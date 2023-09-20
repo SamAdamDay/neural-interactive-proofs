@@ -4,7 +4,7 @@ import torch
 
 from pvg.parameters import Parameters
 from pvg.scenarios import Scenario
-from pvg.datasets import Dataset
+from pvg.data import Dataset
 
 
 class Trainer(ABC):

@@ -1,6 +1,6 @@
 import torch
 
-from .base_trainer import Trainer
+from .base import Trainer
 from ..parameters import Parameters
 
 

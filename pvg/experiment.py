@@ -3,7 +3,7 @@ import torch
 from pvg.parameters import Parameters
 from pvg.trainers import build_trainer
 from pvg.scenarios import build_scenario
-from pvg.datasets import build_dataset
+from pvg.data import load_dataset
 
 
 class Experiment:
@@ -22,7 +22,7 @@ class Experiment:
         self.device = device
         self.trainer = build_trainer(parameters, device)
         self.scenario = build_scenario(parameters, device)
-        self.dataset = build_dataset(parameters, device)
+        self.dataset = load_dataset(parameters, device)
 
     def run(self):
         """Run the experiment."""
