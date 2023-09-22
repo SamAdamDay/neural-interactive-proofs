@@ -1,0 +1,1 @@
+from .torch_modules import GlobalMaxPool

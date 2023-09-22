@@ -15,36 +15,38 @@ class GraphIsomorphismParameters(AdditionalParameters):
     ----------
     prover_num_layers : int
         The number of layers in the prover's GNN.
-    prover_gnn_hidden_size : int
-        The dimension of the hidden layers in the prover's GNN.
+    prover_d_gnn : int
+        The dimension of the hidden layers in the prover's GNN and of the attention
+        embedding.
     prover_num_heads : int
         The number of heads in the prover's attention layer.
-    prover_d_attn : int
-        The embed dimension in the prover's attention layer.
-    prover_d_final_mlp : int
-        The dimension of the hidden layer in the prover's final MLP.
+    prover_d_node_selector : int
+        The dimension of the hidden layer in the prover's MLP which selects a node to
+        send as a message.
     verifier_num_layers : int
         The number of layers in the verifier's GNN.
-    verifier_gnn_hidden_size : int
-        The dimension of the hidden layers in the verifier's GNN.
+    verifier_d_gnn : int
+        The dimension of the hidden layers in the verifier's GNN and of the attention
+        embedding.
     verifier_num_heads : int
         The number of heads in the verifier's attention layer.
-    verifier_d_attn : int
-        The embed dimension in the verifier's attention layer.
-    verifier_d_final_mlp : int
-        The dimension of the hidden layer in the verifier's final MLP.
+    verifier_d_node_selector : int
+        The dimension of the hidden layer in the verifier's MLP which selects a node to
+        send as a message.
+    verifier_d_decider : int
+        The dimension of the hidden layer in the verifier's MLP which decides whether to
+        continue exchanging messages or to make a decision.
     """
 
     prover_num_layers: int = 5
     prover_d_gnn: int = 64
     prover_num_heads: int = 1
-    prover_d_attn: int = 64
-    prover_d_final_mlp: int = 16
+    prover_d_node_selector: int = 16
     verifier_num_layers: int = 2
     verifier_d_gnn: int = 64
     verifier_num_heads: int = 1
-    verifier_d_attn: int = 64
-    verifier_d_final_mlp: int = 16
+    verifier_d_node_selector: int = 16
+    verifier_d_decider: int = 16
 
 
 @dataclass
@@ -59,8 +61,9 @@ class Parameters:
         The RL trainer to use.
     dataset : str
         The dataset to use.
-    max_num_messages : int
-        The maximum number of messages which the verifier can send.
+    max_message_rounds : int
+        The maximum number of rounds of messages, where the verifier sends a message,
+        and the prover responds with a message.
     graph_isomorphism : GraphIsomorphismParameters, optional
         Additional parameters specific to the graph isomorphism experiment.
     """
@@ -68,5 +71,5 @@ class Parameters:
     scenario: str
     trainer: str
     dataset: str
-    max_num_messages: int = 8
+    max_message_rounds: int = 8
     graph_isomorphism: Optional[GraphIsomorphismParameters] = None
