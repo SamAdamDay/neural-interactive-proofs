@@ -86,6 +86,19 @@ class MessageExchange(list[Message]):
                 super().append(message)
             else:
                 raise TypeError(f"Expected a Message object, got {type(message)}")
+            
+
+class Rollout(ABC):
+    """Base class for all Prover-Verifier rollouts."""
+
+    def __init__(self, message_exchange: MessageExchange, batch: Any):
+        self.message_exchange = message_exchange
+        self.batch = batch
+
+    @abstractmethod
+    def visualise(self):
+        """Visualise the rollout."""
+        pass
 
 
 class Scenario(ABC):
@@ -113,6 +126,6 @@ class Scenario(ABC):
         self.verifier: Verifier
 
     @abstractmethod
-    def rollout(self, *args, **kwargs) -> MessageExchange:
+    def rollout(self, *args, **kwargs) -> Rollout:
         """Perform a rollout of the scenario."""
         pass

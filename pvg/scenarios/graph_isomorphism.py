@@ -1,6 +1,8 @@
 from abc import ABC
-from typing import Optional
+from typing import Optional, Callable
 from dataclasses import dataclass
+from math import sqrt
+from functools import partial
 
 import torch
 from torch.nn import ReLU, Linear, MultiheadAttention, Sequential
@@ -13,17 +15,23 @@ from torch_geometric.nn import (
     Sequential as GeometricSequential,
     Linear as GeometricLinear,
 )
-from torch_geometric.utils import to_dense_batch
-from torch_geometric.data import Batch as GeometricBatch
+from torch_geometric.utils import to_dense_batch, to_networkx
+from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
 from einops import rearrange
 
 from jaxtyping import Float, Bool
 
+import plotly.graph_objects as go
+import plotly.express as px
+
+import networkx as nx
+
 from pvg.scenarios.base import (
     Agent,
     Prover,
     Verifier,
+    Rollout,
     Scenario,
     Message,
     MessageExchange,
@@ -391,12 +399,249 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         self.decider.to(device)
 
 
+class GraphIsomorphismRollout(Rollout):
+    """A message exchange in the graph isomorphism task."""
+
+    def __init__(
+        self,
+        message_exchange: MessageExchange,
+        batch: GraphIsomorphismData | GeometricBatch,
+    ):
+        super().__init__(message_exchange, batch)
+
+    def visualise(
+        self,
+        graph_layout_function: Optional[Callable] = None,
+        graph_layout_seed : Optional[int] = None,
+        colour_sequence: str = "Dark24",
+        node_text_colour: str = "white",
+    ):
+        """Visualize the rollout as a plotly graph.
+
+        Parameters
+        ----------
+        graph_layout_function : Callable, default=None
+            A function which takes a networkx graph and returns a dictionary of node
+            positions. Best to use a function from networkx.layout, possibly partially
+            applied with some arguments. If None, uses networkx.spring_layout with
+            `k=4/sqrt(n)`, where `n` is the number of nodes in the graph.
+        graph_layout_seed : int, default=None
+            The seed to use for the graph layout function. If None, the random number
+            generator is the `RandomState` instance used by `numpy.random`.
+        colour_sequence : str, default="Dark24"
+            The name of the colour sequence to use to colour the nodes. Must be one of
+            the colour sequences from plotly.express.colors.qualitative.
+        node_text_colour : str, default="white"
+            The colour of the node labels.
+        """
+
+        if graph_layout_function is None:
+
+            def graph_layout_function(graph, *args, **kwargs):
+                return nx.spring_layout(graph, k=4 / sqrt(len(graph)), *args, **kwargs)
+            
+        graph_layout_function = partial(graph_layout_function, seed=graph_layout_seed)
+
+        # Get the colour sequence
+        colour_list = px.colors.qualitative.__getattribute__(colour_sequence)
+
+        def get_colour(i):
+            return colour_list[i % len(colour_list)]
+
+        # Add titles for the two graphs
+        graph_title_trace = go.Scatter(
+            text=["Graph A", "Graph B"],
+            x=[0, 2.2],
+            y=[1.2, 1.2],
+            textfont=dict(size=20),
+            mode="text",
+            visible=True,
+        )
+
+        # Add labels for the exchange of messages at the bottom
+        message_label_trace = go.Scatter(
+            text=["Verifier messages:", "Prover messages:"],
+            x=[-0.15, -0.15],
+            y=[-1.3, -1.6],
+            mode="text",
+            textposition="middle left",
+            visible=True,
+        )
+
+        traces = [
+            graph_title_trace,
+            message_label_trace,
+        ]
+        buttons = []
+
+        for idx in range(len(self.batch)):
+            # Only show the first batch item initially
+            traces_visible = idx == 0
+
+            # Get the data for this batch item as networkx graphs
+            data = self.batch[idx]
+
+            for k in ["a", "b"]:
+                # Get the graph as a networkx graph
+                if k == "a":
+                    graph = to_networkx(
+                        GeometricData(edge_index=data.edge_index_a, x=data.x_a),
+                        to_undirected=True,
+                    )
+                else:
+                    graph = to_networkx(
+                        GeometricData(edge_index=data.edge_index_b, x=data.x_b),
+                        to_undirected=True,
+                    )
+
+                # Generate the layouts for the graph
+                graph_pos = graph_layout_function(graph)
+
+                # Add an offset to the x coordinates of the nodes in graph B so that it
+                # is to the right of graph A
+                x_add = 0 if k == "a" else 2.2
+
+                # Add the trace for the edges
+                edge_x = []
+                edge_y = []
+                for edge in graph.edges():
+                    x0, y0 = graph_pos[edge[0]]
+                    x1, y1 = graph_pos[edge[1]]
+                    edge_x.append(x0 + x_add)
+                    edge_x.append(x1 + x_add)
+                    edge_x.append(None)
+                    edge_y.append(y0)
+                    edge_y.append(y1)
+                    edge_y.append(None)
+                traces.append(
+                    go.Scatter(
+                        x=edge_x,
+                        y=edge_y,
+                        line=dict(width=0.5, color="#888"),
+                        hoverinfo="none",
+                        mode="lines",
+                        visible=traces_visible,
+                    )
+                )
+
+                # Add the trace for the nodes
+                node_x = []
+                node_y = []
+                node_colour = []
+                node_size = []
+                node_text = []
+                for node in graph.nodes():
+                    x, y = graph_pos[node]
+                    x += x_add
+                    if k == "a":
+                        selected_indices = (
+                            (data.x_a[node] == 1).nonzero().squeeze(-1).tolist()
+                        )
+                    else:
+                        selected_indices = (
+                            (data.x_b[node] == 1).nonzero().squeeze(-1).tolist()
+                        )
+                    if len(selected_indices) == 0:
+                        node_x.append(x)
+                        node_y.append(y)
+                        node_colour.append("grey")
+                        node_size.append(20)
+                        node_text.append(str(node))
+                    else:
+                        for i, j in reversed(list(enumerate(selected_indices))):
+                            node_x.append(x)
+                            node_y.append(y)
+                            node_colour.append(get_colour(j))
+                            node_size.append(10 * i + 20)
+                            node_text.append(str(node))
+                traces.append(
+                    go.Scatter(
+                        x=node_x,
+                        y=node_y,
+                        text=node_text,
+                        textfont=dict(color=node_text_colour),
+                        mode="markers+text",
+                        hoverinfo="text",
+                        marker=dict(
+                            color=node_colour,
+                            size=node_size,
+                            line_width=0,
+                            opacity=1,
+                        ),
+                        visible=traces_visible,
+                    )
+                )
+
+            # Add the trace for the timeline of the messages exchanged
+            timeline_node_x = []
+            timeline_node_y = []
+            timeline_node_text = []
+            timeline_node_colour = []
+            for i, message in enumerate(self.message_exchange):
+                round = i // 2
+                x = round * 0.25
+                y = -1.3 if message.from_verifier else -1.6
+                timeline_node_x.append(x)
+                timeline_node_y.append(y)
+                graph_letter = "A" if message.message[idx, 0].item() == 1 else "B"
+                timeline_node_text.append(
+                    f"{graph_letter}{message.message[idx, 1].item()}"
+                )
+                timeline_node_colour.append(get_colour(round))
+            traces.append(
+                go.Scatter(
+                    x=timeline_node_x,
+                    y=timeline_node_y,
+                    text=timeline_node_text,
+                    textfont=dict(color=node_text_colour),
+                    mode="markers+text",
+                    hoverinfo="text",
+                    marker=dict(
+                        color=timeline_node_colour,
+                        size=30,
+                        line_width=0,
+                        opacity=1,
+                    ),
+                    visible=traces_visible,
+                )
+            )
+
+            # Add a button to show this batch item
+            buttons.append(
+                dict(
+                    label=f"Batch item {idx}",
+                    method="update",
+                    args=[
+                        {
+                            "visible": [True, True]
+                            + [False] * (5 * idx)
+                            + [True] * 5
+                            + [False] * (5 * (len(self.batch) - idx - 1))
+                        }
+                    ],
+                )
+            )
+
+        layout = go.Layout(
+            title="Prover-Verifier messages",
+            showlegend=False,
+            hovermode="closest",
+            margin=dict(b=5, l=5, r=5, t=50),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            updatemenus=[dict(buttons=buttons, active=0, showactive=True)],
+        )
+
+        fig = go.Figure(data=traces, layout=layout)
+        fig.show()
+
+
 @dataclass
 class GraphIsomorphismMessage(Message):
     """A message sent between the prover and the verifier."""
 
     from_verifier: bool
-    message: Float[Tensor, "batch_size"]
+    message: Float[Tensor, "batch_size 2"]
     verifier_guess: Float[Tensor, "batch_size"] = None
 
 
@@ -408,7 +653,9 @@ class GraphIsomorphismScenario(Scenario):
         self.prover = GraphIsomorphismProver(parameters, device)
         self.verifier = GraphIsomorphismVerifier(parameters, device)
 
-    def rollout(self, data: GraphIsomorphismData | GeometricBatch) -> MessageExchange:
+    def rollout(
+        self, data: GraphIsomorphismData | GeometricBatch
+    ) -> GraphIsomorphismRollout:
         message_exchange = MessageExchange()
         max_nodes_a = torch.bincount(data.x_a_batch).max().item()
         max_nodes_b = torch.bincount(data.x_b_batch).max().item()
@@ -425,31 +672,34 @@ class GraphIsomorphismScenario(Scenario):
             # (batch_size)
             verifier_node = Categorical(probs=node_probs).sample()
 
+            # Extract which graph the verifier node is from and the index of the node
+            # within that graph
+            verifier_node_graph = (verifier_node < max_nodes_a).to(torch.int64)
+            verifier_node = torch.where(
+                verifier_node_graph == 1,
+                verifier_node,
+                verifier_node - max_nodes_a,
+            )
+            verifier_message = torch.stack((verifier_node_graph, verifier_node), dim=-1)
+
             # (batch_size)
             verifier_guess = Categorical(logits=decider_logits).sample()
 
             message_exchange.append(
                 GraphIsomorphismMessage(
                     from_verifier=True,
-                    message=verifier_node,
+                    message=verifier_message,
                     verifier_guess=verifier_guess,
                 )
             )
 
             # One-hot encode the verifier's message in the node features
-            # Python loop because batches are small (hopefully) and doing it with tensor
-            # operations is a pain
-            x_a_idx = 0
-            x_b_idx = 0
-            x_a_ptr = data.x_a_ptr.tolist()
-            x_b_ptr = data.x_b_ptr.tolist()
-            for node_idx, len_a, len_b in zip(verifier_node.tolist(), x_a_ptr, x_b_ptr):
-                if node_idx < max_nodes_a:
-                    data.x_a[x_a_idx, round] = 1
-                else:
-                    data.x_b[x_b_idx, round] = 1
-                x_a_idx += len_a
-                x_b_idx += len_b
+            node_index_a = verifier_node + data.x_a_ptr[:-1]
+            node_index_a = node_index_a[verifier_node_graph == 1]
+            node_index_b = verifier_node + data.x_b_ptr[:-1]
+            node_index_b = node_index_b[verifier_node_graph == 0]
+            data.x_a[node_index_a, round] = 1
+            data.x_b[node_index_b, round] = 1
 
             ## Prover sends a message
             # (batch_size, max_nodes_a+max_nodes_b), (batch_size,
@@ -463,7 +713,7 @@ class GraphIsomorphismScenario(Scenario):
             # Make sure that the prover chooses a node in the opposite graph to the one
             # chosen by the verifier
             node_probs = torch.where(
-                verifier_node < max_nodes_a,
+                (verifier_node_graph == 1).unsqueeze(-1),
                 torch.cat(
                     (
                         torch.zeros(node_probs.shape[0], max_nodes_a),
@@ -483,9 +733,29 @@ class GraphIsomorphismScenario(Scenario):
             # (batch_size)
             prover_node = Categorical(probs=node_probs).sample()
 
+            # Extract which graph the prover node is from and the index of the node
+            # within that graph
+            prover_node_graph = (prover_node < max_nodes_a).to(torch.int64)
+            prover_node = torch.where(
+                prover_node_graph == 1,
+                prover_node,
+                prover_node - max_nodes_a,
+            )
+            prover_message = torch.stack((prover_node_graph, prover_node), dim=-1)
+
             message_exchange.append(
                 GraphIsomorphismMessage(
                     from_verifier=False,
-                    message=prover_node,
+                    message=prover_message,
                 )
             )
+
+            # One-hot encode the prover's message in the node features
+            node_index_a = prover_node + data.x_a_ptr[:-1]
+            node_index_a = node_index_a[prover_node_graph == 1]
+            node_index_b = prover_node + data.x_b_ptr[:-1]
+            node_index_b = node_index_b[prover_node_graph == 0]
+            data.x_a[node_index_a, round] = 1
+            data.x_b[node_index_b, round] = 1
+
+        return GraphIsomorphismRollout(message_exchange, data)
