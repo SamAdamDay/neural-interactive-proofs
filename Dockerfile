@@ -12,7 +12,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y python3.10 python3-pip
 
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
-RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake
+RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ libprimesieve-dev
 
 # Move to the root home directory
 WORKDIR /root

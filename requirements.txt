@@ -12,3 +12,4 @@ einops==0.6.1
 networkx==3.1
 plotly==5.17.0
 pandas==2.1.1
+primesieve==2.3.2
