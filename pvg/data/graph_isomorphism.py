@@ -16,7 +16,7 @@ class GraphIsomorphismDataset(Dataset, ABC):
 
 
 class GraphIsomorphismData(GeometricData):
-    """A data object consisting of two graphs and bit for if they are isomorphic.
+    """A data object consisting of two graphs their W-L score.
 
     Parameters
     ----------
@@ -24,9 +24,10 @@ class GraphIsomorphismData(GeometricData):
         The edge indices of graph A.
     edge_index_b : torch.Tensor, optional
         The edge indices of graph B.
-    y : torch.Tensor, optional
-        A tensor with a single element, which is 1 if the graphs are isomorphic and 0
-        otherwise.
+    wl_score : torch.Tensor, optional
+        A tensor with a single element, which is the number of rounds of the
+        Weisfeiler-Lehman algorithm needed to distinguish the graphs, or -1 if the
+        graphs cannot be distinguished with the algorithm.
     x_a : torch.Tensor, optional
         The node features of graph A, which are one-hot encodings of whether the node is
         part of the i-th message sent.
@@ -45,7 +46,7 @@ class GraphIsomorphismData(GeometricData):
         self,
         edge_index_a: Optional[Tensor] = None,
         edge_index_b: Optional[Tensor] = None,
-        y: Optional[Tensor] = None,
+        wl_score: Optional[Tensor] = None,
         x_a: Optional[Tensor] = None,
         x_b: Optional[Tensor] = None,
         num_nodes_a: Optional[int] = None,
@@ -57,7 +58,11 @@ class GraphIsomorphismData(GeometricData):
         if x_b is None and d_features is not None and num_nodes_b is not None:
             x_b = torch.zeros(num_nodes_b, d_features)
         super().__init__(
-            edge_index_a=edge_index_a, edge_index_b=edge_index_b, y=y, x_a=x_a, x_b=x_b
+            edge_index_a=edge_index_a,
+            edge_index_b=edge_index_b,
+            wl_score=wl_score,
+            x_a=x_a,
+            x_b=x_b,
         )
 
     def __inc__(self, key, value, *args, **kwargs):
