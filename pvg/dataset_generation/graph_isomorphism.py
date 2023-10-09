@@ -24,6 +24,41 @@ from pvg.constants import GI_DATA_DIR
 
 @dataclass
 class GraphIsomorphicDatasetConfig:
+    """Configuration for a graph isomorphism dataset.
+
+    Graphs are generated using the Erdos-Renyi model. The dataset is generated in three
+    steps:
+
+    1. Generate `prop_non_isomorphic` non-isomorphic graphs. The pairs are divided
+       equally between the different graph sizes and edge probabilities. The number of
+       graphs with a score of 1, 2 and greater than 2 are divided according to the
+       proportions `non_iso_prop_score_1` and `non_iso_prop_score_2`.
+    2. Generate `(1 - prop_non_isomorphic) * iso_prop_from_non_iso` isomorphic graphs,
+       by sampling from the non-isomorphic graph pairs and shuffling the nodes.
+    3. Generate the remaining `(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)`
+       isomorphic graphs, by generating new graphs and shuffling the nodes.
+    
+    Parameters
+    ----------
+    num_samples : int
+        The number of graph pairs to generate.
+    graph_sizes : list[int], default=[7, 8, 9, 10, 11]
+        The sizes of the graphs to generate.
+    edge_probabilities : list[float], default=[0.2, 0.4, 0.6, 0.8]
+        The probabilities of an edge between two nodes.
+    max_iterations : int, default=5
+        The maximum number of iterations of the Weisfeiler-Lehman algorithm to run to
+        compute the score.
+    prop_non_isomorphic : float, default=0.5
+        The proportion of graph pairs which are non-isomorphic.
+    non_iso_prop_score_1 : float, default=0.1
+        The proportion of non-isomorphic graph pairs which have a score of 1.
+    non_iso_prop_score_2 : float, default=0.2
+        The proportion of non-isomorphic graph pairs which have a score of 2.
+    iso_prop_from_non_iso : float, default=0.5
+        The proportion of graph pairs which are isomorphic and are generated from the
+        non-isomorphic graph pairs.
+    """
     num_samples: int
     graph_sizes: list[int] = [7, 8, 9, 10, 11]
     edge_probabilities: list[float] = [0.2, 0.4, 0.6, 0.8]
@@ -370,6 +405,17 @@ def generate_gi_dataset(
     device: str | torch.device = "cpu",
 ):
     """Generate a dataset of pairs of graphs with WL scores.
+
+    Graphs are generated using the Erdos-Renyi model. The dataset is generated in three
+    steps:
+
+    1. Generate non-isomorphic graphs. The pairs are divided equally between the
+       different graph sizes and edge probabilities. The number of graphs with a score
+       of 1, 2 and greater than 2 are divided according to the proportions
+       `non_iso_prop_score_1` and `non_iso_prop_score_2`.
+    2. Generate isomorphic graphs by sampling from the non-isomorphic graph pairs and
+       shuffling the nodes.
+    3. Generate new isomorphic graphs.
 
     Parameters
     ----------
