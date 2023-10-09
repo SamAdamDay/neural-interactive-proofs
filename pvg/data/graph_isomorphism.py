@@ -1,18 +1,18 @@
 from abc import ABC
-from typing import Any, Optional
+import os
+from typing import Optional, Callable
 
 import torch
 from torch import Tensor
 
-from torch_geometric.data import Data as GeometricData
+from torch_geometric.data import (
+    Data as GeometricData,
+    InMemoryDataset as GeometricInMemoryDataset,
+)
 
+from pvg.parameters import Parameters
 from pvg.data.base import Dataset, DataLoader
-
-
-class GraphIsomorphismDataset(Dataset, ABC):
-    """A dataset for the graph isomorphism experiments."""
-
-    pass
+from pvg.constants import GI_DATA_DIR
 
 
 class GraphIsomorphismData(GeometricData):
@@ -71,3 +71,122 @@ class GraphIsomorphismData(GeometricData):
         if key == "edge_index_b":
             return self.x_b.size(0)
         return super().__inc__(key, value, *args, **kwargs)
+
+
+class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
+    """A dataset for the graph isomorphism experiments."""
+
+    def __init__(
+        self,
+        parameters: Parameters,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None,
+    ):
+        self.parameters = parameters
+        root = os.path.join(GI_DATA_DIR, parameters.dataset)
+        super().__init__(root, transform, pre_transform, pre_filter)
+
+        data, self.slices, self.sizes = torch.load(self.processed_paths[0])
+        if isinstance(data, dict):
+            self.data = GraphIsomorphismData.from_dict(data)
+        else:
+            self.data = data
+
+    @property
+    def processed_dir(self) -> str:
+        return os.path.join(self.root, "processed")
+
+    @property
+    def raw_dir(self) -> str:
+        return os.path.join(self.root, "raw")
+
+    @property
+    def num_node_features(self) -> int:
+        return self.parameters.max_message_rounds
+
+    @property
+    def processed_file_names(self) -> list[str]:
+        return ["data.pt"]
+
+    def process(self):
+        # Copied from https://github.com/pyg-team/pytorch_geometric/blob/f71ead8ade8a67be23982114cfff649b7d074cfb/torch_geometric/datasets/tu_dataset.py#L193
+        self.data, self.slices, self.sizes = _read_gi_data(
+            self.raw_dir, self.num_node_features
+        )
+
+        if self.pre_filter is not None or self.pre_transform is not None:
+            data_list = [self.get(idx) for idx in range(len(self))]
+
+            if self.pre_filter is not None:
+                data_list = [d for d in data_list if self.pre_filter(d)]
+
+            if self.pre_transform is not None:
+                data_list = [self.pre_transform(d) for d in data_list]
+
+            self.data, self.slices = self.collate(data_list)
+            self._data_list = None
+
+        torch.save(
+            (self._data.to_dict(), self.slices, self.sizes), self.processed_paths[0]
+        )
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}[{self.parameters.dataset!r}]({len(self)})"
+
+
+def _read_gi_data(
+    raw_dir: str, d_features: int
+) -> tuple[GraphIsomorphismData, dict[str, Tensor], dict[str, Tensor]]:
+    """Reads the graph isomorphism dataset from the raw directory.
+
+    Parameters
+    ----------
+    raw_dir : str
+        The path to the raw directory.
+    d_features : int
+        The dimension of the node features (which will be filled with zeros).
+
+    Returns
+    -------
+    data : GraphIsomorphismData
+        The data object containing the whole dataset.
+    slices : dict[str, torch.Tensor]
+        A dictionary mapping the attributes to the their slices, for cutting the data
+        up into individual graph pairs.
+    sizes : dict[str, torch.Tensor]
+        The sizes of the graphs in the dataset. Has keys "a" and "b".
+    """
+    data_dict = torch.load(os.path.join(raw_dir, "data.pt"))
+
+    num_graphs = len(data_dict["wl_scores"])
+    total_num_nodes_a = data_dict["sizes_a"].sum().item()
+    total_num_nodes_b = data_dict["sizes_b"].sum().item()
+
+    data = GraphIsomorphismData(
+        edge_index_a=data_dict["edge_index_a"],
+        edge_index_b=data_dict["edge_index_b"],
+        wl_score=data_dict["wl_scores"],
+        num_nodes_a=total_num_nodes_a,
+        num_nodes_b=total_num_nodes_b,
+        d_features=d_features,
+    )
+
+    slices = dict(
+        edge_index_a=data_dict["slices_a"],
+        edge_index_b=data_dict["slices_b"],
+        wl_score=torch.arange(num_graphs + 1),
+        x_a=torch.cat(
+            (torch.zeros(1, dtype=int), torch.cumsum(data_dict["sizes_a"], dim=0))
+        ),
+        x_b=torch.cat(
+            (torch.zeros(1, dtype=int), torch.cumsum(data_dict["sizes_b"], dim=0))
+        ),
+    )
+
+    sizes = dict(
+        a=data_dict["sizes_a"],
+        b=data_dict["sizes_b"],
+    )
+
+    return data, slices, sizes

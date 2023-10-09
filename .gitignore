@@ -136,3 +136,6 @@ dmypy.json
 
 # Swp files
 *.swp
+
+# Processed data files
+data/**/processed

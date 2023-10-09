@@ -1,8 +1,9 @@
-import pickle
+import os
 import itertools
 from math import floor
 from typing import Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 from torch import Tensor
@@ -10,7 +11,7 @@ import torch.nn.functional as F
 
 from torch_geometric.utils import dense_to_sparse
 
-from jaxtyping import Float, Bool
+from jaxtyping import Float
 
 import einops
 
@@ -18,12 +19,14 @@ from tqdm import tqdm
 
 from primesieve.numpy import n_primes
 
+from pvg.constants import GI_DATA_DIR
+
 
 @dataclass
 class GraphIsomorphicDatasetConfig:
     num_samples: int
-    graph_sizes: list[int]
-    edge_probabilities: list[float]
+    graph_sizes: list[int] = [7, 8, 9, 10, 11]
+    edge_probabilities: list[float] = [0.2, 0.4, 0.6, 0.8]
     max_iterations: int = 5
     prop_non_isomorphic: float = 0.5
     non_iso_prop_score_1: float = 0.1
@@ -362,7 +365,7 @@ def _generate_isomorphic_graphs(
 
 def generate_gi_dataset(
     config: GraphIsomorphicDatasetConfig | dict,
-    dataset_filename: str,
+    name: str,
     batch_size: int = 1000000,
     device: str | torch.device = "cpu",
 ):
@@ -372,8 +375,9 @@ def generate_gi_dataset(
     ----------
     config : GraphIsomorphicDatasetConfig or dict
         The configuration for the dataset.
-    dataset_filename : str
-        The filename of the dataset to save.
+    name : str
+        The the dataset to save. This will be the name of the directory in which the
+        dataset is saved, under `pvg.constants.GI_DATA_DIR`.
     batch_size : int, default=1000000
         The batch size to use when generating the graphs.
     device : str or torch.device, default="cpu"
@@ -420,4 +424,7 @@ def generate_gi_dataset(
         sizes_a=sizes,
         sizes_b=sizes,
     )
+    data_dir = os.path.join(GI_DATA_DIR, name, "raw")
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    dataset_filename = os.path.join(data_dir, "data.pt")
     torch.save(data, dataset_filename)

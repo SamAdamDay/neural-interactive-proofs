@@ -37,7 +37,7 @@ from pvg.scenarios.base import (
     MessageExchange,
 )
 from pvg.parameters import Parameters
-from pvg.data import Dataset, GraphIsomorphismData
+from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
 from pvg.utils import GlobalMaxPool
 
 
@@ -652,6 +652,7 @@ class GraphIsomorphismScenario(Scenario):
         super().__init__(parameters, device)
         self.prover = GraphIsomorphismProver(parameters, device)
         self.verifier = GraphIsomorphismVerifier(parameters, device)
+        self.dataset = GraphIsomorphismDataset(parameters)
 
     def rollout(
         self, data: GraphIsomorphismData | GeometricBatch
