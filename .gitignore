@@ -138,4 +138,4 @@ dmypy.json
 *.swp
 
 # Processed data files
-data/**/processed
+data/**/processed*

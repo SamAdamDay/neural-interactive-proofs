@@ -1,6 +1,12 @@
 import torch
 
 from .base import Scenario, Prover, Verifier
+from .graph_isomorphism import (
+    GraphIsomorphismScenario,
+    GraphIsomorphismAgent,
+    GraphIsomorphismProver,
+    GraphIsomorphismVerifier,
+)
 from ..parameters import Parameters
 
 

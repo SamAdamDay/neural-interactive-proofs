@@ -2,7 +2,7 @@ import os
 import itertools
 from math import floor
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
@@ -37,7 +37,7 @@ class GraphIsomorphicDatasetConfig:
        by sampling from the non-isomorphic graph pairs and shuffling the nodes.
     3. Generate the remaining `(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)`
        isomorphic graphs, by generating new graphs and shuffling the nodes.
-    
+
     Parameters
     ----------
     num_samples : int
@@ -59,9 +59,12 @@ class GraphIsomorphicDatasetConfig:
         The proportion of graph pairs which are isomorphic and are generated from the
         non-isomorphic graph pairs.
     """
+
     num_samples: int
-    graph_sizes: list[int] = [7, 8, 9, 10, 11]
-    edge_probabilities: list[float] = [0.2, 0.4, 0.6, 0.8]
+    graph_sizes: list[int] = field(default_factory=lambda: [7, 8, 9, 10, 11])
+    edge_probabilities: list[float] = field(
+        default_factory=lambda: [0.2, 0.4, 0.6, 0.8]
+    )
     max_iterations: int = 5
     prop_non_isomorphic: float = 0.5
     non_iso_prop_score_1: float = 0.1
@@ -457,6 +460,11 @@ def generate_gi_dataset(
     adjacencies_indexed = adjacencies * indices
     edge_indices_a, batch_a = dense_to_sparse(adjacencies_indexed[0])
     edge_indices_b, batch_b = dense_to_sparse(adjacencies_indexed[1])
+    max_sizes_cumsum = torch.arange(adjacencies.shape[1]) * adjacencies.shape[2]
+    to_subtract_a = max_sizes_cumsum[batch_a - 1]
+    to_subtract_b = max_sizes_cumsum[batch_b - 1]
+    edge_indices_a -= to_subtract_a[None, :]
+    edge_indices_b -= to_subtract_b[None, :]
     slices_a = torch.cumsum(torch.bincount(batch_a), 0)
     slices_b = torch.cumsum(torch.bincount(batch_b), 0)
 
@@ -474,3 +482,5 @@ def generate_gi_dataset(
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     dataset_filename = os.path.join(data_dir, "data.pt")
     torch.save(data, dataset_filename)
+
+    print("Done")

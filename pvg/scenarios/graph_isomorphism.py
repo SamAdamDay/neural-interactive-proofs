@@ -3,6 +3,7 @@ from typing import Optional, Callable
 from dataclasses import dataclass
 from math import sqrt
 from functools import partial
+from collections import OrderedDict
 
 import torch
 from torch.nn import ReLU, Linear, MultiheadAttention, Sequential
@@ -80,26 +81,22 @@ class GraphIsomorphismAgent(Agent, ABC):
             The attention module.
         """
         # Build up the GNN
-        gnn_layers = []
-        gnn_layers.append(
-            (
-                GeometricLinear(
-                    d_input,
+        gnn_layers = OrderedDict()
+        gnn_layers["input"] = (
+            GeometricLinear(
+                d_input,
+                d_gnn,
+            ),
+            "x -> x",
+        )
+        for i in range(num_layers):
+            gnn_layers[f"ReLU_{i}"] = ReLU(inplace=True)
+            gnn_layers[f"GNN_layer_{i}"] = (
+                GCNConv(
+                    d_gnn,
                     d_gnn,
                 ),
-                "x -> x",
-            )
-        )
-        for _ in range(num_layers):
-            gnn_layers.append(ReLU(inplace=True))
-            gnn_layers.append(
-                (
-                    GCNConv(
-                        d_gnn,
-                        d_gnn,
-                    ),
-                    "x, edge_index -> x",
-                )
+                "x, edge_index -> x",
             )
         gnn = GeometricSequential("x, edge_index", gnn_layers)
 
@@ -153,12 +150,14 @@ class GraphIsomorphismAgent(Agent, ABC):
         self,
         d_gnn: int,
         d_decider: int,
+        d_out: int = 3,
     ) -> Sequential:
-        """Builds the module which decides whether to continue exchanging messages
+        """Builds the module which produces a graph-pair level output.
 
-        Outputs a single triple of logits for the three options: continue exchanging
-        messages, guess that the graphs are isomorphic, or guess that the graphs are not
-        isomorphic.
+        By default it is used to decide whether to continue exchanging messages. In this
+        case it outputs a single triple of logits for the three options: continue
+        exchanging messages, guess that the graphs are isomorphic, or guess that the
+        graphs are not isomorphic.
 
         The module consists of a linear layer, a global max pooling layer, a final
         linear layer, and ReLU activations.
@@ -170,7 +169,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             layers).
         d_decider : int
             The dimensionality of the final MLP hidden layers.
-        d_out : int
+        d_out : int, default=3
             The dimensionality of the output.
 
         Returns
@@ -188,7 +187,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             GlobalMaxPool(dim=1),
             Linear(
                 in_features=d_decider,
-                out_features=3,
+                out_features=d_out,
             ),
         )
 
@@ -412,7 +411,7 @@ class GraphIsomorphismRollout(Rollout):
     def visualise(
         self,
         graph_layout_function: Optional[Callable] = None,
-        graph_layout_seed : Optional[int] = None,
+        graph_layout_seed: Optional[int] = None,
         colour_sequence: str = "Dark24",
         node_text_colour: str = "white",
     ):
@@ -439,7 +438,7 @@ class GraphIsomorphismRollout(Rollout):
 
             def graph_layout_function(graph, *args, **kwargs):
                 return nx.spring_layout(graph, k=4 / sqrt(len(graph)), *args, **kwargs)
-            
+
         graph_layout_function = partial(graph_layout_function, seed=graph_layout_seed)
 
         # Get the colour sequence

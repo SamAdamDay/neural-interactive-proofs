@@ -73,3 +73,7 @@ class Parameters:
     dataset: str
     max_message_rounds: int = 8
     graph_isomorphism: Optional[GraphIsomorphismParameters] = None
+
+    def __post_init__(self):
+        if self.scenario == "graph_isomorphism":
+            self.graph_isomorphism = GraphIsomorphismParameters()
