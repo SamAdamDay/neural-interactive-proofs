@@ -12,7 +12,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y python3.10 python3-pip
 
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
-RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ libprimesieve-dev
+RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ python-dev-is-python3 libprimesieve-dev
 
 # Move to the root home directory
 WORKDIR /root
@@ -34,10 +34,13 @@ WORKDIR /root/pvg-experiments
 
 # Install all the required packages
 RUN pip install --upgrade pip \
-    && pip install wheel \
+    && pip install wheel cython \
     && pip install -r requirements.txt \
     && pip install -e . \
     && pip install nvitop
+
+# Apparently this is necessary to fully install primesieve
+RUN yes | pip uninstall primesieve && pip install --no-cache-dir primesieve
 
 # Go back to the root
 WORKDIR /root
