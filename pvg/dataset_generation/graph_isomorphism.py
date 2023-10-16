@@ -290,7 +290,9 @@ def _generate_non_isomorphic_graphs(
                         )
                     )
                 )
-                sizes_list.append(torch.ones(num_pairs_to_add, dtype=int) * graph_size)
+                sizes_list.append(
+                    torch.ones(num_pairs_to_add, dtype=int, device=device) * graph_size
+                )
                 scores_list.append(score[index][:num_pairs_to_add])
 
                 # Update
@@ -330,6 +332,8 @@ def _generate_isomorphic_graphs(
     sizes : Float[Tensor, "batch"]
         The number of nodes in each graph.
     """
+    device = non_iso_adjacencies.device
+
     # Compute the number of graphs to generate from the non-isomorphic graphs
     num_from_non_iso = floor(
         config.num_samples
@@ -372,19 +376,23 @@ def _generate_isomorphic_graphs(
             num_new_this = num_new_per
         else:
             num_new_this = num_new - num_new_per * (num_configs - 1)
-        adjacency = generate_er_graphs(num_new_this, graph_size, edge_probability)
+        adjacency = generate_er_graphs(
+            num_new_this, graph_size, edge_probability, device=device
+        )
         adjacency = F.pad(adjacency, (0, max_graph_size - graph_size) * 2)
         adjacencies_new_list.append(
             einops.repeat(adjacency, "batch node1 node2 -> 2 batch node1 node2")
         )
-        sizes_new_list.append(torch.ones(num_new_this, dtype=int) * graph_size)
+        sizes_new_list.append(
+            torch.ones(num_new_this, dtype=int, device=device) * graph_size
+        )
 
     # Combine the lists into tensors
     adjacencies = torch.cat((adjacencies_from_non_iso, *adjacencies_new_list), dim=1)
     sizes = torch.cat((sizes_from_non_iso, *sizes_new_list), dim=0)
 
     # Shuffle the nodes in each graph
-    node_permutation = torch.argsort(torch.rand(adjacencies.shape[:-1]))
+    node_permutation = torch.argsort(torch.rand(adjacencies.shape[:-1], device=device))
     node1_permutation = einops.repeat(
         node_permutation,
         "pair batch node1 -> pair batch node1 node2",
@@ -455,12 +463,14 @@ def generate_gi_dataset(
     )
 
     # Turn the adjacency matrices into edge indices
-    indices = torch.arange(1, adjacencies.shape[1] + 1)
+    indices = torch.arange(1, adjacencies.shape[1] + 1, device=device)
     indices = einops.rearrange(indices, "batch -> () batch () ()")
     adjacencies_indexed = adjacencies * indices
     edge_indices_a, batch_a = dense_to_sparse(adjacencies_indexed[0])
     edge_indices_b, batch_b = dense_to_sparse(adjacencies_indexed[1])
-    max_sizes_cumsum = torch.arange(adjacencies.shape[1]) * adjacencies.shape[2]
+    max_sizes_cumsum = (
+        torch.arange(adjacencies.shape[1], device=device) * adjacencies.shape[2]
+    )
     to_subtract_a = max_sizes_cumsum[batch_a - 1]
     to_subtract_b = max_sizes_cumsum[batch_b - 1]
     edge_indices_a -= to_subtract_a[None, :]
