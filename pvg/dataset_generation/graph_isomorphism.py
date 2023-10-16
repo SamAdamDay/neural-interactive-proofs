@@ -201,15 +201,16 @@ def _generate_non_isomorphic_graphs(
     batch_size : int
         The number of pairs of graphs to generate.
     device : str or torch.device
-        The device to use for the computation.
+        The device to use for the computation. Note that all returned tensors will be
+        on the CPU.
 
     Returns
     -------
-    adjacencies : Float[Tensor, "pair batch node1 node2"]
+    adjacencies : Float[Tensor, "pair batch node1 node2"], device="cpu"
         The batch of adjacency matrices for the generated graphs.
-    sizes : Float[Tensor, "batch"]
+    sizes : Float[Tensor, "batch"], device="cpu"
         The number of nodes in each graph.
-    scores : Float[Tensor, "batch"]
+    scores : Float[Tensor, "batch"], device="cpu"
         The Weisfeiler-Lehman scores for each pair of graphs.
     """
     # Compute the number of pairs of graphs for each class to generate
@@ -289,12 +290,10 @@ def _generate_non_isomorphic_graphs(
                             adjacency_1[index][:num_pairs_to_add],
                             adjacency_2[index][:num_pairs_to_add],
                         )
-                    )
+                    ).cpu()
                 )
-                sizes_list.append(
-                    torch.ones(num_pairs_to_add, dtype=int, device=device) * graph_size
-                )
-                scores_list.append(score[index][:num_pairs_to_add])
+                sizes_list.append(torch.ones(num_pairs_to_add, dtype=int) * graph_size)
+                scores_list.append(score[index][:num_pairs_to_add].cpu())
 
                 # Update
                 score_counts[key] += num_pairs_to_add
@@ -321,20 +320,18 @@ def _generate_isomorphic_graphs(
     ----------
     config : GraphIsomorphicDatasetConfig
         The configuration for the dataset.
-    non_iso_adjacencies : Float[Tensor, "pair batch node1 node2"]
+    non_iso_adjacencies : Float[Tensor, "pair batch node1 node2"], device="cpu"
         The batch of adjacency matrices for the non-isomorphic graph pairs.
-    non_iso_sizes : Float[Tensor, "batch"]
+    non_iso_sizes : Float[Tensor, "batch"], device="cpu"
         The number of nodes in each non-isomorphic graph pair.
 
     Returns
     -------
-    adjacencies : Float[Tensor, "pair batch node1 node2"]
+    adjacencies : Float[Tensor, "pair batch node1 node2"], device="cpu"
         The batch of adjacency matrices for the generated graphs.
-    sizes : Float[Tensor, "batch"]
+    sizes : Float[Tensor, "batch"], device="cpu"
         The number of nodes in each graph.
     """
-    device = non_iso_adjacencies.device
-
     # Compute the number of graphs to generate from the non-isomorphic graphs
     num_from_non_iso = floor(
         config.num_samples
@@ -377,23 +374,19 @@ def _generate_isomorphic_graphs(
             num_new_this = num_new_per
         else:
             num_new_this = num_new - num_new_per * (num_configs - 1)
-        adjacency = generate_er_graphs(
-            num_new_this, graph_size, edge_probability, device=device
-        )
+        adjacency = generate_er_graphs(num_new_this, graph_size, edge_probability)
         adjacency = F.pad(adjacency, (0, max_graph_size - graph_size) * 2)
         adjacencies_new_list.append(
             einops.repeat(adjacency, "batch node1 node2 -> 2 batch node1 node2")
         )
-        sizes_new_list.append(
-            torch.ones(num_new_this, dtype=int, device=device) * graph_size
-        )
+        sizes_new_list.append(torch.ones(num_new_this, dtype=int) * graph_size)
 
     # Combine the lists into tensors
     adjacencies = torch.cat((adjacencies_from_non_iso, *adjacencies_new_list), dim=1)
     sizes = torch.cat((sizes_from_non_iso, *sizes_new_list), dim=0)
 
     # Shuffle the nodes in each graph
-    node_permutation = torch.argsort(torch.rand(adjacencies.shape[:-1], device=device))
+    node_permutation = torch.argsort(torch.rand(adjacencies.shape[:-1]))
     node1_permutation = einops.repeat(
         node_permutation,
         "pair batch node1 -> pair batch node1 node2",
@@ -413,7 +406,7 @@ def _generate_isomorphic_graphs(
 def generate_gi_dataset(
     config: GraphIsomorphicDatasetConfig | dict,
     name: str,
-    batch_size: int = 1000000,
+    batch_size: int = 800000,
     device: str | torch.device = "cpu",
 ):
     """Generate a dataset of pairs of graphs with WL scores.
@@ -461,19 +454,15 @@ def generate_gi_dataset(
     # Combine the graphs
     adjacencies = torch.cat((adjacencies_non_iso, adjacencies_iso), dim=1)
     sizes = torch.cat((sizes_non_iso, sizes_iso), dim=0)
-    scores = torch.cat(
-        (scores_non_iso, -1 * torch.ones(sizes_iso.shape[0], device=device))
-    )
+    scores = torch.cat((scores_non_iso, -1 * torch.ones(sizes_iso.shape[0])))
 
     # Turn the adjacency matrices into edge indices
-    indices = torch.arange(1, adjacencies.shape[1] + 1, device=device)
+    indices = torch.arange(1, adjacencies.shape[1] + 1)
     indices = einops.rearrange(indices, "batch -> () batch () ()")
     adjacencies_indexed = adjacencies * indices
     edge_indices_a, batch_a = dense_to_sparse(adjacencies_indexed[0])
     edge_indices_b, batch_b = dense_to_sparse(adjacencies_indexed[1])
-    max_sizes_cumsum = (
-        torch.arange(adjacencies.shape[1], device=device) * adjacencies.shape[2]
-    )
+    max_sizes_cumsum = torch.arange(adjacencies.shape[1]) * adjacencies.shape[2]
     to_subtract_a = max_sizes_cumsum[batch_a - 1]
     to_subtract_b = max_sizes_cumsum[batch_b - 1]
     edge_indices_a -= to_subtract_a[None, :]

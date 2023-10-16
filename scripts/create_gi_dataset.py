@@ -23,7 +23,7 @@ parser.add_argument(
 parser.add_argument(
     "--batch-size",
     type=int,
-    default=100000,
+    default=800000,
     help="The batch size to use for generating the graphs",
 )
 
