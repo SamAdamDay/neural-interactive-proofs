@@ -4,6 +4,7 @@ from math import floor
 from typing import Optional
 from dataclasses import dataclass, field
 from pathlib import Path
+from datetime import datetime, timedelta
 
 import torch
 from torch import Tensor
@@ -440,6 +441,8 @@ def generate_gi_dataset(
     device : str or torch.device, default="cpu"
         The device to use for the computation.
     """
+    start_time = datetime.now()
+
     if isinstance(config, dict):
         config = GraphIsomorphicDatasetConfig(**config)
 
@@ -493,4 +496,8 @@ def generate_gi_dataset(
     dataset_filename = os.path.join(data_dir, "data.pt")
     torch.save(data, dataset_filename)
 
-    print("Done")
+    # Calculate the elapsed time, rounding microseconds down
+    elapsed_time = datetime.now() - start_time
+    elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
+
+    print(f"Done in {elapsed_time}")
