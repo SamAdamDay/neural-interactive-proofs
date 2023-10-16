@@ -78,13 +78,13 @@ class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
 
     def __init__(
         self,
-        parameters: Parameters,
+        params: Parameters,
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
         pre_filter: Optional[Callable] = None,
     ):
-        self.parameters = parameters
-        self.root = os.path.join(GI_DATA_DIR, parameters.dataset)
+        self.params = params
+        self.root = os.path.join(GI_DATA_DIR, params.dataset)
         super().__init__(self.root, transform, pre_transform, pre_filter)
 
         data, self.slices, self.sizes = torch.load(self.processed_paths[0])
@@ -96,12 +96,12 @@ class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
     @property
     def processed_dir(self) -> str:
         return os.path.join(
-            self.root, f"processed_{self.parameters.max_message_rounds}"
+            self.root, f"processed_{self.params.max_message_rounds}"
         )
     
     @property
     def num_node_features(self) -> int:
-        return self.parameters.max_message_rounds
+        return self.params.max_message_rounds
 
     @property
     def raw_dir(self) -> str:
@@ -135,7 +135,7 @@ class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(name={self.parameters.dataset!r}, "
+            f"{self.__class__.__name__}(name={self.params.dataset!r}, "
             f"num_features={self.num_node_features}, "
             f"num_pairs={len(self)})"
         )

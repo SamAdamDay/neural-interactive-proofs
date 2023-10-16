@@ -11,9 +11,9 @@ from pvg.parameters import Parameters
 class Agent(nn.Module, ABC):
     """Base class for all agents."""
 
-    def __init__(self, parameters: Parameters, device: Optional[str | torch.device]):
+    def __init__(self, params: Parameters, device: Optional[str | torch.device]):
         super().__init__()
-        self.parameters = parameters
+        self.params = params
         if device is None:
             device = "cpu"
         self.device = device
@@ -106,7 +106,7 @@ class Scenario(ABC):
 
     Parameters
     ----------
-    parameters : Parameters
+    params : Parameters
         The parameters of the experiment.
     device : str | torch.device
         The device to use for training.
@@ -119,8 +119,8 @@ class Scenario(ABC):
 
     name: str
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        self.parameters = parameters
+    def __init__(self, params: Parameters, device: str | torch.device):
+        self.params = params
         self.device = device
         self.prover: Prover
         self.verifier: Verifier

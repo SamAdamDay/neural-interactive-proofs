@@ -12,14 +12,14 @@ class Trainer(ABC):
 
     Parameters
     ----------
-    parameters : Parameters
+    params : Parameters
         The parameters of the experiment.
     device : str | torch.device
         The device to use for training.
     """
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        self.parameters = parameters
+    def __init__(self, params: Parameters, device: str | torch.device):
+        self.params = params
         self.device = device
 
     @abstractmethod

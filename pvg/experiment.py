@@ -11,18 +11,18 @@ class Experiment:
 
     Parameters
     ----------
-    parameters : Parameters
-        The parameters of the experiment.
+    params : Parameters
+        The params of the experiment.
     device : str | torch.device
         The device to use for training.
     """
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        self.parameters = parameters
+    def __init__(self, params: Parameters, device: str | torch.device):
+        self.params = params
         self.device = device
-        self.trainer = build_trainer(parameters, device)
-        self.scenario = build_scenario(parameters, device)
-        self.dataset = load_dataset(parameters, device)
+        self.trainer = build_trainer(params, device)
+        self.scenario = build_scenario(params, device)
+        self.dataset = load_dataset(params, device)
 
     def run(self):
         """Run the experiment."""

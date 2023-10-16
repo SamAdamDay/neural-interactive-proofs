@@ -48,8 +48,8 @@ class GraphIsomorphismAgent(Agent, ABC):
     Provides some utility methods for constructing and running the various modules.
     """
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        super().__init__(parameters, device)
+    def __init__(self, params: Parameters, device: str | torch.device):
+        super().__init__(params, device)
         self.gnn: GeometricSequential
         self.attention: MultiheadAttention
 
@@ -270,20 +270,20 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
     probability that this node should be sent as a message to the verifier.
     """
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        super().__init__(parameters, device)
+    def __init__(self, params: Parameters, device: str | torch.device):
+        super().__init__(params, device)
 
         # Build up the GNN and attention modules
         self.gnn, self.attention = self._build_gnn_and_attention(
-            d_input=parameters.max_message_rounds,
-            d_gnn=parameters.graph_isomorphism.prover_d_gnn,
-            num_layers=parameters.graph_isomorphism.prover_num_layers,
-            num_heads=parameters.graph_isomorphism.prover_num_heads,
+            d_input=params.max_message_rounds,
+            d_gnn=params.graph_isomorphism.prover_d_gnn,
+            num_layers=params.graph_isomorphism.prover_num_layers,
+            num_heads=params.graph_isomorphism.prover_num_heads,
         )
 
         self.node_selector = self._build_node_selector(
-            d_gnn=parameters.graph_isomorphism.prover_d_gnn,
-            d_node_selector=parameters.graph_isomorphism.prover_d_node_selector,
+            d_gnn=params.graph_isomorphism.prover_d_gnn,
+            d_node_selector=params.graph_isomorphism.prover_d_node_selector,
             d_out=1,
         )
 
@@ -332,26 +332,26 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
     guess that the graphs are isomorphic, or guess that the graphs are not isomorphic.
     """
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        super().__init__(parameters, device)
+    def __init__(self, params: Parameters, device: str | torch.device):
+        super().__init__(params, device)
 
         # Build up the GNN and attention modules
         self.gnn, self.attention = self._build_gnn_and_attention(
-            d_input=parameters.max_message_rounds,
-            d_gnn=parameters.graph_isomorphism.verifier_d_gnn,
-            num_layers=parameters.graph_isomorphism.verifier_num_layers,
-            num_heads=parameters.graph_isomorphism.verifier_num_heads,
+            d_input=params.max_message_rounds,
+            d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            num_layers=params.graph_isomorphism.verifier_num_layers,
+            num_heads=params.graph_isomorphism.verifier_num_heads,
         )
 
         self.node_selector = self._build_node_selector(
-            d_gnn=parameters.graph_isomorphism.verifier_d_gnn,
-            d_node_selector=parameters.graph_isomorphism.verifier_d_node_selector,
+            d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            d_node_selector=params.graph_isomorphism.verifier_d_node_selector,
             d_out=1,
         )
 
         self.decider = self._build_decider(
-            d_gnn=parameters.graph_isomorphism.verifier_d_gnn,
-            d_decider=parameters.graph_isomorphism.verifier_d_decider,
+            d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            d_decider=params.graph_isomorphism.verifier_d_decider,
         )
 
     def forward(
@@ -647,11 +647,11 @@ class GraphIsomorphismMessage(Message):
 class GraphIsomorphismScenario(Scenario):
     """The graph isomorphism scenario."""
 
-    def __init__(self, parameters: Parameters, device: str | torch.device):
-        super().__init__(parameters, device)
-        self.prover = GraphIsomorphismProver(parameters, device)
-        self.verifier = GraphIsomorphismVerifier(parameters, device)
-        self.dataset = GraphIsomorphismDataset(parameters)
+    def __init__(self, params: Parameters, device: str | torch.device):
+        super().__init__(params, device)
+        self.prover = GraphIsomorphismProver(params, device)
+        self.verifier = GraphIsomorphismVerifier(params, device)
+        self.dataset = GraphIsomorphismDataset(params)
 
     def rollout(
         self, data: GraphIsomorphismData | GeometricBatch
@@ -659,7 +659,7 @@ class GraphIsomorphismScenario(Scenario):
         message_exchange = MessageExchange()
         max_nodes_a = torch.bincount(data.x_a_batch).max().item()
         max_nodes_b = torch.bincount(data.x_b_batch).max().item()
-        for round in range(self.parameters.max_message_rounds):
+        for round in range(self.params.max_message_rounds):
             ## Verifier sends a message
             # (batch_size, max_nodes_a+max_nodes_b), (batch_size, 3), (batch_size,
             # max_nodes_a+max_nodes_b)

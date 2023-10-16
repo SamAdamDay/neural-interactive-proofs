@@ -10,9 +10,9 @@ from .graph_isomorphism import (
 from ..parameters import Parameters
 
 
-def build_scenario(parameters: Parameters, device: str | torch.device) -> Scenario:
+def build_scenario(params: Parameters, device: str | torch.device) -> Scenario:
     for value in globals().values():
-        if issubclass(value, Scenario) and value.name == parameters.scenario:
+        if issubclass(value, Scenario) and value.name == params.scenario:
             cls = value
             break
-    return cls(parameters, device)
+    return cls(params, device)
