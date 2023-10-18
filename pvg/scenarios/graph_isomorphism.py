@@ -20,6 +20,7 @@ from torch_geometric.utils import to_dense_batch, to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
 from einops import rearrange
+from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Float, Bool
 
@@ -39,7 +40,7 @@ from pvg.scenarios.base import (
 )
 from pvg.parameters import Parameters
 from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
-from pvg.utils import GlobalMaxPool
+from pvg.utils.torch_modules import CatGraphPairDim
 
 
 class GraphIsomorphismAgent(Agent, ABC):
@@ -134,16 +135,21 @@ class GraphIsomorphismAgent(Agent, ABC):
             The node selector module, which is an MLP.
         """
         return Sequential(
+            # (2, batch_size, max_nodes, d_gnn)
+            CatGraphPairDim(cat_dim=2),
+            # (batch_size, max_nodes_a+max_nodes_b, d_gnn)
             ReLU(inplace=True),
             Linear(
                 in_features=d_gnn,
                 out_features=d_node_selector,
             ),
+            # (batch_size, max_nodes_a+max_nodes_b, d_node_selector)
             ReLU(inplace=True),
             Linear(
                 in_features=d_node_selector,
                 out_features=d_out,
             ),
+            # (batch_size, max_nodes_a+max_nodes_b, d_node_out)
         )
 
     def _build_decider(
@@ -159,8 +165,8 @@ class GraphIsomorphismAgent(Agent, ABC):
         exchanging messages, guess that the graphs are isomorphic, or guess that the
         graphs are not isomorphic.
 
-        The module consists of a linear layer, a global max pooling layer, a final
-        linear layer, and ReLU activations.
+        The module consists of an MLP, a global max pooling layer per graph, and a final
+        MLP. The MLPs have one hidden layer and ReLU activations.
 
         Parameters
         ----------
@@ -184,7 +190,16 @@ class GraphIsomorphismAgent(Agent, ABC):
                 out_features=d_decider,
             ),
             ReLU(inplace=True),
-            GlobalMaxPool(dim=1),
+            Reduce(
+                "pair batch_size max_nodes d_decider -> pair batch_size d_decider",
+                "max",
+            ),
+            Rearrange("pair batch_size d_decider -> batch_size (pair d_decider)"),
+            Linear(
+                in_features=2 * d_decider,
+                out_features=d_decider,
+            ),
+            ReLU(inplace=True),
             Linear(
                 in_features=d_decider,
                 out_features=d_out,
@@ -197,8 +212,8 @@ class GraphIsomorphismAgent(Agent, ABC):
         gnn: Optional[GeometricSequential] = None,
         attention: Optional[MultiheadAttention] = None,
     ) -> tuple[
-        Float[Tensor, "batch_size max_nodes_a+max_nodes_b d_gnn"],
-        Float[Tensor, "batch_size max_nodes_a+max_nodes_b d_gnn"],
+        Float[Tensor, "2 batch_size max_nodes d_gnn"],
+        Float[Tensor, "2 batch_size max_nodes d_gnn"],
         Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"],
     ]:
         """Runs the GNN and attention modules.
@@ -214,13 +229,14 @@ class GraphIsomorphismAgent(Agent, ABC):
 
         Returns
         -------
-        gnn_output : Float[Tensor, "batch_size max_nodes_a+max_nodes_b d_gnn"]
-            The output of the GNN.
-        attention_output : Float[Tensor "batch_size max_nodes_a+max_nodes_b
-        d_gnn"]
-            The output of the attention.
+        gnn_output_stacked : Float[Tensor, "2 batch_size max_nodes d_gnn"]
+            The output of the GNN with the two graphs stacked in a new batch dimension.
+        attention_output_stacked : Float[Tensor "2 batch_size max_nodes d_gnn"]
+            The output of the attention module with the two graphs stacked in a new
+            batch dimension.
         node_mask : Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"]
-            A mask indicating which nodes are present in the graphs.
+            A mask indicating which nodes are present in the graphs, with the two graphs
+            concatenated along the node dimension.
         """
         if gnn is None:
             gnn = self.gnn
@@ -236,6 +252,10 @@ class GraphIsomorphismAgent(Agent, ABC):
         # (batch_size, max_nodes, d_gnn), (batch_size, max_nodes)
         gnn_output_a, mask_a = to_dense_batch(gnn_output_a, data.x_a_batch)
         gnn_output_b, mask_b = to_dense_batch(gnn_output_b, data.x_b_batch)
+
+        # Get the maximum number of nodes in each graph
+        max_nodes_a = gnn_output_a.shape[1]
+        max_nodes_b = gnn_output_b.shape[1]
 
         # Concatenate the two graph representations and masks
         # (batch_size, max_nodes_a+max_nodes_b, d_gnn)
@@ -260,7 +280,20 @@ class GraphIsomorphismAgent(Agent, ABC):
             need_weights=False,
         )
 
-        return gnn_output, attention_output, node_mask
+        # Separate the graph representations back out
+        # (batch_size, max_nodes_a, d_gnn)
+        gnn_output_a = gnn_output[:, :max_nodes_a]
+        attention_output_a = attention_output[:, :max_nodes_a]
+        # (batch_size, max_nodes_b, d_gnn)
+        gnn_output_b = gnn_output[:, max_nodes_a:]
+        attention_output_b = attention_output[:, max_nodes_a:]
+
+        # Put these together in a new batch dimension
+        # (2, batch_size, max_nodes, d_gnn)
+        gnn_output_stacked = torch.stack((gnn_output_a, gnn_output_b))
+        attention_output_stacked = torch.stack((attention_output_a, attention_output_b))
+
+        return gnn_output_stacked, attention_output_stacked, node_mask
 
 
 class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
@@ -308,12 +341,16 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         node_mask : Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"]
             A mask indicating which nodes are present in the graphs.
         """
-        # (batch_size, max_nodes_a+max_nodes_b, d_gnn), (batch_size,
-        # max_nodes_a+max_nodes_b)
-        _, attention_output, node_mask = self._run_gnn_and_attention(data)
+        # (2, batch_size, max_nodes, d_gnn),
+        # (2, batch_size, max_nodes, d_gnn),
+        # (batch_size, max_nodes_a+max_nodes_b)
+        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
+
+        # (2, batch_size, max_nodes, d_gnn)
+        gnn_attn_output = gnn_output + attention_output
 
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_logits = self.node_selector(attention_output).squeeze(-1)
+        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
 
         return node_logits, node_mask
 
@@ -379,15 +416,19 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         node_mask : Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"]
             A mask indicating which nodes are present in the graphs.
         """
-        # (batch_size, max_nodes_a+max_nodes_b, d_gnn), (batch_size,
-        # max_nodes_a+max_nodes_b)
-        _, attention_output, node_mask = self._run_gnn_and_attention(data)
+        # (batch_size, max_nodes_a+max_nodes_b, d_gnn),
+        # (batch_size, max_nodes_a+max_nodes_b, d_gnn),
+        # (batch_size, max_nodes_a+max_nodes_b)
+        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
+
+        # (batch_size, max_nodes_a+max_nodes_b, d_gnn)
+        gnn_attn_output = gnn_output + attention_output
 
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_logits = self.node_selector(attention_output).squeeze(-1)
+        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
 
         # (batch_size, 3)
-        decider_logits = self.decider(attention_output)
+        decider_logits = self.decider(gnn_attn_output)
 
         return node_logits, decider_logits, node_mask
 
