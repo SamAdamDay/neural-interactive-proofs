@@ -28,6 +28,9 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_gnn : int
         The dimension of the hidden layers in the prover's GNN and of the attention
         embedding.
+    prover_d_gin_mlp : int
+        The dimension of the hidden layers in the prover's Graph Isomorphism Network
+        MLP.
     prover_num_heads : int
         The number of heads in the prover's attention layer.
     prover_d_node_selector : int
@@ -38,6 +41,9 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_d_gnn : int
         The dimension of the hidden layers in the verifier's GNN and of the attention
         embedding.
+    verifier_d_gin_mlp : int
+        The dimension of the hidden layers in the verifier's Graph Isomorphism Network
+        MLP.
     verifier_num_heads : int
         The number of heads in the verifier's attention layer.
     verifier_d_node_selector : int
@@ -49,11 +55,13 @@ class GraphIsomorphismParameters(AdditionalParameters):
     """
 
     prover_num_layers: int = 5
-    prover_d_gnn: int = 64
+    prover_d_gnn: int = 16
+    prover_d_gin_mlp: int = 64
     prover_num_heads: int = 1
     prover_d_node_selector: int = 16
     verifier_num_layers: int = 2
-    verifier_d_gnn: int = 64
+    verifier_d_gnn: int = 16
+    verifier_d_gin_mlp: int = 64
     verifier_num_heads: int = 1
     verifier_d_node_selector: int = 16
     verifier_d_decider: int = 16
@@ -82,7 +90,7 @@ class Parameters(BaseParameters):
     trainer: str
     dataset: str
     max_message_rounds: int = 8
-    graph_isomorphism: Optional[GraphIsomorphismParameters] = None
+    graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == "graph_isomorphism":

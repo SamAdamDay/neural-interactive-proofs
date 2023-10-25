@@ -59,6 +59,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         self,
         d_input: int,
         d_gnn: int,
+        d_gin_mlp: int,
         num_layers: int,
         num_heads: int,
     ) -> tuple[GeometricSequential, MultiheadAttention]:
@@ -70,6 +71,9 @@ class GraphIsomorphismAgent(Agent, ABC):
             The dimensionality of the input features.
         d_gnn : int
             The dimensionality of the GNN hidden layers and of the attention embedding.
+        d_gin_mlp: int
+            The dimensionality of the hidden layers in the Graph Isomorphism Network
+            MLP.
         num_layers : int
             The number of GNN layers.
         num_heads : int
@@ -98,11 +102,11 @@ class GraphIsomorphismAgent(Agent, ABC):
                     Sequential(
                         Linear(
                             d_gnn,
-                            4 * d_gnn,
+                            d_gin_mlp,
                         ),
                         ReLU(inplace=True),
                         Linear(
-                            4 * d_gnn,
+                            d_gin_mlp,
                             d_gnn,
                         ),
                     )
@@ -207,6 +211,11 @@ class GraphIsomorphismAgent(Agent, ABC):
             Rearrange("pair batch_size d_decider -> batch_size (pair d_decider)"),
             Linear(
                 in_features=2 * d_decider,
+                out_features=d_decider,
+            ),
+            ReLU(inplace=True),
+            Linear(
+                in_features=d_decider,
                 out_features=d_decider,
             ),
             ReLU(inplace=True),
@@ -320,6 +329,7 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         self.gnn, self.attention = self._build_gnn_and_attention(
             d_input=params.max_message_rounds,
             d_gnn=params.graph_isomorphism.prover_d_gnn,
+            d_gin_mlp=params.graph_isomorphism.prover_d_gin_mlp,
             num_layers=params.graph_isomorphism.prover_num_layers,
             num_heads=params.graph_isomorphism.prover_num_heads,
         )
@@ -386,6 +396,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         self.gnn, self.attention = self._build_gnn_and_attention(
             d_input=params.max_message_rounds,
             d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            d_gin_mlp=params.graph_isomorphism.verifier_d_gin_mlp,
             num_layers=params.graph_isomorphism.verifier_num_layers,
             num_heads=params.graph_isomorphism.verifier_num_heads,
         )
