@@ -13,6 +13,7 @@ from torch.distributions import Categorical
 
 from torch_geometric.nn import (
     GCNConv,
+    GINConv,
     Sequential as GeometricSequential,
     Linear as GeometricLinear,
 )
@@ -40,7 +41,7 @@ from pvg.scenarios.base import (
 )
 from pvg.parameters import Parameters
 from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
-from pvg.utils.torch_modules import CatGraphPairDim
+from pvg.utils.torch_modules import CatGraphPairDim, Print
 
 
 class GraphIsomorphismAgent(Agent, ABC):
@@ -93,9 +94,18 @@ class GraphIsomorphismAgent(Agent, ABC):
         for i in range(num_layers):
             gnn_layers[f"ReLU_{i}"] = ReLU(inplace=True)
             gnn_layers[f"GNN_layer_{i}"] = (
-                GCNConv(
-                    d_gnn,
-                    d_gnn,
+                GINConv(
+                    Sequential(
+                        Linear(
+                            d_gnn,
+                            4 * d_gnn,
+                        ),
+                        ReLU(inplace=True),
+                        Linear(
+                            4 * d_gnn,
+                            d_gnn,
+                        ),
+                    )
                 ),
                 "x, edge_index -> x",
             )

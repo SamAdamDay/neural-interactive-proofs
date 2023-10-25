@@ -2,8 +2,18 @@ from dataclasses import dataclass
 from abc import ABC
 from typing import Optional
 
+import dacite
 
-class AdditionalParameters(ABC):
+
+class BaseParameters(ABC):
+    """Base class for parameters objects."""
+
+    @classmethod
+    def from_dict(cls, data):
+        return dacite.from_dict(data_class=cls, data=data)
+
+
+class AdditionalParameters(BaseParameters, ABC):
     pass
 
 
@@ -50,7 +60,7 @@ class GraphIsomorphismParameters(AdditionalParameters):
 
 
 @dataclass
-class Parameters:
+class Parameters(BaseParameters):
     """Parameters of the experiment.
 
     Parameters
@@ -76,4 +86,9 @@ class Parameters:
 
     def __post_init__(self):
         if self.scenario == "graph_isomorphism":
-            self.graph_isomorphism = GraphIsomorphismParameters()
+            if self.graph_isomorphism is None:
+                self.graph_isomorphism = GraphIsomorphismParameters()
+            elif isinstance(self.graph_isomorphism, dict):
+                self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
+                    self.graph_isomorphism
+                )
