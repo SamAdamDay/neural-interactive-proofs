@@ -17,6 +17,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server p
 # Move to the root home directory
 WORKDIR /root
 
+# Invalidate the cache if this argument is different from the last build. Convention:
+# use: --build-arg CACHEBUST=`git rev-parse ${GITHUB_REF}`
+ARG CACHEBUST=0
+RUN echo "$CACHEBUST"
+
 # Do all the things which require secrets: set up git, login to Weights &
 # Biases and clone the repo
 RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my_env \
