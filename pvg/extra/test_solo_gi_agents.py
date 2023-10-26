@@ -45,7 +45,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         num_heads: int,
     ) -> nn.Module:
         # Build up the GNN module
-        self.gnn, _ = self._build_gnn_and_attention(
+        self.gnn, self.attention = self._build_gnn_and_attention(
             d_input=1,
             d_gnn=d_gnn,
             d_gin_mlp=d_gin_mlp,

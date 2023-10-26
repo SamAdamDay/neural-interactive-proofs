@@ -18,7 +18,7 @@ param_grid = dict(
     d_gnn=[8],
     d_decider=[16],
     num_epochs=[1000],
-    batch_size=[256],
+    batch_size=[1024],
     learning_rate=[0.003],
     scheduler_patience=[2000],
     scheduler_factor=[0.5],
@@ -39,8 +39,8 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         num_epochs=combo["num_epochs"],
         batch_size=combo["batch_size"],
         learning_rate=combo["learning_rate"],
-        scheduler_patience=combo["SCHEDULER_PATIENCE"],
-        scheduler_factor=combo["SCHEDULER_FACTOR"],
+        scheduler_patience=combo["scheduler_patience"],
+        scheduler_factor=combo["scheduler_factor"],
         freeze_encoder=combo["freeze_encoder"],
         seed=combo["seed"],
         device=device,
@@ -76,9 +76,9 @@ experiment = HyperparameterExperiment(
     experiment_name="TEST_SOLO_GI_AGENTS",
 )
 experiment.parser.add_argument(
-    "run_letter", type=str, help="The letter to prepend to the run ID"
+    "--run-letter", type=str, help="The letter to prepend to the run ID", default="a"
 )
 experiment.parser.add_argument(
-    "gpu_num", type=str, help="The (0-based) number of the GPU to use"
+    "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
 )
 experiment.run()
