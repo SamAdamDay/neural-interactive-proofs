@@ -9,7 +9,7 @@ import torch
 
 from pvg.utils.experiments import HyperparameterExperiment
 from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
-from pvg.constants import GI_SOLO_AGENTS_RESULTS_DIR
+from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
 TEST_SIZE = 0.2
 
@@ -57,7 +57,7 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
     # Save the results
     print(f"Saving results")
     filename = f"{run_id}.json"
-    filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DIR, filename)
+    filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DATA_DIR, filename)
     with open(filepath, "w") as f:
         json.dump(results, f)
 
@@ -67,7 +67,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 
 
 # Make sure the results directory exists
-Path(GI_SOLO_AGENTS_RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
 
 experiment = HyperparameterExperiment(
     param_grid=param_grid,
