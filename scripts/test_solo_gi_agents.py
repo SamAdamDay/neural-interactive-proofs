@@ -63,7 +63,7 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
 
 
 def run_id_fn(combo_index: int, cmd_args: Namespace):
-    return f"test_solo_gi_agents_{cmd_args.run_letter}_{combo_index}"
+    return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
 
 
 # Make sure the results directory exists

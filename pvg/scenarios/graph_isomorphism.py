@@ -198,7 +198,6 @@ class GraphIsomorphismAgent(Agent, ABC):
             The decider module.
         """
         return Sequential(
-            ReLU(inplace=True),
             Linear(
                 in_features=d_gnn,
                 out_features=d_decider,
