@@ -1,5 +1,6 @@
 from abc import ABC
-import pickle
+from typing import Optional, Callable
+from functools import partial
 
 import numpy as np
 
@@ -15,7 +16,7 @@ from torch_geometric.data import Batch as GeometricBatch
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 
-from jaxtyping import Float
+from jaxtyping import Float, Bool
 
 from tqdm import tqdm
 
@@ -61,9 +62,23 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         )
 
     def forward(
-        self, data: GraphIsomorphismData | GeometricBatch
+        self,
+        data: GraphIsomorphismData | GeometricBatch,
+        output_callback: Optional[
+            Callable[
+                [
+                    Float[Tensor, "2 batch_size max_nodes d_gnn"],
+                    Float[Tensor, "2 batch_size max_nodes d_gnn"],
+                    Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"],
+                    GraphIsomorphismData | GeometricBatch,
+                ],
+                None,
+            ]
+        ] = None,
     ) -> Float[Tensor, "batch_size 2"]:
-        gnn_output, _, _ = self._run_gnn_and_attention(data)
+        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
+        if output_callback is not None:
+            output_callback(gnn_output, attention_output, node_mask, data)
         decider_logits = self.decider(gnn_output)
         return decider_logits
 
@@ -100,6 +115,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
             d_decider=d_decider,
             num_heads=params.graph_isomorphism.verifier_num_heads,
         )
+
 
 def train_and_test_solo_gi_agents(
     dataset_name: str,
@@ -176,7 +192,7 @@ def train_and_test_solo_gi_agents(
         graph_isomorphism=GraphIsomorphismParameters(
             prover_d_gnn=d_gnn,
             verifier_d_gnn=d_gnn,
-        )
+        ),
     )
 
     dataset = GraphIsomorphismDataset(params, transform=ScoreToBitTransform())
@@ -243,22 +259,51 @@ def train_and_test_solo_gi_agents(
     ) -> tuple[float, float]:
         model.train()
         optimizer.zero_grad()
-        pred = model(data)
+
+        # Function to compute the encoder equality accuracy
+        encoder_eq_accuracy = torch.empty(data.y.shape[0], dtype=bool, device=device)
+
+        def compute_encoder_eq_accuracy(
+            gnn_output: Float[Tensor, "2 batch_size max_nodes d_gnn"],
+            attention_output,
+            node_mask,
+            data,
+            encoder_eq_accuracy,
+        ):
+            close = torch.isclose(
+                gnn_output[0].max(dim=-2)[0],
+                gnn_output[1].max(dim=-2)[0],
+            )
+            encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
+
+        # Run the model and compute the loss and encoder equality accuracy
+        pred = model(
+            data,
+            output_callback=partial(
+                compute_encoder_eq_accuracy,
+                encoder_eq_accuracy=encoder_eq_accuracy,
+            ),
+        )
         loss = F.cross_entropy(pred, data.y)
+
         loss.backward()
         optimizer.step()
         scheduler.step(loss)
+
         with torch.no_grad():
             accuracy = (pred.argmax(dim=1) == data.y).float().mean().item()
-        return loss.item(), accuracy
+
+        return loss.item(), accuracy, encoder_eq_accuracy
 
     prover.to(device)
     verifier.to(device)
 
     train_losses_prover = np.empty(num_epochs)
     train_accuracies_prover = np.empty(num_epochs)
+    train_encoder_eq_accs_prover = np.empty(num_epochs)
     train_losses_verifier = np.empty(num_epochs)
     train_accuracies_verifier = np.empty(num_epochs)
+    train_encoder_eq_accs_verifier = np.empty(num_epochs)
 
     # Train the prover and verifier
     iterator = range(num_epochs)
@@ -267,24 +312,34 @@ def train_and_test_solo_gi_agents(
     for epoch in iterator:
         total_loss_prover = 0
         total_accuracy_prover = 0
+        total_encoder_eq_acc_prover = 0
         total_loss_verifier = 0
         total_accuracy_verifier = 0
+        total_encoder_eq_acc_verifier = 0
         for data in test_loader:
             data = data.to(device)
-            loss, accuracy = train_step(
+            loss, accuracy, encoder_eq_accuracy = train_step(
                 prover, optimizer_prover, scheduler_prover, data
             )
             total_loss_prover += loss
             total_accuracy_prover += accuracy
-            loss, accuracy = train_step(
+            total_encoder_eq_acc_prover += encoder_eq_accuracy.float().mean().item()
+            loss, accuracy, encoder_eq_accuracy = train_step(
                 verifier, optimizer_verifier, scheduler_verifier, data
             )
             total_loss_verifier += loss
             total_accuracy_verifier += accuracy
+            total_encoder_eq_acc_verifier += encoder_eq_accuracy.float().mean().item()
         train_losses_prover[epoch] = total_loss_prover / len(test_loader)
         train_accuracies_prover[epoch] = total_accuracy_prover / len(test_loader)
+        train_encoder_eq_accs_prover[epoch] = total_encoder_eq_acc_prover / len(
+            test_loader
+        )
         train_losses_verifier[epoch] = total_loss_verifier / len(test_loader)
         train_accuracies_verifier[epoch] = total_accuracy_verifier / len(test_loader)
+        train_encoder_eq_accs_verifier[epoch] = total_encoder_eq_acc_verifier / len(
+            test_loader
+        )
 
     # Define the testing step
     def test_step(
@@ -322,8 +377,10 @@ def train_and_test_solo_gi_agents(
     results = {
         "train_losses_prover": train_losses_prover,
         "train_accuracies_prover": train_accuracies_prover,
+        "train_encoder_eq_accuracies_prover": train_encoder_eq_accs_prover,
         "train_losses_verifier": train_losses_verifier,
         "train_accuracies_verifier": train_accuracies_verifier,
+        "train_encoder_eq_accuracies_verifier": train_encoder_eq_accs_verifier,
         "test_loss_prover": test_loss_prover,
         "test_accuracy_prover": test_accuracy_prover,
         "test_loss_verifier": test_loss_verifier,
