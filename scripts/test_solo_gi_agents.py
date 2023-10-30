@@ -76,7 +76,7 @@ experiment = HyperparameterExperiment(
     experiment_name="TEST_SOLO_GI_AGENTS",
 )
 experiment.parser.add_argument(
-    "--run-letter", type=str, help="The letter to prepend to the run ID", default="a"
+    "--run-infix", type=str, help="The string to add in the middle of the run ID", default="a"
 )
 experiment.parser.add_argument(
     "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
