@@ -205,7 +205,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             ReLU(inplace=True),
             Reduce(
                 "pair batch_size max_nodes d_decider -> pair batch_size d_decider",
-                "max",
+                "sum",
             ),
             Rearrange("pair batch_size d_decider -> batch_size (pair d_decider)"),
             Linear(
