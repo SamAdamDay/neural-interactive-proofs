@@ -358,6 +358,8 @@ def train_and_test_solo_gi_agents(
                     "train_encoder_eq_accuracy_verifier": train_encoder_eq_accs_verifier[
                         epoch
                     ],
+                    "optimizer_lr_prover": optimizer_prover.param_groups[0]["lr"],
+                    "optimizer_lr_verifier": optimizer_verifier.param_groups[0]["lr"],
                 },
                 step=epoch,
             )
