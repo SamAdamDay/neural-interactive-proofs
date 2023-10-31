@@ -36,8 +36,10 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
     use_wandb = cmd_args.wandb_project != ""
     if use_wandb:
         wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
-        wandb.init(project=cmd_args.wandb_project, name=run_id, tags=wandb_tags)
-        wandb.config.update(combo)
+        wandb_run = wandb.init(
+            project=cmd_args.wandb_project, name=run_id, tags=wandb_tags
+        )
+        wandb_run.config.update(combo)
 
     # Train and test the agents to get the results
     _, _, results = train_and_test_solo_gi_agents(
@@ -52,11 +54,12 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         scheduler_factor=combo["scheduler_factor"],
         freeze_encoder=combo["freeze_encoder"],
         seed=combo["seed"],
+        wandb_run=wandb_run if use_wandb else None,
         device=device,
     )
 
     if use_wandb:
-        wandb.finish()
+        wandb_run.finish()
     else:
         # Convert any numpy arrays to lists
         for key, value in results.items():
