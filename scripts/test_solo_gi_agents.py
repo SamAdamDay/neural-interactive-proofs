@@ -7,6 +7,8 @@ import numpy as np
 
 import torch
 
+import wandb
+
 from pvg.utils.experiments import HyperparameterExperiment
 from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
@@ -30,6 +32,13 @@ param_grid = dict(
 def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
 
+    # Set up W&B
+    use_wandb = cmd_args.wandb_project != ""
+    if use_wandb:
+        wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
+        wandb.init(project=cmd_args.wandb_project, name=run_id, tags=wandb_tags)
+        wandb.config.update(combo)
+
     # Train and test the agents to get the results
     _, _, results = train_and_test_solo_gi_agents(
         dataset_name=combo["dataset_name"],
@@ -46,20 +55,23 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         device=device,
     )
 
-    # Convert any numpy arrays to lists
-    for key, value in results.items():
-        if isinstance(value, np.ndarray):
-            results[key] = value.tolist()
+    if use_wandb:
+        wandb.finish()
+    else:
+        # Convert any numpy arrays to lists
+        for key, value in results.items():
+            if isinstance(value, np.ndarray):
+                results[key] = value.tolist()
 
-    results["run_id"] = run_id
-    results["combo"] = combo
+        results["run_id"] = run_id
+        results["combo"] = combo
 
-    # Save the results
-    print(f"Saving results")
-    filename = f"{run_id}.json"
-    filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DATA_DIR, filename)
-    with open(filepath, "w") as f:
-        json.dump(results, f)
+        # Save the results
+        print(f"Saving results locally...")
+        filename = f"{run_id}.json"
+        filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DATA_DIR, filename)
+        with open(filepath, "w") as f:
+            json.dump(results, f)
 
 
 def run_id_fn(combo_index: int, cmd_args: Namespace):
@@ -76,9 +88,24 @@ experiment = HyperparameterExperiment(
     experiment_name="TEST_SOLO_GI_AGENTS",
 )
 experiment.parser.add_argument(
-    "--run-infix", type=str, help="The string to add in the middle of the run ID", default="a"
+    "--run-infix",
+    type=str,
+    help="The string to add in the middle of the run ID",
+    default="a",
 )
 experiment.parser.add_argument(
     "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
+)
+experiment.parser.add_argument(
+    "--wandb-project",
+    type=str,
+    help="The name of the W&B project to use. If not set saves the results locally",
+    default="",
+)
+experiment.parser.add_argument(
+    "--tag",
+    type=str,
+    default="",
+    help="An optional tag for the W&B run",
 )
 experiment.run()

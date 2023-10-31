@@ -29,6 +29,7 @@ GITHUB_PAT=
 GIT_NAME=""
 GIT_EMAIL=""
 SSH_PUBKEY=""
+WANDB_KEY=""
 ```
 
 3. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
@@ -38,7 +39,7 @@ SSH_PUBKEY=""
 4. Build the image using the following command:
 
 ```
-docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env .
+docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
 ```
 
 replacing `DOCKER_REPO` and `DOCKER_TAG` with the appropriate details.

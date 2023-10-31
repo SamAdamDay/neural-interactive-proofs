@@ -17,16 +17,20 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server p
 # Move to the root home directory
 WORKDIR /root
 
+# Install Weights & Biases now so we we can log in
+RUN pip install wandb
+
 # Invalidate the cache if this argument is different from the last build. Convention:
-# use: --build-arg CACHEBUST=`git rev-parse ${GITHUB_REF}`
-ARG CACHEBUST=0
-RUN echo "$CACHEBUST"
+# use: --build-arg CACHE_BUST=`git rev-parse main`
+ARG CACHE_BUST=0
+RUN echo "$CACHE_BUST"
 
 # Do all the things which require secrets: set up git, login to Weights &
 # Biases and clone the repo
 RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my_env \
     && git config --global user.name "${GIT_NAME}" \
     && git config --global user.email "${GIT_EMAIL}" \
+    && wandb login ${WANDB_KEY} \
     && git clone https://$GITHUB_USER:$GITHUB_PAT@github.com/SamAdamDay/pvg-experiments.git pvg-experiments \
     && mkdir -p .ssh \
     && echo ${SSH_PUBKEY} > .ssh/authorized_keys'
