@@ -19,12 +19,12 @@ param_grid = dict(
     dataset_name=["er10000"],
     d_gnn=[8],
     d_decider=[16],
-    num_epochs=[1000],
-    batch_size=[1024],
-    learning_rate=[0.003],
-    scheduler_patience=[2000],
+    num_epochs=[500],
+    batch_size=[64, 256, 1024],
+    learning_rate=[0.1, 0.03, 0.01, 0.003, 0.001],
+    scheduler_patience=[800, 1200, 1600],
     scheduler_factor=[0.5],
-    freeze_encoder=[True, False],
+    freeze_encoder=[True],
     seed=[8144, 820, 4173, 3992],
 )
 
