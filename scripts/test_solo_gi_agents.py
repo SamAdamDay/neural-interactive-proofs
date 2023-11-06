@@ -44,7 +44,9 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
 
     # Train and test the agents to get the results
     learning_rate_scheduler_args = {
-        arg: value for arg, value in combo.items() if arg.startswith("scheduler_")
+        arg[len("scheduler_") :]: value
+        for arg, value in combo.items()
+        if arg.startswith("scheduler_")
     }
     _, _, results = train_and_test_solo_gi_agents(
         dataset_name=combo["dataset_name"],

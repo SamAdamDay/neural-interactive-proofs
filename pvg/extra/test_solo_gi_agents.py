@@ -353,11 +353,11 @@ def train_and_test_solo_gi_agents(
 
         # Update the learning rate
         if learning_rate_scheduler == "ReduceLROnPlateau":
-            scheduler_prover.step(loss_prover, epoch=epoch)
-            scheduler_verifier.step(loss_verifier, epoch=epoch)
+            scheduler_prover.step(loss_prover)
+            scheduler_verifier.step(loss_verifier)
         else:
-            scheduler_prover.step(epoch=epoch)
-            scheduler_verifier.step(epoch=epoch)
+            scheduler_prover.step()
+            scheduler_verifier.step()
 
         # Log the results
         train_losses_prover[epoch] = total_loss_prover / len(test_loader)
