@@ -351,13 +351,15 @@ def train_and_test_solo_gi_agents(
             total_accuracy_verifier += accuracy
             total_encoder_eq_acc_verifier += encoder_eq_accuracy
 
-        # Update the learning rate
+            # Update the learning rate per batch if not using ReduceLROnPlateau
+            if learning_rate_scheduler != "ReduceLROnPlateau":
+                scheduler_prover.step()
+                scheduler_verifier.step()
+
+        # Update the learning rate per epoch if using ReduceLROnPlateau
         if learning_rate_scheduler == "ReduceLROnPlateau":
             scheduler_prover.step(loss_prover)
             scheduler_verifier.step(loss_verifier)
-        else:
-            scheduler_prover.step()
-            scheduler_verifier.step()
 
         # Log the results
         train_losses_prover[epoch] = total_loss_prover / len(test_loader)
