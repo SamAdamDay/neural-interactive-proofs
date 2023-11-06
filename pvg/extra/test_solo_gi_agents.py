@@ -242,12 +242,12 @@ def train_and_test_solo_gi_agents(
     elif learning_rate_scheduler == "CyclicLR":
         scheduler_prover = torch.optim.lr_scheduler.CyclicLR(
             optimizer_prover,
-            verbose=verbose,
+            verbose=False,
             **learning_rate_scheduler_args,
         )
         scheduler_verifier = torch.optim.lr_scheduler.CyclicLR(
             optimizer_verifier,
-            verbose=verbose,
+            verbose=False,
             **learning_rate_scheduler_args,
         )
     else:
