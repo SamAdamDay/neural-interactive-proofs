@@ -22,6 +22,7 @@ param_grid = dict(
     num_epochs=[500],
     batch_size=[64, 256, 1024],
     learning_rate=[0.1, 0.03, 0.01, 0.003, 0.001],
+    learning_rate_scheduler=["ReduceLROnPlateau"],
     scheduler_patience=[800, 1200, 1600],
     scheduler_factor=[0.5],
     freeze_encoder=[True],
@@ -42,6 +43,9 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         wandb_run.config.update(combo)
 
     # Train and test the agents to get the results
+    learning_rate_scheduler_args = {
+        arg: value for arg, value in combo.items() if arg.startswith("scheduler_")
+    }
     _, _, results = train_and_test_solo_gi_agents(
         dataset_name=combo["dataset_name"],
         d_gnn=combo["d_gnn"],
@@ -50,8 +54,8 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         num_epochs=combo["num_epochs"],
         batch_size=combo["batch_size"],
         learning_rate=combo["learning_rate"],
-        scheduler_patience=combo["scheduler_patience"],
-        scheduler_factor=combo["scheduler_factor"],
+        learning_rate_scheduler=combo["learning_rate_scheduler"],
+        learning_rate_scheduler_args=learning_rate_scheduler_args,
         freeze_encoder=combo["freeze_encoder"],
         seed=combo["seed"],
         wandb_run=wandb_run if use_wandb else None,

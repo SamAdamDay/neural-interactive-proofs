@@ -127,8 +127,8 @@ def train_and_test_solo_gi_agents(
     num_epochs: int,
     batch_size: int,
     learning_rate: float,
-    scheduler_patience: int,
-    scheduler_factor: float,
+    learning_rate_scheduler: str,
+    learning_rate_scheduler_args: dict,
     freeze_encoder: bool,
     seed: int,
     device: str | torch.device,
@@ -155,10 +155,10 @@ def train_and_test_solo_gi_agents(
         The batch size.
     learning_rate : float
         The learning rate.
-    scheduler_patience : int
-        The patience for the learning rate scheduler.
-    scheduler_factor : float
-        The factor for the learning rate scheduler.
+    learning_rate_scheduler : "ReduceLROnPlateau" | "CyclicLR"
+        The learning rate scheduler to use.
+    learning_rate_scheduler_args : dict
+        The arguments to pass to the learning rate scheduler.
     freeze_encoder : bool
         Whether to freeze the GNN and attention modules.
     seed : int
@@ -228,20 +228,32 @@ def train_and_test_solo_gi_agents(
     # Create the optimizers and schedulers
     optimizer_prover = Adam(prover_train_params, lr=learning_rate)
     optimizer_verifier = Adam(verifier_train_params, lr=learning_rate)
-    scheduler_prover = ReduceLROnPlateau(
-        optimizer_prover,
-        "min",
-        patience=scheduler_patience,
-        factor=scheduler_factor,
-        verbose=verbose,
-    )
-    scheduler_verifier = ReduceLROnPlateau(
-        optimizer_verifier,
-        "min",
-        patience=scheduler_patience,
-        factor=scheduler_factor,
-        verbose=verbose,
-    )
+    if learning_rate_scheduler == "ReduceLROnPlateau":
+        scheduler_prover = ReduceLROnPlateau(
+            optimizer_prover,
+            verbose=verbose,
+            **learning_rate_scheduler_args,
+        )
+        scheduler_verifier = ReduceLROnPlateau(
+            optimizer_verifier,
+            verbose=verbose,
+            **learning_rate_scheduler_args,
+        )
+    elif learning_rate_scheduler == "CyclicLR":
+        scheduler_prover = torch.optim.lr_scheduler.CyclicLR(
+            optimizer_prover,
+            verbose=verbose,
+            **learning_rate_scheduler_args,
+        )
+        scheduler_verifier = torch.optim.lr_scheduler.CyclicLR(
+            optimizer_verifier,
+            verbose=verbose,
+            **learning_rate_scheduler_args,
+        )
+    else:
+        raise ValueError(
+            f"Unknown learning rate scheduler {learning_rate_scheduler}."
+        )
 
     # Create the data loaders
     test_loader = DataLoader(
@@ -340,8 +352,12 @@ def train_and_test_solo_gi_agents(
             total_encoder_eq_acc_verifier += encoder_eq_accuracy
 
         # Update the learning rate
-        scheduler_prover.step(loss_prover)
-        scheduler_verifier.step(loss_verifier)
+        if learning_rate_scheduler == "ReduceLROnPlateau":
+            scheduler_prover.step(loss_prover, epoch=epoch)
+            scheduler_verifier.step(loss_verifier, epoch=epoch)
+        else:
+            scheduler_prover.step(epoch=epoch)
+            scheduler_verifier.step(epoch=epoch)
 
         # Log the results
         train_losses_prover[epoch] = total_loss_prover / len(test_loader)
