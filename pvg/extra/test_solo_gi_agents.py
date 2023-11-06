@@ -259,9 +259,8 @@ def train_and_test_solo_gi_agents(
     def train_step(
         model: GraphIsomorphismSoloAgent,
         optimizer,
-        scheduler,
         data: GraphIsomorphismData,
-    ) -> tuple[float, float]:
+    ) -> tuple[Tensor, float, float]:
         model.train()
         optimizer.zero_grad()
 
@@ -293,12 +292,11 @@ def train_and_test_solo_gi_agents(
 
         loss.backward()
         optimizer.step()
-        scheduler.step(loss)
 
         with torch.no_grad():
             accuracy = (pred.argmax(dim=1) == data.y).float().mean().item()
 
-        return loss.item(), accuracy, encoder_eq_accuracy.float().mean().item()
+        return loss, accuracy, encoder_eq_accuracy.float().mean().item()
 
     prover.to(device)
     verifier.to(device)
@@ -321,20 +319,31 @@ def train_and_test_solo_gi_agents(
         total_loss_verifier = 0
         total_accuracy_verifier = 0
         total_encoder_eq_acc_verifier = 0
+
         for data in test_loader:
             data = data.to(device)
-            loss, accuracy, encoder_eq_accuracy = train_step(
-                prover, optimizer_prover, scheduler_prover, data
+
+            # Train the prover on the batch
+            loss_prover, accuracy, encoder_eq_accuracy = train_step(
+                prover, optimizer_prover, data
             )
-            total_loss_prover += loss
+            total_loss_prover += loss_prover.item()
             total_accuracy_prover += accuracy
             total_encoder_eq_acc_prover += encoder_eq_accuracy
-            loss, accuracy, encoder_eq_accuracy = train_step(
-                verifier, optimizer_verifier, scheduler_verifier, data
+
+            # Train the verifier on the batch
+            loss_verifier, accuracy, encoder_eq_accuracy = train_step(
+                verifier, optimizer_verifier, data
             )
-            total_loss_verifier += loss
+            total_loss_verifier += loss_verifier.item()
             total_accuracy_verifier += accuracy
             total_encoder_eq_acc_verifier += encoder_eq_accuracy
+
+        # Update the learning rate
+        scheduler_prover.step(loss_prover)
+        scheduler_verifier.step(loss_verifier)
+
+        # Log the results
         train_losses_prover[epoch] = total_loss_prover / len(test_loader)
         train_accuracies_prover[epoch] = total_accuracy_prover / len(test_loader)
         train_encoder_eq_accs_prover[epoch] = total_encoder_eq_acc_prover / len(
@@ -345,6 +354,8 @@ def train_and_test_solo_gi_agents(
         train_encoder_eq_accs_verifier[epoch] = total_encoder_eq_acc_verifier / len(
             test_loader
         )
+
+        # Log to W&B if using
         if wandb_run is not None:
             wandb_run.log(
                 {
@@ -386,17 +397,18 @@ def train_and_test_solo_gi_agents(
         print("Testing...")
     for data in test_loader:
         data = data.to(device)
-        loss, accuracy = test_step(prover, optimizer_prover, data)
-        test_loss_prover += loss
+        loss_verifier, accuracy = test_step(prover, optimizer_prover, data)
+        test_loss_prover += loss_verifier
         test_accuracy_prover += accuracy
-        loss, accuracy = test_step(verifier, optimizer_verifier, data)
-        test_loss_verifier += loss
+        loss_verifier, accuracy = test_step(verifier, optimizer_verifier, data)
+        test_loss_verifier += loss_verifier
         test_accuracy_verifier += accuracy
     test_loss_prover = test_loss_prover / len(test_loader)
     test_accuracy_prover = test_accuracy_prover / len(test_loader)
     test_loss_verifier = test_loss_verifier / len(test_loader)
     test_accuracy_verifier = test_accuracy_verifier / len(test_loader)
 
+    # Record the final results with W&B if using
     if wandb_run is not None:
         wandb_run.log(
             {
