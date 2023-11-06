@@ -89,7 +89,7 @@ class PairedGaussianNoise(nn.Module):
             # Sample the noise once and repeat it across the graph pair dimension
             size = x.size()
             size[self.pair_dim] = 1
-            sampled_noise = self._noise.repeat(*x.size()).normal_() * scale
+            sampled_noise = self._noise.repeat(*size).normal_() * scale
 
             # Add the noise to the input
             x = x + sampled_noise
