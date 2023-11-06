@@ -36,6 +36,9 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_node_selector : int
         The dimension of the hidden layer in the prover's MLP which selects a node to
         send as a message.
+    prover_noise_sigma : float
+        The relative standard deviation of the Gaussian noise added to the prover's
+        graph-level representations.
     verifier_num_layers : int
         The number of layers in the verifier's GNN.
     verifier_d_gnn : int
@@ -52,6 +55,9 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_d_decider : int
         The dimension of the hidden layer in the verifier's MLP which decides whether to
         continue exchanging messages or to make a decision.
+    verifier_noise_sigma : float
+        The relative standard deviation of the Gaussian noise added to the verifier's
+        graph-level representations.
     """
 
     prover_num_layers: int = 5
@@ -59,12 +65,14 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_gin_mlp: int = 64
     prover_num_heads: int = 1
     prover_d_node_selector: int = 16
+    prover_noise_sigma: float = 0.0
     verifier_num_layers: int = 2
     verifier_d_gnn: int = 16
     verifier_d_gin_mlp: int = 64
     verifier_num_heads: int = 1
     verifier_d_node_selector: int = 16
     verifier_d_decider: int = 16
+    verifier_noise_sigma: float = 0.0
 
 
 @dataclass

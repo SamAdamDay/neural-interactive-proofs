@@ -41,7 +41,7 @@ from pvg.scenarios.base import (
 )
 from pvg.parameters import Parameters
 from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
-from pvg.utils.torch_modules import CatGraphPairDim, Print
+from pvg.utils.torch_modules import CatGraphPairDim, PairedGaussianNoise, Print
 
 
 class GraphIsomorphismAgent(Agent, ABC):
@@ -54,6 +54,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         super().__init__(params, device)
         self.gnn: GeometricSequential
         self.attention: MultiheadAttention
+        self.noise: PairedGaussianNoise
 
     def _build_gnn_and_attention(
         self,
@@ -333,6 +334,10 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
             num_heads=params.graph_isomorphism.prover_num_heads,
         )
 
+        self.noise = PairedGaussianNoise(
+            sigma=params.graph_isomorphism.prover_noise_sigma
+        )
+
         self.node_selector = self._build_node_selector(
             d_gnn=params.graph_isomorphism.prover_d_gnn,
             d_node_selector=params.graph_isomorphism.prover_d_node_selector,
@@ -368,15 +373,21 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # (2, batch_size, max_nodes, d_gnn)
         gnn_attn_output = gnn_output + attention_output
 
+        # (2, batch_size, max_nodes, d_gnn)
+        noised_output = self.noise(gnn_attn_output)
+
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
+        node_logits = self.node_selector(noised_output).squeeze(-1)
 
         return node_logits, node_mask
 
     def to(self, device: str | torch.device):
+        super().to(device)
         self.device = device
         self.gnn.to(device)
         self.attention.to(device)
+        self.noise.to(device)
+        return self
 
 
 class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
@@ -398,6 +409,10 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
             d_gin_mlp=params.graph_isomorphism.verifier_d_gin_mlp,
             num_layers=params.graph_isomorphism.verifier_num_layers,
             num_heads=params.graph_isomorphism.verifier_num_heads,
+        )
+
+        self.noise = PairedGaussianNoise(
+            sigma=params.graph_isomorphism.verifier_noise_sigma
         )
 
         self.node_selector = self._build_node_selector(
@@ -447,16 +462,21 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         # (batch_size, max_nodes_a+max_nodes_b)
         node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
 
+        # (2, batch_size, max_nodes, d_gnn)
+        noised_output = self.noise(gnn_attn_output)
+
         # (batch_size, 3)
-        decider_logits = self.decider(gnn_attn_output)
+        decider_logits = self.decider(noised_output)
 
         return node_logits, decider_logits, node_mask
 
     def to(self, device: str | torch.device):
+        super().to(device)
         self.device = device
         self.gnn.to(device)
         self.attention.to(device)
-        self.decider.to(device)
+        self.noise.to(device)
+        return self
 
 
 class GraphIsomorphismRollout(Rollout):

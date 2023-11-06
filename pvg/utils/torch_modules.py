@@ -48,6 +48,59 @@ class CatGraphPairDim(nn.Module):
         )
 
 
+class PairedGaussianNoise(nn.Module):
+    """Add Gaussian noise copied across the graph pair dimension.
+
+    Parameters
+    ----------
+    sigma : float
+        The relative standard deviation of the Gaussian noise. This will be multiplied
+        by the magnitude of the input to get the standard deviation for the noise.
+    pair_dim : int, default=0
+        The graph pair dimension.
+    train_sigma : bool, default=False
+        Whether the `sigma` parameter should be trained or not.
+
+    Notes
+    -----
+    Adapted from
+    https://discuss.pytorch.org/t/where-is-the-noise-layer-in-pytorch/2887/4
+    """
+
+    def __init__(self, sigma: float, pair_dim: int = 0, train_sigma: bool = False):
+        super().__init__()
+        if train_sigma:
+            self.sigma = nn.Parameter(torch.tensor(sigma))
+        else:
+            self.sigma = sigma
+        self.train_sigma = train_sigma
+        self.pair_dim = pair_dim
+        self._noise = torch.tensor(0)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.training and self.sigma != 0:
+            # If we're not training sigma, we need to detach x when computing the scale
+            # so that the gradient doesn't propagate to sigma
+            if self.train_sigma:
+                scale = self.sigma * x.detach()
+            else:
+                scale = self.sigma * x
+
+            # Sample the noise once and repeat it across the graph pair dimension
+            size = x.size()
+            size[self.pair_dim] = 1
+            sampled_noise = self._noise.repeat(*x.size()).normal_() * scale
+
+            # Add the noise to the input
+            x = x + sampled_noise
+        return x
+
+    def to(self, device):
+        super().to(device)
+        self._noise = self._noise.to(device)
+        return self
+
+
 class Print(nn.Module):
     """Print the shape or value of a tensor.
 

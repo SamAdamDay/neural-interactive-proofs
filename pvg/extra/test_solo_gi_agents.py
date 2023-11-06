@@ -25,6 +25,7 @@ import wandb
 from pvg.scenarios import GraphIsomorphismAgent
 from pvg.data import GraphIsomorphismDataset, GraphIsomorphismData
 from pvg.parameters import Parameters, GraphIsomorphismParameters
+from pvg.utils.torch_modules import PairedGaussianNoise
 
 
 class ScoreToBitTransform(BaseTransform):
@@ -46,6 +47,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         d_gin_mlp: int,
         d_decider: int,
         num_heads: int,
+        noise_sigma: float,
     ) -> nn.Module:
         # Build up the GNN module
         self.gnn, self.attention = self._build_gnn_and_attention(
@@ -55,6 +57,9 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
             num_layers=num_layers,
             num_heads=num_heads,
         )
+
+        # Create the Gaussian noise layer
+        self.noise = PairedGaussianNoise(sigma=noise_sigma)
 
         # Build the decider, which decides whether the graphs are isomorphic
         self.decider = self._build_decider(
@@ -94,7 +99,12 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
 class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
     """A class for a prover that tries to solve the graph isomorphism task solo."""
 
-    def __init__(self, params: Parameters, d_decider: int, device: str | torch.device):
+    def __init__(
+        self,
+        params: Parameters,
+        d_decider: int,
+        device: str | torch.device,
+    ):
         super().__init__(params, device)
         self._build_model(
             num_layers=params.graph_isomorphism.prover_num_layers,
@@ -102,13 +112,19 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
             d_gin_mlp=params.graph_isomorphism.prover_d_gin_mlp,
             d_decider=d_decider,
             num_heads=params.graph_isomorphism.prover_num_heads,
+            noise_sigma=params.graph_isomorphism.prover_noise_sigma,
         )
 
 
 class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
     """A class for a verifier that tries to solve the graph isomorphism task solo."""
 
-    def __init__(self, params: Parameters, d_decider: int, device: str | torch.device):
+    def __init__(
+        self,
+        params: Parameters,
+        d_decider: int,
+        device: str | torch.device,
+    ):
         super().__init__(params, device)
         self._build_model(
             num_layers=params.graph_isomorphism.verifier_num_layers,
@@ -116,6 +132,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
             d_gin_mlp=params.graph_isomorphism.verifier_d_gin_mlp,
             d_decider=d_decider,
             num_heads=params.graph_isomorphism.verifier_num_heads,
+            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
         )
 
 
@@ -123,6 +140,7 @@ def train_and_test_solo_gi_agents(
     dataset_name: str,
     d_gnn: int,
     d_decider: int,
+    noise_sigma: float,
     test_size: float,
     num_epochs: int,
     batch_size: int,
@@ -145,6 +163,9 @@ def train_and_test_solo_gi_agents(
         The dimensionality of the GNN hidden layers and of the attention embedding.
     d_decider : int
         The dimensionality of the final MLP hidden layers.
+    noise_sigma : float
+        The relative standard deviation of the Gaussian noise added to the graph-level
+        representations.
     dataset : GraphIsomorphismDataset
         The training dataset.
     test_size : float
@@ -197,6 +218,8 @@ def train_and_test_solo_gi_agents(
         graph_isomorphism=GraphIsomorphismParameters(
             prover_d_gnn=d_gnn,
             verifier_d_gnn=d_gnn,
+            prover_noise_sigma=noise_sigma,
+            verifier_noise_sigma=noise_sigma,
         ),
     )
 
@@ -251,9 +274,7 @@ def train_and_test_solo_gi_agents(
             **learning_rate_scheduler_args,
         )
     else:
-        raise ValueError(
-            f"Unknown learning rate scheduler {learning_rate_scheduler}."
-        )
+        raise ValueError(f"Unknown learning rate scheduler {learning_rate_scheduler}.")
 
     # Create the data loaders
     test_loader = DataLoader(
