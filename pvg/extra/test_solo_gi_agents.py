@@ -93,6 +93,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
     def to(self, device: str | torch.device):
         self.gnn.to(device)
         self.attention.to(device)
+        self.noise.to(device)
         self.decider.to(device)
         return self
 
