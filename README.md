@@ -4,13 +4,15 @@
 
 1. Clone the repo
 2. Create a virtual environment
-3. Install perquisites for [`primesieve`](https://pypi.org/project/primesieve/). On
-   Ubunut/Debian this looks like:
+3. Install prerequisites for [`primesieve`](https://pypi.org/project/primesieve/). On
+   Ubuntu/Debian this looks like:
    ```
    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
    ```
 4. Install the requirements: `pip install -r requirements`
-5. Install the `pvg` package locally in edit mode: `pip install -e .`
+5. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
+   key](https://wandb.ai/settings#dangerzone))
+6. Install the `pvg` package locally in edit mode: `pip install -e .`
 
 
 ## Using Docker
@@ -21,7 +23,10 @@ experiments. To build a new image and use it, follow the proceeding steps.
 1. Create GitHub personal access token. Ideally use a fine-grained one which has access
    only to the contents of this repository.
 
-2. Create a file named `.env` with the following contents
+2. Create a [Weights and Biases](https://wandb.ai) account and generate an [API
+   key](https://wandb.ai/settings#dangerzone)
+
+3. Create a file named `.env` with the following contents
 
 ```bash
 GITHUB_USER=
@@ -32,11 +37,12 @@ SSH_PUBKEY=""
 WANDB_KEY=""
 ```
 
-3. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
-   like it to appear in git commit messages, the email you'd like to use for git commits
-   and the SSH public key you'd like to use to access the container.
+4. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
+   like it to appear in git commit messages, the email you'd like to use for git
+   commits, the SSH public key you'd like to use to access the container and your
+   Weight's and Biases API key.
 
-4. Build the image using the following command:
+5. Build the image using the following command:
 
 ```
 docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
