@@ -84,8 +84,9 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         ] = None,
     ) -> Float[Tensor, "batch_size 2"]:
         gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
+        noised_output = self.noise(gnn_output)
         if output_callback is not None:
-            output_callback(gnn_output, attention_output, node_mask, data)
+            output_callback(gnn_output, noised_output, attention_output, node_mask, data)
         decider_logits = self.decider(gnn_output)
         return decider_logits
 
@@ -301,15 +302,16 @@ def train_and_test_solo_gi_agents(
         encoder_eq_accuracy = torch.empty(data.y.shape[0], dtype=bool, device=device)
 
         def compute_encoder_eq_accuracy(
-            gnn_output: Float[Tensor, "2 batch_size max_nodes d_gnn"],
+            gnn_output,
+            noised_output: Float[Tensor, "2 batch_size max_nodes d_gnn"],
             attention_output,
             node_mask,
             data,
             encoder_eq_accuracy,
         ):
             close = torch.isclose(
-                gnn_output[0].max(dim=-2)[0],
-                gnn_output[1].max(dim=-2)[0],
+                noised_output[0].max(dim=-2)[0],
+                noised_output[1].max(dim=-2)[0],
             )
             encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
 

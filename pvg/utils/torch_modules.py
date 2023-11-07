@@ -75,7 +75,7 @@ class PairedGaussianNoise(nn.Module):
             self.sigma = sigma
         self.train_sigma = train_sigma
         self.pair_dim = pair_dim
-        self._noise = torch.tensor(0)
+        self._noise = torch.tensor(0, dtype=float)
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training and self.sigma != 0:
@@ -87,7 +87,7 @@ class PairedGaussianNoise(nn.Module):
                 scale = self.sigma * x
 
             # Sample the noise once and repeat it across the graph pair dimension
-            size = x.size()
+            size = list(x.size())
             size[self.pair_dim] = 1
             sampled_noise = self._noise.repeat(*size).normal_() * scale
 
@@ -99,6 +99,12 @@ class PairedGaussianNoise(nn.Module):
         super().to(device)
         self._noise = self._noise.to(device)
         return self
+
+    def __repr__(self):
+        return (
+            f"PairedGaussianNoise(sigma={self.sigma}, pair_dim={self.pair_dim}, "
+            f"train_sigma={self.train_sigma})"
+        )
 
 
 class Print(nn.Module):
