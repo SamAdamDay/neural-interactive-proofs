@@ -238,15 +238,24 @@ def train_and_test_solo_gi_agents(
 
     # Freeze the GNN and attention modules if requested
     if freeze_encoder:
+
+        def parameter_selector(name: str) -> bool:
+            return (
+                name.startswith("gnn")
+                or name.startswith("attention")
+                or name.startswith("global_pooling")
+            )
+
         prover_train_params = []
         for name, param in prover.named_parameters():
-            if name.startswith("gnn") or name.startswith("attention"):
+            if parameter_selector(name):
                 param.requires_grad = False
             else:
                 prover_train_params.append(param)
         verifier_train_params = []
+
         for name, param in verifier.named_parameters():
-            if name.startswith("gnn") or name.startswith("attention"):
+            if parameter_selector(name):
                 param.requires_grad = False
             else:
                 verifier_train_params.append(param)
