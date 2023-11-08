@@ -25,7 +25,6 @@ import wandb
 from pvg.scenarios import GraphIsomorphismAgent
 from pvg.data import GraphIsomorphismDataset, GraphIsomorphismData
 from pvg.parameters import Parameters, GraphIsomorphismParameters
-from pvg.utils.torch_modules import PairedGaussianNoise
 
 
 class ScoreToBitTransform(BaseTransform):
@@ -59,11 +58,12 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         )
 
         # Create the Gaussian noise layer
-        self.noise = PairedGaussianNoise(sigma=noise_sigma)
+        self.global_pooling = self._build_global_pooling(
+            d_gnn=d_gnn, d_decider=d_decider, noise_sigma=noise_sigma
+        )
 
         # Build the decider, which decides whether the graphs are isomorphic
         self.decider = self._build_decider(
-            d_gnn=d_gnn,
             d_decider=d_decider,
             d_out=2,
         )
@@ -76,6 +76,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
                 [
                     Float[Tensor, "2 batch_size max_nodes d_gnn"],
                     Float[Tensor, "2 batch_size max_nodes d_gnn"],
+                    Float[Tensor, "2 batch_size d_decider"],
                     Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"],
                     GraphIsomorphismData | GeometricBatch,
                 ],
@@ -84,16 +85,18 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         ] = None,
     ) -> Float[Tensor, "batch_size 2"]:
         gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
-        noised_output = self.noise(gnn_output)
+        pooled_output = self.global_pooling(gnn_output)
         if output_callback is not None:
-            output_callback(gnn_output, noised_output, attention_output, node_mask, data)
-        decider_logits = self.decider(gnn_output)
+            output_callback(
+                gnn_output, attention_output, pooled_output, node_mask, data
+            )
+        decider_logits = self.decider(pooled_output)
         return decider_logits
 
     def to(self, device: str | torch.device):
         self.gnn.to(device)
         self.attention.to(device)
-        self.noise.to(device)
+        self.global_pooling.to(device)
         self.decider.to(device)
         return self
 
@@ -304,16 +307,13 @@ def train_and_test_solo_gi_agents(
 
         def compute_encoder_eq_accuracy(
             gnn_output,
-            noised_output: Float[Tensor, "2 batch_size max_nodes d_gnn"],
             attention_output,
+            pooled_output: Float[Tensor, "2 batch_size d_decider"],
             node_mask,
             data,
             encoder_eq_accuracy,
         ):
-            close = torch.isclose(
-                noised_output[0].max(dim=-2)[0],
-                noised_output[1].max(dim=-2)[0],
-            )
+            close = torch.isclose(pooled_output[0], pooled_output[1])
             encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
 
         # Run the model and compute the loss and encoder equality accuracy

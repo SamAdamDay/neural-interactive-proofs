@@ -67,7 +67,13 @@ class PairedGaussianNoise(nn.Module):
     https://discuss.pytorch.org/t/where-is-the-noise-layer-in-pytorch/2887/4
     """
 
-    def __init__(self, sigma: float, pair_dim: int = 0, train_sigma: bool = False):
+    def __init__(
+        self,
+        sigma: float,
+        pair_dim: int = 0,
+        train_sigma: bool = False,
+        dtype=torch.float32,
+    ):
         super().__init__()
         if train_sigma:
             self.sigma = nn.Parameter(torch.tensor(sigma))
@@ -75,12 +81,12 @@ class PairedGaussianNoise(nn.Module):
             self.sigma = sigma
         self.train_sigma = train_sigma
         self.pair_dim = pair_dim
-        self._noise = torch.tensor(0, dtype=float)
+        self._noise = torch.tensor(0, dtype=dtype)
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training and self.sigma != 0:
-            # If we're not training sigma, we need to detach x when computing the scale
-            # so that the gradient doesn't propagate to sigma
+            # If we're not training sigma, we need to detach `x` when computing the
+            # scale so that the gradient doesn't propagate to sigma
             if self.train_sigma:
                 scale = self.sigma * x.detach()
             else:
@@ -91,13 +97,15 @@ class PairedGaussianNoise(nn.Module):
             size[self.pair_dim] = 1
             sampled_noise = self._noise.repeat(*size).normal_() * scale
 
+            print(x.dtype, sampled_noise.dtype)
+
             # Add the noise to the input
             x = x + sampled_noise
         return x
 
-    def to(self, device):
-        super().to(device)
-        self._noise = self._noise.to(device)
+    def to(self, *args, **kwargs):
+        super().to(*args, **kwargs)
+        self._noise = self._noise.to(*args, **kwargs)
         return self
 
     def __repr__(self):

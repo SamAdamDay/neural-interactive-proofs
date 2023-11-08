@@ -54,7 +54,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         super().__init__(params, device)
         self.gnn: GeometricSequential
         self.attention: MultiheadAttention
-        self.noise: PairedGaussianNoise
+        self.global_pooling: Sequential
 
     def _build_gnn_and_attention(
         self,
@@ -167,9 +167,50 @@ class GraphIsomorphismAgent(Agent, ABC):
             # (batch_size, max_nodes_a+max_nodes_b, d_node_out)
         )
 
-    def _build_decider(
+    def _build_global_pooling(
         self,
         d_gnn: int,
+        d_decider: int,
+        noise_sigma: float,
+    ) -> Sequential:
+        """Builds a pooling layer which computes the graph-level representation.
+
+        The module consists of a linear layer to change the dimensionality of the node
+        representations, a global sum pooling layer, and a paired Gaussian noise layer.
+
+        Parameters
+        ----------
+        d_gnn : int
+            The dimensionality of the attention embedding (also of the GNN hidden
+            layers).
+        d_decider : int
+            The dimensionality of the decider module. This is the dimensionality of the
+            graph-level representation produced by the present module.
+        noise_sigma : float
+            The relative standard deviation of the Gaussian noise. This will be
+            multiplied by the magnitude of the input to get the standard deviation for
+            the noise.
+
+        Returns
+        -------
+        global_pooling : torch.nn.Sequential
+            The global pooling module.
+        """
+        return Sequential(
+            Linear(
+                in_features=d_gnn,
+                out_features=d_decider,
+            ),
+            ReLU(inplace=True),
+            Reduce(
+                "pair batch_size max_nodes d_decider -> pair batch_size d_decider",
+                "sum",
+            ),
+            PairedGaussianNoise(sigma=noise_sigma),
+        )
+
+    def _build_decider(
+        self,
         d_decider: int,
         d_out: int = 3,
     ) -> Sequential:
@@ -185,9 +226,6 @@ class GraphIsomorphismAgent(Agent, ABC):
 
         Parameters
         ----------
-        d_gnn : int
-            The dimensionality of the attention embedding (also of the GNN hidden
-            layers).
         d_decider : int
             The dimensionality of the final MLP hidden layers.
         d_out : int, default=3
@@ -199,15 +237,6 @@ class GraphIsomorphismAgent(Agent, ABC):
             The decider module.
         """
         return Sequential(
-            Linear(
-                in_features=d_gnn,
-                out_features=d_decider,
-            ),
-            ReLU(inplace=True),
-            Reduce(
-                "pair batch_size max_nodes d_decider -> pair batch_size d_decider",
-                "sum",
-            ),
             Rearrange("pair batch_size d_decider -> batch_size (pair d_decider)"),
             Linear(
                 in_features=2 * d_decider,
@@ -334,10 +363,14 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
             num_heads=params.graph_isomorphism.prover_num_heads,
         )
 
-        self.noise = PairedGaussianNoise(
-            sigma=params.graph_isomorphism.prover_noise_sigma
-        )
+        # # Build the global pooling module, which computes the graph-level representation
+        # self.global_pooling = self._build_global_pooling(
+        #     d_gnn=params.graph_isomorphism.prover_d_gnn,
+        #     d_decider=params.graph_isomorphism.prover_d_decider,
+        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma
+        # )
 
+        # Build the node selector module, which selects a node to send as a message
         self.node_selector = self._build_node_selector(
             d_gnn=params.graph_isomorphism.prover_d_gnn,
             d_node_selector=params.graph_isomorphism.prover_d_node_selector,
@@ -373,11 +406,11 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # (2, batch_size, max_nodes, d_gnn)
         gnn_attn_output = gnn_output + attention_output
 
-        # (2, batch_size, max_nodes, d_gnn)
-        noised_output = self.noise(gnn_attn_output)
+        # (2, batch_size, d_decider)
+        # pooled_output = self.global_pooling(gnn_attn_output)
 
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_logits = self.node_selector(noised_output).squeeze(-1)
+        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
 
         return node_logits, node_mask
 
@@ -386,7 +419,7 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         self.device = device
         self.gnn.to(device)
         self.attention.to(device)
-        self.noise.to(device)
+        # self.global_pooling.to(device)
         return self
 
 
@@ -411,19 +444,25 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
             num_heads=params.graph_isomorphism.verifier_num_heads,
         )
 
-        self.noise = PairedGaussianNoise(
-            sigma=params.graph_isomorphism.verifier_noise_sigma
+        # Build the global pooling module, which computes the graph-level representation
+        self.global_pooling = self._build_global_pooling(
+            d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            d_decider=params.graph_isomorphism.verifier_d_decider,
+            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
         )
 
+        # Build the node selector module, which selects a node to send as a message
         self.node_selector = self._build_node_selector(
             d_gnn=params.graph_isomorphism.verifier_d_gnn,
             d_node_selector=params.graph_isomorphism.verifier_d_node_selector,
             d_out=1,
         )
 
+        # Build the decider module, which decides whether to continue exchanging
+        # messages, guess that the graphs are isomorphic, or guess that the graphs are
+        # not isomorphic
         self.decider = self._build_decider(
             d_gnn=params.graph_isomorphism.verifier_d_gnn,
-            d_decider=params.graph_isomorphism.verifier_d_decider,
         )
 
     def forward(
@@ -462,11 +501,11 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         # (batch_size, max_nodes_a+max_nodes_b)
         node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
 
-        # (2, batch_size, max_nodes, d_gnn)
-        noised_output = self.noise(gnn_attn_output)
+        # (2, batch_size, d_decider)
+        pooled_output = self.global_pooling(gnn_attn_output)
 
         # (batch_size, 3)
-        decider_logits = self.decider(noised_output)
+        decider_logits = self.decider(pooled_output)
 
         return node_logits, decider_logits, node_mask
 
@@ -475,7 +514,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         self.device = device
         self.gnn.to(device)
         self.attention.to(device)
-        self.noise.to(device)
+        self.global_pooling.to(device)
         return self
 
 
