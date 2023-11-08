@@ -97,8 +97,6 @@ class PairedGaussianNoise(nn.Module):
             size[self.pair_dim] = 1
             sampled_noise = self._noise.repeat(*size).normal_() * scale
 
-            print(x.dtype, sampled_noise.dtype)
-
             # Add the noise to the input
             x = x + sampled_noise
         return x

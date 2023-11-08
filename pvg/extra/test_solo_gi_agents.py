@@ -97,6 +97,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         self.gnn.to(device)
         self.attention.to(device)
         self.global_pooling.to(device)
+        self.global_pooling[-1].to(device)
         self.decider.to(device)
         return self
 
