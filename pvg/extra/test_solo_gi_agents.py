@@ -151,7 +151,7 @@ def train_and_test_solo_gi_agents(
     num_epochs: int,
     batch_size: int,
     learning_rate: float,
-    learning_rate_scheduler: str,
+    learning_rate_scheduler: str | None,
     learning_rate_scheduler_args: dict,
     freeze_encoder: bool,
     seed: int,
@@ -182,7 +182,7 @@ def train_and_test_solo_gi_agents(
         The batch size.
     learning_rate : float
         The learning rate.
-    learning_rate_scheduler : "ReduceLROnPlateau" | "CyclicLR"
+    learning_rate_scheduler : "ReduceLROnPlateau" | "CyclicLR" | None
         The learning rate scheduler to use.
     learning_rate_scheduler_args : dict
         The arguments to pass to the learning rate scheduler.
@@ -288,6 +288,9 @@ def train_and_test_solo_gi_agents(
             verbose=False,
             **learning_rate_scheduler_args,
         )
+    elif learning_rate_scheduler is None:
+        scheduler_prover = None
+        scheduler_verifier = None
     else:
         raise ValueError(f"Unknown learning rate scheduler {learning_rate_scheduler}.")
 
@@ -386,7 +389,10 @@ def train_and_test_solo_gi_agents(
             total_encoder_eq_acc_verifier += encoder_eq_accuracy
 
             # Update the learning rate per batch if not using ReduceLROnPlateau
-            if learning_rate_scheduler != "ReduceLROnPlateau":
+            if (
+                learning_rate_scheduler is not None
+                and learning_rate_scheduler != "ReduceLROnPlateau"
+            ):
                 scheduler_prover.step()
                 scheduler_verifier.step()
 
