@@ -6,7 +6,7 @@ from functools import partial
 from collections import OrderedDict
 
 import torch
-from torch.nn import ReLU, Linear, MultiheadAttention, Sequential
+from torch.nn import ReLU, Linear, MultiheadAttention, Sequential, BatchNorm1d
 from torch import Tensor
 import torch.nn.functional as F
 from torch.distributions import Categorical
@@ -172,11 +172,13 @@ class GraphIsomorphismAgent(Agent, ABC):
         d_gnn: int,
         d_decider: int,
         noise_sigma: float,
+        use_batch_norm: bool,
     ) -> Sequential:
         """Builds a pooling layer which computes the graph-level representation.
 
         The module consists of a linear layer to change the dimensionality of the node
-        representations, a global sum pooling layer, and a paired Gaussian noise layer.
+        representations, a global sum pooling layer, an optional batch norm layer, and a
+        paired Gaussian noise layer.
 
         Parameters
         ----------
@@ -190,13 +192,15 @@ class GraphIsomorphismAgent(Agent, ABC):
             The relative standard deviation of the Gaussian noise. This will be
             multiplied by the magnitude of the input to get the standard deviation for
             the noise.
+        use_batch_norm : bool
+            Whether to use batch normalisation.
 
         Returns
         -------
         global_pooling : torch.nn.Sequential
             The global pooling module.
         """
-        return Sequential(
+        layers = [
             Linear(
                 in_features=d_gnn,
                 out_features=d_decider,
@@ -206,8 +210,23 @@ class GraphIsomorphismAgent(Agent, ABC):
                 "pair batch_size max_nodes d_decider -> pair batch_size d_decider",
                 "sum",
             ),
+        ]
+        if use_batch_norm:
+            layers.extend(
+                [
+                    Rearrange(
+                        "pair batch_size d_decider -> batch_size (pair d_decider)"
+                    ),
+                    BatchNorm1d(num_features=2 * d_decider),
+                    Rearrange(
+                        "batch_size (pair d_decider) -> pair batch_size d_decider"
+                    ),
+                ]
+            )
+        layers.append(
             PairedGaussianNoise(sigma=noise_sigma),
         )
+        return Sequential(*layers)
 
     def _build_decider(
         self,
@@ -367,7 +386,8 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # self.global_pooling = self._build_global_pooling(
         #     d_gnn=params.graph_isomorphism.prover_d_gnn,
         #     d_decider=params.graph_isomorphism.prover_d_decider,
-        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma
+        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma,
+        #     use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
         # )
 
         # Build the node selector module, which selects a node to send as a message
@@ -449,6 +469,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
             d_gnn=params.graph_isomorphism.verifier_d_gnn,
             d_decider=params.graph_isomorphism.verifier_d_decider,
             noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
+            use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
         )
 
         # Build the node selector module, which selects a node to send as a message

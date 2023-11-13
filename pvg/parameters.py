@@ -36,6 +36,8 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_node_selector : int
         The dimension of the hidden layer in the prover's MLP which selects a node to
         send as a message.
+    prover_use_batch_norm : bool
+        Whether to use batch normalization in the prover's global pooling layer.
     prover_noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the prover's
         graph-level representations.
@@ -55,6 +57,8 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_d_decider : int
         The dimension of the hidden layer in the verifier's MLP which decides whether to
         continue exchanging messages or to make a decision.
+    verifier_use_batch_norm : bool
+        Whether to use batch normalization in the verifier's global pooling layer.
     verifier_noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the verifier's
         graph-level representations.
@@ -65,6 +69,7 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_gin_mlp: int = 64
     prover_num_heads: int = 1
     prover_d_node_selector: int = 16
+    prover_use_batch_norm: bool = True
     prover_noise_sigma: float = 0.0
     verifier_num_layers: int = 2
     verifier_d_gnn: int = 16
@@ -72,6 +77,7 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_num_heads: int = 1
     verifier_d_node_selector: int = 16
     verifier_d_decider: int = 16
+    verifier_use_batch_norm: bool = True
     verifier_noise_sigma: float = 0.0
 
 

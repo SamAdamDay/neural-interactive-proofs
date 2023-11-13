@@ -47,6 +47,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         d_decider: int,
         num_heads: int,
         noise_sigma: float,
+        use_batch_norm: bool,
     ) -> nn.Module:
         # Build up the GNN module
         self.gnn, self.attention = self._build_gnn_and_attention(
@@ -59,7 +60,10 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
 
         # Create the Gaussian noise layer
         self.global_pooling = self._build_global_pooling(
-            d_gnn=d_gnn, d_decider=d_decider, noise_sigma=noise_sigma
+            d_gnn=d_gnn,
+            d_decider=d_decider,
+            noise_sigma=noise_sigma,
+            use_batch_norm=use_batch_norm,
         )
 
         # Build the decider, which decides whether the graphs are isomorphic
@@ -119,6 +123,7 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
             d_decider=d_decider,
             num_heads=params.graph_isomorphism.prover_num_heads,
             noise_sigma=params.graph_isomorphism.prover_noise_sigma,
+            use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
         )
 
 
@@ -139,6 +144,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
             d_decider=d_decider,
             num_heads=params.graph_isomorphism.verifier_num_heads,
             noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
+            use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
         )
 
 
@@ -146,6 +152,7 @@ def train_and_test_solo_gi_agents(
     dataset_name: str,
     d_gnn: int,
     d_decider: int,
+    use_batch_norm: bool,
     noise_sigma: float,
     test_size: float,
     num_epochs: int,
@@ -169,6 +176,8 @@ def train_and_test_solo_gi_agents(
         The dimensionality of the GNN hidden layers and of the attention embedding.
     d_decider : int
         The dimensionality of the final MLP hidden layers.
+    use_batch_norm : bool
+        Whether to use batch normalization in the global pooling layer.
     noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the graph-level
         representations.
@@ -224,6 +233,8 @@ def train_and_test_solo_gi_agents(
         graph_isomorphism=GraphIsomorphismParameters(
             prover_d_gnn=d_gnn,
             verifier_d_gnn=d_gnn,
+            prover_use_batch_norm=use_batch_norm,
+            verifier_use_batch_norm=use_batch_norm,
             prover_noise_sigma=noise_sigma,
             verifier_noise_sigma=noise_sigma,
         ),
