@@ -348,7 +348,15 @@ def train_and_test_solo_gi_agents(
             data,
             encoder_eq_accuracy,
         ):
-            close = torch.isclose(pooled_output[0], pooled_output[1])
+            if use_pair_invariant_pooling:
+                close = torch.isclose(
+                    pooled_output[1],
+                    torch.zeros_like(pooled_output[1]),
+                    rtol=1e-5,
+                    atol=1e-5,
+                )
+            else:
+                close = torch.isclose(pooled_output[0], pooled_output[1])
             encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
 
         # Run the model and compute the loss and encoder equality accuracy
