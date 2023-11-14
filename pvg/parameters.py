@@ -41,6 +41,10 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the prover's
         graph-level representations.
+    prover_pair_invariant_pooling : bool
+        Whether to use pair-invariant pooling in the prover's global pooling layer. This
+        makes the prover's graph-level representations invariant to the order of the
+        graphs in the pair.
     verifier_num_layers : int
         The number of layers in the verifier's GNN.
     verifier_d_gnn : int
@@ -62,6 +66,10 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the verifier's
         graph-level representations.
+    verifier_pair_invariant_pooling : bool
+        Whether to use pair-invariant pooling in the verifier's global pooling layer.
+        This makes the verifier's graph-level representations invariant to the order of
+        the graphs in the pair.
     """
 
     prover_num_layers: int = 5
@@ -71,6 +79,7 @@ class GraphIsomorphismParameters(AdditionalParameters):
     prover_d_node_selector: int = 16
     prover_use_batch_norm: bool = True
     prover_noise_sigma: float = 0.0
+    prover_pair_invariant_pooling: bool = True
     verifier_num_layers: int = 2
     verifier_d_gnn: int = 16
     verifier_d_gin_mlp: int = 64
@@ -79,6 +88,7 @@ class GraphIsomorphismParameters(AdditionalParameters):
     verifier_d_decider: int = 16
     verifier_use_batch_norm: bool = True
     verifier_noise_sigma: float = 0.0
+    verifier_pair_invariant_pooling: bool = True
 
 
 @dataclass

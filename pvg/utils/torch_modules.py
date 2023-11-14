@@ -111,6 +111,27 @@ class PairedGaussianNoise(nn.Module):
             f"PairedGaussianNoise(sigma={self.sigma}, pair_dim={self.pair_dim}, "
             f"train_sigma={self.train_sigma})"
         )
+    
+
+class PairInvariantizer(nn.Module):
+    """Transform the input to be invariant to the order of the graphs in a pair.
+
+    Works by taking the mean of the pair and the absolute difference between the graphs.
+
+    Parameters
+    ----------
+    pair_dim : int, default=0
+        The graph pair dimension.
+    """
+
+    def __init__(self, pair_dim: int = 0):
+        super().__init__()
+        self.pair_dim = pair_dim
+
+    def forward(self, x: Tensor) -> Tensor:
+        mean = x.mean(dim=self.pair_dim)
+        abs_diff = torch.abs(x.select(self.pair_dim, 0) - x.select(self.pair_dim, 1))
+        return torch.stack((mean, abs_diff), dim=0)
 
 
 class Print(nn.Module):

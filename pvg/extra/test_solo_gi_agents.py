@@ -48,6 +48,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         num_heads: int,
         noise_sigma: float,
         use_batch_norm: bool,
+        use_pair_invariant_pooling: bool,
     ) -> nn.Module:
         # Build up the GNN module
         self.gnn, self.attention = self._build_gnn_and_attention(
@@ -64,6 +65,7 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
             d_decider=d_decider,
             noise_sigma=noise_sigma,
             use_batch_norm=use_batch_norm,
+            use_invariantizer=use_pair_invariant_pooling,
         )
 
         # Build the decider, which decides whether the graphs are isomorphic
@@ -124,6 +126,7 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
             num_heads=params.graph_isomorphism.prover_num_heads,
             noise_sigma=params.graph_isomorphism.prover_noise_sigma,
             use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
+            use_pair_invariant_pooling=params.graph_isomorphism.prover_pair_invariant_pooling,
         )
 
 
@@ -145,6 +148,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
             num_heads=params.graph_isomorphism.verifier_num_heads,
             noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
             use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
+            use_pair_invariant_pooling=params.graph_isomorphism.verifier_pair_invariant_pooling,
         )
 
 
@@ -154,6 +158,7 @@ def train_and_test_solo_gi_agents(
     d_decider: int,
     use_batch_norm: bool,
     noise_sigma: float,
+    use_pair_invariant_pooling: bool,
     test_size: float,
     num_epochs: int,
     batch_size: int,
@@ -181,6 +186,10 @@ def train_and_test_solo_gi_agents(
     noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the graph-level
         representations.
+    use_pair_invariant_pooling : bool
+        Whether to use pair-invariant pooling in the global pooling layer. This makes
+        the graph-level representations invariant to the order of the graphs in the
+        pair.
     dataset : GraphIsomorphismDataset
         The training dataset.
     test_size : float
@@ -237,6 +246,8 @@ def train_and_test_solo_gi_agents(
             verifier_use_batch_norm=use_batch_norm,
             prover_noise_sigma=noise_sigma,
             verifier_noise_sigma=noise_sigma,
+            prover_pair_invariant_pooling=use_pair_invariant_pooling,
+            verifier_pair_invariant_pooling=use_pair_invariant_pooling,
         ),
     )
 

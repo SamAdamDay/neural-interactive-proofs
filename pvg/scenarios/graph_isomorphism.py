@@ -12,7 +12,6 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from torch_geometric.nn import (
-    GCNConv,
     GINConv,
     Sequential as GeometricSequential,
     Linear as GeometricLinear,
@@ -41,7 +40,12 @@ from pvg.scenarios.base import (
 )
 from pvg.parameters import Parameters
 from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
-from pvg.utils.torch_modules import CatGraphPairDim, PairedGaussianNoise, Print
+from pvg.utils.torch_modules import (
+    CatGraphPairDim,
+    PairedGaussianNoise,
+    PairInvariantizer,
+    Print,
+)
 
 
 class GraphIsomorphismAgent(Agent, ABC):
@@ -171,14 +175,15 @@ class GraphIsomorphismAgent(Agent, ABC):
         self,
         d_gnn: int,
         d_decider: int,
-        noise_sigma: float,
         use_batch_norm: bool,
+        noise_sigma: float,
+        use_invariantizer: bool,
     ) -> Sequential:
         """Builds a pooling layer which computes the graph-level representation.
 
         The module consists of a linear layer to change the dimensionality of the node
-        representations, a global sum pooling layer, an optional batch norm layer, and a
-        paired Gaussian noise layer.
+        representations, a global sum pooling layer, an optional batch norm layer, a
+        paired Gaussian noise layer and an optional pair invariant pooling layer.
 
         Parameters
         ----------
@@ -188,12 +193,15 @@ class GraphIsomorphismAgent(Agent, ABC):
         d_decider : int
             The dimensionality of the decider module. This is the dimensionality of the
             graph-level representation produced by the present module.
+        use_batch_norm : bool
+            Whether to use batch normalisation.
         noise_sigma : float
             The relative standard deviation of the Gaussian noise. This will be
             multiplied by the magnitude of the input to get the standard deviation for
             the noise.
-        use_batch_norm : bool
-            Whether to use batch normalisation.
+        use_invariant_pooling : bool
+            Whether to use invariant pooling. If True, the output will be invariant to
+            the order of the graphs in each pair.
 
         Returns
         -------
@@ -227,6 +235,8 @@ class GraphIsomorphismAgent(Agent, ABC):
         layers.append(
             PairedGaussianNoise(sigma=noise_sigma),
         )
+        if use_invariantizer:
+            layers.append(PairInvariantizer(pair_dim=0))
         return Sequential(*layers)
 
     def _build_decider(
@@ -387,8 +397,9 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # self.global_pooling = self._build_global_pooling(
         #     d_gnn=params.graph_isomorphism.prover_d_gnn,
         #     d_decider=params.graph_isomorphism.prover_d_decider,
-        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma,
         #     use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
+        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma,
+        #     use_pair_invariant_pooling=params.graph_isomorphism.prover_pair_invariant_pooling,
         # )
 
         # Build the node selector module, which selects a node to send as a message
@@ -469,8 +480,9 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         self.global_pooling = self._build_global_pooling(
             d_gnn=params.graph_isomorphism.verifier_d_gnn,
             d_decider=params.graph_isomorphism.verifier_d_decider,
-            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
             use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
+            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
+            use_invariantizer=params.graph_isomorphism.verifier_pair_invariant_pooling,
         )
 
         # Build the node selector module, which selects a node to send as a message
