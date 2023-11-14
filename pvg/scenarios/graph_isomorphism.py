@@ -215,11 +215,11 @@ class GraphIsomorphismAgent(Agent, ABC):
             layers.extend(
                 [
                     Rearrange(
-                        "pair batch_size d_decider -> batch_size (pair d_decider)"
+                        "pair batch_size d_decider -> (batch_size pair) d_decider"
                     ),
                     BatchNorm1d(num_features=2 * d_decider),
                     Rearrange(
-                        "batch_size (pair d_decider) -> pair batch_size d_decider",
+                        "(batch_size pair) d_decider -> pair batch_size d_decider",
                         pair=2,
                     ),
                 ]
