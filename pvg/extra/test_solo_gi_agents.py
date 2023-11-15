@@ -166,6 +166,7 @@ def train_and_test_solo_gi_agents(
     learning_rate_scheduler: str | None,
     learning_rate_scheduler_args: dict,
     freeze_encoder: bool,
+    encoder_lr_factor: float,
     seed: int,
     device: str | torch.device,
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
@@ -206,6 +207,9 @@ def train_and_test_solo_gi_agents(
         The arguments to pass to the learning rate scheduler.
     freeze_encoder : bool
         Whether to freeze the GNN and attention modules.
+    encoder_lr_factor : float
+        The factor by which to scale the learning rate of the encoder. Only makes sense
+        when freeze_encoder is False.
     seed : int
         The random seed.
     device : str | torch.device
@@ -258,36 +262,70 @@ def train_and_test_solo_gi_agents(
     prover = GraphIsomorphismSoloProver(params, d_decider, device)
     verifier = GraphIsomorphismSoloVerifier(params, d_decider, device)
 
-    # Freeze the GNN and attention modules if requested
+    def encoder_parameter_selector(name: str) -> bool:
+        return (
+            name.startswith("gnn")
+            or name.startswith("attention")
+            or name.startswith("global_pooling")
+        )
+
+    # Divide the parameters into encoder and non-encoder parameters
+    prover_encoder_params = (
+        param
+        for name, param in prover.named_parameters()
+        if encoder_parameter_selector(name)
+    )
+    verifier_encoder_params = (
+        param
+        for name, param in verifier.named_parameters()
+        if encoder_parameter_selector(name)
+    )
+    prover_non_encoder_params = (
+        param
+        for name, param in prover.named_parameters()
+        if not encoder_parameter_selector(name)
+    )
+    verifier_non_encoder_params = (
+        param
+        for name, param in verifier.named_parameters()
+        if not encoder_parameter_selector(name)
+    )
+
+    # Freeze the encoder if requested
     if freeze_encoder:
-
-        def parameter_selector(name: str) -> bool:
-            return (
-                name.startswith("gnn")
-                or name.startswith("attention")
-                or name.startswith("global_pooling")
-            )
-
-        prover_train_params = []
-        for name, param in prover.named_parameters():
-            if parameter_selector(name):
-                param.requires_grad = False
-            else:
-                prover_train_params.append(param)
-        verifier_train_params = []
-
-        for name, param in verifier.named_parameters():
-            if parameter_selector(name):
-                param.requires_grad = False
-            else:
-                verifier_train_params.append(param)
+        for param in prover_encoder_params:
+            param.requires_grad = False
+        for param in verifier_encoder_params:
+            param.requires_grad = False
+        prover_param_dicts = [
+            {"params": prover_non_encoder_params, "lr": learning_rate}
+        ]
+        verifier_param_dicts = [
+            {
+                "params": verifier_non_encoder_params,
+                "lr": learning_rate,
+            }
+        ]
+    # Otherwise, scale the learning rate of the encoder
     else:
-        prover_train_params = prover.parameters()
-        verifier_train_params = verifier.parameters()
+        prover_param_dicts = [
+            {"params": prover_encoder_params, "lr": learning_rate * encoder_lr_factor},
+            {"params": prover_non_encoder_params, "lr": learning_rate},
+        ]
+        verifier_param_dicts = [
+            {
+                "params": verifier_encoder_params,
+                "lr": learning_rate * encoder_lr_factor,
+            },
+            {
+                "params": verifier_non_encoder_params,
+                "lr": learning_rate,
+            },
+        ]
 
     # Create the optimizers and schedulers
-    optimizer_prover = Adam(prover_train_params, lr=learning_rate)
-    optimizer_verifier = Adam(verifier_train_params, lr=learning_rate)
+    optimizer_prover = Adam(prover_param_dicts)
+    optimizer_verifier = Adam(verifier_param_dicts)
     if learning_rate_scheduler == "ReduceLROnPlateau":
         scheduler_prover = ReduceLROnPlateau(
             optimizer_prover,

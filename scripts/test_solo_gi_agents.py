@@ -28,6 +28,7 @@ param_grid = dict(
     learning_rate_scheduler=[None],
     scheduler_factor=[0.5],
     freeze_encoder=[True],
+    encoder_lr_factor=[0.1],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -64,6 +65,7 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         learning_rate_scheduler=combo["learning_rate_scheduler"],
         learning_rate_scheduler_args=learning_rate_scheduler_args,
         freeze_encoder=combo["freeze_encoder"],
+        encoder_lr_factor=combo["encoder_lr_factor"],
         seed=combo["seed"],
         wandb_run=wandb_run if use_wandb else None,
         device=device,
