@@ -167,6 +167,8 @@ def train_and_test_solo_gi_agents(
     learning_rate_scheduler_args: dict,
     freeze_encoder: bool,
     encoder_lr_factor: float,
+    prover_num_layers: int,
+    verifier_num_layers: int,
     seed: int,
     device: str | torch.device,
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
@@ -210,6 +212,10 @@ def train_and_test_solo_gi_agents(
     encoder_lr_factor : float
         The factor by which to scale the learning rate of the encoder. Only makes sense
         when freeze_encoder is False.
+    prover_num_layers : int
+        The number of layers in the prover's GNN.
+    verifier_num_layers : int
+        The number of layers in the verifier's GNN.
     seed : int
         The random seed.
     device : str | torch.device
@@ -244,13 +250,15 @@ def train_and_test_solo_gi_agents(
         dataset=dataset_name,
         max_message_rounds=1,
         graph_isomorphism=GraphIsomorphismParameters(
+            prover_num_layers=prover_num_layers,
             prover_d_gnn=d_gnn,
-            verifier_d_gnn=d_gnn,
             prover_use_batch_norm=use_batch_norm,
-            verifier_use_batch_norm=use_batch_norm,
             prover_noise_sigma=noise_sigma,
-            verifier_noise_sigma=noise_sigma,
             prover_pair_invariant_pooling=use_pair_invariant_pooling,
+            verifier_num_layers=verifier_num_layers,
+            verifier_d_gnn=d_gnn,
+            verifier_use_batch_norm=use_batch_norm,
+            verifier_noise_sigma=noise_sigma,
             verifier_pair_invariant_pooling=use_pair_invariant_pooling,
         ),
     )
