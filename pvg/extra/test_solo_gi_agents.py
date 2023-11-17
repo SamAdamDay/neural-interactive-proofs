@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Optional, Callable
 from functools import partial
+import logging
 
 import numpy as np
 
@@ -172,7 +173,8 @@ def train_and_test_solo_gi_agents(
     seed: int,
     device: str | torch.device,
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
-    verbose: bool = True,
+    tqdm_func: Callable = tqdm,
+    logger: Optional[logging.Logger | logging.LoggerAdapter] = None,
 ) -> tuple[nn.Module, nn.Module, dict]:
     """Train and test solo GI agents.
 
@@ -222,8 +224,10 @@ def train_and_test_solo_gi_agents(
         The device to use.
     wandb_run : wandb.wandb_sdk.wandb_run.Run, optional
         The W&B run to log to, if any.
-    verbose : bool, default=True
-        Whether to print progress.
+    tqdm_func : Callable, optional
+        The tqdm function to use. Defaults to tqdm.
+    logger : logging.Logger | logging.LoggerAdapter, optional
+        The logger to log to. If None, creates a new logger.
 
     Returns
     -------
@@ -239,9 +243,10 @@ def train_and_test_solo_gi_agents(
     np.random.seed(seed)
     torch_generator = torch.Generator().manual_seed(seed)
 
-    if verbose:
-        print()
-        print("Loading dataset and agents...")
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.info("Loading dataset and agents...")
 
     # Create parameters for the experiment
     params = Parameters(
@@ -337,12 +342,12 @@ def train_and_test_solo_gi_agents(
     if learning_rate_scheduler == "ReduceLROnPlateau":
         scheduler_prover = ReduceLROnPlateau(
             optimizer_prover,
-            verbose=verbose,
+            verbose=False,
             **learning_rate_scheduler_args,
         )
         scheduler_verifier = ReduceLROnPlateau(
             optimizer_verifier,
-            verbose=verbose,
+            verbose=False,
             **learning_rate_scheduler_args,
         )
     elif learning_rate_scheduler == "CyclicLR":
@@ -434,10 +439,7 @@ def train_and_test_solo_gi_agents(
     train_encoder_eq_accs_verifier = np.empty(num_epochs)
 
     # Train the prover and verifier
-    iterator = range(num_epochs)
-    if verbose:
-        iterator = tqdm(iterator, desc="Training")
-    for epoch in iterator:
+    for epoch in tqdm_func(range(num_epochs, desc="Training")):
         total_loss_prover = 0
         total_accuracy_prover = 0
         total_encoder_eq_acc_prover = 0
@@ -526,9 +528,7 @@ def train_and_test_solo_gi_agents(
     test_accuracy_verifier = 0
 
     # Test the prover and verifier
-    if verbose:
-        print()
-        print("Testing...")
+    logger.info("Testing...")
     for data in test_loader:
         data = data.to(device)
         loss_verifier, accuracy = test_step(prover, optimizer_prover, data)

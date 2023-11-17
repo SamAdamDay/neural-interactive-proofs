@@ -1,11 +1,65 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from typing import Callable, Optional
 import textwrap
+import os
+from abc import ABC, abstractmethod
+import logging
+from functools import partial
 
 from sklearn.model_selection import ParameterGrid
 
+from tqdm import tqdm
 
-class HyperparameterExperiment:
+from tqdm_multiprocess.logger import setup_logger_tqdm
+from tqdm_multiprocess import TqdmMultiProcessPool
+
+
+# Hack to be able to pickle the command arguments
+# https://stackoverflow.com/a/71010038
+def identity(string):
+    return string
+
+
+class PrefixLoggerAdapter(logging.LoggerAdapter):
+    """A logger adapter that adds a prefix to the log message."""
+
+    def __init__(self, logger: logging.Logger, prefix: str):
+        super().__init__(logger, {})
+        self.prefix = prefix
+
+    def process(self, msg, kwargs):
+        return f"{self.prefix}{msg}", kwargs
+
+
+class HyperparameterExperiment(ABC):
+    """A base class to run an experiment over a grid of hyperparameters.
+
+    Runs each combination of hyperparameters in the grid as a separate experiment.
+    """
+
+    def __init__(
+        self,
+        param_grid: dict,
+        experiment_fn: Callable[[dict, str, Namespace], None],
+        run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        experiment_name: str = "EXPERIMENT",
+    ):
+        if run_id_fn is None:
+            run_id_fn = (
+                lambda combo_index, _: f"{experiment_name.lower()}_{combo_index}"
+            )
+
+        self.param_grid = param_grid
+        self.experiment_fn = experiment_fn
+        self.run_id_fn = run_id_fn
+        self.experiment_name = experiment_name
+
+    @abstractmethod
+    def run(self):
+        pass
+
+
+class SequentialHyperparameterExperiment(HyperparameterExperiment):
     """A class to run an experiment over a grid of hyperparameters.
 
     Runs each combination of hyperparameters in the grid as a separate experiment. If
@@ -51,20 +105,18 @@ class HyperparameterExperiment:
         experiment_name: str = "EXPERIMENT",
         output_width: int = 79,
     ):
-        if run_id_fn is None:
-            run_id_fn = (
-                lambda combo_index, _: f"{experiment_name.lower()}_{combo_index}"
-            )
+        super().__init__(
+            param_grid=param_grid,
+            experiment_fn=experiment_fn,
+            run_id_fn=run_id_fn,
+            experiment_name=experiment_name,
+        )
 
-        self.param_grid = param_grid
-        self.experiment_fn = experiment_fn
-        self.run_id_fn = run_id_fn
-        self.experiment_name = experiment_name
         self.output_width = output_width
 
         # Set up the arg parser
         self.parser = ArgumentParser(
-            description="Run the supervised MMH experiments",
+            description="Run hyperparameter experiments sequentially",
             formatter_class=ArgumentDefaultsHelpFormatter,
         )
 
@@ -150,3 +202,117 @@ class HyperparameterExperiment:
                 print(f"COMBO {combo_num}")
                 print(textwrap.fill(str(combo)))
                 print(result)
+
+
+class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
+    def __init__(
+        self,
+        param_grid: dict,
+        experiment_fn: Callable[
+            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
+        ],
+        run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        experiment_name: str = "EXPERIMENT",
+    ):
+        super().__init__(
+            param_grid=param_grid,
+            experiment_fn=experiment_fn,
+            run_id_fn=run_id_fn,
+            experiment_name=experiment_name,
+        )
+
+        # Set up the arg parser
+        self.parser = ArgumentParser(
+            description="Run hyperparameter experiments in parallel",
+            formatter_class=ArgumentDefaultsHelpFormatter,
+        )
+
+        # Needed so that we can pickle the command arguments
+        # https://stackoverflow.com/a/71010038
+        self.parser.register("type", None, identity)
+
+        # Add various arguments
+        self.parser.add_argument(
+            "--num-workers",
+            type=int,
+            default=1,
+            help="The number of workers to use for multiprocessing",
+        )
+        self.parser.add_argument(
+            '-d', '--debug',
+            help="Print debug messages",
+            action="store_const", dest="log_level", const=logging.DEBUG,
+            default=logging.WARNING,
+        )
+        self.parser.add_argument(
+            '-v', '--verbose',
+            help="Print additional info messages",
+            action="store_const", dest="log_level", const=logging.INFO,
+        )
+
+    def _task_fn(
+        self,
+        combinations: list[dict],
+        combo_index: int,
+        cmd_args: Namespace,
+        base_logger: logging.Logger,
+        tqdm_func: Callable,
+        global_tqdm: tqdm,
+    ) -> bool:
+        info_prefix = f"[{combo_index}/{len(combinations)}] "
+
+        # Create a unique run_id for this run
+        run_id = self.run_id_fn(combo_index, cmd_args)
+
+        # Set up the logger
+        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
+        child_logger.setLevel(cmd_args.log_level)
+        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
+
+        # The tqdm function to use. Set the leave argument to False because tqdm because
+        # otherwise tqdm doesn't display multiple progress bars properly due to a bug
+        # https://github.com/tqdm/tqdm/issues/1496
+        tqdm_func = partial(
+            tqdm_func,
+            leave=False,
+            bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
+        )
+
+        # Run the experiment
+        self.experiment_fn(
+            combinations[combo_index],
+            run_id,
+            cmd_args,
+            tqdm_func,
+            child_logger_adapter,
+        )
+
+        # Update the global progress bar and log that this run is finished
+        global_tqdm.update(1)
+        base_logger.info(f"{info_prefix}{run_id} finished")
+
+        return True
+
+    def run(self):
+        # Get the arguments
+        cmd_args = self.parser.parse_args()
+
+        # Get all configurations of hyperparameters, and turn this into a list of tasks
+        combinations = list(ParameterGrid(self.param_grid))
+
+        # Set up the logger
+        base_logger = logging.getLogger(__name__)
+        setup_logger_tqdm()
+
+        # Create a list of tasks
+        tasks = [
+            (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
+            for combo_index in range(len(combinations))
+        ]
+
+        # Create a pool of workers
+        pool = TqdmMultiProcessPool(cmd_args.num_workers)
+
+        with tqdm(total=len(combinations), dynamic_ncols=True) as global_progress:
+            global_progress.set_description("Total progress")
+            pool.map(global_progress, tasks, lambda x: None, lambda x: None)

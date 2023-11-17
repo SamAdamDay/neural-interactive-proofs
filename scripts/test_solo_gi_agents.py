@@ -2,6 +2,8 @@ from argparse import Namespace
 import os
 import json
 from pathlib import Path
+from typing import Callable
+import logging
 
 import numpy as np
 
@@ -9,7 +11,7 @@ import torch
 
 import wandb
 
-from pvg.utils.experiments import HyperparameterExperiment
+from pvg.utils.experiments import SequentialHyperparameterExperiment
 from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
@@ -34,8 +36,21 @@ param_grid = dict(
 )
 
 
-def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
+def experiment_fn(
+    combo: dict,
+    run_id: str,
+    cmd_args: Namespace,
+    tqdm_func: Callable,
+    logger: logging.Logger,
+):
+    logger.info(f"Starting run {run_id}")
+    logger.debug(f"Combo: {combo}")
+
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
+
+    # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
+    if logger.level > logging.DEBUG:
+        os.environ["WANDB_SILENT"] = "true"
 
     # Set up W&B
     use_wandb = cmd_args.wandb_project != ""
@@ -72,6 +87,8 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         seed=combo["seed"],
         wandb_run=wandb_run if use_wandb else None,
         device=device,
+        tqdm_func=tqdm_func,
+        logger=logger,
     )
 
     if use_wandb:
@@ -86,7 +103,7 @@ def experiment_fn(combo: dict, run_id: str, cmd_args: Namespace):
         results["combo"] = combo
 
         # Save the results
-        print(f"Saving results locally...")
+        logger.info(f"Saving results locally...")
         filename = f"{run_id}.json"
         filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DATA_DIR, filename)
         with open(filepath, "w") as f:
@@ -97,34 +114,35 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
     return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
 
 
-# Make sure the results directory exists
-Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
+if __name__ == "__main__":
+    # Make sure the results directory exists
+    Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
 
-experiment = HyperparameterExperiment(
-    param_grid=param_grid,
-    experiment_fn=experiment_fn,
-    run_id_fn=run_id_fn,
-    experiment_name="TEST_SOLO_GI_AGENTS",
-)
-experiment.parser.add_argument(
-    "--run-infix",
-    type=str,
-    help="The string to add in the middle of the run ID",
-    default="a",
-)
-experiment.parser.add_argument(
-    "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
-)
-experiment.parser.add_argument(
-    "--wandb-project",
-    type=str,
-    help="The name of the W&B project to use. If not set saves the results locally",
-    default="",
-)
-experiment.parser.add_argument(
-    "--tag",
-    type=str,
-    default="",
-    help="An optional tag for the W&B run",
-)
-experiment.run()
+    experiment = SequentialHyperparameterExperiment(
+        param_grid=param_grid,
+        experiment_fn=experiment_fn,
+        run_id_fn=run_id_fn,
+        experiment_name="TEST_SOLO_GI_AGENTS",
+    )
+    experiment.parser.add_argument(
+        "--run-infix",
+        type=str,
+        help="The string to add in the middle of the run ID",
+        default="a",
+    )
+    experiment.parser.add_argument(
+        "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
+    )
+    experiment.parser.add_argument(
+        "--wandb-project",
+        type=str,
+        help="The name of the W&B project to use. If not set saves the results locally",
+        default="",
+    )
+    experiment.parser.add_argument(
+        "--tag",
+        type=str,
+        default="",
+        help="An optional tag for the W&B run",
+    )
+    experiment.run()

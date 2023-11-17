@@ -16,3 +16,4 @@ primesieve==2.3.2
 dacite==1.8.1
 nbformat==5.9.2
 wandb==0.15.12
+tqdm_multiprocess==0.0.11
