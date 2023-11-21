@@ -3,8 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 
 from pvg.parameters import Parameters
-from pvg.scenarios import Scenario
-from pvg.data import Dataset
+from pvg.base import Scenario, Dataset
 
 
 class Trainer(ABC):

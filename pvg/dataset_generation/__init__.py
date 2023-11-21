@@ -1,1 +1,0 @@
-from .graph_isomorphism import generate_gi_dataset, GraphIsomorphicDatasetConfig

@@ -23,8 +23,11 @@ from tqdm import tqdm
 
 import wandb
 
-from pvg.scenarios import GraphIsomorphismAgent
-from pvg.data import GraphIsomorphismDataset, GraphIsomorphismData
+from pvg.graph_isomorphism import (
+    GraphIsomorphismAgent,
+    GraphIsomorphismDataset,
+    GraphIsomorphismData,
+)
 from pvg.parameters import Parameters, GraphIsomorphismParameters
 
 

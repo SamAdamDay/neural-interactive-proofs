@@ -11,7 +11,7 @@ from torch_geometric.data import (
 )
 
 from pvg.parameters import Parameters
-from pvg.data.base import Dataset, DataLoader
+from pvg.base import Dataset, DataLoader
 from pvg.constants import GI_DATA_DIR
 
 

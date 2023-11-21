@@ -29,7 +29,7 @@ import plotly.express as px
 
 import networkx as nx
 
-from pvg.scenarios.base import (
+from pvg.base import (
     Agent,
     Prover,
     Verifier,
@@ -39,7 +39,7 @@ from pvg.scenarios.base import (
     MessageExchange,
 )
 from pvg.parameters import Parameters
-from pvg.data import GraphIsomorphismData, GraphIsomorphismDataset
+from pvg.graph_isomorphism.data import GraphIsomorphismData, GraphIsomorphismDataset
 from pvg.utils.torch_modules import (
     CatGraphPairDim,
     PairedGaussianNoise,

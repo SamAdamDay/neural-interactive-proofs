@@ -2,8 +2,7 @@ import torch
 
 from pvg.parameters import Parameters
 from pvg.trainers import build_trainer
-from pvg.scenarios import build_scenario
-from pvg.data import load_dataset
+from pvg.base import build_scenario, load_dataset
 
 
 class Experiment:

@@ -26,18 +26,20 @@ class Agent(nn.Module, ABC):
 
 class Prover(Agent, ABC):
     """Base class for all provers."""
+
     pass
 
 
 class Verifier(Agent, ABC):
     """Base class for all verifier."""
+
     pass
 
 
 @dataclass
 class Message(ABC):
     """Base class for all messages sent between provers and verifiers.
-    
+
     Parameters
     ----------
     from_verifier : bool
@@ -73,20 +75,20 @@ class MessageExchange(list[Message]):
             super().__setitem__(index, message)
         else:
             raise TypeError(f"Expected a Message object, got {type(message)}")
-        
+
     def append(self, message):
         if isinstance(message, Message):
             super().append(message)
         else:
             raise TypeError(f"Expected a Message object, got {type(message)}")
-        
+
     def extend(self, iterable):
         for message in iterable:
             if isinstance(message, Message):
                 super().append(message)
             else:
                 raise TypeError(f"Expected a Message object, got {type(message)}")
-            
+
 
 class Rollout(ABC):
     """Base class for all Prover-Verifier rollouts."""
@@ -129,3 +131,11 @@ class Scenario(ABC):
     def rollout(self, *args, **kwargs) -> Rollout:
         """Perform a rollout of the scenario."""
         pass
+
+
+def build_scenario(params: Parameters, device: str | torch.device) -> Scenario:
+    for value in globals().values():
+        if issubclass(value, Scenario) and value.name == params.scenario:
+            cls = value
+            break
+    return cls(params, device)
