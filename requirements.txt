@@ -1,7 +1,7 @@
 ipykernel==6.25.2
 ipywidgets==8.1.1
-torch==2.0.1
-torchvision==0.15.2
+torch==2.1.1
+torchvision==0.16.1
 torch_geometric==2.3.1
 numpy==1.26.0
 matplotlib==3.8.0
