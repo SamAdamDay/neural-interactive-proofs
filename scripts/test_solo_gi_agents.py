@@ -11,7 +11,7 @@ import torch
 
 import wandb
 
-from pvg.utils.experiments import SequentialHyperparameterExperiment
+from pvg.utils.experiments import MultiprocessHyperparameterExperiment
 from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     # Make sure the results directory exists
     Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
 
-    experiment = SequentialHyperparameterExperiment(
+    experiment = MultiprocessHyperparameterExperiment(
         param_grid=param_grid,
         experiment_fn=experiment_fn,
         run_id_fn=run_id_fn,
