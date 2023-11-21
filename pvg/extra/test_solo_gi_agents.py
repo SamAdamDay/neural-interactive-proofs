@@ -439,81 +439,89 @@ def train_and_test_solo_gi_agents(
     train_encoder_eq_accs_verifier = np.empty(num_epochs)
 
     # Train the prover and verifier
-    for epoch in tqdm_func(range(num_epochs, desc="Training")):
-        total_loss_prover = 0
-        total_accuracy_prover = 0
-        total_encoder_eq_acc_prover = 0
-        total_loss_verifier = 0
-        total_accuracy_verifier = 0
-        total_encoder_eq_acc_verifier = 0
+    with tqdm_func(total=num_epochs, desc="Training") as pbar:
+        for epoch in range(num_epochs):
+            total_loss_prover = 0
+            total_accuracy_prover = 0
+            total_encoder_eq_acc_prover = 0
+            total_loss_verifier = 0
+            total_accuracy_verifier = 0
+            total_encoder_eq_acc_verifier = 0
 
-        for data in test_loader:
-            data = data.to(device)
+            for data in test_loader:
+                data = data.to(device)
 
-            # Train the prover on the batch
-            loss_prover, accuracy, encoder_eq_accuracy = train_step(
-                prover, optimizer_prover, data
+                # Train the prover on the batch
+                loss_prover, accuracy, encoder_eq_accuracy = train_step(
+                    prover, optimizer_prover, data
+                )
+                total_loss_prover += loss_prover.item()
+                total_accuracy_prover += accuracy
+                total_encoder_eq_acc_prover += encoder_eq_accuracy
+
+                # Train the verifier on the batch
+                loss_verifier, accuracy, encoder_eq_accuracy = train_step(
+                    verifier, optimizer_verifier, data
+                )
+                total_loss_verifier += loss_verifier.item()
+                total_accuracy_verifier += accuracy
+                total_encoder_eq_acc_verifier += encoder_eq_accuracy
+
+                # Update the learning rate per batch if not using ReduceLROnPlateau
+                if (
+                    learning_rate_scheduler is not None
+                    and learning_rate_scheduler != "ReduceLROnPlateau"
+                ):
+                    scheduler_prover.step()
+                    scheduler_verifier.step()
+
+            # Update the learning rate per epoch if using ReduceLROnPlateau
+            if learning_rate_scheduler == "ReduceLROnPlateau":
+                scheduler_prover.step(loss_prover)
+                scheduler_verifier.step(loss_verifier)
+
+            # Log the results
+            train_losses_prover[epoch] = total_loss_prover / len(test_loader)
+            train_accuracies_prover[epoch] = total_accuracy_prover / len(test_loader)
+            train_encoder_eq_accs_prover[epoch] = total_encoder_eq_acc_prover / len(
+                test_loader
             )
-            total_loss_prover += loss_prover.item()
-            total_accuracy_prover += accuracy
-            total_encoder_eq_acc_prover += encoder_eq_accuracy
-
-            # Train the verifier on the batch
-            loss_verifier, accuracy, encoder_eq_accuracy = train_step(
-                verifier, optimizer_verifier, data
+            train_losses_verifier[epoch] = total_loss_verifier / len(test_loader)
+            train_accuracies_verifier[epoch] = total_accuracy_verifier / len(
+                test_loader
             )
-            total_loss_verifier += loss_verifier.item()
-            total_accuracy_verifier += accuracy
-            total_encoder_eq_acc_verifier += encoder_eq_accuracy
-
-            # Update the learning rate per batch if not using ReduceLROnPlateau
-            if (
-                learning_rate_scheduler is not None
-                and learning_rate_scheduler != "ReduceLROnPlateau"
-            ):
-                scheduler_prover.step()
-                scheduler_verifier.step()
-
-        # Update the learning rate per epoch if using ReduceLROnPlateau
-        if learning_rate_scheduler == "ReduceLROnPlateau":
-            scheduler_prover.step(loss_prover)
-            scheduler_verifier.step(loss_verifier)
-
-        # Log the results
-        train_losses_prover[epoch] = total_loss_prover / len(test_loader)
-        train_accuracies_prover[epoch] = total_accuracy_prover / len(test_loader)
-        train_encoder_eq_accs_prover[epoch] = total_encoder_eq_acc_prover / len(
-            test_loader
-        )
-        train_losses_verifier[epoch] = total_loss_verifier / len(test_loader)
-        train_accuracies_verifier[epoch] = total_accuracy_verifier / len(test_loader)
-        train_encoder_eq_accs_verifier[epoch] = total_encoder_eq_acc_verifier / len(
-            test_loader
-        )
-
-        # Log to W&B if using
-        if wandb_run is not None:
-            wandb_run.log(
-                {
-                    "train_loss_prover": train_losses_prover[epoch],
-                    "train_accuracy_prover": train_accuracies_prover[epoch],
-                    "train_encoder_eq_accuracy_prover": train_encoder_eq_accs_prover[
-                        epoch
-                    ],
-                    "train_loss_verifier": train_losses_verifier[epoch],
-                    "train_accuracy_verifier": train_accuracies_verifier[epoch],
-                    "train_encoder_eq_accuracy_verifier": train_encoder_eq_accs_verifier[
-                        epoch
-                    ],
-                    "optimizer_lr_prover": optimizer_prover.param_groups[0]["lr"],
-                    "optimizer_lr_verifier": optimizer_verifier.param_groups[0]["lr"],
-                },
-                step=epoch,
+            train_encoder_eq_accs_verifier[epoch] = total_encoder_eq_acc_verifier / len(
+                test_loader
             )
+
+            # Log to W&B if using
+            if wandb_run is not None:
+                wandb_run.log(
+                    {
+                        "train_loss_prover": train_losses_prover[epoch],
+                        "train_accuracy_prover": train_accuracies_prover[epoch],
+                        "train_encoder_eq_accuracy_prover": train_encoder_eq_accs_prover[
+                            epoch
+                        ],
+                        "train_loss_verifier": train_losses_verifier[epoch],
+                        "train_accuracy_verifier": train_accuracies_verifier[epoch],
+                        "train_encoder_eq_accuracy_verifier": train_encoder_eq_accs_verifier[
+                            epoch
+                        ],
+                        "optimizer_lr_prover": optimizer_prover.param_groups[0]["lr"],
+                        "optimizer_lr_verifier": optimizer_verifier.param_groups[0][
+                            "lr"
+                        ],
+                    },
+                    step=epoch,
+                )
+
+            # Update the progress bar
+            pbar.update(1)
 
     # Define the testing step
     def test_step(
-        model: GraphIsomorphismSoloAgent, optimizer, data: GraphIsomorphismData
+        model: GraphIsomorphismSoloAgent, data: GraphIsomorphismData
     ) -> tuple[float, float]:
         model.eval()
         with torch.no_grad():
@@ -531,10 +539,10 @@ def train_and_test_solo_gi_agents(
     logger.info("Testing...")
     for data in test_loader:
         data = data.to(device)
-        loss_verifier, accuracy = test_step(prover, optimizer_prover, data)
+        loss_verifier, accuracy = test_step(prover, data)
         test_loss_prover += loss_verifier
         test_accuracy_prover += accuracy
-        loss_verifier, accuracy = test_step(verifier, optimizer_verifier, data)
+        loss_verifier, accuracy = test_step(verifier, data)
         test_loss_verifier += loss_verifier
         test_accuracy_verifier += accuracy
     test_loss_prover = test_loss_prover / len(test_loader)

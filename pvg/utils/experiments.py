@@ -8,6 +8,8 @@ from functools import partial
 
 from sklearn.model_selection import ParameterGrid
 
+import torch
+
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
@@ -29,6 +31,10 @@ class PrefixLoggerAdapter(logging.LoggerAdapter):
 
     def process(self, msg, kwargs):
         return f"{self.prefix}{msg}", kwargs
+
+    @property
+    def level(self):
+        return self.logger.level
 
 
 class HyperparameterExperiment(ABC):
@@ -309,6 +315,9 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
             for combo_index in range(len(combinations))
         ]
+
+        # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
+        torch.multiprocessing.set_start_method("spawn")
 
         # Create a pool of workers
         pool = TqdmMultiProcessPool(cmd_args.num_workers)
