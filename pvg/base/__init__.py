@@ -1,5 +1,5 @@
 from .data import Dataset, DataLoader, load_dataset
-from .scenario import (
+from .agents import (
     Agent,
     Prover,
     Verifier,
