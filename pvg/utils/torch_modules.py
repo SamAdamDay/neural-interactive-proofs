@@ -4,6 +4,14 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 
+from tensordict import TensorDictBase
+
+from torch_geometric.nn.inits import reset as reset_parameters
+
+import einops
+
+from jaxtyping import Float, Bool
+
 
 class GlobalMaxPool(nn.Module):
     """Global max pooling layer over a dimension.
@@ -135,6 +143,86 @@ class PairInvariantizer(nn.Module):
             x.select(self.pair_dim, 0) - x.select(self.pair_dim, 1)
         )
         return torch.stack((mean, abs_diff), dim=0)
+
+
+class GIN(nn.Module):
+    """A graph isomorphism network (GIN) layer.
+
+    This is a message-passing layer that aggregates the features of the neighbours as
+    follows:
+    $$
+        x_i' = MLP((1 + \epsilon) x_i + \sum_{j \in \mathcal{N}(i)} x_j)
+    $$
+    where $x_i$ is the feature vector of node $i$, $\mathcal{N}(i)$ is the set of
+    neighbours of node $i$, and $\epsilon$ is a (possibly learnable) parameter.
+
+    From the paper "How Powerful are Graph Neural Networks?" by Keyulu Xu et al.
+    (https://arxiv.org/abs/1810.00826).
+
+    The difference between this implementation and the one in PyTorch Geometric is that
+    this one takes as input a TensorDict with dense representations of the graphs and
+    features.
+
+    Parameters
+    ----------
+    mlp
+        The MLP to apply to the aggregated features.
+    eps
+        The initial value of $\epsilon$.
+    train_eps
+        Whether to train $\epsilon$ or keep it fixed.
+
+    Shapes
+    ------
+    Takes as input a TensorDict with the following keys:
+    * `x` - Float["batch max_nodes feature"] - The features of the nodes.
+    * `adjacency` - Float["batch max_nodes max_nodes"] - The adjacency matrix of the
+      graph.
+    * `node_mask` - Bool["batch max_nodes"] - A mask indicating which nodes exist
+    """
+
+    def __init__(self, mlp: nn.Module, eps: float = 0.0, train_eps: bool = False):
+        super().__init__()
+        self.mlp = mlp
+        self.initial_eps = eps
+        if train_eps:
+            self.eps = torch.nn.Parameter(torch.Tensor([eps]))
+        else:
+            self.register_buffer("eps", torch.Tensor([eps]))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        reset_parameters(self.mlp)
+        self.eps.data.fill_(self.initial_eps)
+
+    def forward(self, tensordict: TensorDictBase) -> torch.Tensor:
+        # Extract the features, adjacency matrix and node mask from the input
+        x: Float[Tensor, "batch max_nodes feature"] = tensordict["x"]
+        adjacency: Float[Tensor, "batch max_nodes max_nodes"] = tensordict["adjacency"]
+        if "node_mask" in tensordict.keys():
+            node_mask: Bool[Tensor, "batch max_nodes"] = tensordict["node_mask"]
+        else:
+            node_mask = torch.ones(x.shape[:-1], dtype=torch.bool, device=x.device)
+
+        # Aggregate the features of the neighbours using summation
+        x_expanded = einops.rearrange(
+            x, "batch max_nodes feature -> batch max_nodes 1 feature"
+        )
+        adjacency = einops.rearrange(
+            adjacency,
+            "batch max_nodes_a max_nodes_b -> batch max_nodes_a max_nodes_b 1",
+        )
+        x_aggregated = (x_expanded * adjacency).sum(dim=1)
+
+        # Apply the MLP to the aggregated features plus a contribution from the node
+        # itself. We do this only according to the node mask, putting zeros elsewhere.
+        out_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
+        out = torch.zeros(
+            (*x.shape[:-1], out_flat.shape[-1]), dtype=x.dtype, device=x.device
+        )
+        out[node_mask] = out_flat
+
+        return out
 
 
 class Print(nn.Module):
