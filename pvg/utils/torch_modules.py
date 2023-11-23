@@ -195,12 +195,29 @@ class GIN(nn.Module):
         reset_parameters(self.mlp)
         self.eps.data.fill_(self.initial_eps)
 
-    def forward(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        key_map: Optional[dict[str, str] | Callable[[str], str]],
+    ) -> torch.Tensor:
+        # Map the keys of the input to the correct ones
+        def _key_map(key: str) -> str:
+            if key_map is None:
+                return key
+            elif isinstance(key_map, dict):
+                return key_map[key]
+            else:
+                return key_map(key)
+
         # Extract the features, adjacency matrix and node mask from the input
-        x: Float[Tensor, "batch max_nodes feature"] = tensordict["x"]
-        adjacency: Float[Tensor, "batch max_nodes max_nodes"] = tensordict["adjacency"]
-        if "node_mask" in tensordict.keys():
-            node_mask: Bool[Tensor, "batch max_nodes"] = tensordict["node_mask"]
+        x: Float[Tensor, "batch max_nodes feature"] = tensordict[_key_map("x")]
+        adjacency: Float[Tensor, "batch max_nodes max_nodes"] = tensordict[
+            _key_map("adjacency")
+        ]
+        if _key_map("node_mask") in tensordict.keys():
+            node_mask: Bool[Tensor, "batch max_nodes"] = tensordict[
+                _key_map("node_mask")
+            ]
         else:
             node_mask = torch.ones(x.shape[:-1], dtype=torch.bool, device=x.device)
 
@@ -223,7 +240,7 @@ class GIN(nn.Module):
         new_x[node_mask] = new_x_flat
 
         out = TensorDict(tensordict)
-        out["x"] = new_x
+        out[_key_map("x")] = new_x
 
         return out
 
@@ -244,10 +261,32 @@ class TensorDictize(nn.Module):
         self.module = module
         self.key = key
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        key_map: Optional[dict[str, str] | Callable[[str], str]],
+    ) -> TensorDictBase:
+        # Map the keys of the input to the correct ones
+        def _key_map(key: str) -> str:
+            if key_map is None:
+                return key
+            elif isinstance(key_map, dict):
+                return key_map[key]
+            else:
+                return key_map(key)
+
         out = TensorDict(tensordict)
-        out[self.key] = self.module(tensordict[self.key])
+        out[_key_map(self.key)] = self.module(tensordict[_key_map(self.key)])
         return out
+
+
+class SequentialKwargs(nn.Sequential):
+    """A sequential module which passes keyword arguments during forward pass."""
+
+    def forward(self, input, **kwargs):
+        for module in self:
+            input = module(input, **kwargs)
+        return input
 
 
 class Print(nn.Module):

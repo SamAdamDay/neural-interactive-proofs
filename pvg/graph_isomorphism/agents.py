@@ -11,9 +11,9 @@ from torch import Tensor
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
-from tensordict import TensorDict
+from tensordict import TensorDictBase
 
-from torch_geometric.utils import to_dense_batch, to_dense_adj, to_networkx
+from torch_geometric.utils import to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
 from einops import rearrange
@@ -43,8 +43,10 @@ from pvg.utils.torch_modules import (
     PairInvariantizer,
     GIN,
     TensorDictize,
+    SequentialKwargs,
     Print,
 )
+from pvg.utils.data import gi_data_to_tensordict
 
 
 class GraphIsomorphismAgent(Agent, ABC):
@@ -66,7 +68,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         d_gin_mlp: int,
         num_layers: int,
         num_heads: int,
-    ) -> tuple[Sequential, MultiheadAttention]:
+    ) -> tuple[SequentialKwargs, MultiheadAttention]:
         """Builds the GNN and attention modules for a prover or verifier.
 
         Parameters
@@ -109,7 +111,7 @@ class GraphIsomorphismAgent(Agent, ABC):
                     ),
                 )
             )
-        gnn = Sequential(gnn_layers)
+        gnn = SequentialKwargs(gnn_layers)
 
         attention = MultiheadAttention(
             embed_dim=d_gnn,
@@ -277,7 +279,7 @@ class GraphIsomorphismAgent(Agent, ABC):
 
     def _run_gnn_and_attention(
         self,
-        data: GraphIsomorphismData | GeometricBatch,
+        data: TensorDictBase | GraphIsomorphismData | GeometricBatch,
         gnn: Optional[Sequential] = None,
         attention: Optional[MultiheadAttention] = None,
     ) -> tuple[
@@ -289,8 +291,10 @@ class GraphIsomorphismAgent(Agent, ABC):
 
         Parameters
         ----------
-        data : GraphIsomorphismData | GraphIsomorphismDataBatch
-            The data to run the GNN and attention on.
+        data : TensorDictBase | GraphIsomorphismData | GraphIsomorphismDataBatch
+            The data to run the GNN and attention on. Either a TensorDictBase with keys
+            "x_a", "adjacency_a", "node_mask_a", "x_b", "adjacency_b" and "node_mask_b",
+            or a GraphIsomorphism data object.
         gnn : Optional[Sequential], optional
             The GNN module to use. If None, uses the module stored in the class.
         attention : Optional[MultiheadAttention], optional
@@ -312,24 +316,14 @@ class GraphIsomorphismAgent(Agent, ABC):
         if attention is None:
             attention = self.attention
 
-        # Convert the data to two TensorDicts
-        adjacency_a = to_dense_adj(data.edge_index_a, data.x_a_batch)
-        x_a, node_mask_a = to_dense_batch(data.x_a, data.x_a_batch)
-        data_a = TensorDict(
-            dict(x=x_a, adjacency=adjacency_a, node_mask=node_mask_a),
-            batch_size=x_a.shape[0],
-        )
-        adjacency_b = to_dense_adj(data.edge_index_b, data.x_b_batch)
-        x_b, node_mask_b = to_dense_batch(data.x_b, data.x_b_batch)
-        data_b = TensorDict(
-            dict(x=x_b, adjacency=adjacency_b, node_mask=node_mask_b),
-            batch_size=x_a.shape[0],
-        )
+        # Convert the data to a TensorDict with dense representations
+        if not isinstance(data, TensorDictBase):
+            data = gi_data_to_tensordict(data)
 
         # Run the GNN on the two graphs
         # (batch_size, max_nodes, d_gnn)
-        gnn_output_a = gnn(data_a)["x"]
-        gnn_output_b = gnn(data_b)["x"]
+        gnn_output_a = gnn(data, key_map=lambda k: f"{k}_a")["x_a"]
+        gnn_output_b = gnn(data, key_map=lambda k: f"{k}_b")["x_b"]
 
         # Get the maximum number of nodes in each graph
         max_nodes_a = gnn_output_a.shape[1]
@@ -339,7 +333,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         # (batch_size, max_nodes_a+max_nodes_b, d_gnn)
         gnn_output = torch.cat([gnn_output_a, gnn_output_b], dim=1)
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_mask = torch.cat([node_mask_a, node_mask_b], dim=1)
+        node_mask = torch.cat([data["node_mask_a"], data["node_mask_b"]], dim=1)
 
         # Turn the mask into batch of 2D attention masks
         attn_mask = ~node_mask
