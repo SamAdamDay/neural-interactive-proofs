@@ -1,10 +1,10 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Iterable
 
 import torch
 from torch import Tensor
 import torch.nn as nn
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, TensorDict
 
 from torch_geometric.nn.inits import reset as reset_parameters
 
@@ -216,12 +216,37 @@ class GIN(nn.Module):
 
         # Apply the MLP to the aggregated features plus a contribution from the node
         # itself. We do this only according to the node mask, putting zeros elsewhere.
-        out_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
-        out = torch.zeros(
-            (*x.shape[:-1], out_flat.shape[-1]), dtype=x.dtype, device=x.device
+        new_x_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
+        new_x = torch.zeros(
+            (*x.shape[:-1], new_x_flat.shape[-1]), dtype=x.dtype, device=x.device
         )
-        out[node_mask] = out_flat
+        new_x[node_mask] = new_x_flat
 
+        out = TensorDict(tensordict)
+        out["x"] = new_x
+
+        return out
+
+
+class TensorDictize(nn.Module):
+    """Convert a module to one which works on a key of a TensorDict.
+
+    Parameters
+    ----------
+    module : nn.Module
+        The module to apply to TensorDictize.
+    key : str
+        The key of the TensorDict to apply the module to.
+    """
+
+    def __init__(self, module: nn.Module, key: str):
+        super().__init__()
+        self.module = module
+        self.key = key
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        out = TensorDict(tensordict)
+        out[self.key] = self.module(tensordict[self.key])
         return out
 
 

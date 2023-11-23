@@ -11,12 +11,9 @@ from torch import Tensor
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
-from torch_geometric.nn import (
-    GINConv,
-    Sequential as GeometricSequential,
-    Linear as GeometricLinear,
-)
-from torch_geometric.utils import to_dense_batch, to_networkx
+from tensordict import TensorDict
+
+from torch_geometric.utils import to_dense_batch, to_dense_adj, to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
 from einops import rearrange
@@ -44,6 +41,8 @@ from pvg.utils.torch_modules import (
     CatGraphPairDim,
     PairedGaussianNoise,
     PairInvariantizer,
+    GIN,
+    TensorDictize,
     Print,
 )
 
@@ -56,7 +55,7 @@ class GraphIsomorphismAgent(Agent, ABC):
 
     def __init__(self, params: Parameters, device: str | torch.device):
         super().__init__(params, device)
-        self.gnn: GeometricSequential
+        self.gnn: Sequential
         self.attention: MultiheadAttention
         self.global_pooling: Sequential
 
@@ -67,7 +66,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         d_gin_mlp: int,
         num_layers: int,
         num_heads: int,
-    ) -> tuple[GeometricSequential, MultiheadAttention]:
+    ) -> tuple[Sequential, MultiheadAttention]:
         """Builds the GNN and attention modules for a prover or verifier.
 
         Parameters
@@ -86,39 +85,31 @@ class GraphIsomorphismAgent(Agent, ABC):
 
         Returns
         -------
-        gnn : torch_geometric.nn.Sequential
-            The GNN module.
+        gnn : torch.nn.Sequential
+            The GNN module, which takes as input a TensorDict with keys "x", "adjacency"
+            and "node_mask".
         attention : MultiheadAttention
             The attention module.
         """
         # Build up the GNN
         gnn_layers = OrderedDict()
-        gnn_layers["input"] = (
-            GeometricLinear(
-                d_input,
-                d_gnn,
-            ),
-            "x -> x",
-        )
+        gnn_layers["input"] = TensorDictize(Linear(d_input, d_gnn), key="x")
         for i in range(num_layers):
-            gnn_layers[f"ReLU_{i}"] = ReLU(inplace=True)
-            gnn_layers[f"GNN_layer_{i}"] = (
-                GINConv(
-                    Sequential(
-                        Linear(
-                            d_gnn,
-                            d_gin_mlp,
-                        ),
-                        ReLU(inplace=True),
-                        Linear(
-                            d_gin_mlp,
-                            d_gnn,
-                        ),
-                    )
-                ),
-                "x, edge_index -> x",
+            gnn_layers[f"ReLU_{i}"] = TensorDictize(ReLU(inplace=True), key="x")
+            gnn_layers[f"GNN_layer_{i}"] = GIN(
+                Sequential(
+                    Linear(
+                        d_gnn,
+                        d_gin_mlp,
+                    ),
+                    ReLU(inplace=True),
+                    Linear(
+                        d_gin_mlp,
+                        d_gnn,
+                    ),
+                )
             )
-        gnn = GeometricSequential("x, edge_index", gnn_layers)
+        gnn = Sequential(gnn_layers)
 
         attention = MultiheadAttention(
             embed_dim=d_gnn,
@@ -287,7 +278,7 @@ class GraphIsomorphismAgent(Agent, ABC):
     def _run_gnn_and_attention(
         self,
         data: GraphIsomorphismData | GeometricBatch,
-        gnn: Optional[GeometricSequential] = None,
+        gnn: Optional[Sequential] = None,
         attention: Optional[MultiheadAttention] = None,
     ) -> tuple[
         Float[Tensor, "2 batch_size max_nodes d_gnn"],
@@ -300,7 +291,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         ----------
         data : GraphIsomorphismData | GraphIsomorphismDataBatch
             The data to run the GNN and attention on.
-        gnn : Optional[GeometricSequential], optional
+        gnn : Optional[Sequential], optional
             The GNN module to use. If None, uses the module stored in the class.
         attention : Optional[MultiheadAttention], optional
             The attention module to use. If None, uses the module stored in the class.
@@ -321,15 +312,24 @@ class GraphIsomorphismAgent(Agent, ABC):
         if attention is None:
             attention = self.attention
 
-        # Run the GNN on the two graphs
-        # (total_num_nodes, d_gnn)
-        gnn_output_a = gnn(x=data.x_a, edge_index=data.edge_index_a)
-        gnn_output_b = gnn(x=data.x_b, edge_index=data.edge_index_b)
+        # Convert the data to two TensorDicts
+        adjacency_a = to_dense_adj(data.edge_index_a, data.x_a_batch)
+        x_a, node_mask_a = to_dense_batch(data.x_a, data.x_a_batch)
+        data_a = TensorDict(
+            dict(x=x_a, adjacency=adjacency_a, node_mask=node_mask_a),
+            batch_size=x_a.shape[0],
+        )
+        adjacency_b = to_dense_adj(data.edge_index_b, data.x_b_batch)
+        x_b, node_mask_b = to_dense_batch(data.x_b, data.x_b_batch)
+        data_b = TensorDict(
+            dict(x=x_b, adjacency=adjacency_b, node_mask=node_mask_b),
+            batch_size=x_a.shape[0],
+        )
 
-        # Convert from a sparse to a dense representation
-        # (batch_size, max_nodes, d_gnn), (batch_size, max_nodes)
-        gnn_output_a, mask_a = to_dense_batch(gnn_output_a, data.x_a_batch)
-        gnn_output_b, mask_b = to_dense_batch(gnn_output_b, data.x_b_batch)
+        # Run the GNN on the two graphs
+        # (batch_size, max_nodes, d_gnn)
+        gnn_output_a = gnn(data_a)["x"]
+        gnn_output_b = gnn(data_b)["x"]
 
         # Get the maximum number of nodes in each graph
         max_nodes_a = gnn_output_a.shape[1]
@@ -339,7 +339,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         # (batch_size, max_nodes_a+max_nodes_b, d_gnn)
         gnn_output = torch.cat([gnn_output_a, gnn_output_b], dim=1)
         # (batch_size, max_nodes_a+max_nodes_b)
-        node_mask = torch.cat([mask_a, mask_b], dim=1)
+        node_mask = torch.cat([node_mask_a, node_mask_b], dim=1)
 
         # Turn the mask into batch of 2D attention masks
         attn_mask = ~node_mask
