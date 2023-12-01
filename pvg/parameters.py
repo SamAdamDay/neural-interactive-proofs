@@ -108,6 +108,14 @@ class Parameters(BaseParameters):
         and the prover responds with a message.
     graph_isomorphism : GraphIsomorphismParameters, optional
         Additional parameters specific to the graph isomorphism experiment.
+    batch_size : int
+        The number of simultaneous environments to run in parallel.
+    prover_reward : float
+        The reward given to the prover when the verifier guesses "accept".
+    verifier_reward : float
+        The reward given to the verifier when it guesses correctly.
+    verifier_terminated_penalty : float
+        The reward given to the verifier if the episode terminates before it guesses.
     """
 
     scenario: str
@@ -115,6 +123,12 @@ class Parameters(BaseParameters):
     dataset: str
     max_message_rounds: int = 8
     graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
+
+    batch_size: int = 64
+
+    prover_reward: float = 1.0
+    verifier_reward: float = 1.0
+    verifier_terminated_penalty: float = -1.0
 
     def __post_init__(self):
         if self.scenario == "graph_isomorphism":

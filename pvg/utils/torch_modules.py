@@ -6,8 +6,6 @@ import torch.nn as nn
 
 from tensordict import TensorDictBase, TensorDict
 
-from torch_geometric.nn.inits import reset as reset_parameters
-
 import einops
 
 from jaxtyping import Float, Bool
@@ -175,10 +173,10 @@ class GIN(nn.Module):
     Shapes
     ------
     Takes as input a TensorDict with the following keys:
-    * `x` - Float["batch max_nodes feature"] - The features of the nodes.
-    * `adjacency` - Float["batch max_nodes max_nodes"] - The adjacency matrix of the
+    * `x` - Float["... max_nodes feature"] - The features of the nodes.
+    * `adjacency` - Float["... max_nodes max_nodes"] - The adjacency matrix of the
       graph.
-    * `node_mask` - Bool["batch max_nodes"] - A mask indicating which nodes exist
+    * `node_mask` - Bool["... max_nodes"] - A mask indicating which nodes exist
     """
 
     def __init__(self, mlp: nn.Module, eps: float = 0.0, train_eps: bool = False):
@@ -192,13 +190,12 @@ class GIN(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        reset_parameters(self.mlp)
         self.eps.data.fill_(self.initial_eps)
 
     def forward(
         self,
         tensordict: TensorDictBase,
-        key_map: Optional[dict[str, str] | Callable[[str], str]],
+        key_map: Optional[dict[str, str] | Callable[[str], str]] = None,
     ) -> torch.Tensor:
         # Map the keys of the input to the correct ones
         def _key_map(key: str) -> str:
@@ -210,26 +207,29 @@ class GIN(nn.Module):
                 return key_map(key)
 
         # Extract the features, adjacency matrix and node mask from the input
-        x: Float[Tensor, "batch max_nodes feature"] = tensordict[_key_map("x")]
-        adjacency: Float[Tensor, "batch max_nodes max_nodes"] = tensordict[
+        x: Float[Tensor, "... max_nodes feature"] = tensordict[_key_map("x")]
+        adjacency: Float[Tensor, "... max_nodes max_nodes"] = tensordict[
             _key_map("adjacency")
         ]
         if _key_map("node_mask") in tensordict.keys():
-            node_mask: Bool[Tensor, "batch max_nodes"] = tensordict[
-                _key_map("node_mask")
-            ]
+            node_mask: Bool[Tensor, "... max_nodes"] = tensordict[_key_map("node_mask")]
         else:
             node_mask = torch.ones(x.shape[:-1], dtype=torch.bool, device=x.device)
 
         # Aggregate the features of the neighbours using summation
         x_expanded = einops.rearrange(
-            x, "batch max_nodes feature -> batch max_nodes 1 feature"
+            x, "... max_nodes feature -> ... max_nodes 1 feature"
         )
         adjacency = einops.rearrange(
             adjacency,
-            "batch max_nodes_a max_nodes_b -> batch max_nodes_a max_nodes_b 1",
+            "... max_nodes_a max_nodes_b -> ... max_nodes_a max_nodes_b 1",
         )
-        x_aggregated = (x_expanded * adjacency).sum(dim=1)
+        # (..., max_nodes, feature)
+        x_aggregated = einops.reduce(
+            x_expanded * adjacency,
+            "... max_nodes_a max_nodes_b feature -> ... max_nodes_b feature",
+            "sum",
+        )
 
         # Apply the MLP to the aggregated features plus a contribution from the node
         # itself. We do this only according to the node mask, putting zeros elsewhere.
