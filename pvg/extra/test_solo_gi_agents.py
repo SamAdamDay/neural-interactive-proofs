@@ -84,16 +84,16 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         output_callback: Optional[
             Callable[
                 [
-                    Float[Tensor, "2 batch_size max_nodes d_gnn"],
-                    Float[Tensor, "2 batch_size max_nodes d_gnn"],
-                    Float[Tensor, "2 batch_size d_decider"],
-                    Bool[Tensor, "batch_size max_nodes_a+max_nodes_b"],
+                    Float[Tensor, "batch 2 max_nodes d_gnn"],
+                    Float[Tensor, "batch 2 max_nodes d_gnn"],
+                    Float[Tensor, "batch 2 d_decider"],
+                    Bool[Tensor, "batch max_nodes_a+max_nodes_b"],
                     GraphIsomorphismData | GeometricBatch,
                 ],
                 None,
             ]
         ] = None,
-    ) -> Float[Tensor, "batch_size 2"]:
+    ) -> Float[Tensor, "batch 2"]:
         gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
         pooled_output = self.global_pooling(gnn_output)
         if output_callback is not None:
@@ -397,20 +397,20 @@ def train_and_test_solo_gi_agents(
         def compute_encoder_eq_accuracy(
             gnn_output,
             attention_output,
-            pooled_output: Float[Tensor, "2 batch_size d_decider"],
+            pooled_output: Float[Tensor, "batch 2 d_decider"],
             node_mask,
             data,
             encoder_eq_accuracy,
         ):
             if use_pair_invariant_pooling:
                 close = torch.isclose(
-                    pooled_output[1],
-                    torch.zeros_like(pooled_output[1]),
+                    pooled_output[:, 1],
+                    torch.zeros_like(pooled_output[:, 1]),
                     rtol=1e-5,
                     atol=1e-5,
                 )
             else:
-                close = torch.isclose(pooled_output[0], pooled_output[1])
+                close = torch.isclose(pooled_output[:, 0], pooled_output[:, 1])
             encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
 
         # Run the model and compute the loss and encoder equality accuracy

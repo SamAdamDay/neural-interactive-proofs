@@ -140,7 +140,7 @@ class PairInvariantizer(nn.Module):
         abs_diff = 0.5 * torch.abs(
             x.select(self.pair_dim, 0) - x.select(self.pair_dim, 1)
         )
-        return torch.stack((mean, abs_diff), dim=0)
+        return torch.stack((mean, abs_diff), dim=self.pair_dim)
 
 
 class GIN(nn.Module):
@@ -252,7 +252,7 @@ class TensorDictize(nn.Module):
     ----------
     module : nn.Module
         The module to apply to TensorDictize.
-    key : str
+    key : str, optional
         The key of the TensorDict to apply the module to.
     """
 
@@ -264,7 +264,7 @@ class TensorDictize(nn.Module):
     def forward(
         self,
         tensordict: TensorDictBase,
-        key_map: Optional[dict[str, str] | Callable[[str], str]],
+        key_map: Optional[dict[str, str] | Callable[[str], str]] = None,
     ) -> TensorDictBase:
         # Map the keys of the input to the correct ones
         def _key_map(key: str) -> str:

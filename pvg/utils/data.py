@@ -11,7 +11,7 @@ from torch_geometric.data import Batch as GeometricBatch
 
 def gi_data_to_tensordict(
     data: GeometricBatch,
-    node_dim_size: Optional[int],
+    node_dim_size: Optional[int] = None,
     adjacency_dtype: torch.dtype = torch.int,
 ) -> TensorDict:
     """Convert a GraphIsomorphismData object to a TensorDict with dense representations.
