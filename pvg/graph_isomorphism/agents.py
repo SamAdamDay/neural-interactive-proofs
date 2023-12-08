@@ -68,9 +68,15 @@ class GraphIsomorphismAgent(Agent, ABC):
         self.gnn_transformer_encoder: Linear
         self.transformer: TransformerEncoder
         self.global_pooling: Sequential
+        self.node_selector: Optional[Sequential]
+        self.decider: Optional[Sequential]
 
     def _create_agent(
-        self, agent_params: GraphIsomorphismAgentParameters, build_decider: bool = True
+        self,
+        agent_params: GraphIsomorphismAgentParameters,
+        build_node_selector: bool = True,
+        build_decider: bool = True,
+        d_decider_out: Optional[int] = None,
     ):
         """Builds and sets all the components of the agent
 
@@ -80,7 +86,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             The parameters used for constructing the agent
         """
         # Build up the GNN module
-        self.gnn = self._build_gnn_and_transformer(
+        self.gnn = self._build_gnn(
             agent_params=agent_params,
             d_input=self.params.max_message_rounds,
         )
@@ -98,10 +104,11 @@ class GraphIsomorphismAgent(Agent, ABC):
         self.transformer = self._build_transformer(agent_params=agent_params)
 
         # Build the node selector module, which selects a node to send as a message
-        self.node_selector = self._build_node_selector(
-            agent_params=agent_params,
-            d_out=1,
-        )
+        if build_node_selector:
+            self.node_selector = self._build_node_selector(
+                agent_params=agent_params,
+                d_out=1,
+            )
 
         # Build the decider module, which decides whether to continue exchanging
         # messages, guess that the graphs are isomorphic, or guess that the graphs are
@@ -109,6 +116,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         if build_decider:
             self.decider = self._build_decider(
                 agent_params=agent_params,
+                d_out=d_decider_out,
             )
 
     @staticmethod
@@ -163,8 +171,9 @@ class GraphIsomorphismAgent(Agent, ABC):
         """Build the encoder layer which translates the GNN output to transformer input
 
         This is a simple linear layer, where the number of input features is `d_gnn` +
-        2, where the extra features encode which graph-level representation the token
-        is, if any.
+        3, where the extra features encode which graph-level representation the token
+        is, if any and whether a node is in the most recent message from the other
+        agent.
 
         Parameters
         ----------
@@ -177,7 +186,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             The encoder module
 
         """
-        return Linear(agent_params.d_gnn + 2, agent_params.d_transformer)
+        return Linear(agent_params.d_gnn + 3, agent_params.d_transformer)
 
     @staticmethod
     def _build_transformer(
@@ -286,7 +295,7 @@ class GraphIsomorphismAgent(Agent, ABC):
         layers.append(
             PairedGaussianNoise(sigma=agent_params.noise_sigma, pair_dim=1),
         )
-        if agent_params.use_invariantizer:
+        if agent_params.use_pair_invariant_pooling:
             layers.append(PairInvariantizer(pair_dim=1))
         return Sequential(*layers)
 
@@ -345,13 +354,18 @@ class GraphIsomorphismAgent(Agent, ABC):
         """Obtain graph-level and node-level representations by running components
 
         Runs the GNN, pools the output, puts everything through a linear encoder, then
-        runs the transformer on this. 
+        runs the transformer on this.
 
         Parameters
         ----------
         data : TensorDictBase | GraphIsomorphismData | GraphIsomorphismDataBatch
             The data to run the GNN and transformer on. Either a TensorDictBase with
-            keys "x", "adjacency" and "node_mask" or a GraphIsomorphism data object.
+            keys:
+            - "x" (batch pair node feature): The graph node features (message history)
+            - "adjacency" (batch pair node node): The graph adjacency matrices
+            - "message" (batch): (optional) (optional) The most recent message from the other agent
+            - "node_mask" (batch pair node): Which nodes actually exist
+            or a GraphIsomorphism data object.
 
         Returns
         -------
@@ -369,7 +383,7 @@ class GraphIsomorphismAgent(Agent, ABC):
             data = gi_data_to_tensordict(data)
 
         # The size of the node dimension
-        max_num_nodes = data["x"].shape[1]
+        max_num_nodes = data["x"].shape[2]
 
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
@@ -388,17 +402,30 @@ class GraphIsomorphismAgent(Agent, ABC):
         )
 
         # Add the graph-level representations to the transformer input with an extra
-        # features which distinguishes them
-        # (batch, 2 + 2 * node, d_gnn + 2)
+        # features which distinguishes them, and add (optional) the most recent message
+        # (batch, 2 + 2 * node, d_gnn + 3)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=1)
         pooled_feature = torch.zeros(
-            (*transformer_input[:-1], 2),
+            *transformer_input.shape[:-1], 2,
             device=transformer_input.device,
             dtype=transformer_input.dtype,
         )
         pooled_feature[:, 0, 0] = 1
         pooled_feature[:, 1, 1] = 1
-        transformer_input = torch.cat((transformer_input, pooled_feature), dim=-1)
+        if "message" in data.keys():
+            message_feature = F.one_hot(
+                data["message"] + 2, num_classes=2 + 2 * max_num_nodes
+            )
+            message_feature = rearrange(message_feature, "batch token -> batch token 1")
+        else:
+            message_feature = torch.zeros(
+                *transformer_input.shape[:-1], 1,
+                device=transformer_input.device,
+                dtype=transformer_input.dtype,
+            )
+        transformer_input = torch.cat(
+            (transformer_input, pooled_feature, message_feature), dim=-1
+        )
 
         # Run the transformer input through the encoder first
         # (batch, 2 + 2 * node, d_transformer)
@@ -423,12 +450,12 @@ class GraphIsomorphismAgent(Agent, ABC):
         src_mask = torch.ones(
             (2 + 2 * max_num_nodes,) * 2, device=padding_mask.device, dtype=bool
         )
-        src_mask[2 : 2 + max_num_nodes, 2 + max_num_nodes :] = 0
-        src_mask[2 + max_num_nodes :, 2 : 2 + max_num_nodes] = 0
+        src_mask[2 : 2 + max_num_nodes, 2 : 2 + max_num_nodes] = 0
+        src_mask[2 + max_num_nodes :, 2 + max_num_nodes :] = 0
 
         # Compute the transformer output
         # (batch, 2 + 2 * max_nodes, d_transformer)
-        transformer_output_flatter, _ = self.transformer(
+        transformer_output_flatter = self.transformer(
             transformer_input,
             mask=src_mask,
             src_key_padding_mask=padding_mask,
@@ -462,14 +489,19 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         )
 
     def forward(
-        self, data: GraphIsomorphismData | GeometricBatch
+        self,
+        data: TensorDictBase,
     ) -> [Float[Tensor, "batch 2*max_nodes"], Bool[Tensor, "batch 2*max_nodes"],]:
         """Runs the prover on the given data.
 
         Parameters
         ----------
-        data : GraphIsomorphismData | GraphIsomorphismDataBatch
-            The data to run the prover on.
+        data : TensorDictBase
+            The data to run the prover on. A tensor dict with keys:
+            - "x" (batch pair node feature): The graph node features (message history)
+            - "adjacency" (batch pair node node): The graph adjacency matrices
+            - "message" (batch): (optional) (optional) The most recent message from the other agent
+            - "node_mask" (batch pair node): Which nodes actually exist
 
         Returns
         -------
@@ -515,7 +547,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         )
 
     def forward(
-        self, data: GraphIsomorphismData | GeometricBatch
+        self, data: TensorDictBase
     ) -> tuple[
         Float[Tensor, "batch 2*max_nodes"],
         Float[Tensor, "batch 3"],
@@ -525,8 +557,12 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
 
         Parameters
         ----------
-        data : GraphIsomorphismData | GraphIsomorphismDataBatch
-            The data to run the verifier on.
+        data : TensorDictBase
+            The data to run the prover on. A tensor dict with keys:
+            - "x" (batch pair node feature): The graph node features (message history)
+            - "adjacency" (batch pair node node): The graph adjacency matrices
+            - "message" (batch): (optional) The most recent message from the other agent
+            - "node_mask" (batch pair node): Which nodes actually exist
 
         Returns
         -------

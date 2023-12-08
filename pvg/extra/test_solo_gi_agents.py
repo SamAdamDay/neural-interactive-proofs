@@ -43,22 +43,12 @@ class ScoreToBitTransform(BaseTransform):
 class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
     """A base class for an agent that tries to solve the graph isomorphism task solo."""
 
-    def _build_model(
+    def _create_agent(
         self,
         agent_params: GraphIsomorphismAgentParameters,
-    ) -> nn.Module:
-        # Build up the GNN module
-        self.gnn, self.attention = self._build_gnn_and_transformer(
-            d_input=1, agent_params=agent_params
-        )
-
-        # Create the Gaussian noise layer
-        self.global_pooling = self._build_global_pooling(agent_params=agent_params)
-
-        # Build the decider, which decides whether the graphs are isomorphic
-        self.decider = self._build_decider(
-            agent_params=agent_params,
-            d_out=2,
+    ):
+        return super()._create_agent(
+            agent_params, build_node_selector=False, build_decider=True, d_decider_out=2
         )
 
     def forward(
@@ -84,7 +74,8 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
 
     def to(self, device: str | torch.device):
         self.gnn.to(device)
-        self.attention.to(device)
+        self.gnn_transformer_encoder.to(device)
+        self.transformer.to(device)
         self.global_pooling.to(device)
         self.global_pooling[-1].to(device)
         self.decider.to(device)
@@ -100,7 +91,7 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._build_model(agent_params=params.graph_isomorphism.prover)
+        self._create_agent(agent_params=params.graph_isomorphism.prover)
 
 
 class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
@@ -112,7 +103,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._build_model(agent_params=params.graph_isomorphism.verifier)
+        self._create_agent(agent_params=params.graph_isomorphism.verifier)
 
 
 def train_and_test_solo_gi_agents(
@@ -388,16 +379,12 @@ def train_and_test_solo_gi_agents(
                 data = data.to(device)
 
                 # Train the prover on the batch
-                loss_prover, accuracy = train_step(
-                    prover, optimizer_prover, data
-                )
+                loss_prover, accuracy = train_step(prover, optimizer_prover, data)
                 total_loss_prover += loss_prover.item()
                 total_accuracy_prover += accuracy
 
                 # Train the verifier on the batch
-                loss_verifier, accuracy = train_step(
-                    verifier, optimizer_verifier, data
-                )
+                loss_verifier, accuracy = train_step(verifier, optimizer_verifier, data)
                 total_loss_verifier += loss_verifier.item()
                 total_accuracy_verifier += accuracy
 

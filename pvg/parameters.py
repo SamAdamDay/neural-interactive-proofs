@@ -49,7 +49,7 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
     noise_sigma : float
         The relative standard deviation of the Gaussian noise added to the agents's
         graph-level representations.
-    pair_invariant_pooling : bool
+    use_pair_invariant_pooling : bool
         Whether to use pair-invariant pooling in the agents's global pooling layer. This
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
@@ -58,15 +58,16 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
-    num_heads: int = 1
+    num_heads: int = 4
     num_transformer_layers: int = 4
     d_transformer: int = 16
     d_transformer_mlp: int = 64
     transformer_dropout: float = 0.0
     d_node_selector: int = 16
+    d_decider: int = 16
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
-    pair_invariant_pooling: bool = True
+    use_pair_invariant_pooling: bool = True
 
 
 @dataclass
