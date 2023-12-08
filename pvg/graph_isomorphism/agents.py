@@ -373,25 +373,25 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # Build up the GNN and attention modules
         self.gnn, self.attention = self._build_gnn_and_attention(
             d_input=params.max_message_rounds,
-            d_gnn=params.graph_isomorphism.prover_d_gnn,
-            d_gin_mlp=params.graph_isomorphism.prover_d_gin_mlp,
-            num_layers=params.graph_isomorphism.prover_num_layers,
-            num_heads=params.graph_isomorphism.prover_num_heads,
+            d_gnn=params.graph_isomorphism.prover.d_gnn,
+            d_gin_mlp=params.graph_isomorphism.prover.d_gin_mlp,
+            num_layers=params.graph_isomorphism.prover.num_layers,
+            num_heads=params.graph_isomorphism.prover.num_heads,
         )
 
         # # Build the global pooling module, which computes the graph-level representation
         # self.global_pooling = self._build_global_pooling(
-        #     d_gnn=params.graph_isomorphism.prover_d_gnn,
-        #     d_decider=params.graph_isomorphism.prover_d_decider,
-        #     use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
-        #     noise_sigma=params.graph_isomorphism.prover_noise_sigma,
-        #     use_pair_invariant_pooling=params.graph_isomorphism.prover_pair_invariant_pooling,
+        #     d_gnn=params.graph_isomorphism.prover.d_gnn,
+        #     d_decider=params.graph_isomorphism.prover.d_decider,
+        #     use_batch_norm=params.graph_isomorphism.prover.use_batch_norm,
+        #     noise_sigma=params.graph_isomorphism.prover.noise_sigma,
+        #     use_pair_invariant_pooling=params.graph_isomorphism.prover.pair_invariant_pooling,
         # )
 
         # Build the node selector module, which selects a node to send as a message
         self.node_selector = self._build_node_selector(
-            d_gnn=params.graph_isomorphism.prover_d_gnn,
-            d_node_selector=params.graph_isomorphism.prover_d_node_selector,
+            d_gnn=params.graph_isomorphism.prover.d_gnn,
+            d_node_selector=params.graph_isomorphism.prover.d_node_selector,
             d_out=1,
         )
 
@@ -456,25 +456,25 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         # Build up the GNN and attention modules
         self.gnn, self.attention = self._build_gnn_and_attention(
             d_input=params.max_message_rounds,
-            d_gnn=params.graph_isomorphism.verifier_d_gnn,
-            d_gin_mlp=params.graph_isomorphism.verifier_d_gin_mlp,
-            num_layers=params.graph_isomorphism.verifier_num_layers,
-            num_heads=params.graph_isomorphism.verifier_num_heads,
+            d_gnn=params.graph_isomorphism.verifier.d_gnn,
+            d_gin_mlp=params.graph_isomorphism.verifier.d_gin_mlp,
+            num_layers=params.graph_isomorphism.verifier.num_layers,
+            num_heads=params.graph_isomorphism.verifier.num_heads,
         )
 
         # Build the global pooling module, which computes the graph-level representation
         self.global_pooling = self._build_global_pooling(
-            d_gnn=params.graph_isomorphism.verifier_d_gnn,
-            d_decider=params.graph_isomorphism.verifier_d_decider,
-            use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
-            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
-            use_invariantizer=params.graph_isomorphism.verifier_pair_invariant_pooling,
+            d_gnn=params.graph_isomorphism.verifier.d_gnn,
+            d_decider=params.graph_isomorphism.verifier.d_decider,
+            use_batch_norm=params.graph_isomorphism.verifier.use_batch_norm,
+            noise_sigma=params.graph_isomorphism.verifier.noise_sigma,
+            use_invariantizer=params.graph_isomorphism.verifier.pair_invariant_pooling,
         )
 
         # Build the node selector module, which selects a node to send as a message
         self.node_selector = self._build_node_selector(
-            d_gnn=params.graph_isomorphism.verifier_d_gnn,
-            d_node_selector=params.graph_isomorphism.verifier_d_node_selector,
+            d_gnn=params.graph_isomorphism.verifier.d_gnn,
+            d_node_selector=params.graph_isomorphism.verifier.d_node_selector,
             d_out=1,
         )
 
@@ -482,7 +482,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         # messages, guess that the graphs are isomorphic, or guess that the graphs are
         # not isomorphic
         self.decider = self._build_decider(
-            d_gnn=params.graph_isomorphism.verifier_d_gnn,
+            d_gnn=params.graph_isomorphism.verifier.d_gnn,
         )
 
     def forward(

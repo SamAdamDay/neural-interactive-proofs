@@ -28,7 +28,7 @@ from pvg.graph_isomorphism import (
     GraphIsomorphismDataset,
     GraphIsomorphismData,
 )
-from pvg.parameters import Parameters, GraphIsomorphismParameters
+from pvg.parameters import Parameters
 
 
 class ScoreToBitTransform(BaseTransform):
@@ -123,14 +123,14 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
     ):
         super().__init__(params, device)
         self._build_model(
-            num_layers=params.graph_isomorphism.prover_num_layers,
-            d_gnn=params.graph_isomorphism.prover_d_gnn,
-            d_gin_mlp=params.graph_isomorphism.prover_d_gin_mlp,
+            num_layers=params.graph_isomorphism.prover.num_layers,
+            d_gnn=params.graph_isomorphism.prover.d_gnn,
+            d_gin_mlp=params.graph_isomorphism.prover.d_gin_mlp,
             d_decider=d_decider,
-            num_heads=params.graph_isomorphism.prover_num_heads,
-            noise_sigma=params.graph_isomorphism.prover_noise_sigma,
-            use_batch_norm=params.graph_isomorphism.prover_use_batch_norm,
-            use_pair_invariant_pooling=params.graph_isomorphism.prover_pair_invariant_pooling,
+            num_heads=params.graph_isomorphism.prover.num_heads,
+            noise_sigma=params.graph_isomorphism.prover.noise_sigma,
+            use_batch_norm=params.graph_isomorphism.prover.use_batch_norm,
+            use_pair_invariant_pooling=params.graph_isomorphism.prover.pair_invariant_pooling,
         )
 
 
@@ -145,14 +145,14 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
     ):
         super().__init__(params, device)
         self._build_model(
-            num_layers=params.graph_isomorphism.verifier_num_layers,
-            d_gnn=params.graph_isomorphism.verifier_d_gnn,
-            d_gin_mlp=params.graph_isomorphism.verifier_d_gin_mlp,
+            num_layers=params.graph_isomorphism.verifier.num_layers,
+            d_gnn=params.graph_isomorphism.verifier.d_gnn,
+            d_gin_mlp=params.graph_isomorphism.verifier.d_gin_mlp,
             d_decider=d_decider,
-            num_heads=params.graph_isomorphism.verifier_num_heads,
-            noise_sigma=params.graph_isomorphism.verifier_noise_sigma,
-            use_batch_norm=params.graph_isomorphism.verifier_use_batch_norm,
-            use_pair_invariant_pooling=params.graph_isomorphism.verifier_pair_invariant_pooling,
+            num_heads=params.graph_isomorphism.verifier.num_heads,
+            noise_sigma=params.graph_isomorphism.verifier.noise_sigma,
+            use_batch_norm=params.graph_isomorphism.verifier.use_batch_norm,
+            use_pair_invariant_pooling=params.graph_isomorphism.verifier.pair_invariant_pooling,
         )
 
 
@@ -257,17 +257,21 @@ def train_and_test_solo_gi_agents(
         trainer="test",
         dataset=dataset_name,
         max_message_rounds=1,
-        graph_isomorphism=GraphIsomorphismParameters(
-            prover_num_layers=prover_num_layers,
-            prover_d_gnn=d_gnn,
-            prover_use_batch_norm=use_batch_norm,
-            prover_noise_sigma=noise_sigma,
-            prover_pair_invariant_pooling=use_pair_invariant_pooling,
-            verifier_num_layers=verifier_num_layers,
-            verifier_d_gnn=d_gnn,
-            verifier_use_batch_norm=use_batch_norm,
-            verifier_noise_sigma=noise_sigma,
-            verifier_pair_invariant_pooling=use_pair_invariant_pooling,
+        graph_isomorphism=dict(
+            prover=dict(
+                num_layers=prover_num_layers,
+                d_gnn=d_gnn,
+                use_batch_norm=use_batch_norm,
+                noise_sigma=noise_sigma,
+                pair_invariant_pooling=use_pair_invariant_pooling,
+            ),
+            verifier=dict(
+                num_layers=verifier_num_layers,
+                d_gnn=d_gnn,
+                use_batch_norm=use_batch_norm,
+                noise_sigma=noise_sigma,
+                pair_invariant_pooling=use_pair_invariant_pooling,
+            ),
         ),
     )
 

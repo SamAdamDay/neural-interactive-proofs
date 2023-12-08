@@ -18,77 +18,69 @@ class AdditionalParameters(BaseParameters, ABC):
 
 
 @dataclass
+class GraphIsomorphismAgentParameters(AdditionalParameters):
+    """Additional parameters for agents in the graph isomorphism experiment.
+
+    Parameters
+    ----------
+    num_layers : int
+        The number of layers in the agents's GNN.
+    d_gnn : int
+        The dimension of the hidden layers in the agents's GNN and of the attention
+        embedding.
+    d_gin_mlp : int
+        The dimension of the hidden layers in the agents's Graph Isomorphism Network
+        MLP.
+    num_heads : int
+        The number of heads in the agents's attention layer.
+    d_node_selector : int
+        The dimension of the hidden layer in the agents's MLP which selects a node to
+        send as a message.
+    use_batch_norm : bool
+        Whether to use batch normalization in the agents's global pooling layer.
+    noise_sigma : float
+        The relative standard deviation of the Gaussian noise added to the agents's
+        graph-level representations.
+    pair_invariant_pooling : bool
+        Whether to use pair-invariant pooling in the agents's global pooling layer. This
+        makes the agents's graph-level representations invariant to the order of the
+        graphs in the pair.
+    """
+
+    num_layers: int = 5
+    d_gnn: int = 16
+    d_gin_mlp: int = 64
+    num_heads: int = 1
+    d_node_selector: int = 16
+    use_batch_norm: bool = True
+    noise_sigma: float = 0.0
+    pair_invariant_pooling: bool = True
+
+
+@dataclass
 class GraphIsomorphismParameters(AdditionalParameters):
     """Additional parameters specific to the graph isomorphism experiment.
 
     Parameters
     ----------
-    prover_num_layers : int
-        The number of layers in the prover's GNN.
-    prover_d_gnn : int
-        The dimension of the hidden layers in the prover's GNN and of the attention
-        embedding.
-    prover_d_gin_mlp : int
-        The dimension of the hidden layers in the prover's Graph Isomorphism Network
-        MLP.
-    prover_num_heads : int
-        The number of heads in the prover's attention layer.
-    prover_d_node_selector : int
-        The dimension of the hidden layer in the prover's MLP which selects a node to
-        send as a message.
-    prover_use_batch_norm : bool
-        Whether to use batch normalization in the prover's global pooling layer.
-    prover_noise_sigma : float
-        The relative standard deviation of the Gaussian noise added to the prover's
-        graph-level representations.
-    prover_pair_invariant_pooling : bool
-        Whether to use pair-invariant pooling in the prover's global pooling layer. This
-        makes the prover's graph-level representations invariant to the order of the
-        graphs in the pair.
-    verifier_num_layers : int
-        The number of layers in the verifier's GNN.
-    verifier_d_gnn : int
-        The dimension of the hidden layers in the verifier's GNN and of the attention
-        embedding.
-    verifier_d_gin_mlp : int
-        The dimension of the hidden layers in the verifier's Graph Isomorphism Network
-        MLP.
-    verifier_num_heads : int
-        The number of heads in the verifier's attention layer.
-    verifier_d_node_selector : int
-        The dimension of the hidden layer in the verifier's MLP which selects a node to
-        send as a message.
-    verifier_d_decider : int
-        The dimension of the hidden layer in the verifier's MLP which decides whether to
-        continue exchanging messages or to make a decision.
-    verifier_use_batch_norm : bool
-        Whether to use batch normalization in the verifier's global pooling layer.
-    verifier_noise_sigma : float
-        The relative standard deviation of the Gaussian noise added to the verifier's
-        graph-level representations.
-    verifier_pair_invariant_pooling : bool
-        Whether to use pair-invariant pooling in the verifier's global pooling layer.
-        This makes the verifier's graph-level representations invariant to the order of
-        the graphs in the pair.
+    prover : GraphIsomorphismAgentParameters
+        Parameters for the prover
+    verifier : GraphIsomorphismAgentParameters
+        Parameters for the prover
     """
 
-    prover_num_layers: int = 5
-    prover_d_gnn: int = 16
-    prover_d_gin_mlp: int = 64
-    prover_num_heads: int = 1
-    prover_d_node_selector: int = 16
-    prover_use_batch_norm: bool = True
-    prover_noise_sigma: float = 0.0
-    prover_pair_invariant_pooling: bool = True
-    verifier_num_layers: int = 2
-    verifier_d_gnn: int = 16
-    verifier_d_gin_mlp: int = 64
-    verifier_num_heads: int = 1
-    verifier_d_node_selector: int = 16
-    verifier_d_decider: int = 16
-    verifier_use_batch_norm: bool = True
-    verifier_noise_sigma: float = 0.0
-    verifier_pair_invariant_pooling: bool = True
+    prover: GraphIsomorphismAgentParameters | dict
+    verifier: GraphIsomorphismAgentParameters | dict
+
+    def __post_init__(self):
+        if isinstance(self.prover, dict):
+            self.prover = GraphIsomorphismAgentParameters.from_dict(
+                self.prover
+            )
+        if isinstance(self.verifier, dict):
+            self.verifier = GraphIsomorphismAgentParameters.from_dict(
+                self.verifier
+            )
 
 
 @dataclass
@@ -129,6 +121,15 @@ class Parameters(BaseParameters):
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
     verifier_terminated_penalty: float = -1.0
+
+    def __post_init__(self):
+        if self.scenario == "graph_isomorphism":
+            if self.graph_isomorphism is None:
+                self.graph_isomorphism = GraphIsomorphismParameters()
+            elif isinstance(self.graph_isomorphism, dict):
+                self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
+                    self.graph_isomorphism
+                )
 
     def __post_init__(self):
         if self.scenario == "graph_isomorphism":
