@@ -6,7 +6,14 @@ from functools import partial
 from collections import OrderedDict
 
 import torch
-from torch.nn import ReLU, Linear, MultiheadAttention, Sequential, BatchNorm1d
+from torch.nn import (
+    ReLU,
+    Linear,
+    TransformerEncoder,
+    TransformerEncoderLayer,
+    Sequential,
+    BatchNorm1d,
+)
 from torch import Tensor
 import torch.nn.functional as F
 from torch.distributions import Categorical
@@ -35,7 +42,7 @@ from pvg.base import (
     Message,
     MessageExchange,
 )
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
 from pvg.graph_isomorphism.data import GraphIsomorphismData, GraphIsomorphismDataset
 from pvg.utils.torch_modules import (
     CatGraphPairDim,
@@ -58,73 +65,152 @@ class GraphIsomorphismAgent(Agent, ABC):
     def __init__(self, params: Parameters, device: str | torch.device):
         super().__init__(params, device)
         self.gnn: Sequential
-        self.attention: MultiheadAttention
+        self.gnn_transformer_encoder: Linear
+        self.transformer: TransformerEncoder
         self.global_pooling: Sequential
 
-    def _build_gnn_and_attention(
-        self,
-        d_input: int,
-        d_gnn: int,
-        d_gin_mlp: int,
-        num_layers: int,
-        num_heads: int,
-    ) -> tuple[SequentialKwargs, MultiheadAttention]:
-        """Builds the GNN and attention modules for a prover or verifier.
+    def _create_agent(
+        self, agent_params: GraphIsomorphismAgentParameters, build_decider: bool = True
+    ):
+        """Builds and sets all the components of the agent
 
         Parameters
         ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+        """
+        # Build up the GNN module
+        self.gnn = self._build_gnn_and_transformer(
+            agent_params=agent_params,
+            d_input=self.params.max_message_rounds,
+        )
+
+        # Build the global pooling module, which computes the graph-level representation
+        # from the GNN output
+        self.global_pooling = self._build_global_pooling(agent_params=agent_params)
+
+        # Build the encoder going from the GNN to the transformer
+        self.gnn_transformer_encoder = self._build_gnn_transformer_encoder(
+            agent_params=agent_params
+        )
+
+        # Build the transformer
+        self.transformer = self._build_transformer(agent_params=agent_params)
+
+        # Build the node selector module, which selects a node to send as a message
+        self.node_selector = self._build_node_selector(
+            agent_params=agent_params,
+            d_out=1,
+        )
+
+        # Build the decider module, which decides whether to continue exchanging
+        # messages, guess that the graphs are isomorphic, or guess that the graphs are
+        # not isomorphic
+        if build_decider:
+            self.decider = self._build_decider(
+                agent_params=agent_params,
+            )
+
+    @staticmethod
+    def _build_gnn(
+        agent_params: GraphIsomorphismAgentParameters, d_input: int
+    ) -> SequentialKwargs:
+        """Builds the GNN module for a prover or verifier.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
         d_input : int
             The dimensionality of the input features.
-        d_gnn : int
-            The dimensionality of the GNN hidden layers and of the attention embedding.
-        d_gin_mlp: int
-            The dimensionality of the hidden layers in the Graph Isomorphism Network
-            MLP.
-        num_layers : int
-            The number of GNN layers.
-        num_heads : int
-            The number of attention heads.
 
         Returns
         -------
         gnn : torch.nn.Sequential
             The GNN module, which takes as input a TensorDict with keys "x", "adjacency"
             and "node_mask".
-        attention : MultiheadAttention
-            The attention module.
+        transformer : torch.nn.TransformerEncoder
+            The transformer module.
         """
         # Build up the GNN
         gnn_layers = OrderedDict()
-        gnn_layers["input"] = TensorDictize(Linear(d_input, d_gnn), key="x")
-        for i in range(num_layers):
+        gnn_layers["input"] = TensorDictize(
+            Linear(d_input, agent_params.d_gnn), key="x"
+        )
+        for i in range(agent_params.num_gnn_layers):
             gnn_layers[f"ReLU_{i}"] = TensorDictize(ReLU(inplace=True), key="x")
             gnn_layers[f"GNN_layer_{i}"] = GIN(
                 Sequential(
                     Linear(
-                        d_gnn,
-                        d_gin_mlp,
+                        agent_params.d_gnn,
+                        agent_params.d_gin_mlp,
                     ),
                     ReLU(inplace=True),
                     Linear(
-                        d_gin_mlp,
-                        d_gnn,
+                        agent_params.d_gin_mlp,
+                        agent_params.d_gnn,
                     ),
                 )
             )
         gnn = SequentialKwargs(gnn_layers)
 
-        attention = MultiheadAttention(
-            embed_dim=d_gnn,
-            num_heads=num_heads,
-            batch_first=True,
+        return gnn
+
+    @staticmethod
+    def _build_gnn_transformer_encoder(
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> Linear:
+        """Build the encoder layer which translates the GNN output to transformer input
+
+        This is a simple linear layer, where the number of input features is `d_gnn` +
+        2, where the extra features encode which graph-level representation the token
+        is, if any.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+
+        Returns
+        -------
+        gnn_transformer_encoder : torch.nn.Linear
+            The encoder module
+
+        """
+        return Linear(agent_params.d_gnn + 2, agent_params.d_transformer)
+
+    @staticmethod
+    def _build_transformer(
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> TransformerEncoder:
+        """Builds the transformer module for a prover or verifier.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+
+        Returns
+        -------
+        transformer : torch.nn.TransformerEncoder
+            The transformer module.
+        """
+
+        transformer = TransformerEncoder(
+            encoder_layer=TransformerEncoderLayer(
+                d_model=agent_params.d_transformer,
+                nhead=agent_params.num_heads,
+                batch_first=True,
+                dropout=agent_params.transformer_dropout,
+            ),
+            num_layers=agent_params.num_transformer_layers,
         )
 
-        return gnn, attention
+        return transformer
 
+    @staticmethod
     def _build_node_selector(
-        self,
-        d_gnn: int,
-        d_node_selector: int,
+        agent_params: GraphIsomorphismAgentParameters,
         d_out: int,
     ) -> Sequential:
         """Builds the MLP which selects a node to send as a message.
@@ -133,11 +219,8 @@ class GraphIsomorphismAgent(Agent, ABC):
 
         Parameters
         ----------
-        d_gnn : int
-            The dimensionality of the attention embedding (also of the GNN hidden
-            layers).
-        d_node_selector : int
-            The dimensionality of the MLP hidden layer.
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
         d_out : int
             The dimensionality of the output.
 
@@ -147,54 +230,36 @@ class GraphIsomorphismAgent(Agent, ABC):
             The node selector module, which is an MLP.
         """
         return Sequential(
-            # (batch, 2, max_nodes, d_gnn)
+            # (batch, 2, max_nodes, d_transformer)
             CatGraphPairDim(cat_dim=2),
-            # (batch, 2*max_nodes, d_gnn)
+            # (batch, 2*max_nodes, d_transformer)
             ReLU(inplace=True),
             Linear(
-                in_features=d_gnn,
-                out_features=d_node_selector,
+                in_features=agent_params.d_transformer,
+                out_features=agent_params.d_node_selector,
             ),
             # (batch, 2*max_nodes, d_node_selector)
             ReLU(inplace=True),
             Linear(
-                in_features=d_node_selector,
+                in_features=agent_params.d_node_selector,
                 out_features=d_out,
             ),
             # (batch, 2*max_nodes, d_node_out)
         )
 
+    @staticmethod
     def _build_global_pooling(
-        self,
-        d_gnn: int,
-        d_decider: int,
-        use_batch_norm: bool,
-        noise_sigma: float,
-        use_invariantizer: bool,
+        agent_params: GraphIsomorphismAgentParameters,
     ) -> Sequential:
         """Builds a pooling layer which computes the graph-level representation.
 
-        The module consists of a linear layer to change the dimensionality of the node
-        representations, a global sum pooling layer, an optional batch norm layer, a
-        paired Gaussian noise layer and an optional pair invariant pooling layer.
+        The module consists of a global sum pooling layer, an optional batch norm layer,
+        a paired Gaussian noise layer and an optional pair invariant pooling layer.
 
         Parameters
         ----------
-        d_gnn : int
-            The dimensionality of the attention embedding (also of the GNN hidden
-            layers).
-        d_decider : int
-            The dimensionality of the decider module. This is the dimensionality of the
-            graph-level representation produced by the present module.
-        use_batch_norm : bool
-            Whether to use batch normalisation.
-        noise_sigma : float
-            The relative standard deviation of the Gaussian noise. This will be
-            multiplied by the magnitude of the input to get the standard deviation for
-            the noise.
-        use_invariant_pooling : bool
-            Whether to use invariant pooling. If True, the output will be invariant to
-            the order of the graphs in each pair.
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
 
         Returns
         -------
@@ -202,39 +267,32 @@ class GraphIsomorphismAgent(Agent, ABC):
             The global pooling module.
         """
         layers = [
-            Linear(
-                in_features=d_gnn,
-                out_features=d_decider,
-            ),
-            ReLU(inplace=True),
             Reduce(
-                "batch pair max_nodes d_decider -> batch pair d_decider",
+                "batch pair max_nodes d_gnn -> batch pair d_gnn",
                 "sum",
             ),
         ]
-        if use_batch_norm:
+        if agent_params.use_batch_norm:
             layers.extend(
                 [
+                    Rearrange("batch pair d_gnn -> (batch pair) d_gnn"),
+                    BatchNorm1d(num_features=agent_params.d_gnn),
                     Rearrange(
-                        "batch pair d_decider -> (batch pair) d_decider"
-                    ),
-                    BatchNorm1d(num_features=d_decider),
-                    Rearrange(
-                        "(batch pair) d_decider -> batch pair d_decider",
+                        "(batch pair) d_gnn -> batch pair d_gnn",
                         pair=2,
                     ),
                 ]
             )
         layers.append(
-            PairedGaussianNoise(sigma=noise_sigma, pair_dim=1),
+            PairedGaussianNoise(sigma=agent_params.noise_sigma, pair_dim=1),
         )
-        if use_invariantizer:
+        if agent_params.use_invariantizer:
             layers.append(PairInvariantizer(pair_dim=1))
         return Sequential(*layers)
 
+    @staticmethod
     def _build_decider(
-        self,
-        d_decider: int,
+        agent_params: GraphIsomorphismAgentParameters,
         d_out: int = 3,
     ) -> Sequential:
         """Builds the module which produces a graph-pair level output.
@@ -244,13 +302,12 @@ class GraphIsomorphismAgent(Agent, ABC):
         graphs are not isomorphic, guess that the graphs are isomorphic, or continue
         exchanging messages.
 
-        The module consists of an MLP, a global max pooling layer per graph, and a final
-        MLP. The MLPs have one hidden layer and ReLU activations.
+        The module consists of an MLP with two hidden layers and ReLU activations.
 
         Parameters
         ----------
-        d_decider : int
-            The dimensionality of the final MLP hidden layers.
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
         d_out : int, default=3
             The dimensionality of the output.
 
@@ -260,104 +317,134 @@ class GraphIsomorphismAgent(Agent, ABC):
             The decider module.
         """
         return Sequential(
-            Rearrange("batch pair d_decider -> batch (pair d_decider)"),
+            Rearrange("batch pair d_transformer -> batch (pair d_transformer)"),
             Linear(
-                in_features=2 * d_decider,
-                out_features=d_decider,
+                in_features=2 * agent_params.d_transformer,
+                out_features=agent_params.d_decider,
             ),
             ReLU(inplace=True),
             Linear(
-                in_features=d_decider,
-                out_features=d_decider,
+                in_features=agent_params.d_decider,
+                out_features=agent_params.d_decider,
             ),
             ReLU(inplace=True),
             Linear(
-                in_features=d_decider,
+                in_features=agent_params.d_decider,
                 out_features=d_out,
             ),
         )
 
-    def _run_gnn_and_attention(
+    def _get_representations(
         self,
         data: TensorDictBase | GraphIsomorphismData | GeometricBatch,
-        gnn: Optional[Sequential] = None,
-        attention: Optional[MultiheadAttention] = None,
     ) -> tuple[
         Float[Tensor, "batch 2 max_nodes d_gnn"],
         Float[Tensor, "batch 2 max_nodes d_gnn"],
         Bool[Tensor, "batch 2*max_nodes"],
     ]:
-        """Runs the GNN and attention modules.
+        """Obtain graph-level and node-level representations by running components
+
+        Runs the GNN, pools the output, puts everything through a linear encoder, then
+        runs the transformer on this. 
 
         Parameters
         ----------
         data : TensorDictBase | GraphIsomorphismData | GraphIsomorphismDataBatch
-            The data to run the GNN and attention on. Either a TensorDictBase with keys
-            "x", "adjacency" and "node_mask"
-            or a GraphIsomorphism data object.
-        gnn : Optional[Sequential], optional
-            The GNN module to use. If None, uses the module stored in the class.
-        attention : Optional[MultiheadAttention], optional
-            The attention module to use. If None, uses the module stored in the class.
+            The data to run the GNN and transformer on. Either a TensorDictBase with
+            keys "x", "adjacency" and "node_mask" or a GraphIsomorphism data object.
 
         Returns
         -------
-        gnn_output : Float[Tensor, "batch 2 max_nodes d_gnn"]
-            The output of the GNN across the two graphs.
-        attention_output : Float[Tensor "batch 2 max_nodes d_gnn"]
-            The output of the attention module with the two graphs stacked in a new
-            batch dimension.
+        graph_level_repr : Float[Tensor, "batch 2 d_transformer"]
+            The output graph-level representations.
+        node_level_repr : Float[Tensor "batch 2 max_nodes d_transformer"]
+            The output node-level representations.
         node_mask : Bool[Tensor, "batch 2*max_nodes"]
             A mask indicating which nodes are present in the graphs, with the two graphs
             concatenated along the node dimension.
         """
-        if gnn is None:
-            gnn = self.gnn
-        if attention is None:
-            attention = self.attention
 
         # Convert the data to a TensorDict with dense representations
         if not isinstance(data, TensorDictBase):
             data = gi_data_to_tensordict(data)
 
+        # The size of the node dimension
+        max_num_nodes = data["x"].shape[1]
+
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
-        gnn_output = gnn(data)["x"]
+        gnn_output = self.gnn(data)["x"]
+
+        # Obtain the graph-level representations by pooling
+        # (batch, pair, d_gnn)
+        pooled_gnn_output = self.global_pooling(gnn_output)
 
         # Flatten the two batch dimensions in the graph representation and mask
         gnn_output_flatter = rearrange(
             gnn_output, "batch pair node feature -> batch (pair node) feature"
         )
-        torch.cat([gnn_output[:, 0], gnn_output[:, 1]], dim=1)
         node_mask_flatter = rearrange(
             data["node_mask"], "batch pair node -> batch (pair node)"
         )
 
-        # Turn the mask into batch of 2D attention masks
-        attn_mask = ~node_mask_flatter
-        # (batch, 2 * max_nodes, 2 * max_nodes)
-        attn_mask = rearrange(attn_mask, "batch node -> batch node 1") * rearrange(
-            attn_mask, "batch node -> batch 1 node"
+        # Add the graph-level representations to the transformer input with an extra
+        # features which distinguishes them
+        # (batch, 2 + 2 * node, d_gnn + 2)
+        transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=1)
+        pooled_feature = torch.zeros(
+            (*transformer_input[:-1], 2),
+            device=transformer_input.device,
+            dtype=transformer_input.dtype,
+        )
+        pooled_feature[:, 0, 0] = 1
+        pooled_feature[:, 1, 1] = 1
+        transformer_input = torch.cat((transformer_input, pooled_feature), dim=-1)
+
+        # Run the transformer input through the encoder first
+        # (batch, 2 + 2 * node, d_transformer)
+        transformer_input = self.gnn_transformer_encoder(transformer_input)
+
+        # Create the padding mask so that the transformer only attends to the actual
+        # nodes (and the pooled representations)
+        # (batch, 2 + 2 * node)
+        padding_mask = ~node_mask_flatter
+        padding_mask = torch.cat(
+            (
+                torch.ones(
+                    (padding_mask.shape[0], 2), device=padding_mask.device, dtype=bool
+                ),
+                padding_mask,
+            ),
+            dim=-1,
         )
 
-        # Compute the attention output
-        # (batch, 2 * max_nodes, d_gnn)
-        attention_output_flatter, _ = attention(
-            query=gnn_output_flatter,
-            key=gnn_output_flatter,
-            value=gnn_output_flatter,
-            attn_mask=attn_mask,
-            need_weights=False,
+        # The attention mask applied to all batch elements, which makes sure that nodes
+        # only attend to nodes in the other graph and to the pooled representations.
+        src_mask = torch.ones(
+            (2 + 2 * max_num_nodes,) * 2, device=padding_mask.device, dtype=bool
+        )
+        src_mask[2 : 2 + max_num_nodes, 2 + max_num_nodes :] = 0
+        src_mask[2 + max_num_nodes :, 2 : 2 + max_num_nodes] = 0
+
+        # Compute the transformer output
+        # (batch, 2 + 2 * max_nodes, d_transformer)
+        transformer_output_flatter, _ = self.transformer(
+            transformer_input,
+            mask=src_mask,
+            src_key_padding_mask=padding_mask,
+            is_causal=False,
         )
 
-        # Unflatten the attention output
-        attention_output = rearrange(
-            attention_output_flatter,
+        # Extract the graph-level representations and rearrange the rest to have two
+        # batch dims
+        graph_level_repr = transformer_output_flatter[:, :2]
+        node_level_repr = rearrange(
+            transformer_output_flatter[:, 2:],
             "batch (pair node) feature -> batch pair node feature",
             pair=2,
         )
 
-        return gnn_output, attention_output, node_mask_flatter
+        return graph_level_repr, node_level_repr, node_mask_flatter
 
 
 class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
@@ -370,37 +457,13 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
     def __init__(self, params: Parameters, device: str | torch.device):
         super().__init__(params, device)
 
-        # Build up the GNN and attention modules
-        self.gnn, self.attention = self._build_gnn_and_attention(
-            d_input=params.max_message_rounds,
-            d_gnn=params.graph_isomorphism.prover.d_gnn,
-            d_gin_mlp=params.graph_isomorphism.prover.d_gin_mlp,
-            num_layers=params.graph_isomorphism.prover.num_layers,
-            num_heads=params.graph_isomorphism.prover.num_heads,
-        )
-
-        # # Build the global pooling module, which computes the graph-level representation
-        # self.global_pooling = self._build_global_pooling(
-        #     d_gnn=params.graph_isomorphism.prover.d_gnn,
-        #     d_decider=params.graph_isomorphism.prover.d_decider,
-        #     use_batch_norm=params.graph_isomorphism.prover.use_batch_norm,
-        #     noise_sigma=params.graph_isomorphism.prover.noise_sigma,
-        #     use_pair_invariant_pooling=params.graph_isomorphism.prover.pair_invariant_pooling,
-        # )
-
-        # Build the node selector module, which selects a node to send as a message
-        self.node_selector = self._build_node_selector(
-            d_gnn=params.graph_isomorphism.prover.d_gnn,
-            d_node_selector=params.graph_isomorphism.prover.d_node_selector,
-            d_out=1,
+        self._create_agent(
+            agent_params=params.graph_isomorphism.prover, build_decider=False
         )
 
     def forward(
         self, data: GraphIsomorphismData | GeometricBatch
-    ) -> [
-        Float[Tensor, "batch 2*max_nodes"],
-        Bool[Tensor, "batch 2*max_nodes"],
-    ]:
+    ) -> [Float[Tensor, "batch 2*max_nodes"], Bool[Tensor, "batch 2*max_nodes"],]:
         """Runs the prover on the given data.
 
         Parameters
@@ -419,16 +482,10 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2*max_nodes)
-        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
-
-        # (batch, 2, max_nodes, d_gnn)
-        gnn_attn_output = gnn_output + attention_output
-
-        # (batch, 2, d_decider)
-        # pooled_output = self.global_pooling(gnn_attn_output)
+        _, node_level_repr, node_mask = self._get_representations(data)
 
         # (batch, 2*max_nodes)
-        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
+        node_logits = self.node_selector(node_level_repr).squeeze(-1)
 
         return node_logits, node_mask
 
@@ -436,7 +493,7 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         super().to(device)
         self.device = device
         self.gnn.to(device)
-        self.attention.to(device)
+        self.transformer.to(device)
         # self.global_pooling.to(device)
         return self
 
@@ -453,36 +510,8 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
     def __init__(self, params: Parameters, device: str | torch.device):
         super().__init__(params, device)
 
-        # Build up the GNN and attention modules
-        self.gnn, self.attention = self._build_gnn_and_attention(
-            d_input=params.max_message_rounds,
-            d_gnn=params.graph_isomorphism.verifier.d_gnn,
-            d_gin_mlp=params.graph_isomorphism.verifier.d_gin_mlp,
-            num_layers=params.graph_isomorphism.verifier.num_layers,
-            num_heads=params.graph_isomorphism.verifier.num_heads,
-        )
-
-        # Build the global pooling module, which computes the graph-level representation
-        self.global_pooling = self._build_global_pooling(
-            d_gnn=params.graph_isomorphism.verifier.d_gnn,
-            d_decider=params.graph_isomorphism.verifier.d_decider,
-            use_batch_norm=params.graph_isomorphism.verifier.use_batch_norm,
-            noise_sigma=params.graph_isomorphism.verifier.noise_sigma,
-            use_invariantizer=params.graph_isomorphism.verifier.pair_invariant_pooling,
-        )
-
-        # Build the node selector module, which selects a node to send as a message
-        self.node_selector = self._build_node_selector(
-            d_gnn=params.graph_isomorphism.verifier.d_gnn,
-            d_node_selector=params.graph_isomorphism.verifier.d_node_selector,
-            d_out=1,
-        )
-
-        # Build the decider module, which decides whether to continue exchanging
-        # messages, guess that the graphs are isomorphic, or guess that the graphs are
-        # not isomorphic
-        self.decider = self._build_decider(
-            d_gnn=params.graph_isomorphism.verifier.d_gnn,
+        self._create_agent(
+            agent_params=params.graph_isomorphism.verifier, build_decider=True
         )
 
     def forward(
@@ -513,19 +542,13 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2, max_nodes)
-        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
-
-        # (batch, 2, max_nodes, d_gnn)
-        gnn_attn_output = gnn_output + attention_output
+        graph_level_repr, node_level_repr, node_mask = self._get_representations(data)
 
         # (batch, 2*max_nodes)
-        node_logits = self.node_selector(gnn_attn_output).squeeze(-1)
-
-        # (batch, 2, d_decider)
-        pooled_output = self.global_pooling(gnn_attn_output)
+        node_logits = self.node_selector(node_level_repr).squeeze(-1)
 
         # (batch, 3)
-        decider_logits = self.decider(pooled_output)
+        decider_logits = self.decider(graph_level_repr)
 
         return node_logits, decider_logits, node_mask
 
@@ -533,7 +556,7 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         super().to(device)
         self.device = device
         self.gnn.to(device)
-        self.attention.to(device)
+        self.transformer.to(device)
         self.global_pooling.to(device)
         return self
 

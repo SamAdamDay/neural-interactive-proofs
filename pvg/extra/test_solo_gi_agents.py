@@ -28,7 +28,7 @@ from pvg.graph_isomorphism import (
     GraphIsomorphismDataset,
     GraphIsomorphismData,
 )
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
 
 
 class ScoreToBitTransform(BaseTransform):
@@ -45,36 +45,19 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
 
     def _build_model(
         self,
-        num_layers: int,
-        d_gnn: int,
-        d_gin_mlp: int,
-        d_decider: int,
-        num_heads: int,
-        noise_sigma: float,
-        use_batch_norm: bool,
-        use_pair_invariant_pooling: bool,
+        agent_params: GraphIsomorphismAgentParameters,
     ) -> nn.Module:
         # Build up the GNN module
-        self.gnn, self.attention = self._build_gnn_and_attention(
-            d_input=1,
-            d_gnn=d_gnn,
-            d_gin_mlp=d_gin_mlp,
-            num_layers=num_layers,
-            num_heads=num_heads,
+        self.gnn, self.attention = self._build_gnn_and_transformer(
+            d_input=1, agent_params=agent_params
         )
 
         # Create the Gaussian noise layer
-        self.global_pooling = self._build_global_pooling(
-            d_gnn=d_gnn,
-            d_decider=d_decider,
-            noise_sigma=noise_sigma,
-            use_batch_norm=use_batch_norm,
-            use_invariantizer=use_pair_invariant_pooling,
-        )
+        self.global_pooling = self._build_global_pooling(agent_params=agent_params)
 
         # Build the decider, which decides whether the graphs are isomorphic
         self.decider = self._build_decider(
-            d_decider=d_decider,
+            agent_params=agent_params,
             d_out=2,
         )
 
@@ -84,9 +67,8 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
         output_callback: Optional[
             Callable[
                 [
-                    Float[Tensor, "batch 2 max_nodes d_gnn"],
-                    Float[Tensor, "batch 2 max_nodes d_gnn"],
-                    Float[Tensor, "batch 2 d_decider"],
+                    Float[Tensor, "batch 2 d_transformer"],
+                    Float[Tensor, "batch 2 max_nodes d_transformer"],
                     Bool[Tensor, "batch max_nodes_a+max_nodes_b"],
                     GraphIsomorphismData | GeometricBatch,
                 ],
@@ -94,13 +76,10 @@ class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
             ]
         ] = None,
     ) -> Float[Tensor, "batch 2"]:
-        gnn_output, attention_output, node_mask = self._run_gnn_and_attention(data)
-        pooled_output = self.global_pooling(gnn_output)
+        graph_level_repr, node_level_repr, node_mask = self._get_representations(data)
         if output_callback is not None:
-            output_callback(
-                gnn_output, attention_output, pooled_output, node_mask, data
-            )
-        decider_logits = self.decider(pooled_output)
+            output_callback(graph_level_repr, node_level_repr, node_mask, data)
+        decider_logits = self.decider(graph_level_repr)
         return decider_logits
 
     def to(self, device: str | torch.device):
@@ -118,20 +97,10 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
     def __init__(
         self,
         params: Parameters,
-        d_decider: int,
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._build_model(
-            num_layers=params.graph_isomorphism.prover.num_layers,
-            d_gnn=params.graph_isomorphism.prover.d_gnn,
-            d_gin_mlp=params.graph_isomorphism.prover.d_gin_mlp,
-            d_decider=d_decider,
-            num_heads=params.graph_isomorphism.prover.num_heads,
-            noise_sigma=params.graph_isomorphism.prover.noise_sigma,
-            use_batch_norm=params.graph_isomorphism.prover.use_batch_norm,
-            use_pair_invariant_pooling=params.graph_isomorphism.prover.pair_invariant_pooling,
-        )
+        self._build_model(agent_params=params.graph_isomorphism.prover)
 
 
 class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
@@ -140,20 +109,10 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
     def __init__(
         self,
         params: Parameters,
-        d_decider: int,
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._build_model(
-            num_layers=params.graph_isomorphism.verifier.num_layers,
-            d_gnn=params.graph_isomorphism.verifier.d_gnn,
-            d_gin_mlp=params.graph_isomorphism.verifier.d_gin_mlp,
-            d_decider=d_decider,
-            num_heads=params.graph_isomorphism.verifier.num_heads,
-            noise_sigma=params.graph_isomorphism.verifier.noise_sigma,
-            use_batch_norm=params.graph_isomorphism.verifier.use_batch_norm,
-            use_pair_invariant_pooling=params.graph_isomorphism.verifier.pair_invariant_pooling,
-        )
+        self._build_model(agent_params=params.graph_isomorphism.verifier)
 
 
 def train_and_test_solo_gi_agents(
@@ -264,6 +223,7 @@ def train_and_test_solo_gi_agents(
                 use_batch_norm=use_batch_norm,
                 noise_sigma=noise_sigma,
                 pair_invariant_pooling=use_pair_invariant_pooling,
+                d_decider=d_decider,
             ),
             verifier=dict(
                 num_layers=verifier_num_layers,
@@ -271,6 +231,7 @@ def train_and_test_solo_gi_agents(
                 use_batch_norm=use_batch_norm,
                 noise_sigma=noise_sigma,
                 pair_invariant_pooling=use_pair_invariant_pooling,
+                d_decider=d_decider,
             ),
         ),
     )
@@ -279,8 +240,8 @@ def train_and_test_solo_gi_agents(
     train_dataset, test_dataset = random_split(dataset, (1 - test_size, test_size))
 
     # Create the prover and verifier
-    prover = GraphIsomorphismSoloProver(params, d_decider, device)
-    verifier = GraphIsomorphismSoloVerifier(params, d_decider, device)
+    prover = GraphIsomorphismSoloProver(params, device)
+    verifier = GraphIsomorphismSoloVerifier(params, device)
 
     def encoder_parameter_selector(name: str) -> bool:
         return (
@@ -395,36 +356,8 @@ def train_and_test_solo_gi_agents(
         model.train()
         optimizer.zero_grad()
 
-        # Function to compute the encoder equality accuracy
-        encoder_eq_accuracy = torch.empty(data.y.shape[0], dtype=bool, device=device)
-
-        def compute_encoder_eq_accuracy(
-            gnn_output,
-            attention_output,
-            pooled_output: Float[Tensor, "batch 2 d_decider"],
-            node_mask,
-            data,
-            encoder_eq_accuracy,
-        ):
-            if use_pair_invariant_pooling:
-                close = torch.isclose(
-                    pooled_output[:, 1],
-                    torch.zeros_like(pooled_output[:, 1]),
-                    rtol=1e-5,
-                    atol=1e-5,
-                )
-            else:
-                close = torch.isclose(pooled_output[:, 0], pooled_output[:, 1])
-            encoder_eq_accuracy[:] = close.all(dim=-1) == data.y.bool()
-
         # Run the model and compute the loss and encoder equality accuracy
-        pred = model(
-            data,
-            output_callback=partial(
-                compute_encoder_eq_accuracy,
-                encoder_eq_accuracy=encoder_eq_accuracy,
-            ),
-        )
+        pred = model(data)
         loss = F.cross_entropy(pred, data.y)
 
         loss.backward()
@@ -433,46 +366,40 @@ def train_and_test_solo_gi_agents(
         with torch.no_grad():
             accuracy = (pred.argmax(dim=1) == data.y).float().mean().item()
 
-        return loss, accuracy, encoder_eq_accuracy.float().mean().item()
+        return loss, accuracy
 
     prover.to(device)
     verifier.to(device)
 
     train_losses_prover = np.empty(num_epochs)
     train_accuracies_prover = np.empty(num_epochs)
-    train_encoder_eq_accs_prover = np.empty(num_epochs)
     train_losses_verifier = np.empty(num_epochs)
     train_accuracies_verifier = np.empty(num_epochs)
-    train_encoder_eq_accs_verifier = np.empty(num_epochs)
 
     # Train the prover and verifier
     with tqdm_func(total=num_epochs, desc="Training") as pbar:
         for epoch in range(num_epochs):
             total_loss_prover = 0
             total_accuracy_prover = 0
-            total_encoder_eq_acc_prover = 0
             total_loss_verifier = 0
             total_accuracy_verifier = 0
-            total_encoder_eq_acc_verifier = 0
 
             for data in test_loader:
                 data = data.to(device)
 
                 # Train the prover on the batch
-                loss_prover, accuracy, encoder_eq_accuracy = train_step(
+                loss_prover, accuracy = train_step(
                     prover, optimizer_prover, data
                 )
                 total_loss_prover += loss_prover.item()
                 total_accuracy_prover += accuracy
-                total_encoder_eq_acc_prover += encoder_eq_accuracy
 
                 # Train the verifier on the batch
-                loss_verifier, accuracy, encoder_eq_accuracy = train_step(
+                loss_verifier, accuracy = train_step(
                     verifier, optimizer_verifier, data
                 )
                 total_loss_verifier += loss_verifier.item()
                 total_accuracy_verifier += accuracy
-                total_encoder_eq_acc_verifier += encoder_eq_accuracy
 
                 # Update the learning rate per batch if not using ReduceLROnPlateau
                 if (
@@ -490,14 +417,8 @@ def train_and_test_solo_gi_agents(
             # Log the results
             train_losses_prover[epoch] = total_loss_prover / len(test_loader)
             train_accuracies_prover[epoch] = total_accuracy_prover / len(test_loader)
-            train_encoder_eq_accs_prover[epoch] = total_encoder_eq_acc_prover / len(
-                test_loader
-            )
             train_losses_verifier[epoch] = total_loss_verifier / len(test_loader)
             train_accuracies_verifier[epoch] = total_accuracy_verifier / len(
-                test_loader
-            )
-            train_encoder_eq_accs_verifier[epoch] = total_encoder_eq_acc_verifier / len(
                 test_loader
             )
 
@@ -507,14 +428,8 @@ def train_and_test_solo_gi_agents(
                     {
                         "train_loss_prover": train_losses_prover[epoch],
                         "train_accuracy_prover": train_accuracies_prover[epoch],
-                        "train_encoder_eq_accuracy_prover": train_encoder_eq_accs_prover[
-                            epoch
-                        ],
                         "train_loss_verifier": train_losses_verifier[epoch],
                         "train_accuracy_verifier": train_accuracies_verifier[epoch],
-                        "train_encoder_eq_accuracy_verifier": train_encoder_eq_accs_verifier[
-                            epoch
-                        ],
                         "optimizer_lr_prover": optimizer_prover.param_groups[0]["lr"],
                         "optimizer_lr_verifier": optimizer_verifier.param_groups[0][
                             "lr"
@@ -571,10 +486,8 @@ def train_and_test_solo_gi_agents(
     results = {
         "train_losses_prover": train_losses_prover,
         "train_accuracies_prover": train_accuracies_prover,
-        "train_encoder_eq_accuracies_prover": train_encoder_eq_accs_prover,
         "train_losses_verifier": train_losses_verifier,
         "train_accuracies_verifier": train_accuracies_verifier,
-        "train_encoder_eq_accuracies_verifier": train_encoder_eq_accs_verifier,
         "test_loss_prover": test_loss_prover,
         "test_accuracy_prover": test_accuracy_prover,
         "test_loss_verifier": test_loss_verifier,

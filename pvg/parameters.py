@@ -23,7 +23,7 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
 
     Parameters
     ----------
-    num_layers : int
+    num_gnn_layers : int
         The number of layers in the agents's GNN.
     d_gnn : int
         The dimension of the hidden layers in the agents's GNN and of the attention
@@ -32,7 +32,15 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
         The dimension of the hidden layers in the agents's Graph Isomorphism Network
         MLP.
     num_heads : int
-        The number of heads in the agents's attention layer.
+        The number of heads in the agents's transformer.
+    num_transformer_layers : int
+        The number of transformer layers
+    d_transformer : int
+        The dimensionality of the transformer
+    d_transformer_mlp
+        The hidden dimension of the transformer MLP
+    transformer_dropout : float
+        The dropout value for the transformer
     d_node_selector : int
         The dimension of the hidden layer in the agents's MLP which selects a node to
         send as a message.
@@ -47,10 +55,14 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
         graphs in the pair.
     """
 
-    num_layers: int = 5
+    num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
     num_heads: int = 1
+    num_transformer_layers: int = 4
+    d_transformer: int = 16
+    d_transformer_mlp: int = 64
+    transformer_dropout: float = 0.0
     d_node_selector: int = 16
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
