@@ -82,15 +82,23 @@ class GraphIsomorphismParameters(AdditionalParameters):
         Parameters for the prover
     """
 
-    prover: GraphIsomorphismAgentParameters | dict
-    verifier: GraphIsomorphismAgentParameters | dict
+    prover: Optional[GraphIsomorphismAgentParameters | dict] = None
+    verifier: Optional[GraphIsomorphismAgentParameters | dict] = None
 
     def __post_init__(self):
-        if isinstance(self.prover, dict):
+        # if isinstance(self.prover, dict):
+        #     self.prover = GraphIsomorphismAgentParameters.from_dict(self.prover)
+        # if isinstance(self.verifier, dict):
+        #     self.verifier = GraphIsomorphismAgentParameters.from_dict(self.verifier)
+        if self.prover is None:
+            self.prover = GraphIsomorphismAgentParameters()
+        elif isinstance(self.prover, dict):
             self.prover = GraphIsomorphismAgentParameters.from_dict(
                 self.prover
             )
-        if isinstance(self.verifier, dict):
+        if self.verifier is None:
+            self.verifier = GraphIsomorphismAgentParameters()
+        elif isinstance(self.verifier, dict):
             self.verifier = GraphIsomorphismAgentParameters.from_dict(
                 self.verifier
             )

@@ -18,7 +18,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, TensorDict
 
 from torch_geometric.utils import to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
@@ -406,7 +406,8 @@ class GraphIsomorphismAgent(Agent, ABC):
         # (batch, 2 + 2 * node, d_gnn + 3)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=1)
         pooled_feature = torch.zeros(
-            *transformer_input.shape[:-1], 2,
+            *transformer_input.shape[:-1],
+            2,
             device=transformer_input.device,
             dtype=transformer_input.dtype,
         )
@@ -419,7 +420,8 @@ class GraphIsomorphismAgent(Agent, ABC):
             message_feature = rearrange(message_feature, "batch token -> batch token 1")
         else:
             message_feature = torch.zeros(
-                *transformer_input.shape[:-1], 1,
+                *transformer_input.shape[:-1],
+                1,
                 device=transformer_input.device,
                 dtype=transformer_input.dtype,
             )
@@ -491,25 +493,30 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
     def forward(
         self,
         data: TensorDictBase,
-    ) -> [Float[Tensor, "batch 2*max_nodes"], Bool[Tensor, "batch 2*max_nodes"],]:
+    ) -> TensorDict:
         """Runs the prover on the given data.
 
         Parameters
         ----------
         data : TensorDictBase
             The data to run the prover on. A tensor dict with keys:
+
             - "x" (batch pair node feature): The graph node features (message history)
             - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): (optional) (optional) The most recent message from the other agent
+            - "message" (batch): (optional) (optional) The most recent message from the
+              agent
             - "node_mask" (batch pair node): Which nodes actually exist
 
         Returns
         -------
-        node_logits : Float[Tensor, "batch 2*max_nodes"]
-            A logit for each node, indicating the probability that this node should be
-            sent as a message to the verifier.
-        node_mask : Bool[Tensor, "batch 2*max_nodes"]
-            A mask indicating which nodes are present in the graphs.
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
+              indicating the probability that this node should be sent as a message to
+              the verifier.
+            - "node_mask" (batch 2*max_nodes): A mask indicating which nodes are present
+              in the graphs.
         """
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2, max_nodes, d_gnn),
@@ -517,9 +524,12 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
         _, node_level_repr, node_mask = self._get_representations(data)
 
         # (batch, 2*max_nodes)
-        node_logits = self.node_selector(node_level_repr).squeeze(-1)
+        node_selected_logits = self.node_selector(node_level_repr).squeeze(-1)
 
-        return node_logits, node_mask
+        return TensorDict(
+            dict(node_selected_logits=node_selected_logits, node_mask=node_mask),
+            shape=node_selected_logits.shape[0],
+        )
 
     def to(self, device: str | torch.device):
         super().to(device)
@@ -546,19 +556,14 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
             agent_params=params.graph_isomorphism.verifier, build_decider=True
         )
 
-    def forward(
-        self, data: TensorDictBase
-    ) -> tuple[
-        Float[Tensor, "batch 2*max_nodes"],
-        Float[Tensor, "batch 3"],
-        Bool[Tensor, "batch 2*max_nodes"],
-    ]:
+    def forward(self, data: TensorDictBase) -> TensorDict:
         """Runs the verifier on the given data.
 
         Parameters
         ----------
         data : TensorDictBase
             The data to run the prover on. A tensor dict with keys:
+
             - "x" (batch pair node feature): The graph node features (message history)
             - "adjacency" (batch pair node node): The graph adjacency matrices
             - "message" (batch): (optional) The most recent message from the other agent
@@ -566,14 +571,17 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
 
         Returns
         -------
-        node_logits : Float[Tensor, "batch 2*max_nodes"]
-            A logit for each node, indicating the probability that this node should be
-            sent as a message to the prover.
-        decider_logits : Float[Tensor, "batch 3"]
-            A logit for each of the three options: continue exchanging messages, guess
-            that the graphs are isomorphic, or guess that the graphs are not isomorphic.
-        node_mask : Bool[Tensor, "batch 2*max_nodes"]
-            A mask indicating which nodes are present in the graphs.
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
+              indicating the probability that this node should be sent as a message to
+              the prover.
+            - "decider_logits" (batch 3): A logit for each of the three options:
+              continue exchanging messages, guess that the graphs are isomorphic, or
+              guess that the graphs are not isomorphic.
+            - "node_mask" : (batch 2*max_nodes): A mask indicating which nodes are
+              present in the graphs.
         """
         # (batch, 2, max_nodes, d_gnn),
         # (batch, 2, max_nodes, d_gnn),
@@ -581,12 +589,19 @@ class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
         graph_level_repr, node_level_repr, node_mask = self._get_representations(data)
 
         # (batch, 2*max_nodes)
-        node_logits = self.node_selector(node_level_repr).squeeze(-1)
+        node_selected_logits = self.node_selector(node_level_repr).squeeze(-1)
 
         # (batch, 3)
         decider_logits = self.decider(graph_level_repr)
 
-        return node_logits, decider_logits, node_mask
+        return TensorDict(
+            dict(
+                node_selected_logits=node_selected_logits,
+                decider_logits=decider_logits,
+                node_mask=node_mask,
+            ),
+            shape=node_selected_logits.shape[0],
+        )
 
     def to(self, device: str | torch.device):
         super().to(device)
@@ -862,10 +877,10 @@ class GraphIsomorphismScenario(Scenario):
             ## Verifier sends a message
             # (batch, 2*max_nodes), (batch, 3), (batch,
             # 2*max_nodes)
-            node_logits, decider_logits, node_mask = self.verifier(data)
+            node_selected_logits, decider_logits, node_mask = self.verifier(data)
 
             # (batch, 2*max_nodes)
-            node_probs = F.softmax(node_logits, dim=-1)
+            node_probs = F.softmax(node_selected_logits, dim=-1)
             node_probs[~node_mask] = 0
 
             # (batch)
@@ -903,10 +918,10 @@ class GraphIsomorphismScenario(Scenario):
             ## Prover sends a message
             # (batch, 2*max_nodes), (batch,
             # 2*max_nodes)
-            node_logits, node_mask = self.prover(data)
+            node_selected_logits, node_mask = self.prover(data)
 
             # (batch, 2*max_nodes)
-            node_probs = F.softmax(node_logits, dim=-1)
+            node_probs = F.softmax(node_selected_logits, dim=-1)
             node_probs[~node_mask] = 0
 
             # Make sure that the prover chooses a node in the opposite graph to the one
