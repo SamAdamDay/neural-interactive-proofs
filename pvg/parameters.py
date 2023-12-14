@@ -44,6 +44,18 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
     d_node_selector : int
         The dimension of the hidden layer in the agents's MLP which selects a node to
         send as a message.
+    num_node_selector_layers : int
+        The number of layers in the agents's node selector MLP.
+    d_decider : int
+        The dimension of the hidden layer in the agents's MLP which decides whether to
+        accept or reject.
+    num_decider_layers : int
+        The number of layers in the agents's decider MLP.
+    d_critic : int
+        The dimension of the hidden layer in the agents's MLP which estimates the value
+        function.
+    num_critic_layers : int
+        The number of layers in the agents's critic MLP.
     use_batch_norm : bool
         Whether to use batch normalization in the agents's global pooling layer.
     noise_sigma : float
@@ -64,7 +76,11 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
     d_transformer_mlp: int = 64
     transformer_dropout: float = 0.0
     d_node_selector: int = 16
+    num_node_selector_layers: int = 2
     d_decider: int = 16
+    num_decider_layers: int = 2
+    d_critic: int = 16
+    num_critic_layers: int = 2
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True

@@ -278,6 +278,23 @@ class TensorDictize(nn.Module):
         out = TensorDict(tensordict)
         out[_key_map(self.key)] = self.module(tensordict[_key_map(self.key)])
         return out
+    
+
+class SelectTensorDictValue(nn.Module):
+    """Select a value from a TensorDict using a key.
+
+    Parameters
+    ----------
+    key : str
+        The key to select.
+    """
+
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+
+    def forward(self, tensor_dict: TensorDictBase) -> Tensor:
+        return tensor_dict[self.key]
 
 
 class SequentialKwargs(nn.Sequential):

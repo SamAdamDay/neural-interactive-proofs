@@ -24,7 +24,7 @@ from tqdm import tqdm
 import wandb
 
 from pvg.graph_isomorphism import (
-    GraphIsomorphismAgent,
+    GraphIsomorphismAgentBody,
     GraphIsomorphismDataset,
     GraphIsomorphismData,
 )
@@ -40,14 +40,14 @@ class ScoreToBitTransform(BaseTransform):
         return data
 
 
-class GraphIsomorphismSoloAgent(GraphIsomorphismAgent, ABC):
+class GraphIsomorphismSoloAgent(GraphIsomorphismAgentBody, ABC):
     """A base class for an agent that tries to solve the graph isomorphism task solo."""
 
-    def _create_agent(
+    def _create_agent_body(
         self,
         agent_params: GraphIsomorphismAgentParameters,
     ):
-        return super()._create_agent(
+        return super()._create_agent_body(
             agent_params, build_node_selector=False, build_decider=True, d_decider_out=2
         )
 
@@ -91,7 +91,7 @@ class GraphIsomorphismSoloProver(GraphIsomorphismSoloAgent):
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._create_agent(agent_params=params.graph_isomorphism.prover)
+        self._create_agent_body(agent_params=params.graph_isomorphism.prover)
 
 
 class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
@@ -103,7 +103,7 @@ class GraphIsomorphismSoloVerifier(GraphIsomorphismSoloAgent):
         device: str | torch.device,
     ):
         super().__init__(params, device)
-        self._create_agent(agent_params=params.graph_isomorphism.verifier)
+        self._create_agent_body(agent_params=params.graph_isomorphism.verifier)
 
 
 def train_and_test_solo_gi_agents(

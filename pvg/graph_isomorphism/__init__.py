@@ -2,7 +2,7 @@ from .data import GraphIsomorphismDataset, GraphIsomorphismData
 from .dataset_generation import generate_gi_dataset, GraphIsomorphicDatasetConfig
 from .agents import (
     GraphIsomorphismScenario,
-    GraphIsomorphismAgent,
-    GraphIsomorphismProver,
-    GraphIsomorphismVerifier,
+    GraphIsomorphismAgentBody,
+    GraphIsomorphismProverBody,
+    GraphIsomorphismVerifierBody,
 )

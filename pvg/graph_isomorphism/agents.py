@@ -34,90 +34,99 @@ import plotly.express as px
 import networkx as nx
 
 from pvg.base import (
-    Agent,
-    Prover,
-    Verifier,
-    Rollout,
-    Scenario,
-    Message,
-    MessageExchange,
+    AgentPart,
+    AgentBody,
+    AgentHead,
+    AgentPolicyHead,
+    AgentCriticHead,
 )
 from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
 from pvg.graph_isomorphism.data import GraphIsomorphismData, GraphIsomorphismDataset
 from pvg.utils.torch_modules import (
-    CatGraphPairDim,
     PairedGaussianNoise,
     PairInvariantizer,
     GIN,
     TensorDictize,
+    SelectTensorDictValue,
     SequentialKwargs,
     Print,
 )
 from pvg.utils.data import gi_data_to_tensordict
 
 
-class GraphIsomorphismAgent(Agent, ABC):
-    """Mixin for the graph isomorphism agents.
+class GraphIsomorphismAgentPart(AgentPart, ABC):
+    """Base class for all graph isomorphism agent parts.
 
-    Provides some utility methods for constructing and running the various modules.
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent. Must be either "prover" or "verifier".
+    device : str or torch.device, optional
+        The device to use for this agent part. If not given, the CPU is used.
     """
 
-    def __init__(self, params: Parameters, device: str | torch.device):
-        super().__init__(params, device)
-        self.gnn: Sequential
-        self.gnn_transformer_encoder: Linear
-        self.transformer: TransformerEncoder
-        self.global_pooling: Sequential
-        self.node_selector: Optional[Sequential]
-        self.decider: Optional[Sequential]
-
-    def _create_agent(
+    def __init__(
         self,
-        agent_params: GraphIsomorphismAgentParameters,
-        build_node_selector: bool = True,
-        build_decider: bool = True,
-        d_decider_out: Optional[int] = None,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
     ):
-        """Builds and sets all the components of the agent
+        super().__init__(params, device)
+        self.agent_name = agent_name
 
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
-        """
+        if agent_name == "prover":
+            self._agent_params = params.graph_isomorphism.prover
+        elif agent_name == "verifier":
+            self._agent_params = params.graph_isomorphism.verifier
+        else:
+            raise ValueError(f"Unknown agent name: {agent_name}")
+
+
+class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
+    """Agent body for the graph isomorphism task.
+
+    Takes as input a pair of graphs and outputs node-level and graph-level
+    representations.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent. Must be either "prover" or "verifier".
+    device : str or torch.device, optional
+        The device to use for this agent part. If not given, the CPU is used.
+    """
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
         # Build up the GNN module
         self.gnn = self._build_gnn(
-            agent_params=agent_params,
+            agent_params=self._agent_params,
             d_input=self.params.max_message_rounds,
         )
 
         # Build the global pooling module, which computes the graph-level representation
         # from the GNN output
-        self.global_pooling = self._build_global_pooling(agent_params=agent_params)
+        self.global_pooling = self._build_global_pooling(
+            agent_params=self._agent_params
+        )
 
         # Build the encoder going from the GNN to the transformer
         self.gnn_transformer_encoder = self._build_gnn_transformer_encoder(
-            agent_params=agent_params
+            agent_params=self._agent_params
         )
 
         # Build the transformer
-        self.transformer = self._build_transformer(agent_params=agent_params)
-
-        # Build the node selector module, which selects a node to send as a message
-        if build_node_selector:
-            self.node_selector = self._build_node_selector(
-                agent_params=agent_params,
-                d_out=1,
-            )
-
-        # Build the decider module, which decides whether to continue exchanging
-        # messages, guess that the graphs are isomorphic, or guess that the graphs are
-        # not isomorphic
-        if build_decider:
-            self.decider = self._build_decider(
-                agent_params=agent_params,
-                d_out=d_decider_out,
-            )
+        self.transformer = self._build_transformer(agent_params=self._agent_params)
 
     @staticmethod
     def _build_gnn(
@@ -218,45 +227,6 @@ class GraphIsomorphismAgent(Agent, ABC):
         return transformer
 
     @staticmethod
-    def _build_node_selector(
-        agent_params: GraphIsomorphismAgentParameters,
-        d_out: int,
-    ) -> Sequential:
-        """Builds the MLP which selects a node to send as a message.
-
-        The MLP has one hidden layer and ReLU activations.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
-        d_out : int
-            The dimensionality of the output.
-
-        Returns
-        -------
-        node_selector : torch.nn.Sequential
-            The node selector module, which is an MLP.
-        """
-        return Sequential(
-            # (batch, 2, max_nodes, d_transformer)
-            CatGraphPairDim(cat_dim=2),
-            # (batch, 2*max_nodes, d_transformer)
-            ReLU(inplace=True),
-            Linear(
-                in_features=agent_params.d_transformer,
-                out_features=agent_params.d_node_selector,
-            ),
-            # (batch, 2*max_nodes, d_node_selector)
-            ReLU(inplace=True),
-            Linear(
-                in_features=agent_params.d_node_selector,
-                out_features=d_out,
-            ),
-            # (batch, 2*max_nodes, d_node_out)
-        )
-
-    @staticmethod
     def _build_global_pooling(
         agent_params: GraphIsomorphismAgentParameters,
     ) -> Sequential:
@@ -299,58 +269,10 @@ class GraphIsomorphismAgent(Agent, ABC):
             layers.append(PairInvariantizer(pair_dim=1))
         return Sequential(*layers)
 
-    @staticmethod
-    def _build_decider(
-        agent_params: GraphIsomorphismAgentParameters,
-        d_out: int = 3,
-    ) -> Sequential:
-        """Builds the module which produces a graph-pair level output.
-
-        By default it is used to decide whether to continue exchanging messages. In this
-        case it outputs a single triple of logits for the three options: guess that the
-        graphs are not isomorphic, guess that the graphs are isomorphic, or continue
-        exchanging messages.
-
-        The module consists of an MLP with two hidden layers and ReLU activations.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
-        d_out : int, default=3
-            The dimensionality of the output.
-
-        Returns
-        -------
-        decider : torch.nn.Sequential
-            The decider module.
-        """
-        return Sequential(
-            Rearrange("batch pair d_transformer -> batch (pair d_transformer)"),
-            Linear(
-                in_features=2 * agent_params.d_transformer,
-                out_features=agent_params.d_decider,
-            ),
-            ReLU(inplace=True),
-            Linear(
-                in_features=agent_params.d_decider,
-                out_features=agent_params.d_decider,
-            ),
-            ReLU(inplace=True),
-            Linear(
-                in_features=agent_params.d_decider,
-                out_features=d_out,
-            ),
-        )
-
-    def _get_representations(
+    def forward(
         self,
         data: TensorDictBase | GraphIsomorphismData | GeometricBatch,
-    ) -> tuple[
-        Float[Tensor, "batch 2 max_nodes d_gnn"],
-        Float[Tensor, "batch 2 max_nodes d_gnn"],
-        Bool[Tensor, "batch 2*max_nodes"],
-    ]:
+    ) -> TensorDict:
         """Obtain graph-level and node-level representations by running components
 
         Runs the GNN, pools the output, puts everything through a linear encoder, then
@@ -361,21 +283,25 @@ class GraphIsomorphismAgent(Agent, ABC):
         data : TensorDictBase | GraphIsomorphismData | GraphIsomorphismDataBatch
             The data to run the GNN and transformer on. Either a TensorDictBase with
             keys:
+
             - "x" (batch pair node feature): The graph node features (message history)
             - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): (optional) (optional) The most recent message from the other agent
+            - "message" (batch): (optional) (optional) The most recent message from the
+              other agent
             - "node_mask" (batch pair node): Which nodes actually exist
             or a GraphIsomorphism data object.
 
         Returns
         -------
-        graph_level_repr : Float[Tensor, "batch 2 d_transformer"]
-            The output graph-level representations.
-        node_level_repr : Float[Tensor "batch 2 max_nodes d_transformer"]
-            The output node-level representations.
-        node_mask : Bool[Tensor, "batch 2*max_nodes"]
-            A mask indicating which nodes are present in the graphs, with the two graphs
-            concatenated along the node dimension.
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+              representations.
+            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
+              representations.
+            - "node_mask" : (batch 2*max_nodes): A mask indicating which nodes are
+              present in the graphs.
         """
 
         # Convert the data to a TensorDict with dense representations
@@ -473,39 +399,232 @@ class GraphIsomorphismAgent(Agent, ABC):
             pair=2,
         )
 
-        return graph_level_repr, node_level_repr, node_mask_flatter
-
-
-class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
-    """The prover for the graph isomorphism task.
-
-    Takes as input a pair of graphs and outputs for each node a logit for the
-    probability that this node should be sent as a message to the verifier.
-    """
-
-    def __init__(self, params: Parameters, device: str | torch.device):
-        super().__init__(params, device)
-
-        self._create_agent(
-            agent_params=params.graph_isomorphism.prover, build_decider=False
+        return TensorDict(
+            dict(
+                graph_level_repr=graph_level_repr,
+                node_level_repr=node_level_repr,
+                node_mask_flatter=node_mask_flatter,
+            ),
+            batch_size=graph_level_repr.shape[0],
         )
 
-    def forward(
-        self,
-        data: TensorDictBase,
-    ) -> TensorDict:
-        """Runs the prover on the given data.
+    def to(self, device: Optional[str | torch.device] = None):
+        super().to(device)
+        self.device = device
+        self.gnn.to(device)
+        self.transformer.to(device)
+        self.global_pooling.to(device)
+        self.global_pooling[-1].to(device)
+        return self
+
+
+class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
+    """Base class for all graph isomorphism agent heads.
+
+    This class provides some utility methods for constructing and running the various
+    modules.
+    """
+
+    @staticmethod
+    def _build_node_level_mlp(
+        d_in: int,
+        d_hidden: int,
+        d_out: int,
+        num_layers: int,
+    ) -> Sequential:
+        """Builds an MLP which acts on the node-level representations.
+
+        This takes as input a TensorDict with key "node_level_repr" and outputs a
+        Tensor.
 
         Parameters
         ----------
-        data : TensorDictBase
-            The data to run the prover on. A tensor dict with keys:
+        d_in : int
+            The dimensionality of the input.
+        d_hidden : int
+            The dimensionality of the hidden layers.
+        d_out : int
+            The dimensionality of the output.
+        num_layers : int
+            The number of hidden layers in the MLP.
 
-            - "x" (batch pair node feature): The graph node features (message history)
-            - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): (optional) (optional) The most recent message from the
-              agent
-            - "node_mask" (batch pair node): Which nodes actually exist
+        Returns
+        -------
+        node_level_mlp : torch.nn.Sequential
+            The node-level MLP.
+        """
+        layers = []
+
+        # Select the node-level representations
+        layers.append(SelectTensorDictValue(key="node_level_repr"))
+
+        # The layers of the MLP
+        layers.append(Linear(d_in, d_hidden))
+        layers.append(ReLU(inplace=True))
+        for _ in range(num_layers - 2):
+            layers.append(Linear(d_hidden, d_hidden))
+            layers.append(ReLU(inplace=True))
+        layers.append(Linear(d_hidden, d_out))
+
+        # Concatenate the pair and node dimensions
+        layers.append(Rearrange("batch pair node d_out -> batch (pair node) d_out"))
+
+        return Sequential(*layers)
+
+    @staticmethod
+    def _build_graph_level_mlp(
+        d_in: int,
+        d_hidden: int,
+        d_out: int,
+        num_layers: int,
+    ) -> Sequential:
+        """Builds an MLP which acts on the node-level representations.
+
+        This takes as input a TensorDict with key "graph_level_repr" and outputs a
+        Tensor.
+
+        Parameters
+        ----------
+        d_in : int
+            The dimensionality of the input.
+        d_hidden : int
+            The dimensionality of the hidden layers.
+        d_out : int
+            The dimensionality of the output.
+        num_layers : int
+            The number of hidden layers in the MLP.
+
+        Returns
+        -------
+        node_level_mlp : torch.nn.Sequential
+            The node-level MLP.
+        """
+        layers = []
+
+        # Select the graph-level representations
+        layers.append(SelectTensorDictValue(key="graph_level_repr"))
+
+        # Concatenate the two graph-level representations
+        layers.append(Rearrange("batch pair d_in -> batch (pair d_in)"))
+
+        # The layers of the MLP
+        layers.append(Linear(d_in, d_hidden))
+        layers.append(ReLU(inplace=True))
+        for _ in range(num_layers - 2):
+            layers.append(Linear(d_hidden, d_hidden))
+            layers.append(ReLU(inplace=True))
+        layers.append(Linear(d_hidden, d_out))
+
+        return Sequential(*layers)
+
+
+class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead):
+    """Agent policy head for the graph isomorphism task.
+
+    Takes as input the output of the agent body and outputs a policy distribution over
+    the actions. Both agents select a node to send as a message, and the verifier also
+    decides whether to continue exchanging messages or to guess that the graphs are
+    isomorphic or not.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent. Must be either "prover" or "verifier".
+    device : str or torch.device, optional
+        The device to use for this agent part. If not given, the CPU is used.
+    """
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        # Build the node selector module
+        self.node_selector = self._build_node_selector(agent_params=self._agent_params)
+
+        # Build the decider module if necessary
+        if agent_name == "verifier":
+            self.decider = self._build_decider(agent_params=self._agent_params)
+        else:
+            self.decider = None
+
+    @classmethod
+    def _build_node_selector(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> Sequential:
+        """Builds the module which selects which node to send as a message.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+
+        Returns
+        -------
+        node_selector : torch.nn.Sequential
+            The node selector module.
+        """
+        return cls._build_node_level_mlp(
+            d_in=agent_params.d_transformer,
+            d_hidden=agent_params.d_node_selector,
+            d_out=1,
+            num_layers=agent_params.num_node_selector_layers,
+        )
+
+    @classmethod
+    def _build_decider(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+        d_out: int = 3,
+    ) -> Sequential:
+        """Builds the module which produces a graph-pair level output.
+
+        By default it is used to decide whether to continue exchanging messages. In this
+        case it outputs a single triple of logits for the three options: guess that the
+        graphs are not isomorphic, guess that the graphs are isomorphic, or continue
+        exchanging messages.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+        d_out : int, default=3
+            The dimensionality of the output.
+
+        Returns
+        -------
+        decider : torch.nn.Sequential
+            The decider module.
+        """
+        return cls._build_graph_level_mlp(
+            d_in=agent_params.d_transformer,
+            d_hidden=agent_params.d_decider,
+            d_out=d_out,
+            num_layers=agent_params.num_decider_layers,
+        )
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the policy head on the given body output.
+
+        Runs the node selector module and the decider module if present.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+              representations.
+            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
+              representations.
+            - (optional) "node_mask" : (batch 2*max_nodes): A mask indicating which
+              nodes are present in the graphs.
 
         Returns
         -------
@@ -515,461 +634,429 @@ class GraphIsomorphismProver(Prover, GraphIsomorphismAgent):
             - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - "node_mask" (batch 2*max_nodes): A mask indicating which nodes are present
-              in the graphs.
+            - (optional) "decider_logits" (batch 3): A logit for each of the three
+              options: continue exchanging messages, guess that the graphs are
+              isomorphic, or guess that the graphs are not isomorphic.
+            - (optional) "node_mask" : (batch 2*max_nodes): The node mask from the body
+              output.
         """
-        # (batch, 2, max_nodes, d_gnn),
-        # (batch, 2, max_nodes, d_gnn),
-        # (batch, 2*max_nodes)
-        _, node_level_repr, node_mask = self._get_representations(data)
 
-        # (batch, 2*max_nodes)
-        node_selected_logits = self.node_selector(node_level_repr).squeeze(-1)
+        out_dict = {}
+
+        out_dict["node_selected_logits"] = self.node_selector(body_output).squeeze(-1)
+
+        if self.decider is not None:
+            out_dict["decider_logits"] = self.decider(body_output)
+
+        if "node_mask" in body_output.keys():
+            out_dict["node_mask"] = body_output["node_mask"]
 
         return TensorDict(
-            dict(node_selected_logits=node_selected_logits, node_mask=node_mask),
-            shape=node_selected_logits.shape[0],
+            out_dict, batch_size=out_dict["node_selected_logits"].shape[0]
         )
 
-    def to(self, device: str | torch.device):
-        super().to(device)
-        self.device = device
-        self.gnn.to(device)
-        self.transformer.to(device)
-        # self.global_pooling.to(device)
-        return self
 
+class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):
+    """Critic head for the graph isomorphism task.
 
-class GraphIsomorphismVerifier(Verifier, GraphIsomorphismAgent):
-    """The verifier for the graph isomorphism task.
+    Takes as input the output of the agent body and outputs a value function.
 
-    Takes as input a pair of graphs and outputs for each node a logit for the
-    probability that this node should be sent as a message to the verifier, as well as
-    a single triple of logits for the three options: continue exchanging messages,
-    guess that the graphs are isomorphic, or guess that the graphs are not isomorphic.
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent. Must be either "prover" or "verifier".
+    device : str or torch.device, optional
+        The device to use for this agent part. If not given, the CPU is used.
     """
-
-    def __init__(self, params: Parameters, device: str | torch.device):
-        super().__init__(params, device)
-
-        self._create_agent(
-            agent_params=params.graph_isomorphism.verifier, build_decider=True
-        )
-
-    def forward(self, data: TensorDictBase) -> TensorDict:
-        """Runs the verifier on the given data.
-
-        Parameters
-        ----------
-        data : TensorDictBase
-            The data to run the prover on. A tensor dict with keys:
-
-            - "x" (batch pair node feature): The graph node features (message history)
-            - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): (optional) The most recent message from the other agent
-            - "node_mask" (batch pair node): Which nodes actually exist
-
-        Returns
-        -------
-        out : TensorDict
-            A tensor dict with keys:
-
-            - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
-              indicating the probability that this node should be sent as a message to
-              the prover.
-            - "decider_logits" (batch 3): A logit for each of the three options:
-              continue exchanging messages, guess that the graphs are isomorphic, or
-              guess that the graphs are not isomorphic.
-            - "node_mask" : (batch 2*max_nodes): A mask indicating which nodes are
-              present in the graphs.
-        """
-        # (batch, 2, max_nodes, d_gnn),
-        # (batch, 2, max_nodes, d_gnn),
-        # (batch, 2, max_nodes)
-        graph_level_repr, node_level_repr, node_mask = self._get_representations(data)
-
-        # (batch, 2*max_nodes)
-        node_selected_logits = self.node_selector(node_level_repr).squeeze(-1)
-
-        # (batch, 3)
-        decider_logits = self.decider(graph_level_repr)
-
-        return TensorDict(
-            dict(
-                node_selected_logits=node_selected_logits,
-                decider_logits=decider_logits,
-                node_mask=node_mask,
-            ),
-            shape=node_selected_logits.shape[0],
-        )
-
-    def to(self, device: str | torch.device):
-        super().to(device)
-        self.device = device
-        self.gnn.to(device)
-        self.transformer.to(device)
-        self.global_pooling.to(device)
-        return self
-
-
-class GraphIsomorphismRollout(Rollout):
-    """A message exchange in the graph isomorphism task."""
 
     def __init__(
         self,
-        message_exchange: MessageExchange,
-        batch: GraphIsomorphismData | GeometricBatch,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
     ):
-        super().__init__(message_exchange, batch)
+        super().__init__(params, agent_name, device)
 
-    def visualise(
-        self,
-        graph_layout_function: Optional[Callable] = None,
-        graph_layout_seed: Optional[int] = None,
-        colour_sequence: str = "Dark24",
-        node_text_colour: str = "white",
-    ):
-        """Visualize the rollout as a plotly graph.
+        self.critic_mlp = self._build_critic_mlp(agent_params=self._agent_params)
+
+    @classmethod
+    def _build_critic_mlp(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> Sequential:
+        """Builds the module which computes the value function.
 
         Parameters
         ----------
-        graph_layout_function : Callable, default=None
-            A function which takes a networkx graph and returns a dictionary of node
-            positions. Best to use a function from networkx.layout, possibly partially
-            applied with some arguments. If None, uses networkx.spring_layout with
-            `k=4/sqrt(n)`, where `n` is the number of nodes in the graph.
-        graph_layout_seed : int, default=None
-            The seed to use for the graph layout function. If None, the random number
-            generator is the `RandomState` instance used by `numpy.random`.
-        colour_sequence : str, default="Dark24"
-            The name of the colour sequence to use to colour the nodes. Must be one of
-            the colour sequences from plotly.express.colors.qualitative.
-        node_text_colour : str, default="white"
-            The colour of the node labels.
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+        d_out : int, default=3
+            The dimensionality of the output.
+
+        Returns
+        -------
+        critic_mlp : torch.nn.Sequential
+            The critic module.
         """
-
-        if graph_layout_function is None:
-
-            def graph_layout_function(graph, *args, **kwargs):
-                return nx.spring_layout(graph, k=4 / sqrt(len(graph)), *args, **kwargs)
-
-        graph_layout_function = partial(graph_layout_function, seed=graph_layout_seed)
-
-        # Get the colour sequence
-        colour_list = px.colors.qualitative.__getattribute__(colour_sequence)
-
-        def get_colour(i):
-            return colour_list[i % len(colour_list)]
-
-        # Add titles for the two graphs
-        graph_title_trace = go.Scatter(
-            text=["Graph A", "Graph B"],
-            x=[0, 2.2],
-            y=[1.2, 1.2],
-            textfont=dict(size=20),
-            mode="text",
-            visible=True,
+        return cls._build_graph_level_mlp(
+            d_in=agent_params.d_transformer,
+            d_hidden=agent_params.d_critic,
+            d_out=1,
+            num_layers=agent_params.num_critic_layers,
         )
 
-        # Add labels for the exchange of messages at the bottom
-        message_label_trace = go.Scatter(
-            text=["Verifier messages:", "Prover messages:"],
-            x=[-0.15, -0.15],
-            y=[-1.3, -1.6],
-            mode="text",
-            textposition="middle left",
-            visible=True,
-        )
 
-        traces = [
-            graph_title_trace,
-            message_label_trace,
-        ]
-        buttons = []
+# class GraphIsomorphismRollout(Rollout):
+#     """A message exchange in the graph isomorphism task."""
 
-        for idx in range(len(self.batch)):
-            # Only show the first batch item initially
-            traces_visible = idx == 0
+#     def __init__(
+#         self,
+#         message_exchange: MessageExchange,
+#         batch: GraphIsomorphismData | GeometricBatch,
+#     ):
+#         super().__init__(message_exchange, batch)
 
-            # Get the data for this batch item as networkx graphs
-            data = self.batch[idx]
+#     def visualise(
+#         self,
+#         graph_layout_function: Optional[Callable] = None,
+#         graph_layout_seed: Optional[int] = None,
+#         colour_sequence: str = "Dark24",
+#         node_text_colour: str = "white",
+#     ):
+#         """Visualize the rollout as a plotly graph.
 
-            for k in ["a", "b"]:
-                # Get the graph as a networkx graph
-                if k == "a":
-                    graph = to_networkx(
-                        GeometricData(edge_index=data.edge_index_a, x=data.x_a),
-                        to_undirected=True,
-                    )
-                else:
-                    graph = to_networkx(
-                        GeometricData(edge_index=data.edge_index_b, x=data.x_b),
-                        to_undirected=True,
-                    )
+#         Parameters
+#         ----------
+#         graph_layout_function : Callable, default=None
+#             A function which takes a networkx graph and returns a dictionary of node
+#             positions. Best to use a function from networkx.layout, possibly partially
+#             applied with some arguments. If None, uses networkx.spring_layout with
+#             `k=4/sqrt(n)`, where `n` is the number of nodes in the graph.
+#         graph_layout_seed : int, default=None
+#             The seed to use for the graph layout function. If None, the random number
+#             generator is the `RandomState` instance used by `numpy.random`.
+#         colour_sequence : str, default="Dark24"
+#             The name of the colour sequence to use to colour the nodes. Must be one of
+#             the colour sequences from plotly.express.colors.qualitative.
+#         node_text_colour : str, default="white"
+#             The colour of the node labels.
+#         """
 
-                # Generate the layouts for the graph
-                graph_pos = graph_layout_function(graph)
+#         if graph_layout_function is None:
 
-                # Add an offset to the x coordinates of the nodes in graph B so that it
-                # is to the right of graph A
-                x_add = 0 if k == "a" else 2.2
+#             def graph_layout_function(graph, *args, **kwargs):
+#                 return nx.spring_layout(graph, k=4 / sqrt(len(graph)), *args, **kwargs)
 
-                # Add the trace for the edges
-                edge_x = []
-                edge_y = []
-                for edge in graph.edges():
-                    x0, y0 = graph_pos[edge[0]]
-                    x1, y1 = graph_pos[edge[1]]
-                    edge_x.append(x0 + x_add)
-                    edge_x.append(x1 + x_add)
-                    edge_x.append(None)
-                    edge_y.append(y0)
-                    edge_y.append(y1)
-                    edge_y.append(None)
-                traces.append(
-                    go.Scatter(
-                        x=edge_x,
-                        y=edge_y,
-                        line=dict(width=0.5, color="#888"),
-                        hoverinfo="none",
-                        mode="lines",
-                        visible=traces_visible,
-                    )
-                )
+#         graph_layout_function = partial(graph_layout_function, seed=graph_layout_seed)
 
-                # Add the trace for the nodes
-                node_x = []
-                node_y = []
-                node_colour = []
-                node_size = []
-                node_text = []
-                for node in graph.nodes():
-                    x, y = graph_pos[node]
-                    x += x_add
-                    if k == "a":
-                        selected_indices = (
-                            (data.x_a[node] == 1).nonzero().squeeze(-1).tolist()
-                        )
-                    else:
-                        selected_indices = (
-                            (data.x_b[node] == 1).nonzero().squeeze(-1).tolist()
-                        )
-                    if len(selected_indices) == 0:
-                        node_x.append(x)
-                        node_y.append(y)
-                        node_colour.append("grey")
-                        node_size.append(20)
-                        node_text.append(str(node))
-                    else:
-                        for i, j in reversed(list(enumerate(selected_indices))):
-                            node_x.append(x)
-                            node_y.append(y)
-                            node_colour.append(get_colour(j))
-                            node_size.append(10 * i + 20)
-                            node_text.append(str(node))
-                traces.append(
-                    go.Scatter(
-                        x=node_x,
-                        y=node_y,
-                        text=node_text,
-                        textfont=dict(color=node_text_colour),
-                        mode="markers+text",
-                        hoverinfo="text",
-                        marker=dict(
-                            color=node_colour,
-                            size=node_size,
-                            line_width=0,
-                            opacity=1,
-                        ),
-                        visible=traces_visible,
-                    )
-                )
+#         # Get the colour sequence
+#         colour_list = px.colors.qualitative.__getattribute__(colour_sequence)
 
-            # Add the trace for the timeline of the messages exchanged
-            timeline_node_x = []
-            timeline_node_y = []
-            timeline_node_text = []
-            timeline_node_colour = []
-            for i, message in enumerate(self.message_exchange):
-                round = i // 2
-                x = round * 0.25
-                y = -1.3 if message.from_verifier else -1.6
-                timeline_node_x.append(x)
-                timeline_node_y.append(y)
-                graph_letter = "A" if message.message[idx, 0].item() == 1 else "B"
-                timeline_node_text.append(
-                    f"{graph_letter}{message.message[idx, 1].item()}"
-                )
-                timeline_node_colour.append(get_colour(round))
-            traces.append(
-                go.Scatter(
-                    x=timeline_node_x,
-                    y=timeline_node_y,
-                    text=timeline_node_text,
-                    textfont=dict(color=node_text_colour),
-                    mode="markers+text",
-                    hoverinfo="text",
-                    marker=dict(
-                        color=timeline_node_colour,
-                        size=30,
-                        line_width=0,
-                        opacity=1,
-                    ),
-                    visible=traces_visible,
-                )
-            )
+#         def get_colour(i):
+#             return colour_list[i % len(colour_list)]
 
-            # Add a button to show this batch item
-            buttons.append(
-                dict(
-                    label=f"Batch item {idx}",
-                    method="update",
-                    args=[
-                        {
-                            "visible": [True, True]
-                            + [False] * (5 * idx)
-                            + [True] * 5
-                            + [False] * (5 * (len(self.batch) - idx - 1))
-                        }
-                    ],
-                )
-            )
+#         # Add titles for the two graphs
+#         graph_title_trace = go.Scatter(
+#             text=["Graph A", "Graph B"],
+#             x=[0, 2.2],
+#             y=[1.2, 1.2],
+#             textfont=dict(size=20),
+#             mode="text",
+#             visible=True,
+#         )
 
-        layout = go.Layout(
-            title="Prover-Verifier messages",
-            showlegend=False,
-            hovermode="closest",
-            margin=dict(b=5, l=5, r=5, t=50),
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            updatemenus=[dict(buttons=buttons, active=0, showactive=True)],
-        )
+#         # Add labels for the exchange of messages at the bottom
+#         message_label_trace = go.Scatter(
+#             text=["Verifier messages:", "Prover messages:"],
+#             x=[-0.15, -0.15],
+#             y=[-1.3, -1.6],
+#             mode="text",
+#             textposition="middle left",
+#             visible=True,
+#         )
 
-        fig = go.Figure(data=traces, layout=layout)
-        fig.show()
+#         traces = [
+#             graph_title_trace,
+#             message_label_trace,
+#         ]
+#         buttons = []
+
+#         for idx in range(len(self.batch)):
+#             # Only show the first batch item initially
+#             traces_visible = idx == 0
+
+#             # Get the data for this batch item as networkx graphs
+#             data = self.batch[idx]
+
+#             for k in ["a", "b"]:
+#                 # Get the graph as a networkx graph
+#                 if k == "a":
+#                     graph = to_networkx(
+#                         GeometricData(edge_index=data.edge_index_a, x=data.x_a),
+#                         to_undirected=True,
+#                     )
+#                 else:
+#                     graph = to_networkx(
+#                         GeometricData(edge_index=data.edge_index_b, x=data.x_b),
+#                         to_undirected=True,
+#                     )
+
+#                 # Generate the layouts for the graph
+#                 graph_pos = graph_layout_function(graph)
+
+#                 # Add an offset to the x coordinates of the nodes in graph B so that it
+#                 # is to the right of graph A
+#                 x_add = 0 if k == "a" else 2.2
+
+#                 # Add the trace for the edges
+#                 edge_x = []
+#                 edge_y = []
+#                 for edge in graph.edges():
+#                     x0, y0 = graph_pos[edge[0]]
+#                     x1, y1 = graph_pos[edge[1]]
+#                     edge_x.append(x0 + x_add)
+#                     edge_x.append(x1 + x_add)
+#                     edge_x.append(None)
+#                     edge_y.append(y0)
+#                     edge_y.append(y1)
+#                     edge_y.append(None)
+#                 traces.append(
+#                     go.Scatter(
+#                         x=edge_x,
+#                         y=edge_y,
+#                         line=dict(width=0.5, color="#888"),
+#                         hoverinfo="none",
+#                         mode="lines",
+#                         visible=traces_visible,
+#                     )
+#                 )
+
+#                 # Add the trace for the nodes
+#                 node_x = []
+#                 node_y = []
+#                 node_colour = []
+#                 node_size = []
+#                 node_text = []
+#                 for node in graph.nodes():
+#                     x, y = graph_pos[node]
+#                     x += x_add
+#                     if k == "a":
+#                         selected_indices = (
+#                             (data.x_a[node] == 1).nonzero().squeeze(-1).tolist()
+#                         )
+#                     else:
+#                         selected_indices = (
+#                             (data.x_b[node] == 1).nonzero().squeeze(-1).tolist()
+#                         )
+#                     if len(selected_indices) == 0:
+#                         node_x.append(x)
+#                         node_y.append(y)
+#                         node_colour.append("grey")
+#                         node_size.append(20)
+#                         node_text.append(str(node))
+#                     else:
+#                         for i, j in reversed(list(enumerate(selected_indices))):
+#                             node_x.append(x)
+#                             node_y.append(y)
+#                             node_colour.append(get_colour(j))
+#                             node_size.append(10 * i + 20)
+#                             node_text.append(str(node))
+#                 traces.append(
+#                     go.Scatter(
+#                         x=node_x,
+#                         y=node_y,
+#                         text=node_text,
+#                         textfont=dict(color=node_text_colour),
+#                         mode="markers+text",
+#                         hoverinfo="text",
+#                         marker=dict(
+#                             color=node_colour,
+#                             size=node_size,
+#                             line_width=0,
+#                             opacity=1,
+#                         ),
+#                         visible=traces_visible,
+#                     )
+#                 )
+
+#             # Add the trace for the timeline of the messages exchanged
+#             timeline_node_x = []
+#             timeline_node_y = []
+#             timeline_node_text = []
+#             timeline_node_colour = []
+#             for i, message in enumerate(self.message_exchange):
+#                 round = i // 2
+#                 x = round * 0.25
+#                 y = -1.3 if message.from_verifier else -1.6
+#                 timeline_node_x.append(x)
+#                 timeline_node_y.append(y)
+#                 graph_letter = "A" if message.message[idx, 0].item() == 1 else "B"
+#                 timeline_node_text.append(
+#                     f"{graph_letter}{message.message[idx, 1].item()}"
+#                 )
+#                 timeline_node_colour.append(get_colour(round))
+#             traces.append(
+#                 go.Scatter(
+#                     x=timeline_node_x,
+#                     y=timeline_node_y,
+#                     text=timeline_node_text,
+#                     textfont=dict(color=node_text_colour),
+#                     mode="markers+text",
+#                     hoverinfo="text",
+#                     marker=dict(
+#                         color=timeline_node_colour,
+#                         size=30,
+#                         line_width=0,
+#                         opacity=1,
+#                     ),
+#                     visible=traces_visible,
+#                 )
+#             )
+
+#             # Add a button to show this batch item
+#             buttons.append(
+#                 dict(
+#                     label=f"Batch item {idx}",
+#                     method="update",
+#                     args=[
+#                         {
+#                             "visible": [True, True]
+#                             + [False] * (5 * idx)
+#                             + [True] * 5
+#                             + [False] * (5 * (len(self.batch) - idx - 1))
+#                         }
+#                     ],
+#                 )
+#             )
+
+#         layout = go.Layout(
+#             title="Prover-Verifier messages",
+#             showlegend=False,
+#             hovermode="closest",
+#             margin=dict(b=5, l=5, r=5, t=50),
+#             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+#             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+#             updatemenus=[dict(buttons=buttons, active=0, showactive=True)],
+#         )
+
+#         fig = go.Figure(data=traces, layout=layout)
+#         fig.show()
 
 
-@dataclass
-class GraphIsomorphismMessage(Message):
-    """A message sent between the prover and the verifier."""
+# class GraphIsomorphismScenario(Scenario):
+#     """The graph isomorphism scenario."""
 
-    from_verifier: bool
-    message: Float[Tensor, "batch 2"]
-    verifier_guess: Float[Tensor, "batch"] = None
+#     def __init__(self, params: Parameters, device: Optional[str | torch.device] = None):
+#         super().__init__(params, device)
+#         self.prover = GraphIsomorphismProverBody(params, device)
+#         self.verifier = GraphIsomorphismVerifierBody(params, device)
+#         self.dataset = GraphIsomorphismDataset(params)
 
+#     def rollout(
+#         self, data: GraphIsomorphismData | GeometricBatch
+#     ) -> GraphIsomorphismRollout:
+#         message_exchange = MessageExchange()
+#         max_nodes_a = torch.bincount(data.x_a_batch).max().item()
+#         max_nodes_b = torch.bincount(data.x_b_batch).max().item()
+#         for round in range(self.params.max_message_rounds):
+#             ## Verifier sends a message
+#             # (batch, 2*max_nodes), (batch, 3), (batch,
+#             # 2*max_nodes)
+#             node_selected_logits, decider_logits, node_mask = self.verifier(data)
 
-class GraphIsomorphismScenario(Scenario):
-    """The graph isomorphism scenario."""
+#             # (batch, 2*max_nodes)
+#             node_probs = F.softmax(node_selected_logits, dim=-1)
+#             node_probs[~node_mask] = 0
 
-    def __init__(self, params: Parameters, device: str | torch.device):
-        super().__init__(params, device)
-        self.prover = GraphIsomorphismProver(params, device)
-        self.verifier = GraphIsomorphismVerifier(params, device)
-        self.dataset = GraphIsomorphismDataset(params)
+#             # (batch)
+#             verifier_node = Categorical(probs=node_probs).sample()
 
-    def rollout(
-        self, data: GraphIsomorphismData | GeometricBatch
-    ) -> GraphIsomorphismRollout:
-        message_exchange = MessageExchange()
-        max_nodes_a = torch.bincount(data.x_a_batch).max().item()
-        max_nodes_b = torch.bincount(data.x_b_batch).max().item()
-        for round in range(self.params.max_message_rounds):
-            ## Verifier sends a message
-            # (batch, 2*max_nodes), (batch, 3), (batch,
-            # 2*max_nodes)
-            node_selected_logits, decider_logits, node_mask = self.verifier(data)
+#             # Extract which graph the verifier node is from and the index of the node
+#             # within that graph
+#             verifier_node_graph = (verifier_node < max_nodes_a).to(torch.int64)
+#             verifier_node = torch.where(
+#                 verifier_node_graph == 1,
+#                 verifier_node,
+#                 verifier_node - max_nodes_a,
+#             )
+#             verifier_message = torch.stack((verifier_node_graph, verifier_node), dim=-1)
 
-            # (batch, 2*max_nodes)
-            node_probs = F.softmax(node_selected_logits, dim=-1)
-            node_probs[~node_mask] = 0
+#             # (batch)
+#             verifier_guess = Categorical(logits=decider_logits).sample()
 
-            # (batch)
-            verifier_node = Categorical(probs=node_probs).sample()
+#             message_exchange.append(
+#                 GraphIsomorphismMessage(
+#                     from_verifier=True,
+#                     message=verifier_message,
+#                     verifier_guess=verifier_guess,
+#                 )
+#             )
 
-            # Extract which graph the verifier node is from and the index of the node
-            # within that graph
-            verifier_node_graph = (verifier_node < max_nodes_a).to(torch.int64)
-            verifier_node = torch.where(
-                verifier_node_graph == 1,
-                verifier_node,
-                verifier_node - max_nodes_a,
-            )
-            verifier_message = torch.stack((verifier_node_graph, verifier_node), dim=-1)
+#             # One-hot encode the verifier's message in the node features
+#             node_index_a = verifier_node + data.x_a_ptr[:-1]
+#             node_index_a = node_index_a[verifier_node_graph == 1]
+#             node_index_b = verifier_node + data.x_b_ptr[:-1]
+#             node_index_b = node_index_b[verifier_node_graph == 0]
+#             data.x_a[node_index_a, round] = 1
+#             data.x_b[node_index_b, round] = 1
 
-            # (batch)
-            verifier_guess = Categorical(logits=decider_logits).sample()
+#             ## Prover sends a message
+#             # (batch, 2*max_nodes), (batch,
+#             # 2*max_nodes)
+#             node_selected_logits, node_mask = self.prover(data)
 
-            message_exchange.append(
-                GraphIsomorphismMessage(
-                    from_verifier=True,
-                    message=verifier_message,
-                    verifier_guess=verifier_guess,
-                )
-            )
+#             # (batch, 2*max_nodes)
+#             node_probs = F.softmax(node_selected_logits, dim=-1)
+#             node_probs[~node_mask] = 0
 
-            # One-hot encode the verifier's message in the node features
-            node_index_a = verifier_node + data.x_a_ptr[:-1]
-            node_index_a = node_index_a[verifier_node_graph == 1]
-            node_index_b = verifier_node + data.x_b_ptr[:-1]
-            node_index_b = node_index_b[verifier_node_graph == 0]
-            data.x_a[node_index_a, round] = 1
-            data.x_b[node_index_b, round] = 1
+#             # Make sure that the prover chooses a node in the opposite graph to the one
+#             # chosen by the verifier
+#             node_probs = torch.where(
+#                 (verifier_node_graph == 1).unsqueeze(-1),
+#                 torch.cat(
+#                     (
+#                         torch.zeros(node_probs.shape[0], max_nodes_a),
+#                         node_probs[:, max_nodes_a:],
+#                     ),
+#                     dim=-1,
+#                 ),
+#                 torch.cat(
+#                     (
+#                         node_probs[:, :max_nodes_a],
+#                         torch.zeros(node_probs.shape[0], max_nodes_b),
+#                     ),
+#                     dim=-1,
+#                 ),
+#             )
 
-            ## Prover sends a message
-            # (batch, 2*max_nodes), (batch,
-            # 2*max_nodes)
-            node_selected_logits, node_mask = self.prover(data)
+#             # (batch)
+#             prover_node = Categorical(probs=node_probs).sample()
 
-            # (batch, 2*max_nodes)
-            node_probs = F.softmax(node_selected_logits, dim=-1)
-            node_probs[~node_mask] = 0
+#             # Extract which graph the prover node is from and the index of the node
+#             # within that graph
+#             prover_node_graph = (prover_node < max_nodes_a).to(torch.int64)
+#             prover_node = torch.where(
+#                 prover_node_graph == 1,
+#                 prover_node,
+#                 prover_node - max_nodes_a,
+#             )
+#             prover_message = torch.stack((prover_node_graph, prover_node), dim=-1)
 
-            # Make sure that the prover chooses a node in the opposite graph to the one
-            # chosen by the verifier
-            node_probs = torch.where(
-                (verifier_node_graph == 1).unsqueeze(-1),
-                torch.cat(
-                    (
-                        torch.zeros(node_probs.shape[0], max_nodes_a),
-                        node_probs[:, max_nodes_a:],
-                    ),
-                    dim=-1,
-                ),
-                torch.cat(
-                    (
-                        node_probs[:, :max_nodes_a],
-                        torch.zeros(node_probs.shape[0], max_nodes_b),
-                    ),
-                    dim=-1,
-                ),
-            )
+#             message_exchange.append(
+#                 GraphIsomorphismMessage(
+#                     from_verifier=False,
+#                     message=prover_message,
+#                 )
+#             )
 
-            # (batch)
-            prover_node = Categorical(probs=node_probs).sample()
+#             # One-hot encode the prover's message in the node features
+#             node_index_a = prover_node + data.x_a_ptr[:-1]
+#             node_index_a = node_index_a[prover_node_graph == 1]
+#             node_index_b = prover_node + data.x_b_ptr[:-1]
+#             node_index_b = node_index_b[prover_node_graph == 0]
+#             data.x_a[node_index_a, round] = 1
+#             data.x_b[node_index_b, round] = 1
 
-            # Extract which graph the prover node is from and the index of the node
-            # within that graph
-            prover_node_graph = (prover_node < max_nodes_a).to(torch.int64)
-            prover_node = torch.where(
-                prover_node_graph == 1,
-                prover_node,
-                prover_node - max_nodes_a,
-            )
-            prover_message = torch.stack((prover_node_graph, prover_node), dim=-1)
-
-            message_exchange.append(
-                GraphIsomorphismMessage(
-                    from_verifier=False,
-                    message=prover_message,
-                )
-            )
-
-            # One-hot encode the prover's message in the node features
-            node_index_a = prover_node + data.x_a_ptr[:-1]
-            node_index_a = node_index_a[prover_node_graph == 1]
-            node_index_b = prover_node + data.x_b_ptr[:-1]
-            node_index_b = node_index_b[prover_node_graph == 0]
-            data.x_a[node_index_a, round] = 1
-            data.x_b[node_index_b, round] = 1
-
-        return GraphIsomorphismRollout(message_exchange, data)
+#         return GraphIsomorphismRollout(message_exchange, data)
