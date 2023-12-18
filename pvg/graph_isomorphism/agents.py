@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from tensordict import TensorDictBase, TensorDict
+from tensordict.nn import TensorDictModuleBase
 
 from torch_geometric.utils import to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
@@ -54,7 +55,7 @@ from pvg.utils.torch_modules import (
 from pvg.utils.data import gi_data_to_tensordict
 
 
-class GraphIsomorphismAgentPart(AgentPart, ABC):
+class GraphIsomorphismAgentPart(TensorDictModuleBase, AgentPart, ABC):
     """Base class for all graph isomorphism agent parts.
 
     Parameters
@@ -99,6 +100,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     device : str or torch.device, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
+
+    in_keys = ("x", "adjacency", "message", "node_mask", "ignore_message")
+    out_keys = ("graph_level_repr", "node_level_repr")
 
     def __init__(
         self,
@@ -286,10 +290,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
             - "x" (batch pair node feature): The graph node features (message history)
             - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): (optional) (optional) The most recent message from the
-              other agent
-            - "node_mask" (batch pair node): Which nodes actually exist
-            or a GraphIsomorphism data object.
+            - "message" (batch): The most recent message from the other agent
+            - "node_mask" (batch pair node): Which nodes actually exist or a
+              GraphIsomorphism data object.
+            - "ignore_message" (batch): Whether to ignore any values in "message". For
+              example, in the first round the there is no message, and the "message"
+              field is set to a dummy value.
+
 
         Returns
         -------
@@ -300,8 +307,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
               representations.
             - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
               representations.
-            - "node_mask" : (batch 2*max_nodes): A mask indicating which nodes are
-              present in the graphs.
         """
 
         # Convert the data to a TensorDict with dense representations
@@ -327,10 +332,12 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             data["node_mask"], "batch pair node -> batch (pair node)"
         )
 
-        # Add the graph-level representations to the transformer input with an extra
-        # features which distinguishes them, and add (optional) the most recent message
+        # Add the graph-level representations to the transformer input
         # (batch, 2 + 2 * node, d_gnn + 3)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=1)
+
+        # Add extra features to distinguish the pooled representations from the
+        # node-level representations
         pooled_feature = torch.zeros(
             *transformer_input.shape[:-1],
             2,
@@ -339,18 +346,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
         pooled_feature[:, 0, 0] = 1
         pooled_feature[:, 1, 1] = 1
-        if "message" in data.keys():
-            message_feature = F.one_hot(
-                data["message"] + 2, num_classes=2 + 2 * max_num_nodes
-            )
-            message_feature = rearrange(message_feature, "batch token -> batch token 1")
-        else:
-            message_feature = torch.zeros(
-                *transformer_input.shape[:-1],
-                1,
-                device=transformer_input.device,
-                dtype=transformer_input.dtype,
-            )
+
+        # Add the most recent message as a new one-hot feature
+        message_feature = F.one_hot(
+            data["message"] + 2, num_classes=2 + 2 * max_num_nodes
+        )
+        message_feature[data["ignore_message"]] = 0
+        message_feature = rearrange(message_feature, "batch token -> batch token 1")
+
+        # Concatenate everything together
         transformer_input = torch.cat(
             (transformer_input, pooled_feature, message_feature), dim=-1
         )
@@ -403,7 +407,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             dict(
                 graph_level_repr=graph_level_repr,
                 node_level_repr=node_level_repr,
-                node_mask_flatter=node_mask_flatter,
             ),
             batch_size=graph_level_repr.shape[0],
         )
@@ -536,6 +539,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         The device to use for this agent part. If not given, the CPU is used.
     """
 
+    in_keys = ("graph_level_repr", "node_level_repr")
+
     def __init__(
         self,
         params: Parameters,
@@ -552,6 +557,13 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.decider = self._build_decider(agent_params=self._agent_params)
         else:
             self.decider = None
+
+    @property
+    def out_keys(self):
+        if self.decider is None:
+            return ("node_selected_logits", )
+        else:
+            return ("node_selected_logits", "decider_logits")
 
     @classmethod
     def _build_node_selector(
@@ -623,8 +635,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               representations.
             - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
               representations.
-            - (optional) "node_mask" : (batch 2*max_nodes): A mask indicating which
-              nodes are present in the graphs.
 
         Returns
         -------
@@ -637,8 +647,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - (optional) "decider_logits" (batch 3): A logit for each of the three
               options: continue exchanging messages, guess that the graphs are
               isomorphic, or guess that the graphs are not isomorphic.
-            - (optional) "node_mask" : (batch 2*max_nodes): The node mask from the body
-              output.
         """
 
         out_dict = {}
@@ -648,12 +656,16 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         if self.decider is not None:
             out_dict["decider_logits"] = self.decider(body_output)
 
-        if "node_mask" in body_output.keys():
-            out_dict["node_mask"] = body_output["node_mask"]
-
         return TensorDict(
             out_dict, batch_size=out_dict["node_selected_logits"].shape[0]
         )
+    
+    def to(self, device: Optional[str | torch.device] = None):
+        super().to(device)
+        self.device = device
+        self.node_selector.to(device)
+        if self.decider is not None:
+            self.decider.to(device)
 
 
 class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):
@@ -670,6 +682,9 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
     device : str or torch.device, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
+
+    in_keys = ("graph_level_repr", "node_level_repr")
+    out_keys = ("value",)
 
     def __init__(
         self,
@@ -706,6 +721,43 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
             d_out=1,
             num_layers=agent_params.num_critic_layers,
         )
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the critic head on the given body output.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+              representations.
+            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
+              representations.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "value" (batch): The estimated value for each batch item
+        """
+
+        out_dict = {}
+
+        out_dict["value"] = self.critic_mlp(body_output).squeeze(-1)
+
+        if "node_mask" in body_output.keys():
+            out_dict["node_mask"] = body_output["node_mask"]
+
+        return TensorDict(
+            out_dict, batch_size=out_dict["value"].shape[0]
+        )
+    
+    def to(self, device: Optional[str | torch.device] = None):
+        super().to(device)
+        self.device = device
+        self.critic_mlp.to(device)
 
 
 # class GraphIsomorphismRollout(Rollout):
