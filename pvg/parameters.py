@@ -121,6 +121,53 @@ class GraphIsomorphismParameters(AdditionalParameters):
 
 
 @dataclass
+class PpoParameters(AdditionalParameters):
+    """Additional parameters for PPO.
+
+    Parameters
+    ----------
+    frames_per_batch : int
+        The number of frames to sample per training iteration.
+    num_iterations : int
+        The number of sampling and training iterations. `num_iterations *
+        frames_per_batch` is the total number of frames sampled during training.
+    num_epochs : int
+        The number of epochs per training iteration.
+    minibatch_size : int
+        The size of the minibatches in each optimization step.
+    lr : float
+        The learning rate.
+    max_grad_norm : float
+        The maximum norm of the gradients during optimization.
+    gamma : float
+        The discount factor.
+    lam : float
+        The GAE parameter.
+    clip_epsilon : float
+        The PPO clip range.
+    entropy_eps : float
+        The coefficient of the entropy term in the PPO loss.
+    """
+
+    # Sampling
+    frames_per_batch = 1000
+    num_iterations: int = 8
+
+    # Training
+    num_epochs: int = 4
+    minibatch_size: int = 64
+    lr = 3e-4
+    max_grad_norm = 1.0
+
+    # PPO
+    gamma: float = 0.99
+    lam: float = 0.95
+    clip_epsilon: float = 0.2
+    entropy_eps: float = 1e-4
+
+
+
+@dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
 
@@ -135,8 +182,6 @@ class Parameters(BaseParameters):
     max_message_rounds : int
         The maximum number of rounds of messages, where the verifier sends a message,
         and the prover responds with a message.
-    graph_isomorphism : GraphIsomorphismParameters, optional
-        Additional parameters specific to the graph isomorphism experiment.
     batch_size : int
         The number of simultaneous environments to run in parallel.
     prover_reward : float
@@ -145,19 +190,24 @@ class Parameters(BaseParameters):
         The reward given to the verifier when it guesses correctly.
     verifier_terminated_penalty : float
         The reward given to the verifier if the episode terminates before it guesses.
+    graph_isomorphism : GraphIsomorphismParameters, optional
+        Additional parameters specific to the graph isomorphism experiment.
+    ppo : PpoParameters, optional
+        Additional parameters for PPO.
     """
 
     scenario: str
     trainer: str
     dataset: str
-    max_message_rounds: int = 8
-    graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
 
-    batch_size: int = 64
+    max_message_rounds: int = 8
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
     verifier_terminated_penalty: float = -1.0
+    
+    graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
+    ppo: Optional[PpoParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == "graph_isomorphism":
@@ -167,12 +217,8 @@ class Parameters(BaseParameters):
                 self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
                     self.graph_isomorphism
                 )
-
-    def __post_init__(self):
-        if self.scenario == "graph_isomorphism":
-            if self.graph_isomorphism is None:
-                self.graph_isomorphism = GraphIsomorphismParameters()
-            elif isinstance(self.graph_isomorphism, dict):
-                self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
-                    self.graph_isomorphism
-                )
+        if self.trainer == "ppo":
+            if self.ppo is None:
+                self.ppo = PpoParameters()
+            elif isinstance(self.ppo, dict):
+                self.ppo = PpoParameters.from_dict(self.ppo)

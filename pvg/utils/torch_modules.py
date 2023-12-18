@@ -5,6 +5,7 @@ from torch import Tensor
 import torch.nn as nn
 
 from tensordict import TensorDictBase, TensorDict
+from tensordict.nn import TensorDictModuleBase
 
 import einops
 
@@ -143,7 +144,7 @@ class PairInvariantizer(nn.Module):
         return torch.stack((mean, abs_diff), dim=self.pair_dim)
 
 
-class GIN(nn.Module):
+class GIN(TensorDictModuleBase):
     """A graph isomorphism network (GIN) layer.
 
     This is a message-passing layer that aggregates the features of the neighbours as
@@ -178,6 +179,9 @@ class GIN(nn.Module):
       graph.
     * `node_mask` - Bool["... max_nodes"] - A mask indicating which nodes exist
     """
+
+    in_keys = ("x", "adjacency", "node_mask")
+    out_keys = ("x", "adjacency", "node_mask")
 
     def __init__(self, mlp: nn.Module, eps: float = 0.0, train_eps: bool = False):
         super().__init__()
@@ -243,67 +247,6 @@ class GIN(nn.Module):
         out[_key_map("x")] = new_x
 
         return out
-
-
-class TensorDictize(nn.Module):
-    """Convert a module to one which works on a key of a TensorDict.
-
-    Parameters
-    ----------
-    module : nn.Module
-        The module to apply to TensorDictize.
-    key : str, optional
-        The key of the TensorDict to apply the module to.
-    """
-
-    def __init__(self, module: nn.Module, key: str):
-        super().__init__()
-        self.module = module
-        self.key = key
-
-    def forward(
-        self,
-        tensordict: TensorDictBase,
-        key_map: Optional[dict[str, str] | Callable[[str], str]] = None,
-    ) -> TensorDictBase:
-        # Map the keys of the input to the correct ones
-        def _key_map(key: str) -> str:
-            if key_map is None:
-                return key
-            elif isinstance(key_map, dict):
-                return key_map[key]
-            else:
-                return key_map(key)
-
-        out = TensorDict(tensordict)
-        out[_key_map(self.key)] = self.module(tensordict[_key_map(self.key)])
-        return out
-    
-
-class SelectTensorDictValue(nn.Module):
-    """Select a value from a TensorDict using a key.
-
-    Parameters
-    ----------
-    key : str
-        The key to select.
-    """
-
-    def __init__(self, key: str):
-        super().__init__()
-        self.key = key
-
-    def forward(self, tensor_dict: TensorDictBase) -> Tensor:
-        return tensor_dict[self.key]
-
-
-class SequentialKwargs(nn.Sequential):
-    """A sequential module which passes keyword arguments during forward pass."""
-
-    def forward(self, input, **kwargs):
-        for module in self:
-            input = module(input, **kwargs)
-        return input
 
 
 class Print(nn.Module):

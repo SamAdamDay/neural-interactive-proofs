@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from tensordict import TensorDictBase, TensorDict
-from tensordict.nn import TensorDictModuleBase
+from tensordict.nn import TensorDictModuleBase, TensorDictModule, TensorDictSequential
 
 from torch_geometric.utils import to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
@@ -47,9 +47,6 @@ from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
     GIN,
-    TensorDictize,
-    SelectTensorDictValue,
-    SequentialKwargs,
     Print,
 )
 from pvg.utils.data import gi_data_to_tensordict
@@ -135,7 +132,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     @staticmethod
     def _build_gnn(
         agent_params: GraphIsomorphismAgentParameters, d_input: int
-    ) -> SequentialKwargs:
+    ) -> TensorDictSequential:
         """Builds the GNN module for a prover or verifier.
 
         Parameters
@@ -147,33 +144,37 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         Returns
         -------
-        gnn : torch.nn.Sequential
+        gnn : TensorDictSequential
             The GNN module, which takes as input a TensorDict with keys "x", "adjacency"
             and "node_mask".
-        transformer : torch.nn.TransformerEncoder
-            The transformer module.
         """
         # Build up the GNN
-        gnn_layers = OrderedDict()
-        gnn_layers["input"] = TensorDictize(
-            Linear(d_input, agent_params.d_gnn), key="x"
+        gnn_layers = []
+        gnn_layers.append(
+            TensorDictModule(
+                Linear(d_input, agent_params.d_gnn), in_keys=("x",), out_keys=("x",)
+            )
         )
         for i in range(agent_params.num_gnn_layers):
-            gnn_layers[f"ReLU_{i}"] = TensorDictize(ReLU(inplace=True), key="x")
-            gnn_layers[f"GNN_layer_{i}"] = GIN(
-                Sequential(
-                    Linear(
-                        agent_params.d_gnn,
-                        agent_params.d_gin_mlp,
-                    ),
-                    ReLU(inplace=True),
-                    Linear(
-                        agent_params.d_gin_mlp,
-                        agent_params.d_gnn,
-                    ),
+            gnn_layers.append(
+                TensorDictModule(ReLU(inplace=True), in_keys=("x",), out_keys=("x",))
+            )
+            gnn_layers.append(
+                GIN(
+                    Sequential(
+                        Linear(
+                            agent_params.d_gnn,
+                            agent_params.d_gin_mlp,
+                        ),
+                        ReLU(inplace=True),
+                        Linear(
+                            agent_params.d_gin_mlp,
+                            agent_params.d_gnn,
+                        ),
+                    )
                 )
             )
-        gnn = SequentialKwargs(gnn_layers)
+        gnn = TensorDictSequential(*gnn_layers)
 
         return gnn
 
@@ -316,6 +317,24 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # The size of the node dimension
         max_num_nodes = data["x"].shape[2]
 
+        # If the data is empty, return empty outputs
+        if data.batch_size[0] == 0:
+            return TensorDict(
+                dict(
+                    graph_level_repr=torch.empty(
+                        (0, 2, self._agent_params.d_transformer),
+                        device=self.device,
+                        dtype=torch.float32,
+                    ),
+                    node_level_repr=torch.empty(
+                        (0, 2, max_num_nodes, self._agent_params.d_transformer),
+                        device=self.device,
+                        dtype=torch.float32,
+                    ),
+                ),
+                batch_size=0,
+            )
+
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
         gnn_output = self.gnn(data)["x"]
@@ -369,7 +388,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         padding_mask = ~node_mask_flatter
         padding_mask = torch.cat(
             (
-                torch.ones(
+                torch.zeros(
                     (padding_mask.shape[0], 2), device=padding_mask.device, dtype=bool
                 ),
                 padding_mask,
@@ -379,11 +398,11 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # The attention mask applied to all batch elements, which makes sure that nodes
         # only attend to nodes in the other graph and to the pooled representations.
-        src_mask = torch.ones(
+        src_mask = torch.zeros(
             (2 + 2 * max_num_nodes,) * 2, device=padding_mask.device, dtype=bool
         )
-        src_mask[2 : 2 + max_num_nodes, 2 : 2 + max_num_nodes] = 0
-        src_mask[2 + max_num_nodes :, 2 + max_num_nodes :] = 0
+        src_mask[2 : 2 + max_num_nodes, 2 : 2 + max_num_nodes] = 1
+        src_mask[2 + max_num_nodes :, 2 + max_num_nodes :] = 1
 
         # Compute the transformer output
         # (batch, 2 + 2 * max_nodes, d_transformer)
@@ -434,7 +453,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         d_hidden: int,
         d_out: int,
         num_layers: int,
-    ) -> Sequential:
+        out_key: str = "node_level_mlp_output",
+    ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
 
         This takes as input a TensorDict with key "node_level_repr" and outputs a
@@ -450,16 +470,15 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The dimensionality of the output.
         num_layers : int
             The number of hidden layers in the MLP.
+        out_key : str, default="node_level_mlp_output"
+            The tensordict key to use for the output of the MLP.
 
         Returns
         -------
-        node_level_mlp : torch.nn.Sequential
+        node_level_mlp : TensorDictModule
             The node-level MLP.
         """
         layers = []
-
-        # Select the node-level representations
-        layers.append(SelectTensorDictValue(key="node_level_repr"))
 
         # The layers of the MLP
         layers.append(Linear(d_in, d_hidden))
@@ -472,7 +491,13 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         # Concatenate the pair and node dimensions
         layers.append(Rearrange("batch pair node d_out -> batch (pair node) d_out"))
 
-        return Sequential(*layers)
+        # Make the layers into a sequential module and wrap it in a TensorDictModule
+        sequential = Sequential(*layers)
+        tensor_dict_sequential = TensorDictModule(
+            sequential, in_keys=("node_level_repr",), out_keys=(out_key,)
+        )
+
+        return tensor_dict_sequential
 
     @staticmethod
     def _build_graph_level_mlp(
@@ -480,7 +505,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         d_hidden: int,
         d_out: int,
         num_layers: int,
-    ) -> Sequential:
+        out_key: str = "graph_level_mlp_output",
+    ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
 
         This takes as input a TensorDict with key "graph_level_repr" and outputs a
@@ -496,29 +522,34 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The dimensionality of the output.
         num_layers : int
             The number of hidden layers in the MLP.
+        out_key : str, default="graph_level_mlp_output"
+            The tensordict key to use for the output of the MLP.
 
         Returns
         -------
-        node_level_mlp : torch.nn.Sequential
+        node_level_mlp : TensorDictModule
             The node-level MLP.
         """
         layers = []
-
-        # Select the graph-level representations
-        layers.append(SelectTensorDictValue(key="graph_level_repr"))
 
         # Concatenate the two graph-level representations
         layers.append(Rearrange("batch pair d_in -> batch (pair d_in)"))
 
         # The layers of the MLP
-        layers.append(Linear(d_in, d_hidden))
+        layers.append(Linear(2 * d_in, d_hidden))
         layers.append(ReLU(inplace=True))
         for _ in range(num_layers - 2):
             layers.append(Linear(d_hidden, d_hidden))
             layers.append(ReLU(inplace=True))
         layers.append(Linear(d_hidden, d_out))
 
-        return Sequential(*layers)
+        # Make the layers into a sequential module, and wrap it in a TensorDictModule
+        sequential = Sequential(*layers)
+        tensor_dict_sequential = TensorDictModule(
+            sequential, in_keys=("graph_level_repr",), out_keys=(out_key,)
+        )
+
+        return tensor_dict_sequential
 
 
 class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead):
@@ -541,6 +572,13 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     in_keys = ("graph_level_repr", "node_level_repr")
 
+    @property
+    def out_keys(self):
+        if self.decider is None:
+            return ("node_selected_logits",)
+        else:
+            return ("node_selected_logits", "decision_logits")
+
     def __init__(
         self,
         params: Parameters,
@@ -558,18 +596,11 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         else:
             self.decider = None
 
-    @property
-    def out_keys(self):
-        if self.decider is None:
-            return ("node_selected_logits", )
-        else:
-            return ("node_selected_logits", "decider_logits")
-
     @classmethod
     def _build_node_selector(
         cls,
         agent_params: GraphIsomorphismAgentParameters,
-    ) -> Sequential:
+    ) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
 
         Parameters
@@ -579,7 +610,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
         Returns
         -------
-        node_selector : torch.nn.Sequential
+        node_selector : TensorDictModule
             The node selector module.
         """
         return cls._build_node_level_mlp(
@@ -587,6 +618,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             d_hidden=agent_params.d_node_selector,
             d_out=1,
             num_layers=agent_params.num_node_selector_layers,
+            out_key="node_selected_logits",
         )
 
     @classmethod
@@ -594,7 +626,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         cls,
         agent_params: GraphIsomorphismAgentParameters,
         d_out: int = 3,
-    ) -> Sequential:
+    ) -> TensorDictModule:
         """Builds the module which produces a graph-pair level output.
 
         By default it is used to decide whether to continue exchanging messages. In this
@@ -611,7 +643,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
         Returns
         -------
-        decider : torch.nn.Sequential
+        decider : TensorDictModule
             The decider module.
         """
         return cls._build_graph_level_mlp(
@@ -619,6 +651,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             d_hidden=agent_params.d_decider,
             d_out=d_out,
             num_layers=agent_params.num_decider_layers,
+            out_key="decision_logits",
         )
 
     def forward(self, body_output: TensorDict) -> TensorDict:
@@ -644,22 +677,38 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - (optional) "decider_logits" (batch 3): A logit for each of the three
+            - (optional) "decision_logits" (batch 3): A logit for each of the three
               options: continue exchanging messages, guess that the graphs are
               isomorphic, or guess that the graphs are not isomorphic.
         """
 
         out_dict = {}
 
-        out_dict["node_selected_logits"] = self.node_selector(body_output).squeeze(-1)
+        if body_output.batch_size[0] == 0:
+            out_dict["node_selected_logits"] = torch.empty(
+                (0, 2 * body_output["node_level_repr"].shape[2]),
+                device=self.device,
+                dtype=torch.float32,
+            )
+        else:
+            out_dict["node_selected_logits"] = self.node_selector(body_output)[
+                "node_selected_logits"
+            ].squeeze(-1)
 
         if self.decider is not None:
-            out_dict["decider_logits"] = self.decider(body_output)
+            if body_output.batch_size[0] == 0:
+                out_dict["decision_logits"] = torch.empty(
+                    (0, 3), device=self.device, dtype=torch.float32
+                )
+            else:
+                out_dict["decision_logits"] = self.decider(body_output)[
+                    "decision_logits"
+                ]
 
         return TensorDict(
             out_dict, batch_size=out_dict["node_selected_logits"].shape[0]
         )
-    
+
     def to(self, device: Optional[str | torch.device] = None):
         super().to(device)
         self.device = device
@@ -700,7 +749,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
     def _build_critic_mlp(
         cls,
         agent_params: GraphIsomorphismAgentParameters,
-    ) -> Sequential:
+    ) -> TensorDictModule:
         """Builds the module which computes the value function.
 
         Parameters
@@ -712,7 +761,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 
         Returns
         -------
-        critic_mlp : torch.nn.Sequential
+        critic_mlp : TensorDictModule
             The critic module.
         """
         return cls._build_graph_level_mlp(
@@ -720,6 +769,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
             d_hidden=agent_params.d_critic,
             d_out=1,
             num_layers=agent_params.num_critic_layers,
+            out_key="value",
         )
 
     def forward(self, body_output: TensorDict) -> TensorDict:
@@ -743,17 +793,23 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
             - "value" (batch): The estimated value for each batch item
         """
 
-        out_dict = {}
+        if body_output.batch_size[0] == 0:
+            return TensorDict(
+                dict(
+                    value=torch.empty(
+                        (0,),
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                ),
+                batch_size=0,
+            )
+        else:
+            return TensorDict(
+                dict(value=self.critic_mlp(body_output)["value"].squeeze(-1)),
+                batch_size=body_output.batch_size,
+            )
 
-        out_dict["value"] = self.critic_mlp(body_output).squeeze(-1)
-
-        if "node_mask" in body_output.keys():
-            out_dict["node_mask"] = body_output["node_mask"]
-
-        return TensorDict(
-            out_dict, batch_size=out_dict["value"].shape[0]
-        )
-    
     def to(self, device: Optional[str | torch.device] = None):
         super().to(device)
         self.device = device
