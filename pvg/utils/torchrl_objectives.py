@@ -158,7 +158,8 @@ class PPOLossMultipleActions(PPOLoss):
 
         action_tensordict = TensorDict(actions, batch_size=actions_batch_size)
 
-        dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            dist = self.actor.get_dist(tensordict)
 
         if not isinstance(dist, CompositeDistribution):
             raise RuntimeError(
@@ -166,13 +167,15 @@ class PPOLossMultipleActions(PPOLoss):
                 f"{self.__name__}, but got {dist}."
             )
 
-        log_prob = dist.log_prob(action_tensordict)
+        log_prob = dist.log_prob(action_tensordict).get(
+            self.tensor_keys.sample_log_prob
+        )
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if prev_log_prob.requires_grad:
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
-        log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
+        log_weight = (log_prob - prev_log_prob)#.unsqueeze(-1)
         return log_weight, dist
 
 
