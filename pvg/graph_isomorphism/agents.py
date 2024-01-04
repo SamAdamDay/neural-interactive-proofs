@@ -12,7 +12,6 @@ from torch.nn import (
     TransformerEncoder,
     TransformerEncoderLayer,
     Sequential,
-    BatchNorm1d,
 )
 from torch import Tensor
 import torch.nn.functional as F
@@ -24,7 +23,7 @@ from tensordict.nn import TensorDictModuleBase, TensorDictModule, TensorDictSequ
 from torch_geometric.utils import to_networkx
 from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
-from einops import rearrange
+from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Float, Bool
@@ -34,12 +33,14 @@ import plotly.express as px
 
 import networkx as nx
 
+from pvg.constants import PROVER_AGENT_NUM, VERIFIER_AGENT_NUM
 from pvg.base import (
     AgentPart,
     AgentBody,
     AgentHead,
     AgentPolicyHead,
     AgentCriticHead,
+    AgentValueHead,
 )
 from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
 from pvg.graph_isomorphism.data import GraphIsomorphismData, GraphIsomorphismDataset
@@ -47,6 +48,8 @@ from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
     GIN,
+    Squeeze,
+    BatchNorm1dBatchDims,
     Print,
 )
 from pvg.utils.data import gi_data_to_tensordict
@@ -76,10 +79,93 @@ class GraphIsomorphismAgentPart(TensorDictModuleBase, AgentPart, ABC):
 
         if agent_name == "prover":
             self._agent_params = params.graph_isomorphism.prover
+            self.agent_index = PROVER_AGENT_NUM
         elif agent_name == "verifier":
             self._agent_params = params.graph_isomorphism.verifier
+            self.agent_index = VERIFIER_AGENT_NUM
         else:
             raise ValueError(f"Unknown agent name: {agent_name}")
+
+    @classmethod
+    def _run_masked_transformer(
+        cls,
+        transformer: TransformerEncoder,
+        transformer_input: Float[Tensor, "... 2+2*node d_transformer"],
+        node_mask: Float[Tensor, "... pair node"],
+    ) -> Float[Tensor, "... 2+2*node d_transformer"]:
+        """Run a transformer on graph and node representations, with masking.
+
+        The input is expected to be the concatenation of the two graph-level
+        representations and the node-level representations.
+
+        Attention is masked so that nodes only attend to nodes in the other graph and
+        to the pooled representations. We also make sure that the transformer only
+        attends to the actual nodes (and the pooled representations).
+
+        Parameters
+        ----------
+        transformer : torch.nn.TransformerEncoder
+            The transformer module.
+        transformer_input : Float[Tensor, "... 2+2*node d_transformer"]
+            The input to the transformer. This is expected to be the concatenation of
+            the two graph-level representations and the node-level representations.
+        node_mask : Float[Tensor, "... pair node"]
+            Which nodes actually exist.
+
+        Returns
+        -------
+        transformer_output_flatter : Float[Tensor, "... 2+2*node d_transformer"]
+            The output of the transformer.
+        """
+
+        # The batch size and the size of the node dimension
+        batch_shape = transformer_input.shape[:-2]
+        max_num_nodes = node_mask.shape[-1]
+
+        # Flatten the node mask to concatenate the two graphs
+        node_mask_flatter = rearrange(node_mask, "... pair node -> ... (pair node)")
+
+        # Create the padding mask so that the transformer only attends to the actual
+        # nodes (and the pooled representations)
+        # (..., 2 + 2 * node)
+        padding_mask = ~node_mask_flatter
+        padding_mask = torch.cat(
+            (
+                torch.zeros((*batch_shape, 2), device=padding_mask.device, dtype=bool),
+                padding_mask,
+            ),
+            dim=-1,
+        )
+
+        # The attention mask applied to all batch elements, which makes sure that nodes
+        # only attend to nodes in the other graph and to the pooled representations.
+        src_mask = torch.zeros(
+            (2 + 2 * max_num_nodes,) * 2, device=padding_mask.device, dtype=bool
+        )
+        src_mask[2 : 2 + max_num_nodes, 2 : 2 + max_num_nodes] = 1
+        src_mask[2 + max_num_nodes :, 2 + max_num_nodes :] = 1
+
+        # Flatten the batch dimensions in the transformer input and padding mask
+        transformer_input_flatter = transformer_input.reshape(
+            -1, *transformer_input.shape[-2:]
+        )
+        padding_mask_flatter = padding_mask.reshape(-1, *padding_mask.shape[-1:])
+
+        # Compute the transformer output
+        # (..., 2 + 2 * max_nodes, d_transformer)
+        transformer_output_flatter = transformer(
+            transformer_input_flatter,
+            mask=src_mask,
+            src_key_padding_mask=padding_mask_flatter,
+            is_causal=False,
+        )
+
+        # Expand out the batch dimensions
+        transformer_output = transformer_output_flatter.reshape(
+            *transformer_input.shape[:-2], *transformer_output_flatter.shape[-2:]
+        )
+
+        return transformer_output
 
 
 class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
@@ -129,9 +215,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # Build the transformer
         self.transformer = self._build_transformer(agent_params=self._agent_params)
 
-    @staticmethod
+    @classmethod
     def _build_gnn(
-        agent_params: GraphIsomorphismAgentParameters, d_input: int
+        cls, agent_params: GraphIsomorphismAgentParameters, d_input: int
     ) -> TensorDictSequential:
         """Builds the GNN module for a prover or verifier.
 
@@ -171,15 +257,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                             agent_params.d_gin_mlp,
                             agent_params.d_gnn,
                         ),
-                    )
+                    ),
+                    vmap_compatible=True,
                 )
             )
         gnn = TensorDictSequential(*gnn_layers)
 
         return gnn
 
-    @staticmethod
+    @classmethod
     def _build_gnn_transformer_encoder(
+        cls,
         agent_params: GraphIsomorphismAgentParameters,
     ) -> Linear:
         """Build the encoder layer which translates the GNN output to transformer input
@@ -202,8 +290,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         """
         return Linear(agent_params.d_gnn + 3, agent_params.d_transformer)
 
-    @staticmethod
+    @classmethod
     def _build_transformer(
+        cls,
         agent_params: GraphIsomorphismAgentParameters,
     ) -> TransformerEncoder:
         """Builds the transformer module for a prover or verifier.
@@ -231,8 +320,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         return transformer
 
-    @staticmethod
+    @classmethod
     def _build_global_pooling(
+        cls,
         agent_params: GraphIsomorphismAgentParameters,
     ) -> Sequential:
         """Builds a pooling layer which computes the graph-level representation.
@@ -252,26 +342,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         """
         layers = [
             Reduce(
-                "batch pair max_nodes d_gnn -> batch pair d_gnn",
+                "... pair max_nodes d_gnn -> ... pair d_gnn",
                 "sum",
             ),
         ]
         if agent_params.use_batch_norm:
-            layers.extend(
-                [
-                    Rearrange("batch pair d_gnn -> (batch pair) d_gnn"),
-                    BatchNorm1d(num_features=agent_params.d_gnn),
-                    Rearrange(
-                        "(batch pair) d_gnn -> batch pair d_gnn",
-                        pair=2,
-                    ),
-                ]
-            )
+            layers.append(BatchNorm1dBatchDims(num_features=agent_params.d_gnn))
         layers.append(
-            PairedGaussianNoise(sigma=agent_params.noise_sigma, pair_dim=1),
+            PairedGaussianNoise(sigma=agent_params.noise_sigma, pair_dim=-2),
         )
         if agent_params.use_pair_invariant_pooling:
-            layers.append(PairInvariantizer(pair_dim=1))
+            layers.append(PairInvariantizer(pair_dim=-2))
         return Sequential(*layers)
 
     def forward(
@@ -289,12 +370,12 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             The data to run the GNN and transformer on. Either a TensorDictBase with
             keys:
 
-            - "x" (batch pair node feature): The graph node features (message history)
-            - "adjacency" (batch pair node node): The graph adjacency matrices
-            - "message" (batch): The most recent message from the other agent
-            - "node_mask" (batch pair node): Which nodes actually exist or a
+            - "x" (... pair node feature): The graph node features (message history)
+            - "adjacency" (... pair node node): The graph adjacency matrices
+            - "message" (...): The most recent message from the other agent
+            - "node_mask" (... pair node): Which nodes actually exist or a
               GraphIsomorphism data object.
-            - "ignore_message" (batch): Whether to ignore any values in "message". For
+            - "ignore_message" (...): Whether to ignore any values in "message". For
               example, in the first round the there is no message, and the "message"
               field is set to a dummy value.
 
@@ -304,9 +385,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         out : TensorDict
             A tensor dict with keys:
 
-            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_transformer): The output graph-level
               representations.
-            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
+            - "node_level_repr" (... 2 max_nodes d_transformer): The output node-level
               representations.
         """
 
@@ -315,24 +396,29 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             data = gi_data_to_tensordict(data)
 
         # The size of the node dimension
-        max_num_nodes = data["x"].shape[2]
+        max_num_nodes = data["x"].shape[-2]
 
         # If the data is empty, return empty outputs
         if data.batch_size[0] == 0:
             return TensorDict(
                 dict(
                     graph_level_repr=torch.empty(
-                        (0, 2, self._agent_params.d_transformer),
+                        (*data.batch_size, 2, self._agent_params.d_transformer),
                         device=self.device,
                         dtype=torch.float32,
                     ),
                     node_level_repr=torch.empty(
-                        (0, 2, max_num_nodes, self._agent_params.d_transformer),
+                        (
+                            *data.batch_size,
+                            2,
+                            max_num_nodes,
+                            self._agent_params.d_transformer,
+                        ),
                         device=self.device,
                         dtype=torch.float32,
                     ),
                 ),
-                batch_size=0,
+                batch_size=data.batch_size,
             )
 
         # Run the GNN on the graphs
@@ -345,15 +431,12 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Flatten the two batch dimensions in the graph representation and mask
         gnn_output_flatter = rearrange(
-            gnn_output, "batch pair node feature -> batch (pair node) feature"
-        )
-        node_mask_flatter = rearrange(
-            data["node_mask"], "batch pair node -> batch (pair node)"
+            gnn_output, "... pair node feature -> ... (pair node) feature"
         )
 
         # Add the graph-level representations to the transformer input
-        # (batch, 2 + 2 * node, d_gnn + 3)
-        transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=1)
+        # (..., 2 + 2 * node, d_gnn + 3)
+        transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=-2)
 
         # Add extra features to distinguish the pooled representations from the
         # node-level representations
@@ -363,15 +446,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             device=transformer_input.device,
             dtype=transformer_input.dtype,
         )
-        pooled_feature[:, 0, 0] = 1
-        pooled_feature[:, 1, 1] = 1
+        pooled_feature[..., 0, 0] = 1
+        pooled_feature[..., 1, 1] = 1
 
         # Add the most recent message as a new one-hot feature
         message_feature = F.one_hot(
             data["message"] + 2, num_classes=2 + 2 * max_num_nodes
         )
-        message_feature[data["ignore_message"]] = 0
-        message_feature = rearrange(message_feature, "batch token -> batch token 1")
+        message_feature = torch.where(
+            data["ignore_message"][..., None], 0, message_feature
+        )
+        message_feature = rearrange(message_feature, "... token -> ... token 1")
 
         # Concatenate everything together
         transformer_input = torch.cat(
@@ -379,46 +464,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
 
         # Run the transformer input through the encoder first
-        # (batch, 2 + 2 * node, d_transformer)
+        # (..., 2 + 2 * node, d_transformer)
         transformer_input = self.gnn_transformer_encoder(transformer_input)
 
-        # Create the padding mask so that the transformer only attends to the actual
-        # nodes (and the pooled representations)
-        # (batch, 2 + 2 * node)
-        padding_mask = ~node_mask_flatter
-        padding_mask = torch.cat(
-            (
-                torch.zeros(
-                    (padding_mask.shape[0], 2), device=padding_mask.device, dtype=bool
-                ),
-                padding_mask,
-            ),
-            dim=-1,
-        )
-
-        # The attention mask applied to all batch elements, which makes sure that nodes
-        # only attend to nodes in the other graph and to the pooled representations.
-        src_mask = torch.zeros(
-            (2 + 2 * max_num_nodes,) * 2, device=padding_mask.device, dtype=bool
-        )
-        src_mask[2 : 2 + max_num_nodes, 2 : 2 + max_num_nodes] = 1
-        src_mask[2 + max_num_nodes :, 2 + max_num_nodes :] = 1
-
-        # Compute the transformer output
-        # (batch, 2 + 2 * max_nodes, d_transformer)
-        transformer_output_flatter = self.transformer(
-            transformer_input,
-            mask=src_mask,
-            src_key_padding_mask=padding_mask,
-            is_causal=False,
+        # Run the transformer
+        # (..., 2 + 2 * node, d_transformer)
+        transformer_output_flatter = self._run_masked_transformer(
+            transformer=self.transformer,
+            transformer_input=transformer_input,
+            node_mask=data["node_mask"],
         )
 
         # Extract the graph-level representations and rearrange the rest to have two
         # batch dims
-        graph_level_repr = transformer_output_flatter[:, :2]
+        graph_level_repr = transformer_output_flatter[..., :2, :]
         node_level_repr = rearrange(
-            transformer_output_flatter[:, 2:],
-            "batch (pair node) feature -> batch pair node feature",
+            transformer_output_flatter[..., 2:, :],
+            "... (pair node) feature -> ... pair node feature",
             pair=2,
         )
 
@@ -427,7 +489,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 graph_level_repr=graph_level_repr,
                 node_level_repr=node_level_repr,
             ),
-            batch_size=graph_level_repr.shape[0],
+            batch_size=graph_level_repr.shape[:-2],
         )
 
     def to(self, device: Optional[str | torch.device] = None):
@@ -447,8 +509,9 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
     modules.
     """
 
-    @staticmethod
+    @classmethod
     def _build_node_level_mlp(
+        cls,
         d_in: int,
         d_hidden: int,
         d_out: int,
@@ -499,13 +562,15 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
 
         return tensor_dict_sequential
 
-    @staticmethod
+    @classmethod
     def _build_graph_level_mlp(
+        cls,
         d_in: int,
         d_hidden: int,
         d_out: int,
         num_layers: int,
         out_key: str = "graph_level_mlp_output",
+        squeeze: bool = False,
     ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
 
@@ -515,7 +580,9 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Parameters
         ----------
         d_in : int
-            The dimensionality of the input.
+            The dimensionality of the graph-level representations. This will be
+            multiplied by two, as the MLP takes as input the concatenation of the two
+            graph-level representations.
         d_hidden : int
             The dimensionality of the hidden layers.
         d_out : int
@@ -524,6 +591,9 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The number of hidden layers in the MLP.
         out_key : str, default="graph_level_mlp_output"
             The tensordict key to use for the output of the MLP.
+        squeeze : bool, default=False
+            Whether to squeeze the output dimension. Only use this if the output
+            dimension is 1.
 
         Returns
         -------
@@ -533,7 +603,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         layers = []
 
         # Concatenate the two graph-level representations
-        layers.append(Rearrange("batch pair d_in -> batch (pair d_in)"))
+        layers.append(Rearrange("... pair d_in -> ... (pair d_in)"))
 
         # The layers of the MLP
         layers.append(Linear(2 * d_in, d_hidden))
@@ -542,6 +612,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             layers.append(Linear(d_hidden, d_hidden))
             layers.append(ReLU(inplace=True))
         layers.append(Linear(d_hidden, d_out))
+
+        # Squeeze the output dimension if necessary
+        if squeeze:
+            layers.append(Squeeze())
 
         # Make the layers into a sequential module, and wrap it in a TensorDictModule
         sequential = Sequential(*layers)
@@ -664,9 +738,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         body_output : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_transformer): The output graph-level
               representations.
-            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
+            - "node_level_repr" (... 2 max_nodes d_transformer): The output node-level
               representations.
 
         Returns
@@ -674,10 +748,10 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         out : TensorDict
             A tensor dict with keys:
 
-            - "node_selected_logits" (batch 2*max_nodes): A logit for each node,
+            - "node_selected_logits" (... 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - (optional) "decision_logits" (batch 3): A logit for each of the three
+            - (optional) "decision_logits" (... 3): A logit for each of the three
               options: continue exchanging messages, guess that the graphs are
               isomorphic, or guess that the graphs are not isomorphic.
         """
@@ -686,7 +760,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
         if body_output.batch_size[0] == 0:
             out_dict["node_selected_logits"] = torch.empty(
-                (0, 2 * body_output["node_level_repr"].shape[2]),
+                (*body_output.batch_size, 2 * body_output["node_level_repr"].shape[2]),
                 device=self.device,
                 dtype=torch.float32,
             )
@@ -698,16 +772,16 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         if self.decider is not None:
             if body_output.batch_size[0] == 0:
                 out_dict["decision_logits"] = torch.empty(
-                    (0, 3), device=self.device, dtype=torch.float32
+                    (*body_output.batch_size, 3),
+                    device=self.device,
+                    dtype=torch.float32,
                 )
             else:
                 out_dict["decision_logits"] = self.decider(body_output)[
                     "decision_logits"
                 ]
 
-        return TensorDict(
-            out_dict, batch_size=out_dict["node_selected_logits"].shape[0]
-        )
+        return TensorDict(out_dict, batch_size=body_output.batch_size)
 
     def to(self, device: Optional[str | torch.device] = None):
         super().to(device)
@@ -717,8 +791,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.decider.to(device)
 
 
-class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):
-    """Critic head for the graph isomorphism task.
+class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
+    """Value head for the graph isomorphism task.
 
     Takes as input the output of the agent body and outputs a value function.
 
@@ -732,7 +806,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("graph_level_repr", "node_level_repr")
+    in_keys = ("graph_level_repr",)
     out_keys = ("value",)
 
     def __init__(
@@ -743,10 +817,10 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
     ):
         super().__init__(params, agent_name, device)
 
-        self.critic_mlp = self._build_critic_mlp(agent_params=self._agent_params)
+        self.value_mlp = self._build_mlp(agent_params=self._agent_params)
 
     @classmethod
-    def _build_critic_mlp(
+    def _build_mlp(
         cls,
         agent_params: GraphIsomorphismAgentParameters,
     ) -> TensorDictModule:
@@ -756,8 +830,187 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         ----------
         agent_params : GraphIsomorphismAgentParameters
             The parameters used for constructing the agent
-        d_out : int, default=3
-            The dimensionality of the output.
+
+        Returns
+        -------
+        value_mlp : TensorDictModule
+            The value module.
+        """
+        return cls._build_graph_level_mlp(
+            d_in=agent_params.d_transformer,
+            d_hidden=agent_params.d_value,
+            d_out=1,
+            num_layers=agent_params.num_value_layers,
+            out_key="value",
+            squeeze=True,
+        )
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the value head on the given body output.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+              representations.
+
+        Returns
+        -------
+        value_out : TensorDict
+            A tensor dict with keys:
+
+            - "value" (...): The estimated value for each batch item
+        """
+
+        if body_output.batch_size[0] == 0:
+            return TensorDict(
+                dict(
+                    value=torch.empty(
+                        (*body_output.batch_size,),
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                ),
+                batch_size=body_output.batch_size,
+            )
+
+        return self.value_mlp(body_output)
+
+    def to(self, device: Optional[str | torch.device] = None):
+        super().to(device)
+        self.device = device
+        self.value_mlp.to(device)
+
+
+class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):
+    """Critic head for the graph isomorphism task.
+
+    Takes as input the output of the agent body and the actions taken and outputs a
+    value function.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent. Must be either "prover" or "verifier".
+    device : str or torch.device, optional
+        The device to use for this agent part. If not given, the CPU is used.
+    """
+
+    in_keys = (
+        "graph_level_repr",
+        "node_level_repr",
+        ("agents", "node_selected"),
+        ("agents", "decision"),
+        "node_mask",
+    )
+    out_keys = ("value",)
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        self.transformer_encoder = self._build_transformer_encoder(
+            agent_params=self._agent_params
+        )
+        self.transformer = self._build_transformer(agent_params=self._agent_params)
+        self.critic_mlp = self._build_mlp(agent_params=self._agent_params)
+
+    def _get_agent_level_tensordict_value(
+        self, key: str, tensordict: TensorDict
+    ) -> Tensor:
+        """Get a value from a TensorDict with agent-level keys.
+
+        Selects the value ["agents", key] from the tensordict, then selects the tensor
+        corresponding to the agent index.
+
+        Parameters
+        ----------
+        key : str
+            The key to get.
+        tensordict : TensorDict
+            The TensorDict to get the value from.
+
+        Returns
+        -------
+        value : Tensor
+            The value.
+        """
+        return tensordict["agents", key][..., self.agent_index]
+
+    @classmethod
+    def _build_transformer_encoder(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> Linear:
+        """Build the encoder layer from the hidden representations to the transformer
+
+        This is a simple linear layer, where the number of input features is
+        `d_transformer` + 1, where the extra feature encodes whether a node is in the
+        next message from to other agent, and the decision made (if any) one-hot
+        encoded, repeated across all tokens.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+
+        Returns
+        -------
+        transformer_encoder : torch.nn.Linear
+            The encoder module
+
+        """
+        return Linear(agent_params.d_transformer + 4, agent_params.d_transformer)
+
+    @classmethod
+    def _build_transformer(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> TransformerEncoder:
+        """Builds the transformer which processes the next message.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
+
+        Returns
+        -------
+        transformer : torch.nn.TransformerEncoder
+            The transformer module.
+        """
+
+        transformer = TransformerEncoder(
+            encoder_layer=TransformerEncoderLayer(
+                d_model=agent_params.d_transformer,
+                nhead=agent_params.num_heads,
+                batch_first=True,
+                dropout=agent_params.transformer_dropout,
+            ),
+            num_layers=agent_params.num_critic_transformer_layers,
+        )
+
+        return transformer
+
+    @classmethod
+    def _build_mlp(
+        cls,
+        agent_params: GraphIsomorphismAgentParameters,
+    ) -> TensorDictModule:
+        """Builds the module which computes the value function.
+
+        Parameters
+        ----------
+        agent_params : GraphIsomorphismAgentParameters
+            The parameters used for constructing the agent
 
         Returns
         -------
@@ -772,28 +1025,32 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
             out_key="value",
         )
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(self, critic_input: TensorDict) -> TensorDict:
         """Runs the critic head on the given body output.
 
         Parameters
         ----------
-        body_output : TensorDict
+        critic_input : TensorDict
             The output of the body module. A tensor dict with keys:
 
             - "graph_level_repr" (batch 2 d_transformer): The output graph-level
               representations.
             - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
               representations.
+            - "node_selected" (batch 2 max_nodes): Which node was selected to send as a
+              message.
+            - "decision" (batch): The decision made by the verifier.
+            - "node_mask" (batch 2 max_nodes): Which nodes actually exist.
 
         Returns
         -------
-        out : TensorDict
+        critic_out : TensorDict
             A tensor dict with keys:
 
             - "value" (batch): The estimated value for each batch item
         """
 
-        if body_output.batch_size[0] == 0:
+        if critic_input.batch_size[0] == 0:
             return TensorDict(
                 dict(
                     value=torch.empty(
@@ -804,15 +1061,75 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
                 ),
                 batch_size=0,
             )
-        else:
-            return TensorDict(
-                dict(value=self.critic_mlp(body_output)["value"].squeeze(-1)),
-                batch_size=body_output.batch_size,
-            )
+
+        # The size of the node dimension
+        max_num_nodes = critic_input["node_level_repr"].shape[2]
+
+        # Concatenate the two graph-level representations and the node-level
+        # representations
+        # (batch, 2 + 2 * node, d_transformer)
+        transformer_input = torch.cat(
+            (
+                critic_input["graph_level_repr"],
+                rearrange(
+                    critic_input["node_level_repr"],
+                    "... pair node d_transformer -> ... (pair node) d_transformer",
+                ),
+            ),
+            dim=-2,
+        )
+
+        # Add the most recent message as a new one-hot feature
+        message_feature = F.one_hot(
+            self._get_agent_level_tensordict_value("node_selected", critic_input) + 2,
+            num_classes=2 + 2 * max_num_nodes,
+        )
+        message_feature = rearrange(message_feature, "... token -> ... token 1")
+
+        # Add the decision as new one-hot features
+        decision_features = F.one_hot(
+            self._get_agent_level_tensordict_value("decision", critic_input),
+            num_classes=3,
+        )
+        decision_features = repeat(
+            decision_features,
+            "... decision -> ... token decision",
+            token=2 + 2 * max_num_nodes,
+        )
+
+        # Concatenate everything together
+        transformer_input = torch.cat(
+            (transformer_input, message_feature, decision_features), dim=-1
+        )
+
+        # Run the transformer input through the encoder first
+        # (batch, 2 + 2 * max_nodes, d_transformer)
+        transformer_input = self.transformer_encoder(transformer_input)
+
+        # Run the transformer
+        # (batch, 2 + 2 * node, d_transformer)
+        transformer_output_flatter = self._run_masked_transformer(
+            transformer=self.transformer,
+            transformer_input=transformer_input,
+            node_mask=critic_input["node_mask"],
+        )
+
+        # Extract the graph-level representations, and feed them through the MLP
+        graph_level_repr = transformer_output_flatter[:, :2]
+        mlp_input = TensorDict(
+            dict(graph_level_repr=graph_level_repr),
+            batch_size=critic_input.batch_size,
+        )
+        critic_out = self.critic_mlp(mlp_input)
+        critic_out["value"] = critic_out["value"].squeeze(-1)
+
+        return critic_out
 
     def to(self, device: Optional[str | torch.device] = None):
         super().to(device)
         self.device = device
+        self.transformer_encoder.to(device)
+        self.transformer.to(device)
         self.critic_mlp.to(device)
 
 

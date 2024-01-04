@@ -54,3 +54,9 @@ class AgentCriticHead(AgentHead, ABC):
     """Base class for all agent critic heads."""
 
     pass
+
+
+class AgentValueHead(AgentHead, ABC):
+    """Base class for all agent value heads."""
+
+    pass

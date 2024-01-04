@@ -9,7 +9,12 @@
    ```
    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
    ```
-4. Install the requirements: `pip install -r requirements`
+4. Install the requirements:
+
+   ```
+   pip install -r requirements.txt --find-links https://download.pytorch.org/whl/nightly/cu121
+   ```
+
 5. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
    key](https://wandb.ai/settings#dangerzone))
 6. Install the `pvg` package locally in edit mode: `pip install -e .`
@@ -51,3 +56,17 @@ docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env --build-arg C
 replacing `DOCKER_REPO` and `DOCKER_TAG` with the appropriate details.
 
 5. Push the image to the Docker Hub, ready for use.
+
+
+## TODOs
+
+- [ ] Currently when doing a rollout the prover and verifier are run each round, even
+  though it's only one of their turns. This is because TorchRL passes the value net
+  through vmap, and [vmap can't do data-dependent control
+  flow](https://github.com/pytorch/functorch/issues/257). This makes the rollout twice a
+  slow.
+
+  It's possible to overcome this using an 'interleaved' execution. Under this each
+  rollout is actually two rollouts. At the beginning we sample two datapoints in a new
+  batch dimension, and each round we swap these two. In the first round we ignore the
+  verifier output. This way we use the output of both agents in every round.

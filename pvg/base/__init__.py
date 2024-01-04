@@ -5,4 +5,5 @@ from .agents import (
     AgentHead,
     AgentPolicyHead,
     AgentCriticHead,
+    AgentValueHead,
 )

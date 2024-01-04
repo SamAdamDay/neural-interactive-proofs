@@ -51,9 +51,16 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
         accept or reject.
     num_decider_layers : int
         The number of layers in the agents's decider MLP.
+    d_value : int
+        The dimension of the hidden layer in the agents's MLP which estimates the value
+        function.
+    num_value_layers : int
+        The number of layers in the agents's value MLP.
     d_critic : int
         The dimension of the hidden layer in the agents's MLP which estimates the value
         function.
+    num_critic_transformer_layers : int
+        The number of transformer layers in the agents's critic.
     num_critic_layers : int
         The number of layers in the agents's critic MLP.
     use_batch_norm : bool
@@ -79,7 +86,10 @@ class GraphIsomorphismAgentParameters(AdditionalParameters):
     num_node_selector_layers: int = 2
     d_decider: int = 16
     num_decider_layers: int = 2
+    d_value: int = 16
+    num_value_layers: int = 2
     d_critic: int = 16
+    num_critic_transformer_layers: int = 2
     num_critic_layers: int = 2
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
@@ -141,8 +151,8 @@ class PpoParameters(AdditionalParameters):
         The maximum norm of the gradients during optimization.
     gamma : float
         The discount factor.
-    lam : float
-        The GAE parameter.
+    lmbda : float
+        The GAE lambda parameter.
     clip_epsilon : float
         The PPO clip range.
     entropy_eps : float
@@ -161,7 +171,7 @@ class PpoParameters(AdditionalParameters):
 
     # PPO
     gamma: float = 0.99
-    lam: float = 0.95
+    lmbda: float = 0.95
     clip_epsilon: float = 0.2
     entropy_eps: float = 1e-4
 

@@ -164,12 +164,16 @@ class GIN(TensorDictModuleBase):
 
     Parameters
     ----------
-    mlp
+    mlp : nn.Module
         The MLP to apply to the aggregated features.
-    eps
+    eps : float, default=0.0
         The initial value of $\epsilon$.
-    train_eps
+    train_eps : bool, default=False
         Whether to train $\epsilon$ or keep it fixed.
+    vmap_compatible : bool, default=False
+        Whether the module is compatible with `vmap` or not. If `True`, the node mask
+        is only applied after the MLP, which is less efficient but allows for the use
+        of `vmap`.
 
     Shapes
     ------
@@ -183,10 +187,17 @@ class GIN(TensorDictModuleBase):
     in_keys = ("x", "adjacency", "node_mask")
     out_keys = ("x", "adjacency", "node_mask")
 
-    def __init__(self, mlp: nn.Module, eps: float = 0.0, train_eps: bool = False):
+    def __init__(
+        self,
+        mlp: nn.Module,
+        eps: float = 0.0,
+        train_eps: bool = False,
+        vmap_compatible: bool = False,
+    ):
         super().__init__()
         self.mlp = mlp
         self.initial_eps = eps
+        self.vmap_compatible = vmap_compatible
         if train_eps:
             self.eps = torch.nn.Parameter(torch.Tensor([eps]))
         else:
@@ -237,16 +248,57 @@ class GIN(TensorDictModuleBase):
 
         # Apply the MLP to the aggregated features plus a contribution from the node
         # itself. We do this only according to the node mask, putting zeros elsewhere.
-        new_x_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
-        new_x = torch.zeros(
-            (*x.shape[:-1], new_x_flat.shape[-1]), dtype=x.dtype, device=x.device
-        )
-        new_x[node_mask] = new_x_flat
+        if self.vmap_compatible:
+            new_x = self.mlp((1 + self.eps) * x + x_aggregated)
+            new_x = new_x * node_mask[..., None]
+        else:
+            new_x_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
+            new_x = torch.zeros(
+                (*x.shape[:-1], new_x_flat.shape[-1]), dtype=x.dtype, device=x.device
+            )
+            new_x[node_mask] = new_x_flat
 
         out = TensorDict(tensordict)
         out[_key_map("x")] = new_x
 
         return out
+
+
+class Squeeze(nn.Module):
+    """Squeeze a dimension.
+
+    Parameters
+    ----------
+    dim : int, default=-1
+        The dimension to squeeze.
+    """
+
+    def __init__(self, dim: int = -1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x.squeeze(self.dim)
+
+
+class BatchNorm1dBatchDims(nn.BatchNorm1d):
+    """Batch normalization layer with arbitrary batch dimensions.
+
+    See `torch.nn.BatchNorm1d` for documentation.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Get the shape of the batch dims
+        batch_shape = x.shape[:-1]
+
+        # Flatten the batch dims
+        x = x.reshape(-1, x.shape[-1])
+
+        # Apply the batch normalization
+        x = super().forward(x)
+
+        # Reshape the output to have the same shape as the input
+        return x.reshape(*batch_shape, x.shape[-1])
 
 
 class Print(nn.Module):

@@ -3,5 +3,5 @@ from .dataset_generation import generate_gi_dataset, GraphIsomorphicDatasetConfi
 from .agents import (
     GraphIsomorphismAgentBody,
     GraphIsomorphismAgentPolicyHead,
-    GraphIsomorphismAgentCriticHead,
+    GraphIsomorphismAgentValueHead,
 )
