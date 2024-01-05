@@ -11,14 +11,18 @@ import torch
 
 import wandb
 
-from pvg.utils.experiments import MultiprocessHyperparameterExperiment
+from pvg.utils.experiments import (
+    MultiprocessHyperparameterExperiment,
+    SequentialHyperparameterExperiment,
+)
 from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
+MULTIPROCESS = False
 TEST_SIZE = 0.2
 
 param_grid = dict(
-    dataset_name=["er10000"],
+    dataset_name=["eru10000"],
     d_gnn=[16],
     d_decider=[16],
     use_batch_norm=[True],
@@ -118,7 +122,12 @@ if __name__ == "__main__":
     # Make sure the results directory exists
     Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
 
-    experiment = MultiprocessHyperparameterExperiment(
+    if MULTIPROCESS:
+        experiment_class = MultiprocessHyperparameterExperiment
+    else:
+        experiment_class = SequentialHyperparameterExperiment
+
+    experiment = experiment_class(
         param_grid=param_grid,
         experiment_fn=experiment_fn,
         run_id_fn=run_id_fn,

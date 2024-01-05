@@ -37,6 +37,35 @@ class PrefixLoggerAdapter(logging.LoggerAdapter):
         return self.logger.level
 
 
+class MultiLineFormatter(logging.Formatter):
+    """Multi-line formatter.
+
+    https://stackoverflow.com/a/66855071
+    """
+
+    def get_header_length(self, record):
+        """Get the header length of a given record."""
+        return len(
+            super().format(
+                logging.LogRecord(
+                    name=record.name,
+                    level=record.levelno,
+                    pathname=record.pathname,
+                    lineno=record.lineno,
+                    msg="",
+                    args=(),
+                    exc_info=None,
+                )
+            )
+        )
+
+    def format(self, record):
+        """Format a record with added indentation."""
+        indent = " " * self.get_header_length(record)
+        head, *trailing = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in trailing)
+
+
 class HyperparameterExperiment(ABC):
     """A base class to run an experiment over a grid of hyperparameters.
 
@@ -46,9 +75,12 @@ class HyperparameterExperiment(ABC):
     def __init__(
         self,
         param_grid: dict,
-        experiment_fn: Callable[[dict, str, Namespace], None],
+        experiment_fn: Callable[
+            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
+        ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
+        arg_parser_description: str = "Run hyperparameter experiments",
     ):
         if run_id_fn is None:
             run_id_fn = (
@@ -60,13 +92,57 @@ class HyperparameterExperiment(ABC):
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
 
+        # Set up the arg parser
+        self.parser = ArgumentParser(
+            description=arg_parser_description,
+            formatter_class=ArgumentDefaultsHelpFormatter,
+        )
+
+        # Add parser arguments for controlling logging output
+        self.parser.add_argument(
+            "-d", "--debug", help="Print debug messages", action="store_true"
+        )
+        self.parser.add_argument(
+            "-v",
+            "--verbose",
+            help="Print additional info messages",
+            action="store_true",
+        )
+
+        # Create a logging formatter
+        self.logging_formatter = MultiLineFormatter(
+            fmt="[%(asctime)s %(levelname)s] %(message)s", datefmt="%x %X"
+        )
+
     @abstractmethod
-    def run(self):
+    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
+        """The function that actually runs the experiment, to be implemented."""
         pass
+
+    def run(self):
+        """Run the experiment."""
+
+        # Get the arguments
+        cmd_args = self.parser.parse_args()
+
+        # Set up the logger
+        base_logger = logging.getLogger(__name__)
+        setup_logger_tqdm(formatter=self.logging_formatter)
+
+        # Set the log level inside the experiment function
+        if cmd_args.debug:
+            self.experiment_log_level = logging.DEBUG
+        elif cmd_args.verbose:
+            self.experiment_log_level = logging.INFO
+        else:
+            self.experiment_log_level = logging.WARNING
+
+        # Run the experiment
+        self._run(cmd_args, base_logger)
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
-    """A class to run an experiment over a grid of hyperparameters.
+    """A class to run an experiment over a grid of hyperparameters in sequence.
 
     Runs each combination of hyperparameters in the grid as a separate experiment. If
     there is an error in one of the experiments, all subsequent experiments are skipped.
@@ -84,47 +160,47 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
     ----------
     param_grid : dict
         A dictionary mapping hyperparameter names to lists of values to try.
-    experiment_fn : Callable[[dict, str, Namespace], None]
+    experiment_fn : Callable[[dict, str, Namespace, Callable, logging.LoggerAdapter],
+    None]
         A function that takes a single hyperparameter combination and runs the
         experiment. It should take the form:
-            experiment_fn(combo, run_id, cmd_args)
-        where combo is a single combination of hyperparameters, run_id is a unique
-        identifier for the run, and cmd_args is the command line arguments.
+            experiment_fn(combo, run_id, cmd_args, tqdm_func, child_logger_adapter)
+        where `combo` is a single combination of hyperparameters, `run_id` is a unique
+        identifier for the run, `cmd_args` is the command line arguments, `tqdm_func` is
+        a function used to create a tqdm progress bar, and `child_logger_adapter` is a
+        logger adapter to use for logging.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
         the combination index. It should take the form:
             run_id_fn(combo_index, cmd_args)
-        where combo_index is the index of the combination in the ParameterGrid and
-        cmd_args is the command line arguments.
+        where `combo_index` is the index of the combination in the ParameterGrid and
+        `cmd_args` is the command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
-    output_width : int, default=79
-        The width of the output to print.
+    output_width : int, default=70
+        The width of the output to print (after the logging prefix).
     """
 
     def __init__(
         self,
         param_grid: dict,
-        experiment_fn: Callable[[dict, str, Namespace], None],
+        experiment_fn: Callable[
+            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
+        ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
-        output_width: int = 79,
+        output_width: int = 70,
     ):
         super().__init__(
             param_grid=param_grid,
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
+            arg_parser_description="Run hyperparameter experiments sequentially",
         )
 
         self.output_width = output_width
-
-        # Set up the arg parser
-        self.parser = ArgumentParser(
-            description="Run hyperparameter experiments sequentially",
-            formatter_class=ArgumentDefaultsHelpFormatter,
-        )
 
         # Add various arguments
         self.parser.add_argument(
@@ -146,11 +222,53 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             help="The number of initial combos to skip. Useful to resume a group",
         )
 
-    def run(self):
-        """Run the experiment."""
-        # Get the arguments
-        cmd_args = self.parser.parse_args()
+    def _run_single_experiment(
+        self,
+        combinations: list[tuple[int, dict]],
+        combo: dict,
+        combo_index: int,
+        cmd_args: Namespace,
+        base_logger: logging.Logger,
+    ) -> bool:
+        """Run an experiment for a single combination of hyperparameters."""
 
+        info_prefix = f"[{combo_index}/{len(combinations)}] "
+
+        # Create a unique run_id for this run
+        run_id = self.run_id_fn(combo_index, cmd_args)
+
+        # Set up the logger
+        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
+        child_logger.setLevel(self.experiment_log_level)
+        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
+
+        # The tqdm function to use
+        tqdm_func = partial(
+            tqdm,
+            bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
+        )
+
+        # Print the run_id and the Parameters
+        base_logger.info("")
+        base_logger.info("=" * self.output_width)
+        title = f"| {self.experiment_name} | Run ID: {run_id}"
+        title += (" " * (self.output_width - 1 - len(title))) + "|"
+        title = textwrap.fill(title, self.output_width)
+        base_logger.info(title)
+        base_logger.info("=" * self.output_width)
+
+        # Run the experiment
+        self.experiment_fn(
+            combo,
+            run_id,
+            cmd_args,
+            tqdm_func,
+            child_logger_adapter,
+        )
+
+        return True
+
+    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
         # An iterator over the configurations of hyperparameters
         param_iter = ParameterGrid(self.param_grid)
 
@@ -174,43 +292,66 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 # Set the status of the current run to failed until proven otherwise
                 run_results[i] = "FAILED"
 
-                # Create a unique run_id for this trial
-                run_id = self.run_id_fn(combo_index, cmd_args)
-
-                # Print the run_id and the Parameters
-                print()
-                print()
-                print("=" * self.output_width)
-                title = f"| {self.experiment_name} | Run ID: {run_id}"
-                title += (" " * (self.output_width - 1 - len(title))) + "|"
-                title = textwrap.fill(title, self.output_width)
-                print(title)
-                print("=" * self.output_width)
-                print()
-                print()
-
-                self.experiment_fn(combo, run_id, cmd_args)
+                self._run_single_experiment(
+                    combinations, combo, combo_index, cmd_args, base_logger
+                )
 
                 run_results[i] = "SUCCEEDED"
 
         finally:
             # Print a summary of the experiment results
-            print()
-            print()
-            print("=" * self.output_width)
+            base_logger.info("")
+            base_logger.info("")
+            base_logger.info("=" * self.output_width)
             title = f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
             title += (" " * (self.output_width - 1 - len(title))) + "|"
             title = textwrap.fill(title, self.output_width)
-            print(title)
-            print("=" * self.output_width)
+            base_logger.info(title)
+            base_logger.info("=" * self.output_width)
             for result, (combo_num, combo) in zip(run_results, combinations):
-                print()
-                print(f"COMBO {combo_num}")
-                print(textwrap.fill(str(combo)))
-                print(result)
+                base_logger.info("")
+                base_logger.info(f"COMBO {combo_num}")
+                base_logger.info(textwrap.fill(str(combo)))
+                base_logger.info(result)
 
 
 class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
+    """A class to run an experiment over a grid of hyperparameters in parallel.
+
+    Runs each combination of hyperparameters in the grid as a separate experiment using
+    a pool of workers.
+
+    The workflow is as follows:
+
+    1. Call the constructor with the hyperparameter grid and the experiment function.
+    2. (Optional) Add any additional arguments to the arg parser using
+       `self.parser.add_argument`.
+    3. Call `self.run()` to run the experiment.
+
+    Parameters
+    ----------
+    param_grid : dict
+        A dictionary mapping hyperparameter names to lists of values to try.
+    experiment_fn : Callable[[dict, str, Namespace, Callable, logging.LoggerAdapter],
+    None]
+        A function that takes a single hyperparameter combination and runs the
+        experiment. It should take the form:
+            experiment_fn(combo, run_id, cmd_args, tqdm_func, child_logger_adapter)
+        where `combo` is a single combination of hyperparameters, `run_id` is a unique
+        identifier for the run, `cmd_args` is the command line arguments, `tqdm_func` is
+        a function used to create a tqdm progress bar, and `child_logger_adapter` is a
+        logger adapter to use for logging.
+    run_id_fn : Callable[[int, Namespace], str], optional
+        A function that takes a single hyperparameter combination and returns a unique
+        identifier for the run. If None, the default is to use the experiment name and
+        the combination index. It should take the form:
+            run_id_fn(combo_index, cmd_args)
+        where `combo_index` is the index of the combination in the ParameterGrid and
+        `cmd_args` is the command line arguments.
+    experiment_name : str, default="EXPERIMENT"
+        The name of the experiment.
+    """
+
     def __init__(
         self,
         param_grid: dict,
@@ -225,12 +366,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
-        )
-
-        # Set up the arg parser
-        self.parser = ArgumentParser(
-            description="Run hyperparameter experiments in parallel",
-            formatter_class=ArgumentDefaultsHelpFormatter,
+            arg_parser_description="Run hyperparameter experiments in parallel",
         )
 
         # Needed so that we can pickle the command arguments
@@ -243,17 +379,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             type=int,
             default=1,
             help="The number of workers to use for multiprocessing",
-        )
-        self.parser.add_argument(
-            '-d', '--debug',
-            help="Print debug messages",
-            action="store_const", dest="log_level", const=logging.DEBUG,
-            default=logging.WARNING,
-        )
-        self.parser.add_argument(
-            '-v', '--verbose',
-            help="Print additional info messages",
-            action="store_const", dest="log_level", const=logging.INFO,
         )
 
     def _task_fn(
@@ -272,7 +397,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
         # Set up the logger
         child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
-        child_logger.setLevel(cmd_args.log_level)
+        child_logger.setLevel(self.experiment_log_level)
         child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
 
         # The tqdm function to use. Set the leave argument to False because tqdm because
@@ -299,16 +424,9 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
         return True
 
-    def run(self):
-        # Get the arguments
-        cmd_args = self.parser.parse_args()
-
+    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
-
-        # Set up the logger
-        base_logger = logging.getLogger(__name__)
-        setup_logger_tqdm()
 
         # Create a list of tasks
         tasks = [
