@@ -1,3 +1,5 @@
+"""Base classes for handling data."""
+
 from abc import ABC, abstractmethod
 
 import torch

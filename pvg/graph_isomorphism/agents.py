@@ -1,3 +1,8 @@
+"""Graph isomorphism agents components.
+
+Contains classes for building agent bodies and heads for the graph isomorphism task.
+"""
+
 from abc import ABC
 from typing import Optional, Callable
 from dataclasses import dataclass

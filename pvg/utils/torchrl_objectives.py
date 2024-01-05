@@ -1,3 +1,5 @@
+"""Extensions of TorchRL objectives to overcome limitations of the library."""
+
 from dataclasses import dataclass, make_dataclass, field, fields
 from typing import Iterable
 
@@ -140,10 +142,24 @@ class PPOLossMultipleActions(PPOLoss):
         self._in_keys = list(set(keys))
 
     def _log_weight(
-        self, tensordict: TensorDictBase
+        self, sample: TensorDictBase
     ) -> tuple[torch.Tensor, torch.distributions.Distribution]:
+        """Compute the log weight for the given TensorDict sample.
+
+        Parameters
+        ----------
+        sample : TensorDictBase
+            The sample TensorDict.
+
+        Returns
+        -------
+        log_weight : torch.Tensor
+            The log weight of the sample
+        dist : torch.distributions.Distribution
+            The distribution used to compute the log weight.
+        """
         # current log_prob of actions
-        actions = {key: tensordict.get(key) for key in self.action_keys}
+        actions = {key: sample.get(key) for key in self.action_keys}
         actions_batch_size = None
         for key, action in actions.items():
             if action.requires_grad:
@@ -159,7 +175,7 @@ class PPOLossMultipleActions(PPOLoss):
         action_tensordict = TensorDict(actions, batch_size=actions_batch_size)
 
         with self.actor_params.to_module(self.actor):
-            dist = self.actor.get_dist(tensordict)
+            dist = self.actor.get_dist(sample)
 
         if not isinstance(dist, CompositeDistribution):
             raise RuntimeError(
@@ -171,11 +187,11 @@ class PPOLossMultipleActions(PPOLoss):
             self.tensor_keys.sample_log_prob
         )
 
-        prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+        prev_log_prob = sample.get(self.tensor_keys.sample_log_prob)
         if prev_log_prob.requires_grad:
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
-        log_weight = (log_prob - prev_log_prob)#.unsqueeze(-1)
+        log_weight = log_prob - prev_log_prob  # .unsqueeze(-1)
         return log_weight, dist
 
 

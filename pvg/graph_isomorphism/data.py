@@ -74,7 +74,25 @@ class GraphIsomorphismData(GeometricData):
 
 
 class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
-    """A dataset for the graph isomorphism experiments."""
+    """A dataset for the graph isomorphism experiments.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    transform : callable, optional
+        A function/transform that takes in a `torch_geometric.data.Data` object
+        and returns a transformed version. The data object will be transformed before
+        every access.
+    pre_transform : callable, optional
+        A function/transform that takes in a `torch_geometric.data.Data` object
+        and returns a transformed version. The data object will be transformed before
+        being saved to disk.
+    pre_filter : callable, optional
+        A function that takes in a `torch_geometric.data.Data` object and returns a
+        boolean value, indicating whether the data object should be included in the
+        final dataset.
+    """
 
     def __init__(
         self,
@@ -95,10 +113,8 @@ class GraphIsomorphismDataset(GeometricInMemoryDataset, Dataset):
 
     @property
     def processed_dir(self) -> str:
-        return os.path.join(
-            self.root, f"processed_{self.params.max_message_rounds}"
-        )
-    
+        return os.path.join(self.root, f"processed_{self.params.max_message_rounds}")
+
     @property
     def num_node_features(self) -> int:
         return self.params.max_message_rounds

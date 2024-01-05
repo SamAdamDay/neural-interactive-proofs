@@ -1,3 +1,21 @@
+"""Functions for generating a dataset of pairs of graphs with WL scores.
+
+The main function is `generate_gi_dataset`, which generates a dataset of pairs of
+graphs with WL scores.
+
+Graphs are generated using the Erdős-Rényi model. The dataset is generated in three
+steps:
+
+1. Generate `prop_non_isomorphic` non-isomorphic graphs. The pairs are divided equally
+   between the different graph sizes and edge probabilities. The number of graphs with a
+   score of 1, 2 and greater than 2 are divided according to the proportions
+   `non_iso_prop_score_1` and `non_iso_prop_score_2`.
+2. Generate `(1 - prop_non_isomorphic) * iso_prop_from_non_iso` isomorphic graphs, by
+   sampling from the non-isomorphic graph pairs and shuffling the nodes.
+3. Generate the remaining `(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)`
+   isomorphic graphs, by generating new graphs and shuffling the nodes.
+"""
+
 import os
 import itertools
 from math import floor
@@ -27,7 +45,7 @@ from pvg.constants import GI_DATA_DIR
 class GraphIsomorphicDatasetConfig:
     """Configuration for a graph isomorphism dataset.
 
-    Graphs are generated using the Erdos-Renyi model. The dataset is generated in three
+    Graphs are generated using the Erdős-Rényi model. The dataset is generated in three
     steps:
 
     1. Generate `prop_non_isomorphic` non-isomorphic graphs. The pairs are divided
@@ -162,7 +180,7 @@ def generate_er_graphs(
     edge_probability: float,
     device: str | torch.device = "cpu",
 ) -> Int32[Tensor, "batch node1 node2"]:
-    """Generate a batch of Erdos-Renyi graphs.
+    """Generate a batch of Erdős-Rényi graphs.
 
     Parameters
     ----------
@@ -461,7 +479,7 @@ def generate_gi_dataset(
 ):
     """Generate a dataset of pairs of graphs with WL scores.
 
-    Graphs are generated using the Erdos-Renyi model. The dataset is generated in three
+    Graphs are generated using the Erdős-Rényi model. The dataset is generated in three
     steps:
 
     1. Generate non-isomorphic graphs. The pairs are divided equally between the

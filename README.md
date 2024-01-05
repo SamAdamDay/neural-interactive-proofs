@@ -1,6 +1,6 @@
 # PVG Experiments
 
-## Installation
+## Installation (development)
 
 1. Clone the repo
 2. Create a virtual environment
@@ -9,15 +9,43 @@
    ```
    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
    ```
-4. Install the requirements:
+4. Install the requirements (we use a nightly version of TorchRL, which requires a
+   nightly version of PyTorch; also installing torch-scatter is a pain):
 
    ```
-   pip install -r requirements.txt --find-links https://download.pytorch.org/whl/nightly/cu121
+   pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
+   pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.1.0+cu121.html
+   pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
    ```
 
 5. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
    key](https://wandb.ai/settings#dangerzone))
 6. Install the `pvg` package locally in edit mode: `pip install -e .`
+
+
+## Style guide
+
+- The code is formatted using [`black`](https://black.readthedocs.io/en/stable/).
+   * To format the whole repository, use `black .`
+   * Make sure you do this before committing
+   * On VS Code use `Ctrl+Shift+I` ("Format Document") to format the current file. It's
+     useful to do this regularly.
+- The line length is 88 (see
+  [rationale](https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#line-length))
+   * Black does its best to format to this line length
+   * Docstrings and comments are wrapped to this length
+   * Use the [Rewrap VS Code
+     extension](https://marketplace.visualstudio.com/items?itemName=stkb.rewrap) bound
+     to `Alt+Q` to re-wrap any comment or docstring to the line-length. Make sure to set
+     the ruler to 88 for this project.
+- All classes, functions and modules should have a docstring (Copilot helps with this)
+   * Docstrings are formatting using the [Numpydoc Style
+     Guide](https://numpydoc.readthedocs.io/en/latest/format.html)
+- Please add type hints to all functions
+   * [Jaxtyping](https://docs.kidger.site/jaxtyping/) is used for annotating tensors
+     with their shapes.
+      + E.g. `fun(arg: Float[Tensor, "batch feature"])`
+   * Strict type-checking is not enforced
 
 
 ## Using Docker

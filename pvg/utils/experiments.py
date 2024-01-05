@@ -1,3 +1,18 @@
+"""Experiment runners.
+
+Contains utilities for running hyperparameter experiments. These can be run either
+sequentially or in parallel using a pool of workers. 
+
+The workflow is as follows:
+
+1. Call the constructor with the hyperparameter grid and the experiment function.
+2. (Optional) Add any additional arguments to the arg parser using
+   `experiment.parser.add_argument`.
+3. Call `experiment.run()` to run the experiment.
+
+See the docstrings of the classes for more details.
+"""
+
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from typing import Callable, Optional
 import textwrap

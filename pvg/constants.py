@@ -1,3 +1,5 @@
+"""Global constants for the PVG project."""
+
 import os
 from pathlib import Path
 

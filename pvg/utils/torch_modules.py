@@ -1,3 +1,5 @@
+"""Handy PyTorch modules."""
+
 from typing import Callable, Optional, Iterable
 
 import torch
@@ -252,7 +254,9 @@ class GIN(TensorDictModuleBase):
             new_x = self.mlp((1 + self.eps) * x + x_aggregated)
             new_x = new_x * node_mask[..., None]
         else:
-            new_x_flat = self.mlp((1 + self.eps) * x[node_mask] + x_aggregated[node_mask])
+            new_x_flat = self.mlp(
+                (1 + self.eps) * x[node_mask] + x_aggregated[node_mask]
+            )
             new_x = torch.zeros(
                 (*x.shape[:-1], new_x_flat.shape[-1]), dtype=x.dtype, device=x.device
             )

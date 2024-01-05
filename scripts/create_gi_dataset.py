@@ -1,3 +1,5 @@
+"""Generate a graph isomorphism dataset"""
+
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import torch
@@ -39,4 +41,6 @@ else:
     device = torch.device("cpu")
 
 # Generate the dataset
-generate_gi_dataset(config, cmd_args.name, batch_size=cmd_args.batch_size, device=device)
+generate_gi_dataset(
+    config, cmd_args.name, batch_size=cmd_args.batch_size, device=device
+)

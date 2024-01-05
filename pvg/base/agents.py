@@ -1,3 +1,10 @@
+"""Base classes for building agents.
+
+An agent is composed of a body and one or more heads. The body computes a representation
+of the environment state, and the heads use this representation to compute the agent's
+policy, value function, etc.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Any
 from dataclasses import dataclass
@@ -10,7 +17,7 @@ from pvg.parameters import Parameters
 
 class AgentPart(nn.Module, ABC):
     """Base class for all agent parts: bodies and heads.
-    
+
     Parameters
     ----------
     params : Parameters
@@ -50,13 +57,13 @@ class AgentPolicyHead(AgentHead, ABC):
     pass
 
 
-class AgentCriticHead(AgentHead, ABC):
-    """Base class for all agent critic heads."""
+class AgentValueHead(AgentHead, ABC):
+    """Base class for all agent value heads, to the value of a state."""
 
     pass
 
 
-class AgentValueHead(AgentHead, ABC):
-    """Base class for all agent value heads."""
+class AgentCriticHead(AgentHead, ABC):
+    """Base class for all agent critic heads, to the value of a state-action pair."""
 
     pass

@@ -1,3 +1,15 @@
+"""The parameters of the experiment.
+
+The parameters are initialised by constructing a `Parameters` object. This object
+completely defines the experiment, and is passed around to all experiment components.
+
+Some experiment parameters are sub-parameters, which are defined in separate classes.
+When the `Parameters` object is initialised, these sub-parameters may be initialised
+as well, according to the values of the main parameters.
+
+The `Parameters` object is a dataclass, and can be initialised from a dictionary.
+"""
+
 from dataclasses import dataclass
 from abc import ABC
 from typing import Optional
@@ -119,15 +131,11 @@ class GraphIsomorphismParameters(AdditionalParameters):
         if self.prover is None:
             self.prover = GraphIsomorphismAgentParameters()
         elif isinstance(self.prover, dict):
-            self.prover = GraphIsomorphismAgentParameters.from_dict(
-                self.prover
-            )
+            self.prover = GraphIsomorphismAgentParameters.from_dict(self.prover)
         if self.verifier is None:
             self.verifier = GraphIsomorphismAgentParameters()
         elif isinstance(self.verifier, dict):
-            self.verifier = GraphIsomorphismAgentParameters.from_dict(
-                self.verifier
-            )
+            self.verifier = GraphIsomorphismAgentParameters.from_dict(self.verifier)
 
 
 @dataclass
@@ -176,7 +184,6 @@ class PpoParameters(AdditionalParameters):
     entropy_eps: float = 1e-4
 
 
-
 @dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
@@ -215,7 +222,7 @@ class Parameters(BaseParameters):
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
     verifier_terminated_penalty: float = -1.0
-    
+
     graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
     ppo: Optional[PpoParameters | dict] = None
 

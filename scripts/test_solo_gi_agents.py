@@ -1,3 +1,9 @@
+"""Test solo graph isomorphism agents using a grid of hyperparameters.
+
+A solo agent is one which does not interact with any other agents, but instead tries to
+solve the graph isomorphism problem on its own.
+"""
+
 from argparse import Namespace
 import os
 import json
