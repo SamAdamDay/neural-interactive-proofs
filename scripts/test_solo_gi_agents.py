@@ -17,6 +17,12 @@ import torch
 
 import wandb
 
+from pvg.parameters import (
+    Parameters,
+    GraphIsomorphismParameters,
+    GraphIsomorphismAgentParameters,
+    SoloAgentParameters,
+)
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
@@ -38,8 +44,8 @@ param_grid = dict(
     batch_size=[256],
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
-    freeze_encoder=[False],
-    encoder_lr_factor=[0.01],
+    freeze_body=[False],
+    body_lr_factor=[0.01],
     prover_num_layers=[5],
     verifier_num_layers=[2],
     seed=[8144, 820, 4173, 3992],
@@ -62,6 +68,37 @@ def experiment_fn(
     if logger.level > logging.DEBUG:
         os.environ["WANDB_SILENT"] = "true"
 
+    # Create the parameters object
+    params = Parameters(
+        scenario="graph_isomorphism",
+        trainer="solo_agent",
+        dataset=combo["dataset_name"],
+        graph_isomorphism=GraphIsomorphismParameters(
+            prover=GraphIsomorphismAgentParameters(
+                d_gnn=combo["d_gnn"],
+                d_decider=combo["d_decider"],
+                use_batch_norm=combo["use_batch_norm"],
+                noise_sigma=combo["noise_sigma"],
+                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                num_decider_layers=combo["prover_num_layers"],
+            ),
+            verifier=GraphIsomorphismAgentParameters(
+                d_gnn=combo["d_gnn"],
+                d_decider=combo["d_decider"],
+                use_batch_norm=combo["use_batch_norm"],
+                noise_sigma=combo["noise_sigma"],
+                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                num_decider_layers=combo["verifier_num_layers"],
+            ),
+        ),
+        solo_agent=SoloAgentParameters(
+            num_epochs=combo["num_epochs"],
+            batch_size=combo["batch_size"],
+            learning_rate=combo["learning_rate"],
+            body_lr_factor=combo["body_lr_factor"],
+        ),
+    )
+
     # Set up W&B
     use_wandb = cmd_args.wandb_project != ""
     if use_wandb:
@@ -69,36 +106,17 @@ def experiment_fn(
         wandb_run = wandb.init(
             project=cmd_args.wandb_project, name=run_id, tags=wandb_tags
         )
-        wandb_run.config.update(combo)
+        wandb_run.config.update(params.to_dict())
 
     # Train and test the agents to get the results
-    learning_rate_scheduler_args = {
-        arg[len("scheduler_") :]: value
-        for arg, value in combo.items()
-        if arg.startswith("scheduler_")
-    }
     _, _, results = train_and_test_solo_gi_agents(
-        dataset_name=combo["dataset_name"],
-        d_gnn=combo["d_gnn"],
-        d_decider=combo["d_decider"],
-        use_batch_norm=combo["use_batch_norm"],
-        noise_sigma=combo["noise_sigma"],
-        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+        params=params,
         test_size=TEST_SIZE,
-        num_epochs=combo["num_epochs"],
-        batch_size=combo["batch_size"],
-        learning_rate=combo["learning_rate"],
-        learning_rate_scheduler=combo["learning_rate_scheduler"],
-        learning_rate_scheduler_args=learning_rate_scheduler_args,
-        freeze_encoder=combo["freeze_encoder"],
-        encoder_lr_factor=combo["encoder_lr_factor"],
-        prover_num_layers=combo["prover_num_layers"],
-        verifier_num_layers=combo["verifier_num_layers"],
-        seed=combo["seed"],
         wandb_run=wandb_run if use_wandb else None,
         device=device,
         tqdm_func=tqdm_func,
         logger=logger,
+        ignore_cache=cmd_args.ignore_cache,
     )
 
     if use_wandb:
@@ -159,5 +177,10 @@ if __name__ == "__main__":
         type=str,
         default="",
         help="An optional tag for the W&B run",
+    )
+    experiment.parser.add_argument(
+        "--ignore-cache",
+        action="store_true",
+        help="Ignore the cache and rebuild the dataset from the raw data",
     )
     experiment.run()

@@ -16,4 +16,5 @@ from .agents import (
     AgentPolicyHead,
     AgentCriticHead,
     AgentValueHead,
+    SoloAgentHead,
 )

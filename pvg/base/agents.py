@@ -3,6 +3,9 @@
 An agent is composed of a body and one or more heads. The body computes a representation
 of the environment state, and the heads use this representation to compute the agent's
 policy, value function, etc.
+
+All modules are TensorDictModules, which means they take and return TensorDicts. Input
+and output keys are specified in the module's `input_keys` and `output_keys` attributes.
 """
 
 from abc import ABC, abstractmethod
@@ -10,12 +13,13 @@ from typing import Optional, Any
 from dataclasses import dataclass
 
 import torch
-import torch.nn as nn
+
+from tensordict.nn import TensorDictModuleBase
 
 from pvg.parameters import Parameters
 
 
-class AgentPart(nn.Module, ABC):
+class AgentPart(TensorDictModuleBase, ABC):
     """Base class for all agent parts: bodies and heads.
 
     Parameters
@@ -65,5 +69,11 @@ class AgentValueHead(AgentHead, ABC):
 
 class AgentCriticHead(AgentHead, ABC):
     """Base class for all agent critic heads, to the value of a state-action pair."""
+
+    pass
+
+
+class SoloAgentHead(AgentHead, ABC):
+    """Base class for all solo agent heads, which attempt the task on their own."""
 
     pass

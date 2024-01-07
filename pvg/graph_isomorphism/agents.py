@@ -23,10 +23,9 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from tensordict import TensorDictBase, TensorDict
-from tensordict.nn import TensorDictModuleBase, TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch_geometric.utils import to_networkx
-from torch_geometric.data import Batch as GeometricBatch, Data as GeometricData
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
@@ -46,9 +45,9 @@ from pvg.base import (
     AgentPolicyHead,
     AgentCriticHead,
     AgentValueHead,
+    SoloAgentHead,
 )
 from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
-from pvg.graph_isomorphism.data import GraphIsomorphismData, GraphIsomorphismDataset
 from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
@@ -57,10 +56,9 @@ from pvg.utils.torch_modules import (
     BatchNorm1dBatchDims,
     Print,
 )
-from pvg.utils.data import gi_data_to_tensordict
 
 
-class GraphIsomorphismAgentPart(TensorDictModuleBase, AgentPart, ABC):
+class GraphIsomorphismAgentPart(AgentPart, ABC):
     """Base class for all graph isomorphism agent parts.
 
     Parameters
@@ -202,66 +200,63 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Build up the GNN module
         self.gnn = self._build_gnn(
-            agent_params=self._agent_params,
             d_input=self.params.max_message_rounds,
         )
 
         # Build the global pooling module, which computes the graph-level representation
         # from the GNN output
-        self.global_pooling = self._build_global_pooling(
-            agent_params=self._agent_params
-        )
+        self.global_pooling = self._build_global_pooling()
 
         # Build the encoder going from the GNN to the transformer
-        self.gnn_transformer_encoder = self._build_gnn_transformer_encoder(
-            agent_params=self._agent_params
-        )
+        self.gnn_transformer_encoder = self._build_gnn_transformer_encoder()
 
         # Build the transformer
-        self.transformer = self._build_transformer(agent_params=self._agent_params)
+        self.transformer = self._build_transformer()
 
-    def _build_gnn(
-        self, agent_params: GraphIsomorphismAgentParameters, d_input: int
-    ) -> TensorDictSequential:
+    def _build_gnn(self, d_input: int) -> TensorDictSequential:
         """Builds the GNN module for a prover or verifier.
 
         Parameters
         ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
         d_input : int
             The dimensionality of the input features.
 
         Returns
         -------
         gnn : TensorDictSequential
-            The GNN module, which takes as input a TensorDict with keys "x", "adjacency"
-            and "node_mask".
+            The GNN module, which takes as input a TensorDict with keys "gnn_repr",
+            "adjacency" and "node_mask".
         """
         # Build up the GNN
         gnn_layers = []
         gnn_layers.append(
             TensorDictModule(
-                Linear(d_input, agent_params.d_gnn), in_keys=("x",), out_keys=("x",)
+                Linear(d_input, self._agent_params.d_gnn),
+                in_keys=("x",),
+                out_keys=("gnn_repr",),
             )
         )
-        for i in range(agent_params.num_gnn_layers):
+        for _ in range(self._agent_params.num_gnn_layers):
             gnn_layers.append(
-                TensorDictModule(ReLU(inplace=True), in_keys=("x",), out_keys=("x",))
+                TensorDictModule(
+                    ReLU(inplace=True), in_keys=("gnn_repr",), out_keys=("gnn_repr",)
+                )
             )
             gnn_layers.append(
                 GIN(
                     Sequential(
                         Linear(
-                            agent_params.d_gnn,
-                            agent_params.d_gin_mlp,
+                            self._agent_params.d_gnn,
+                            self._agent_params.d_gin_mlp,
                         ),
                         ReLU(inplace=True),
                         Linear(
-                            agent_params.d_gin_mlp,
-                            agent_params.d_gnn,
+                            self._agent_params.d_gin_mlp,
+                            self._agent_params.d_gnn,
                         ),
                     ),
+                    feature_in_key="gnn_repr",
+                    feature_out_key="gnn_repr",
                     vmap_compatible=True,
                 )
             )
@@ -273,7 +268,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
     def _build_gnn_transformer_encoder(
         self,
-        agent_params: GraphIsomorphismAgentParameters,
     ) -> Linear:
         """Build the encoder layer which translates the GNN output to transformer input
 
@@ -282,11 +276,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         is, if any and whether a node is in the most recent message from the other
         agent.
 
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
-
         Returns
         -------
         gnn_transformer_encoder : torch.nn.Linear
@@ -294,19 +283,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         """
         return Linear(
-            agent_params.d_gnn + 3, agent_params.d_transformer, device=self.device
+            self._agent_params.d_gnn + 3,
+            self._agent_params.d_transformer,
+            device=self.device,
         )
 
-    def _build_transformer(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> TransformerEncoder:
+    def _build_transformer(self) -> TransformerEncoder:
         """Builds the transformer module for a prover or verifier.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -316,31 +299,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         transformer = TransformerEncoder(
             encoder_layer=TransformerEncoderLayer(
-                d_model=agent_params.d_transformer,
-                nhead=agent_params.num_heads,
+                d_model=self._agent_params.d_transformer,
+                nhead=self._agent_params.num_heads,
                 batch_first=True,
-                dropout=agent_params.transformer_dropout,
+                dropout=self._agent_params.transformer_dropout,
             ),
-            num_layers=agent_params.num_transformer_layers,
+            num_layers=self._agent_params.num_transformer_layers,
         )
 
         transformer = transformer.to(self.device)
 
         return transformer
 
-    def _build_global_pooling(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> Sequential:
+    def _build_global_pooling(self) -> Sequential:
         """Builds a pooling layer which computes the graph-level representation.
 
         The module consists of a global sum pooling layer, an optional batch norm layer,
         a paired Gaussian noise layer and an optional pair invariant pooling layer.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -355,14 +330,14 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             ),
         ]
 
-        if agent_params.use_batch_norm:
-            layers.append(BatchNorm1dBatchDims(num_features=agent_params.d_gnn))
+        if self._agent_params.use_batch_norm:
+            layers.append(BatchNorm1dBatchDims(num_features=self._agent_params.d_gnn))
 
         layers.append(
-            PairedGaussianNoise(sigma=agent_params.noise_sigma, pair_dim=-2),
+            PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),
         )
 
-        if agent_params.use_pair_invariant_pooling:
+        if self._agent_params.use_pair_invariant_pooling:
             layers.append(PairInvariantizer(pair_dim=-2))
 
         global_pooling = Sequential(*layers)
@@ -373,7 +348,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
     def forward(
         self,
-        data: TensorDictBase | GraphIsomorphismData | GeometricBatch,
+        data: TensorDictBase,
     ) -> TensorDict:
         """Obtain graph-level and node-level representations by running components
 
@@ -382,8 +357,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         Parameters
         ----------
-        data : TensorDictBase | GraphIsomorphismData | GraphIsomorphismDataBatch
-            The data to run the GNN and transformer on. Either a TensorDictBase with
+        data : TensorDictBase
+            The data to run the GNN and transformer on. A TensorDictBase with
             keys:
 
             - "x" (... pair node feature): The graph node features (message history)
@@ -406,10 +381,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             - "node_level_repr" (... 2 max_nodes d_transformer): The output node-level
               representations.
         """
-
-        # Convert the data to a TensorDict with dense representations
-        if not isinstance(data, TensorDictBase):
-            data = gi_data_to_tensordict(data)
 
         # The size of the node dimension
         max_num_nodes = data["x"].shape[-2]
@@ -439,7 +410,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
-        gnn_output = self.gnn(data)["x"]
+        gnn_output = self.gnn(data)["gnn_repr"]
 
         # Obtain the graph-level representations by pooling
         # (batch, pair, d_gnn)
@@ -644,6 +615,32 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
 
         return tensor_dict_sequential
 
+    def _build_decider(self, d_out: int = 3) -> TensorDictModule:
+        """Builds the module which produces a graph-pair level output.
+
+        By default it is used to decide whether to continue exchanging messages. In this
+        case it outputs a single triple of logits for the three options: guess that the
+        graphs are not isomorphic, guess that the graphs are isomorphic, or continue
+        exchanging messages.
+
+        Parameters
+        ----------
+        d_out : int, default=3
+            The dimensionality of the output.
+
+        Returns
+        -------
+        decider : TensorDictModule
+            The decider module.
+        """
+        return self._build_graph_level_mlp(
+            d_in=self._agent_params.d_transformer,
+            d_hidden=self._agent_params.d_decider,
+            d_out=d_out,
+            num_layers=self._agent_params.num_decider_layers,
+            out_key="decision_logits",
+        )
+
 
 class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead):
     """Agent policy head for the graph isomorphism task.
@@ -681,24 +678,16 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         super().__init__(params, agent_name, device)
 
         # Build the node selector module
-        self.node_selector = self._build_node_selector(agent_params=self._agent_params)
+        self.node_selector = self._build_node_selector()
 
         # Build the decider module if necessary
         if agent_name == "verifier":
-            self.decider = self._build_decider(agent_params=self._agent_params)
+            self.decider = self._build_decider()
         else:
             self.decider = None
 
-    def _build_node_selector(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> TensorDictModule:
+    def _build_node_selector(self) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -706,43 +695,11 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             The node selector module.
         """
         return self._build_node_level_mlp(
-            d_in=agent_params.d_transformer,
-            d_hidden=agent_params.d_node_selector,
+            d_in=self._agent_params.d_transformer,
+            d_hidden=self._agent_params.d_node_selector,
             d_out=1,
-            num_layers=agent_params.num_node_selector_layers,
+            num_layers=self._agent_params.num_node_selector_layers,
             out_key="node_selected_logits",
-        )
-
-    def _build_decider(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-        d_out: int = 3,
-    ) -> TensorDictModule:
-        """Builds the module which produces a graph-pair level output.
-
-        By default it is used to decide whether to continue exchanging messages. In this
-        case it outputs a single triple of logits for the three options: guess that the
-        graphs are not isomorphic, guess that the graphs are isomorphic, or continue
-        exchanging messages.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
-        d_out : int, default=3
-            The dimensionality of the output.
-
-        Returns
-        -------
-        decider : TensorDictModule
-            The decider module.
-        """
-        return self._build_graph_level_mlp(
-            d_in=agent_params.d_transformer,
-            d_hidden=agent_params.d_decider,
-            d_out=d_out,
-            num_layers=agent_params.num_decider_layers,
-            out_key="decision_logits",
         )
 
     def forward(self, body_output: TensorDict) -> TensorDict:
@@ -834,18 +791,10 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     ):
         super().__init__(params, agent_name, device)
 
-        self.value_mlp = self._build_mlp(agent_params=self._agent_params)
+        self.value_mlp = self._build_mlp()
 
-    def _build_mlp(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> TensorDictModule:
+    def _build_mlp(self) -> TensorDictModule:
         """Builds the module which computes the value function.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -853,10 +802,10 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
             The value module.
         """
         return self._build_graph_level_mlp(
-            d_in=agent_params.d_transformer,
-            d_hidden=agent_params.d_value,
+            d_in=self._agent_params.d_transformer,
+            d_hidden=self._agent_params.d_value,
             d_out=1,
-            num_layers=agent_params.num_value_layers,
+            num_layers=self._agent_params.num_value_layers,
             out_key="value",
             squeeze=True,
         )
@@ -933,11 +882,9 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
     ):
         super().__init__(params, agent_name, device)
 
-        self.transformer_encoder = self._build_transformer_encoder(
-            agent_params=self._agent_params
-        )
-        self.transformer = self._build_transformer(agent_params=self._agent_params)
-        self.critic_mlp = self._build_mlp(agent_params=self._agent_params)
+        self.transformer_encoder = self._build_transformer_encoder()
+        self.transformer = self._build_transformer()
+        self.critic_mlp = self._build_mlp()
 
     def _get_agent_level_tensordict_value(
         self, key: str, tensordict: TensorDict
@@ -961,21 +908,13 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         """
         return tensordict["agents", key][..., self.agent_index]
 
-    def _build_transformer_encoder(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> Linear:
+    def _build_transformer_encoder(self) -> Linear:
         """Build the encoder layer from the hidden representations to the transformer
 
         This is a simple linear layer, where the number of input features is
         `d_transformer` + 1, where the extra feature encodes whether a node is in the
         next message from to other agent, and the decision made (if any) one-hot
         encoded, repeated across all tokens.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -984,21 +923,13 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 
         """
         return Linear(
-            agent_params.d_transformer + 4,
-            agent_params.d_transformer,
+            self._agent_params.d_transformer + 4,
+            self._agent_params.d_transformer,
             device=self.device,
         )
 
-    def _build_transformer(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> TransformerEncoder:
+    def _build_transformer(self) -> TransformerEncoder:
         """Builds the transformer which processes the next message.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -1008,28 +939,20 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 
         transformer = TransformerEncoder(
             encoder_layer=TransformerEncoderLayer(
-                d_model=agent_params.d_transformer,
-                nhead=agent_params.num_heads,
+                d_model=self._agent_params.d_transformer,
+                nhead=self._agent_params.num_heads,
                 batch_first=True,
-                dropout=agent_params.transformer_dropout,
+                dropout=self._agent_params.transformer_dropout,
             ),
-            num_layers=agent_params.num_critic_transformer_layers,
+            num_layers=self._agent_params.num_critic_transformer_layers,
         )
 
         transformer = transformer.to(self.device)
 
         return transformer
 
-    def _build_mlp(
-        self,
-        agent_params: GraphIsomorphismAgentParameters,
-    ) -> TensorDictModule:
+    def _build_mlp(self) -> TensorDictModule:
         """Builds the module which computes the value function.
-
-        Parameters
-        ----------
-        agent_params : GraphIsomorphismAgentParameters
-            The parameters used for constructing the agent
 
         Returns
         -------
@@ -1037,10 +960,10 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
             The critic module.
         """
         return self._build_graph_level_mlp(
-            d_in=agent_params.d_transformer,
-            d_hidden=agent_params.d_critic,
+            d_in=self._agent_params.d_transformer,
+            d_hidden=self._agent_params.d_critic,
             d_out=1,
-            num_layers=agent_params.num_critic_layers,
+            num_layers=self._agent_params.num_critic_layers,
             out_key="value",
         )
 
@@ -1150,6 +1073,54 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         self.transformer_encoder.to(device)
         self.transformer.to(device)
         self.critic_mlp.to(device)
+
+
+class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
+    """Solo agent head for the graph isomorphism task.
+
+    Solo agents try to solve the task on their own, without interacting with another
+    agents.
+    """
+
+    in_keys = ("graph_level_repr",)
+    out_keys = ("decision_logits",)
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[str | torch.device] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        self.decider = self._build_decider(d_out=2)
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the solo agent head on the given body output.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+              representations.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "decision_logits" (... 2): A logit for each of the two options: guess that
+              the graphs are isomorphic, or guess that the graphs are not isomorphic.
+        """
+
+        return self.decider(body_output)
+
+    def to(self, device: Optional[str | torch.device] = None):
+        super().to(device)
+        self.device = device
+        self.decider.to(device)
 
 
 # class GraphIsomorphismRollout(Rollout):
@@ -1408,7 +1379,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 #             ## Verifier sends a message
 #             # (batch, 2*max_nodes), (batch, 3), (batch,
 #             # 2*max_nodes)
-#             node_selected_logits, decider_logits, node_mask = self.verifier(data)
+#             node_selected_logits, decision_logits, node_mask = self.verifier(data)
 
 #             # (batch, 2*max_nodes)
 #             node_probs = F.softmax(node_selected_logits, dim=-1)
@@ -1428,7 +1399,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 #             verifier_message = torch.stack((verifier_node_graph, verifier_node), dim=-1)
 
 #             # (batch)
-#             verifier_guess = Categorical(logits=decider_logits).sample()
+#             verifier_guess = Categorical(logits=decision_logits).sample()
 
 #             message_exchange.append(
 #                 GraphIsomorphismMessage(
