@@ -39,6 +39,7 @@ from tqdm import tqdm
 from primesieve.numpy import n_primes
 
 from pvg.constants import GI_DATA_DIR
+from pvg.utils.types import TorchDevice
 
 
 @dataclass
@@ -96,7 +97,7 @@ def wl_score(
     adjacency_b: Int32[Tensor, "batch node1 node2"],
     max_iterations: int = 5,
     hash_size: int = 2**24 - 1,
-    device: Optional[str | torch.device] = None,
+    device: Optional[TorchDevice] = None,
 ) -> Int32[Tensor, "batch"]:
     """Compute the Weisfeiler-Lehman scores for a batch of graphs.
 
@@ -114,7 +115,7 @@ def wl_score(
         The maximum number of iterations of the Weisfeiler-Lehman algorithm to run.
     hash_size : int, default=2**24 - 1
         The size of the hash table used to store the hashes of the graphs.
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for the computation. If not given, defaults to the device of
         `adjacency_a`.
 
@@ -178,7 +179,7 @@ def generate_er_graphs(
     num_graphs: int,
     graph_size: int,
     edge_probability: float,
-    device: str | torch.device = "cpu",
+    device: TorchDevice = "cpu",
 ) -> Int32[Tensor, "batch node1 node2"]:
     """Generate a batch of Erdős-Rényi graphs.
 
@@ -190,7 +191,7 @@ def generate_er_graphs(
         The number of nodes in each graph.
     edge_probability : float
         The probability of an edge between two nodes.
-    device : str or torch.device, default="cpu"
+    device : TorchDevice, default="cpu"
         The device to use for the computation.
 
     Returns
@@ -264,7 +265,7 @@ def shuffle_adjacencies(
 
 
 def _generate_non_isomorphic_graphs(
-    config: GraphIsomorphicDatasetConfig, batch_size: int, device: str | torch.device
+    config: GraphIsomorphicDatasetConfig, batch_size: int, device: TorchDevice
 ) -> tuple[
     Int32[Tensor, "pair batch node1 node2"],
     Int32[Tensor, "batch"],
@@ -278,7 +279,7 @@ def _generate_non_isomorphic_graphs(
         The configuration for the dataset.
     batch_size : int
         The number of pairs of graphs to generate.
-    device : str or torch.device
+    device : TorchDevice
         The device to use for the computation. Note that all returned tensors will be
         on the CPU.
 
@@ -475,7 +476,7 @@ def generate_gi_dataset(
     config: GraphIsomorphicDatasetConfig | dict,
     name: str,
     batch_size: int = 800000,
-    device: str | torch.device = "cpu",
+    device: TorchDevice = "cpu",
 ):
     """Generate a dataset of pairs of graphs with WL scores.
 
@@ -499,7 +500,7 @@ def generate_gi_dataset(
         dataset is saved, under `pvg.constants.GI_DATA_DIR`.
     batch_size : int, default=1000000
         The batch size to use when generating the graphs.
-    device : str or torch.device, default="cpu"
+    device : TorchDevice, default="cpu"
         The device to use for the computation.
     """
     start_time = datetime.now()

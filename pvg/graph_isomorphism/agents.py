@@ -38,7 +38,7 @@ import plotly.express as px
 import networkx as nx
 
 from pvg.constants import PROVER_AGENT_NUM, VERIFIER_AGENT_NUM
-from pvg.base import (
+from pvg.scenario_base import (
     AgentPart,
     AgentBody,
     AgentHead,
@@ -46,8 +46,9 @@ from pvg.base import (
     AgentCriticHead,
     AgentValueHead,
     SoloAgentHead,
+    AgentsBuilder,
 )
-from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
+from pvg.parameters import Parameters, ScenarioType
 from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
@@ -56,6 +57,7 @@ from pvg.utils.torch_modules import (
     BatchNorm1dBatchDims,
     Print,
 )
+from pvg.utils.types import TorchDevice
 
 
 class GraphIsomorphismAgentPart(AgentPart, ABC):
@@ -67,7 +69,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         The parameters of the experiment.
     agent_name : str
         The name of the agent. Must be either "prover" or "verifier".
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
 
@@ -75,7 +77,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, device)
         self.agent_name = agent_name
@@ -183,7 +185,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         The parameters of the experiment.
     agent_name : str
         The name of the agent. Must be either "prover" or "verifier".
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
 
@@ -194,7 +196,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
 
@@ -479,7 +481,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             batch_size=graph_level_repr.shape[:-2],
         )
 
-    def to(self, device: Optional[str | torch.device] = None):
+    def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
         self.gnn.to(device)
@@ -656,7 +658,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         The parameters of the experiment.
     agent_name : str
         The name of the agent. Must be either "prover" or "verifier".
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
 
@@ -673,7 +675,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
 
@@ -757,7 +759,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
         return TensorDict(out_dict, batch_size=body_output.batch_size)
 
-    def to(self, device: Optional[str | torch.device] = None):
+    def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
         self.node_selector.to(device)
@@ -776,7 +778,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         The parameters of the experiment.
     agent_name : str
         The name of the agent. Must be either "prover" or "verifier".
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
 
@@ -787,7 +789,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
 
@@ -843,7 +845,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
         return self.value_mlp(body_output)
 
-    def to(self, device: Optional[str | torch.device] = None):
+    def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
         self.value_mlp.to(device)
@@ -861,7 +863,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         The parameters of the experiment.
     agent_name : str
         The name of the agent. Must be either "prover" or "verifier".
-    device : str or torch.device, optional
+    device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
 
@@ -878,7 +880,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
 
@@ -1067,7 +1069,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
 
         return critic_out
 
-    def to(self, device: Optional[str | torch.device] = None):
+    def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
         self.transformer_encoder.to(device)
@@ -1089,7 +1091,7 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
         self,
         params: Parameters,
         agent_name: str,
-        device: Optional[str | torch.device] = None,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
 
@@ -1117,10 +1119,24 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 
         return self.decider(body_output)
 
-    def to(self, device: Optional[str | torch.device] = None):
+    def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
         self.decider.to(device)
+
+
+class GraphIsomorphismAgentsBuilder(AgentsBuilder):
+    """The graph isomorphism agent builder.
+    
+    Run `build` to build the agents.
+    """
+
+    scenario = ScenarioType.GRAPH_ISOMORPHISM
+
+    body_class = GraphIsomorphismAgentBody
+    policy_head_class = GraphIsomorphismAgentPolicyHead
+    value_head_class = GraphIsomorphismAgentValueHead
+    solo_head_class = GraphIsomorphismSoloAgentHead
 
 
 # class GraphIsomorphismRollout(Rollout):
@@ -1363,7 +1379,7 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 # class GraphIsomorphismScenario(Scenario):
 #     """The graph isomorphism scenario."""
 
-#     def __init__(self, params: Parameters, device: Optional[str | torch.device] = None):
+#     def __init__(self, params: Parameters, device: Optional[TorchDevice] = None):
 #         super().__init__(params, device)
 #         self.prover = GraphIsomorphismProverBody(params, device)
 #         self.verifier = GraphIsomorphismVerifierBody(params, device)

@@ -1,5 +1,7 @@
 """The parameters of the experiment.
 
+An experiment should be completely reproducible from its parameters.
+
 The parameters are initialised by constructing a `Parameters` object. This object
 completely defines the experiment, and is passed around to all experiment components.
 
@@ -57,13 +59,13 @@ from enum import StrEnum, auto as enum_auto
 import dacite
 
 
-class Scenario(StrEnum):
+class ScenarioType(StrEnum):
     """Enum for the scenario to run."""
 
     GRAPH_ISOMORPHISM = enum_auto()
 
 
-class Trainer(StrEnum):
+class TrainerType(StrEnum):
     """Enum for the RL trainer to use."""
 
     PPO = enum_auto()
@@ -257,12 +259,16 @@ class SoloAgentParameters(SubParameters):
     body_lr_factor : float
         The learning rate factor for the body part of the model. This allows updating
         the body at a different rate to the rest of the model.
+    test_size : float
+        The proportion of the dataset to use for testing.
     """
 
     num_epochs: int = 500
     batch_size: int = 256
     learning_rate: float = 0.001
     body_lr_factor: float = 0.01
+
+    test_size: float = 0.2
 
 
 @dataclass
@@ -297,8 +303,8 @@ class Parameters(BaseParameters):
         "solo_agent".
     """
 
-    scenario: Scenario
-    trainer: Trainer
+    scenario: ScenarioType
+    trainer: TrainerType
     dataset: str
 
     seed: int = 6198
@@ -314,19 +320,19 @@ class Parameters(BaseParameters):
     solo_agent: Optional[SoloAgentParameters | dict] = None
 
     def __post_init__(self):
-        if self.scenario == Scenario.GRAPH_ISOMORPHISM:
+        if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             if self.graph_isomorphism is None:
                 self.graph_isomorphism = GraphIsomorphismParameters()
             elif isinstance(self.graph_isomorphism, dict):
                 self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
                     self.graph_isomorphism
                 )
-        if self.trainer == Trainer.PPO:
+        if self.trainer == TrainerType.PPO:
             if self.ppo is None:
                 self.ppo = PpoParameters()
             elif isinstance(self.ppo, dict):
                 self.ppo = PpoParameters.from_dict(self.ppo)
-        elif self.trainer == Trainer.SOLO_AGENT:
+        elif self.trainer == TrainerType.SOLO_AGENT:
             if self.solo_agent is None:
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):

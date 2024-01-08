@@ -1,8 +1,7 @@
-import torch
+"""Classes for training agents in an experiment.
+
+A trainer takes the components of a scenario and trains the agents.
+"""
 
 from .base import Trainer
-from ..parameters import Parameters
-
-
-def build_trainer(params: Parameters, device: str | torch.device) -> Trainer:
-    pass
+from .solo_agent import SoloAgentTrainer

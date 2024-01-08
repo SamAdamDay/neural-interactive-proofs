@@ -1,0 +1,183 @@
+"""Train agents in isolation, without any interaction with other agents.
+
+This is useful for ensuring that the agents are able to learn the task in isolation.
+"""
+import logging
+
+import numpy as np
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import random_split
+from torch.optim import Adam, Optimizer
+
+from tensordict import TensorDict
+
+from pvg.scenario_base import DataLoader
+from pvg.graph_isomorphism import GraphIsomorphismDataset
+from pvg.parameters import Parameters
+from pvg.experiment_settings import ExperimentSettings
+from pvg.utils.types import TorchDevice
+from pvg.trainers.base import Trainer
+
+
+class SoloAgentTrainer(Trainer):
+    """Trainer for training agents in isolation.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    component_holder : ComponentHolder
+        The components of the experiment.
+    settings : ExperimentSettings
+        The instance-specific settings of the experiment, like device, logging, etc.
+    """
+
+    def train(self):
+        """Train the agents."""
+
+        torch.manual_seed(self.params.seed)
+        np.random.seed(self.params.seed)
+        torch_generator = torch.Generator().manual_seed(self.params.seed)
+
+        if self.settings.logger is None:
+             self.settings.logger = logging.getLogger(__name__)
+        
+        logger = self.settings.logger
+
+        logger.info("Loading dataset and agents...")
+
+        dataset = GraphIsomorphismDataset(
+            self.params, ignore_cache=self.settings.ignore_cache
+        )
+        train_dataset, test_dataset = random_split(
+            dataset,
+            (1 - self.params.solo_agent.test_size, self.params.solo_agent.test_size),
+        )
+
+        # Load the agents
+        agent_names = ["prover", "verifier"]
+        agents = self.component_holder.agents
+
+        # Create the optimizers, specifying the learning rates for the different parts of
+        # the agent
+        optimizers: dict[str, Optimizer] = {}
+        for agent_name in agent_names:
+            model_param_dict = [
+                {
+                    "params": agents[agent_name].body.parameters(),
+                    "lr": self.params.solo_agent.learning_rate
+                    * self.params.solo_agent.body_lr_factor,
+                },
+                {
+                    "params": agents[agent_name].solo_head.parameters(),
+                    "lr": self.params.solo_agent.learning_rate,
+                },
+            ]
+            optimizers[agent_name] = Adam(model_param_dict)
+
+        # Create the data loaders
+        test_loader = DataLoader(
+            train_dataset,
+            batch_size=self.params.solo_agent.batch_size,
+            shuffle=True,
+            generator=torch_generator,
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=self.params.solo_agent.batch_size,
+            shuffle=False,
+        )
+
+        # Train the prover and verifier
+        pbar = self.settings.tqdm_func(
+            total=self.params.solo_agent.num_epochs, desc="Training"
+        )
+        for epoch in range(self.params.solo_agent.num_epochs):
+            total_loss = {agent_name: 0 for agent_name in agent_names}
+            total_accuracy = {agent_name: 0 for agent_name in agent_names}
+
+            for data in test_loader:
+                data: TensorDict
+                data = data.to(self.settings.device)
+
+                # Set the message to zero and ignore it. Needed because the solo agent
+                # expects a message
+                data["message"] = torch.zeros(
+                    data.batch_size, dtype=torch.long, device=self.settings.device
+                )
+                data["ignore_message"] = torch.ones(
+                    data.batch_size, device=self.settings.device, dtype=torch.bool
+                )
+
+                # Train the agents on the batch
+                for agent_name in agent_names:
+                    agents[agent_name].body.train()
+                    agents[agent_name].solo_head.train()
+                    optimizers[agent_name].zero_grad()
+
+                    body_output = agents[agent_name].body(data)
+                    head_output = agents[agent_name].solo_head(body_output)
+                    logits = head_output["decision_logits"]
+                    loss = F.cross_entropy(logits, data["y"])
+
+                    loss.backward()
+                    optimizers[agent_name].step()
+
+                    with torch.no_grad():
+                        accuracy = (
+                            (logits.argmax(dim=1) == data["y"]).float().mean().item()
+                        )
+
+                    total_loss[agent_name] += loss.item()
+                    total_accuracy[agent_name] += accuracy
+
+            # Log to W&B if using
+            if self.settings.wandb_run is not None:
+                to_log = {}
+                for agent_name in agent_names:
+                    train_loss = total_loss[agent_name] / len(test_loader)
+                    train_accuracy = total_accuracy[agent_name] / len(test_loader)
+                    to_log[f"{agent_name}.train_loss"] = train_loss
+                    to_log[f"{agent_name}.train_accuracy"] = train_accuracy
+                self.settings.wandb_run.log(to_log, step=epoch)
+
+            # Update the progress bar
+            pbar.update(1)
+
+        # Close the progress bar
+        pbar.close()
+
+        total_loss = {agent_name: 0 for agent_name in agent_names}
+        total_accuracy = {agent_name: 0 for agent_name in agent_names}
+
+        # Test the prover and verifier
+        logger.info("Testing...")
+        for data in test_loader:
+            data = data.to(self.settings.device)
+
+            for agent_name in agent_names:
+                agents[agent_name].body.eval()
+                agents[agent_name].solo_head.eval()
+
+                with torch.no_grad():
+                    body_output = agents[agent_name].body(data)
+                    head_output = agents[agent_name].solo_head(body_output)
+                    logits = head_output["decision_logits"]
+                    loss = F.cross_entropy(logits, data["y"])
+                    accuracy = (logits.argmax(dim=1) == data["y"]).float().mean().item()
+
+                total_loss[agent_name] += loss
+                total_accuracy[agent_name] += accuracy
+
+        # Record the final results with W&B if using
+        if self.settings.wandb_run is not None:
+            to_log = {}
+            for agent_name in agent_names:
+                test_loss = total_loss[agent_name] / len(test_loader)
+                test_accuracy = total_accuracy[agent_name] / len(test_loader)
+                to_log[f"{agent_name}.test_loss"] = test_loss
+                to_log[f"{agent_name}.test_accuracy"] = test_accuracy
+            self.settings.wandb_run.log(to_log)

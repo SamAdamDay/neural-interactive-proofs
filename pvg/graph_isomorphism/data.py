@@ -8,7 +8,7 @@ from torch_geometric.utils import to_dense_adj
 
 from einops import repeat
 
-from pvg.base import Dataset
+from pvg.scenario_base import Dataset
 from pvg.constants import GI_DATA_DIR
 
 

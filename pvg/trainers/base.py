@@ -1,27 +1,34 @@
+"""Base classes for all trainers."""
+
 from abc import ABC, abstractmethod
 
-import torch
-
 from pvg.parameters import Parameters
-from pvg.base import Scenario, Dataset
+from pvg.scenario_base.component_holder import ComponentHolder
+from pvg.experiment_settings import ExperimentSettings
 
 
 class Trainer(ABC):
-    """Base class for all RL trainers.
+    """Base class for all trainers.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
-    device : str | torch.device
+    device : TorchDevice
         The device to use for training.
     """
 
-    def __init__(self, params: Parameters, device: str | torch.device):
+    def __init__(
+        self,
+        params: Parameters,
+        component_holder: ComponentHolder,
+        settings: ExperimentSettings,
+    ):
         self.params = params
-        self.device = device
+        self.component_holder = component_holder
+        self.settings = settings
 
     @abstractmethod
-    def train(self, scenario: Scenario, dataset: Dataset):
+    def train(self):
         """Train the agents."""
         pass

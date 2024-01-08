@@ -17,17 +17,20 @@ import torch
 
 import wandb
 
-from pvg.parameters import (
+from pvg import (
     Parameters,
     GraphIsomorphismParameters,
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
+    ScenarioType,
+    TrainerType,
+    run_experiment,
+    ExperimentSettings,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
 )
-from pvg.extra.test_solo_gi_agents import train_and_test_solo_gi_agents
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
 MULTIPROCESS = False
@@ -70,8 +73,8 @@ def experiment_fn(
 
     # Create the parameters object
     params = Parameters(
-        scenario="graph_isomorphism",
-        trainer="solo_agent",
+        scenario=ScenarioType.GRAPH_ISOMORPHISM,
+        trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
         graph_isomorphism=GraphIsomorphismParameters(
             prover=GraphIsomorphismAgentParameters(
@@ -99,43 +102,24 @@ def experiment_fn(
         ),
     )
 
-    # Set up W&B
     use_wandb = cmd_args.wandb_project != ""
     if use_wandb:
         wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
-        wandb_run = wandb.init(
-            project=cmd_args.wandb_project, name=run_id, tags=wandb_tags
-        )
-        wandb_run.config.update(params.to_dict())
-
-    # Train and test the agents to get the results
-    _, _, results = train_and_test_solo_gi_agents(
-        params=params,
-        test_size=TEST_SIZE,
-        wandb_run=wandb_run if use_wandb else None,
-        device=device,
-        tqdm_func=tqdm_func,
-        logger=logger,
-        ignore_cache=cmd_args.ignore_cache,
-    )
-
-    if use_wandb:
-        wandb_run.finish()
     else:
-        # Convert any numpy arrays to lists
-        for key, value in results.items():
-            if isinstance(value, np.ndarray):
-                results[key] = value.tolist()
+        wandb_tags = []
 
-        results["run_id"] = run_id
-        results["combo"] = combo
-
-        # Save the results
-        logger.info(f"Saving results locally...")
-        filename = f"{run_id}.json"
-        filepath = os.path.join(GI_SOLO_AGENTS_RESULTS_DATA_DIR, filename)
-        with open(filepath, "w") as f:
-            json.dump(results, f)
+    # Train and test the agents
+    run_experiment(
+        params,
+        device=device,
+        logger=logger,
+        tqdm_func=tqdm_func,
+        ignore_cache=cmd_args.ignore_cache,
+        use_wandb=use_wandb,
+        wandb_project=cmd_args.wandb_project,
+        run_id=run_id,
+        wandb_tags=wandb_tags,
+    )
 
 
 def run_id_fn(combo_index: int, cmd_args: Namespace):

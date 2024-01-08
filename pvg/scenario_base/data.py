@@ -104,11 +104,3 @@ class DataLoader(torch.utils.data.DataLoader):
     def __init__(self, dataset: Dataset, **kwargs):
         collate_fn = kwargs.pop("collate_fn", lambda x: x)
         super().__init__(dataset, collate_fn=collate_fn, **kwargs)
-
-
-def load_dataset(params: Parameters) -> Dataset:
-    for value in globals().values():
-        if issubclass(value, Dataset) and value.name == params.dataset:
-            cls = value
-            break
-    return cls(params)
