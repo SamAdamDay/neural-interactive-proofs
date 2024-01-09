@@ -5,6 +5,7 @@ A scenario consists of a dataset and a definition of the agents.
 Contains base classes for:
 
 - Handling data
+- The RL environment
 - Building agents
 - Holding the components of a scenario
 
@@ -13,6 +14,7 @@ method is used to build the agents using the given parameters.
 """
 
 from .data import Dataset, DataLoader
+from .environment import Environment
 from .agents import (
     AgentPart,
     AgentBody,
@@ -22,6 +24,8 @@ from .agents import (
     AgentValueHead,
     SoloAgentHead,
     Agent,
-    AgentsBuilder,
+    CombinedBody,
+    CombinedPolicyHead,
+    CombinedValueHead,
 )
-from .component_holder import ComponentHolder
+from .scenario_instance import ScenarioInstance

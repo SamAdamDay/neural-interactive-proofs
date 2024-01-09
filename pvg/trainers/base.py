@@ -2,8 +2,20 @@
 
 from abc import ABC, abstractmethod
 
+import torch
+from torch.nn.utils import clip_grad_norm_
+from torch.optim import Optimizer
+
+from tensordict import TensorDict
+
+from torchrl.collectors import DataCollectorBase
+from torchrl.objectives import LossModule
+from torchrl.objectives.value import GAE
+from torchrl.data.replay_buffers import ReplayBuffer
+
 from pvg.parameters import Parameters
-from pvg.scenario_base.component_holder import ComponentHolder
+from pvg.scenario_base.scenario_instance import ScenarioInstance
+from pvg.scenario_base.environment import Environment
 from pvg.experiment_settings import ExperimentSettings
 
 
@@ -21,14 +33,216 @@ class Trainer(ABC):
     def __init__(
         self,
         params: Parameters,
-        component_holder: ComponentHolder,
+        scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
         self.params = params
-        self.component_holder = component_holder
+        self.scenario_instance = scenario_instance
         self.settings = settings
+
+        self.device = self.settings.device
+        self.environment = self.scenario_instance.environment
 
     @abstractmethod
     def train(self):
         """Train the agents."""
         pass
+
+
+class ReinforcementLearningTrainer(Trainer):
+    """Base class for all reinforcement learning trainers.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    device : TorchDevice
+        The device to use for training.
+    """
+
+    agent_names = ["prover", "verifier"]
+
+    def train(self):
+        """Train the agents."""
+        # Setup
+        self._train_setup()
+
+        # Build everything we need for training
+        collector = self._get_data_collector()
+        replay_buffer = self._get_replay_buffer()
+        loss_module, gae = self._get_loss_module_and_gae()
+        optimizer = self._get_optimizer(loss_module)
+
+        # Run the training loop
+        self._run_rl_training_loop(
+            self.environment,
+            collector,
+            replay_buffer,
+            loss_module,
+            gae,
+            optimizer,
+        )
+
+    def _train_setup(self):
+        """Optional setup before training."""
+        pass
+
+    @abstractmethod
+    def _get_data_collector(self) -> DataCollectorBase:
+        """Construct the data collector, which generates rollouts from the environment
+
+        Returns
+        -------
+        collector : DataCollectorBase
+            The data collector.
+        """
+        pass
+
+    @abstractmethod
+    def _get_replay_buffer(self) -> ReplayBuffer:
+        """Construct the replay buffer, which will store the rollouts
+
+        Returns
+        -------
+        ReplayBuffer
+            The replay buffer.
+        """
+        pass
+
+    @abstractmethod
+    def _get_loss_module_and_gae(self) -> tuple[LossModule, GAE]:
+        """Construct the loss module and the generalized advantage estimator
+
+        Returns
+        -------
+        loss_module : LossModule
+            The loss module.
+        gae : GAE
+            The generalized advantage estimator.
+        """
+        pass
+
+    @abstractmethod
+    def _get_optimizer(self, loss_module: LossModule) -> torch.optim.Optimizer:
+        """Construct the optimizer for the loss module
+
+        Parameters
+        ----------
+        loss_module : LossModule
+            The loss module.
+
+        Returns
+        -------
+        torch.optim.Optimizer
+            The optimizer.
+        """
+        pass
+
+    def _run_rl_training_loop(
+        self,
+        environment: Environment,
+        collector: DataCollectorBase,
+        replay_buffer: ReplayBuffer,
+        loss_module: LossModule,
+        gae: GAE,
+        optimizer: Optimizer,
+    ):
+        """Run a generic RL training loop.
+
+        Parameters
+        ----------
+        environment : Environment
+            The environment to train in.
+        collector : DataCollectorBase
+            The data collector to use for collecting data from the environment.
+        replay_buffer : ReplayBuffer
+            The replay buffer to use for storing the collected data.
+        loss_module : LossModule
+            The loss module.
+        gae : GAE
+            The generalized advantage estimator.
+        optimizer : Optimizer
+            The optimizer to use for optimizing the loss.
+        """
+
+        optimizer = torch.optim.Adam(loss_module.parameters(), self.params.ppo.lr)
+
+        iterator = self.settings.tqdm_func(
+            collector, desc="Training", total=self.params.ppo.num_iterations
+        )
+        for tensordict_data in iterator:
+            # Expand the done and terminated to match the reward shape (this is expected by the
+            # value estimator)
+            tensordict_data.set(
+                ("next", "agents", "done"),
+                tensordict_data.get(("next", "done"))
+                .unsqueeze(-1)
+                .expand(
+                    tensordict_data.get_item_shape(("next", environment.reward_key))
+                ),
+            )
+            tensordict_data.set(
+                ("next", "agents", "terminated"),
+                tensordict_data.get(("next", "terminated"))
+                .unsqueeze(-1)
+                .expand(
+                    tensordict_data.get_item_shape(("next", environment.reward_key))
+                ),
+            )
+
+            # Compute the GAE
+            with torch.no_grad():
+                gae(
+                    tensordict_data,
+                    params=loss_module.critic_params,
+                    target_params=loss_module.target_critic_params,
+                )
+
+            # Flatten the data and add it to the replay buffer
+            data_view = tensordict_data.reshape(-1)
+            replay_buffer.extend(data_view)
+
+            for _ in range(self.params.ppo.num_epochs):
+                for i in range(
+                    self.params.ppo.frames_per_batch // self.params.ppo.minibatch_size
+                ):
+                    # Sample a minibatch from the replay buffer
+                    sub_data = replay_buffer.sample()
+
+                    # Compute the loss
+                    loss_vals: TensorDict = loss_module(sub_data)
+                    loss_value = (
+                        loss_vals["loss_objective"]
+                        + loss_vals["loss_critic"]
+                        + loss_vals["loss_entropy"]
+                    )
+
+                    # Take an optimization step
+                    loss_value.backward()
+                    clip_grad_norm_(
+                        loss_module.parameters(), self.params.ppo.max_grad_norm
+                    )
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+            # Update the policy weights if the policy of the data collector and the
+            # trained policy live on different devices.
+            collector.update_policy_weights_()
+
+            # Compute the mean rewards for the done episodes
+            done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
+            reward = tensordict_data.get(("next", "agents", "reward"))
+            mean_rewards = {}
+            for i, agent_name in enumerate(self.agent_names):
+                mean_rewards[agent_name] = reward[..., i][done].mean().item()
+
+            # Compute the average episode length
+            round = tensordict_data.get(("next", "round"))
+            mean_episode_length = round[done].float().mean().item()
+
+            # Log to W&B if using
+            if self.settings.wandb_run is not None:
+                to_log = dict(mean_episode_length=mean_episode_length)
+                for agent_name in self.agent_names:
+                    to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
+                self.settings.wandb_run.log(to_log)

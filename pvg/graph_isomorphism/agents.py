@@ -30,7 +30,7 @@ from torch_geometric.utils import to_networkx
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
-from jaxtyping import Float, Bool
+from jaxtyping import Float, Bool, Int
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -46,9 +46,11 @@ from pvg.scenario_base import (
     AgentCriticHead,
     AgentValueHead,
     SoloAgentHead,
-    AgentsBuilder,
+    CombinedBody,
+    CombinedPolicyHead,
+    CombinedValueHead,
 )
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import Parameters
 from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
@@ -727,9 +729,10 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - "node_selected_logits" (... 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - (optional) "decision_logits" (... 3): A logit for each of the three
-              options: continue exchanging messages, guess that the graphs are
-              isomorphic, or guess that the graphs are not isomorphic.
+            - "decision_logits" (... 3): A logit for each of the three options: continue
+              exchanging messages, guess that the graphs are isomorphic, or guess that
+              the graphs are not isomorphic. Set to zeros when the decider is not
+              present.
         """
 
         out_dict = {}
@@ -745,17 +748,23 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
                 "node_selected_logits"
             ].squeeze(-1)
 
-        if self.decider is not None:
-            if body_output.batch_size[0] == 0:
-                out_dict["decision_logits"] = torch.empty(
+        if body_output.batch_size[0] == 0:
+            out_dict["decision_logits"] = torch.empty(
+                (*body_output.batch_size, 3),
+                device=self.device,
+                dtype=torch.float32,
+            )
+        else:
+            if self.decider is not None:
+                out_dict["decision_logits"] = self.decider(body_output)[
+                    "decision_logits"
+                ]
+            else:
+                out_dict["decision_logits"] = torch.zeros(
                     (*body_output.batch_size, 3),
                     device=self.device,
                     dtype=torch.float32,
                 )
-            else:
-                out_dict["decision_logits"] = self.decider(body_output)[
-                    "decision_logits"
-                ]
 
         return TensorDict(out_dict, batch_size=body_output.batch_size)
 
@@ -1125,18 +1134,189 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
         self.decider.to(device)
 
 
-class GraphIsomorphismAgentsBuilder(AgentsBuilder):
-    """The graph isomorphism agent builder.
-    
-    Run `build` to build the agents.
+class GraphIsomorphismCombinedBody(CombinedBody):
+    """A module which combines the agent bodies for the graph isomorphism task.
+
+    Parameters
+    ----------
+    bodies : dict[str, GraphIsomorphismAgentBody]
+        The agent bodies to combine.
     """
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    in_keys = ("round", "x", "adjacency", "message", "node_mask")
+    out_keys = ("round", ("agents", "node_level_repr"), ("agents", "graph_level_repr"))
 
-    body_class = GraphIsomorphismAgentBody
-    policy_head_class = GraphIsomorphismAgentPolicyHead
-    value_head_class = GraphIsomorphismAgentValueHead
-    solo_head_class = GraphIsomorphismSoloAgentHead
+    def __init__(
+        self,
+        bodies: dict[str, GraphIsomorphismAgentBody],
+    ) -> None:
+        super().__init__(bodies)
+
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        round: Int[Tensor, "batch"] = data["round"]
+
+        # Run the agent bodies
+        body_outputs: dict[str, TensorDict] = {}
+        for agent_name in self.agent_names:
+            # Build the input dict for the agent body
+            input_dict = {}
+            for key in self.bodies[agent_name].in_keys:
+                if key == "ignore_message":
+                    input_dict[key] = round == 0
+                else:
+                    input_dict[key] = data[key]
+            input_td = TensorDict(
+                input_dict,
+                batch_size=data.batch_size,
+            )
+
+            # Run the agent body
+            body_outputs[agent_name] = self.bodies[agent_name](input_td)
+
+        # Stack the outputs
+        node_level_repr = torch.stack(
+            [body_outputs[name]["node_level_repr"] for name in self.agent_names],
+            dim=-3,
+        )
+        graph_level_repr = torch.stack(
+            [body_outputs[name]["graph_level_repr"] for name in self.agent_names],
+            dim=-2,
+        )
+
+        return data.update(
+            dict(
+                agents=dict(
+                    node_level_repr=node_level_repr,
+                    graph_level_repr=graph_level_repr,
+                )
+            )
+        )
+
+
+class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
+    in_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
+    out_keys = (("agents", "node_selected_logits"), ("agents", "decision_logits"))
+
+    def __init__(
+        self,
+        policy_heads: dict[str, GraphIsomorphismAgentPolicyHead],
+    ):
+        super().__init__(policy_heads)
+
+    def forward(self, head_output: TensorDictBase) -> TensorDict:
+        """Run the prover and verifier policy heads and combine their outputs.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input to the value heads. Should contain the keys:
+
+            - ("agents", "node_level_repr"): The node-level representation from the
+              body.
+            - ("agents", "graph_level_repr"): The node-level representation from the
+              body.
+
+        Returns
+        -------
+        tensordict: TensorDict
+            The tensordict update in place with the output of the value heads.
+        """
+
+        # Run the policy heads to obtain the probability distributions
+        policy_outputs: dict[str, TensorDict] = {}
+        for i, agent_name in enumerate(self.agent_names):
+            input_td = TensorDict(
+                dict(
+                    node_level_repr=head_output["agents", "node_level_repr"][
+                        ..., i, :, :, :
+                    ],
+                    graph_level_repr=head_output["agents", "graph_level_repr"][
+                        ..., i, :, :
+                    ],
+                ),
+                batch_size=head_output.batch_size,
+            )
+            policy_outputs[agent_name] = self.policy_heads[agent_name](input_td)
+
+        # Stack the outputs
+        node_selected_logits = torch.stack(
+            [policy_outputs[name]["node_selected_logits"] for name in self.agent_names],
+            dim=-2,
+        )
+        decision_logits = torch.stack(
+            [policy_outputs[name]["decision_logits"] for name in self.agent_names],
+            dim=-2,
+        )
+
+        return head_output.update(
+            dict(
+                agents=TensorDict(
+                    dict(
+                        node_selected_logits=node_selected_logits,
+                        decision_logits=decision_logits,
+                    ),
+                    batch_size=head_output.batch_size,
+                )
+            )
+        )
+
+
+class GraphIsomorphismCombinedValueHead(CombinedValueHead):
+    in_keys = (("agents", "graph_level_repr"),)
+    out_keys = (("agents", "value"),)
+
+    def __init__(
+        self,
+        value_heads: dict[str, GraphIsomorphismAgentValueHead],
+    ):
+        super().__init__(value_heads)
+
+    def forward(self, head_output: TensorDictBase) -> TensorDict:
+        """Run the prover and verifier value heads and combine their values.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input to the value heads. Should contain the keys:
+
+            - ("agents", "graph_level_repr"): The node-level representation from the
+              body.
+
+        Returns
+        -------
+        tensordict: TensorDict
+            The tensordict update in place with the output of the value heads.
+        """
+
+        # Run the policy heads to obtain the value estimates
+        value_outputs: dict[str, TensorDict] = {}
+        for i, agent_name in enumerate(self.agent_names):
+            input_td = TensorDict(
+                dict(
+                    node_level_repr=head_output["agents", "node_level_repr"][
+                        ..., i, :, :, :
+                    ],
+                    graph_level_repr=head_output["agents", "graph_level_repr"][
+                        ..., i, :, :
+                    ],
+                ),
+                batch_size=head_output.batch_size,
+            )
+            value_outputs[agent_name] = self.value_heads[agent_name](input_td)
+
+        # Stack the outputs
+        value = torch.stack(
+            [value_outputs[name]["value"] for name in self.agent_names], dim=-1
+        )
+
+        return head_output.update(
+            dict(
+                agents=TensorDict(
+                    dict(value=value),
+                    batch_size=head_output.batch_size,
+                )
+            ),
+        )
 
 
 # class GraphIsomorphismRollout(Rollout):

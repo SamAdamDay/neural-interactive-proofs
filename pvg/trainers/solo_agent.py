@@ -7,18 +7,12 @@ import logging
 import numpy as np
 
 import torch
-from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import random_split
 from torch.optim import Adam, Optimizer
 
 from tensordict import TensorDict
 
-from pvg.scenario_base import DataLoader
-from pvg.graph_isomorphism import GraphIsomorphismDataset
-from pvg.parameters import Parameters
-from pvg.experiment_settings import ExperimentSettings
-from pvg.utils.types import TorchDevice
 from pvg.trainers.base import Trainer
 
 
@@ -29,7 +23,7 @@ class SoloAgentTrainer(Trainer):
     ----------
     params : Parameters
         The parameters of the experiment.
-    component_holder : ComponentHolder
+    scenario_instance : ComponentHolder
         The components of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
@@ -43,15 +37,13 @@ class SoloAgentTrainer(Trainer):
         torch_generator = torch.Generator().manual_seed(self.params.seed)
 
         if self.settings.logger is None:
-             self.settings.logger = logging.getLogger(__name__)
-        
+            self.settings.logger = logging.getLogger(__name__)
+
         logger = self.settings.logger
 
         logger.info("Loading dataset and agents...")
 
-        dataset = GraphIsomorphismDataset(
-            self.params, ignore_cache=self.settings.ignore_cache
-        )
+        dataset = self.scenario_instance.dataset
         train_dataset, test_dataset = random_split(
             dataset,
             (1 - self.params.solo_agent.test_size, self.params.solo_agent.test_size),
@@ -59,7 +51,7 @@ class SoloAgentTrainer(Trainer):
 
         # Load the agents
         agent_names = ["prover", "verifier"]
-        agents = self.component_holder.agents
+        agents = self.scenario_instance.agents
 
         # Create the optimizers, specifying the learning rates for the different parts of
         # the agent
@@ -79,13 +71,13 @@ class SoloAgentTrainer(Trainer):
             optimizers[agent_name] = Adam(model_param_dict)
 
         # Create the data loaders
-        test_loader = DataLoader(
+        test_loader = self.scenario_instance.dataloader_class(
             train_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
             generator=torch_generator,
         )
-        test_loader = DataLoader(
+        test_loader = self.scenario_instance.dataloader_class(
             test_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=False,

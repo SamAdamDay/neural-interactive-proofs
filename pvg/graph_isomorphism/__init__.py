@@ -3,6 +3,7 @@
 Has classes for:
 
 - Handling data
+- Defining the RL environment
 - Generating a dataset
 - Building agents
 
@@ -21,12 +22,12 @@ import torch
 
 from .data import GraphIsomorphismDataset
 from .dataset_generation import generate_gi_dataset, GraphIsomorphicDatasetConfig
+from .environment import GraphIsomorphismEnvironment
 from .agents import (
     GraphIsomorphismAgentPart,
     GraphIsomorphismAgentBody,
     GraphIsomorphismAgentPolicyHead,
     GraphIsomorphismAgentValueHead,
     GraphIsomorphismSoloAgentHead,
-    GraphIsomorphismAgentsBuilder
 )
-from .component_holder import GraphIsomorphismComponentHolder
+from .scenario_instance import GraphIsomorphismScenarioInstance

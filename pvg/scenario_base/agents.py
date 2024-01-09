@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import torch
 
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
 import dacite
@@ -82,6 +83,114 @@ class SoloAgentHead(AgentHead, ABC):
     pass
 
 
+class CombinedBody(TensorDictModuleBase, ABC):
+    """A module which combines all the agent bodies together.
+    
+    Parameters
+    ----------
+    bodies : dict[str, AgentBody]
+        The agent bodies to combine.
+    """
+
+    agent_names = ["prover", "verifier"]
+
+    def __init__(self, bodies: dict[str, AgentBody]):
+        super().__init__()
+        self.bodies = bodies
+
+        # Add the bodies as submodules, so that PyTorch knows about them
+        for agent_name, body in bodies.items():
+            self.add_module(agent_name, body)
+
+    @abstractmethod
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        """Forward pass through the combined body.
+
+        Parameters
+        ----------
+        data : TensorDict
+            The input to the combined body.
+
+        Returns
+        -------
+        body_output : TensorDict
+            The output of the combined body.
+        """
+        pass
+
+
+class CombinedPolicyHead(TensorDictModuleBase, ABC):
+    """A module which combines all the agent policy heads together.
+    
+    Parameters
+    ----------
+    policy_heads : dict[str, AgentPolicyHead]
+        The agent policy heads to combine.
+    """
+
+    agent_names = ["prover", "verifier"]
+
+    def __init__(self, policy_heads: dict[str, AgentPolicyHead]):
+        super().__init__()
+        self.policy_heads = policy_heads
+
+        # Add the policy heads as submodules, so that PyTorch knows about them
+        for agent_name, policy_head in policy_heads.items():
+            self.add_module(agent_name, policy_head)
+
+    @abstractmethod
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        """Forward pass through the combined policy head.
+
+        Parameters
+        ----------
+        data : TensorDict
+            The input to the combined policy head.
+
+        Returns
+        -------
+        policy_output : TensorDict
+            The output of the combined policy head.
+        """
+        pass
+
+
+class CombinedValueHead(TensorDictModuleBase, ABC):
+    """A module which combines all the agent value heads together.
+    
+    Parameters
+    ----------
+    value_heads : dict[str, AgentValueHead]
+        The agent value heads to combine.
+    """
+
+    agent_names = ["prover", "verifier"]
+
+    def __init__(self, value_heads: dict[str, AgentValueHead]):
+        super().__init__()
+        self.value_heads = value_heads
+
+        # Add the value heads as submodules, so that PyTorch knows about them
+        for agent_name, value_head in value_heads.items():
+            self.add_module(agent_name, value_head)
+
+    @abstractmethod
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        """Forward pass through the combined value head.
+
+        Parameters
+        ----------
+        data : TensorDict
+            The input to the combined value head.
+
+        Returns
+        -------
+        value_output : TensorDict
+            The output of the combined value head.
+        """
+        pass
+
+
 @dataclass
 class Agent:
     """A class which holds all the parts of an agent for an experiment."""
@@ -109,92 +218,3 @@ class Agent:
                 "An agent with a policy head must have either a value head or a critic "
                 "head, or both."
             )
-
-
-class AgentsBuilder(ABC):
-    """Base class for building agents.
-    
-    All scenarios should subclass this class and add the class attributes below.
-
-    Attributes
-    ----------
-    scenario : Scenario
-        The scenario for which this builder builds agents.
-    body_class : type[AgentBody]
-        The class for the agent body.
-    policy_head_class : type[AgentPolicyHead]
-        The class for the agent policy head.
-    value_head_class : type[AgentValueHead]
-        The class for the agent value head.
-    solo_head_class : type[SoloAgentHead]
-        The class for the solo agent head.
-    """
-
-    scenario: ScenarioType
-
-    body_class: type[AgentBody]
-    policy_head_class: type[AgentPolicyHead]
-    value_head_class: type[AgentValueHead]
-    solo_head_class: type[SoloAgentHead]
-
-    @classmethod
-    def build(
-        cls,
-        params: Parameters,
-        device: TorchDevice,
-    ) -> dict[str, Agent]:
-        """Build the agents for the given scenario.
-
-        Parameters
-        ----------
-        params : Parameters
-            The parameters of the experiment.
-        device : TorchDevice
-            The device to use for the agents.
-
-        Returns
-        -------
-        agents : dict[str, Agent]
-            A dictionary mapping agent names to `Agent` objects, which contain the agent
-            parts.
-        """
-
-        if params.scenario != cls.scenario:
-            raise ValueError(
-                f"Cannot build agents for scenario {params.scenario} "
-                f"with {cls.__name__} parameters."
-            )
-
-        agent_names = ["prover", "verifier"]
-
-        agents = {}
-        for agent_name in agent_names:
-            agent_dict = {}
-
-            agent_dict["body"] = cls.body_class(
-                params=params,
-                device=device,
-                agent_name=agent_name,
-            )
-
-            if params.trainer == TrainerType.PPO:
-                agent_dict["policy_head"] = cls.policy_head_class(
-                    params=params,
-                    device=device,
-                    agent_name=agent_name,
-                )
-                agent_dict["value_head"] = cls.value_head_class(
-                    params=params,
-                    device=device,
-                    agent_name=agent_name,
-                )
-            elif params.trainer == TrainerType.SOLO_AGENT:
-                agent_dict["solo_head"] = cls.solo_head_class(
-                    params=params,
-                    device=device,
-                    agent_name=agent_name,
-                )
-
-            agents[agent_name] = Agent.from_dict(agent_dict)
-
-        return agents

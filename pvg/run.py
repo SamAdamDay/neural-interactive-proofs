@@ -1,6 +1,9 @@
 """Build and run an experiment.
 
 This is the main entry point for running an experiment.
+
+When adding a new scenario or a new trainer, add the scenario and trainer to the maps
+below.
 """
 
 from typing import Optional
@@ -11,9 +14,19 @@ from tqdm import tqdm
 
 from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.graph_isomorphism import GraphIsomorphismComponentHolder
-from pvg.trainers import SoloAgentTrainer
+from pvg.scenario_base import ScenarioInstance
+from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
+from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
 from pvg.utils.types import TorchDevice, LoggingType
+
+SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
+    ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismScenarioInstance,
+}
+
+TRAINER_MAP: dict[TrainerType, Trainer] = {
+    TrainerType.SOLO_AGENT: SoloAgentTrainer,
+    TrainerType.PPO: PpoTrainer,
+}
 
 
 def run_experiment(
@@ -61,9 +74,7 @@ def run_experiment(
             raise ValueError("wandb_project must be specified if use_wandb is True.")
         if run_id is None:
             raise ValueError("run_id must be specified if use_wandb is True.")
-        wandb_run = wandb.init(
-            project=wandb_project, name=run_id, tags=wandb_tags
-        )
+        wandb_run = wandb.init(project=wandb_project, name=run_id, tags=wandb_tags)
         wandb_run.config.update(params.to_dict())
     else:
         wandb_run = None
@@ -78,14 +89,14 @@ def run_experiment(
     )
 
     # Build the scenario components of the experiment.
-    if params.scenario == ScenarioType.GRAPH_ISOMORPHISM:
-        component_holder = GraphIsomorphismComponentHolder(params, device)
+    if params.scenario in SCENARIO_MAP:
+        scenario_instance = SCENARIO_MAP[params.scenario](params, settings)
     else:
         raise ValueError(f"Unknown scenario {params.scenario}")
 
     # Build the trainer.
-    if params.trainer == TrainerType.SOLO_AGENT:
-        trainer = SoloAgentTrainer(params, component_holder, settings)
+    if params.trainer in TRAINER_MAP:
+        trainer = TRAINER_MAP[params.trainer](params, scenario_instance, settings)
     else:
         raise ValueError(f"Unknown trainer {params.trainer}")
 

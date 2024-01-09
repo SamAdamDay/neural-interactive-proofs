@@ -13,10 +13,11 @@ from tqdm import tqdm
 
 from pvg.utils.types import TorchDevice, LoggingType
 
+
 @dataclass
 class ExperimentSettings:
     """Instance-specific settings for the experiment.
-    
+
     Parameters
     ----------
     device : TorchDevice, default="cpu"
@@ -34,6 +35,6 @@ class ExperimentSettings:
 
     device: TorchDevice = "cpu"
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
-    tqdm_func: callable = tqdm,
+    tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
