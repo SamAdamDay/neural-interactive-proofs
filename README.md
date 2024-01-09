@@ -49,6 +49,17 @@ run_experiment(params)
   experiments in sequence or in parallel.
 
 
+## Testing
+
+There is a small suite of tests, to catch some bugs. Run them with:
+
+```bash
+python -m pytest
+```
+
+Make sure all tests pass before committing.
+
+
 ## Style guide
 
 - The code is formatted using [`black`](https://black.readthedocs.io/en/stable/).
