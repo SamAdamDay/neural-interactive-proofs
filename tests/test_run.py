@@ -10,6 +10,7 @@ from pvg import (
 )
 from pvg.utils.output import DummyTqdm
 
+
 def test_run_experiment():
     """Test running experiments with very basic parameters."""
 

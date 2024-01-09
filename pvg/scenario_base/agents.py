@@ -85,7 +85,7 @@ class SoloAgentHead(AgentHead, ABC):
 
 class CombinedBody(TensorDictModuleBase, ABC):
     """A module which combines all the agent bodies together.
-    
+
     Parameters
     ----------
     bodies : dict[str, AgentBody]
@@ -121,7 +121,7 @@ class CombinedBody(TensorDictModuleBase, ABC):
 
 class CombinedPolicyHead(TensorDictModuleBase, ABC):
     """A module which combines all the agent policy heads together.
-    
+
     Parameters
     ----------
     policy_heads : dict[str, AgentPolicyHead]
@@ -157,7 +157,7 @@ class CombinedPolicyHead(TensorDictModuleBase, ABC):
 
 class CombinedValueHead(TensorDictModuleBase, ABC):
     """A module which combines all the agent value heads together.
-    
+
     Parameters
     ----------
     value_heads : dict[str, AgentValueHead]

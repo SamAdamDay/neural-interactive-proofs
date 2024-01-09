@@ -1,6 +1,7 @@
 """Utilities related to outputting things to the user."""
 from typing import Iterable
 
+
 class DummyTqdm:
     """A dummy tqdm class, to avoid printing progress bars.
 
@@ -11,17 +12,17 @@ class DummyTqdm:
     **kwargs
         Keyword arguments to pass to tqdm.
     """
-    
+
     def __init__(self, *args, **kwargs):
         if len(args) > 0:
             self.iterable = args[0]
 
     def __iter__(self):
         return iter(self.iterable)
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         pass
 

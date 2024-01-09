@@ -18,7 +18,7 @@ from pvg.utils.distributions import CompositeCategoricalDistribution
 
 class PpoTrainer(ReinforcementLearningTrainer):
     """Proximal Policy Optimization trainer.
-    
+
     Implements a multi-agent PPO algorithm, specifically IPPO, since the value estimator
     is not shared between agents.
 
@@ -73,12 +73,13 @@ class PpoTrainer(ReinforcementLearningTrainer):
             device=self.device,
             storing_device=self.device,
             frames_per_batch=self.params.ppo.frames_per_batch,
-            total_frames=self.params.ppo.frames_per_batch * self.params.ppo.num_iterations,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_iterations,
         )
 
     def _get_replay_buffer(self) -> ReplayBuffer:
         """Construct the replay buffer, which will store the rollouts
-        
+
         Returns
         -------
         ReplayBuffer
@@ -122,12 +123,14 @@ class PpoTrainer(ReinforcementLearningTrainer):
 
         # Make the generalized advantage estimator
         loss_module.make_value_estimator(
-            ValueEstimators.GAE, gamma=self.params.ppo.gamma, lmbda=self.params.ppo.lmbda
+            ValueEstimators.GAE,
+            gamma=self.params.ppo.gamma,
+            lmbda=self.params.ppo.lmbda,
         )
         gae = loss_module.value_estimator
 
         return loss_module, gae
-    
+
     def _get_optimizer(self, loss_module: LossModule) -> torch.optim.Adam:
         """Construct the optimizer for the loss module
 
