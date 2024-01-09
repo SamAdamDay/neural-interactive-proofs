@@ -126,6 +126,10 @@ class SoloAgentTrainer(Trainer):
                     total_loss[agent_name] += loss.item()
                     total_accuracy[agent_name] += accuracy
 
+                # If we're in test mode, exit after one iteration
+                if self.settings.test_run:
+                    break
+
             # Log to W&B if using
             if self.settings.wandb_run is not None:
                 to_log = {}
@@ -135,6 +139,10 @@ class SoloAgentTrainer(Trainer):
                     to_log[f"{agent_name}.train_loss"] = train_loss
                     to_log[f"{agent_name}.train_accuracy"] = train_accuracy
                 self.settings.wandb_run.log(to_log, step=epoch)
+
+            # If we're in test mode, exit after one iteration
+            if self.settings.test_run:
+                break
 
             # Update the progress bar
             pbar.update(1)
@@ -150,6 +158,15 @@ class SoloAgentTrainer(Trainer):
         for data in test_loader:
             data = data.to(self.settings.device)
 
+            # Set the message to zero and ignore it. Needed because the solo agent
+            # expects a message
+            data["message"] = torch.zeros(
+                data.batch_size, dtype=torch.long, device=self.settings.device
+            )
+            data["ignore_message"] = torch.ones(
+                data.batch_size, device=self.settings.device, dtype=torch.bool
+            )
+
             for agent_name in agent_names:
                 agents[agent_name].body.eval()
                 agents[agent_name].solo_head.eval()
@@ -163,6 +180,10 @@ class SoloAgentTrainer(Trainer):
 
                 total_loss[agent_name] += loss
                 total_accuracy[agent_name] += accuracy
+
+            # If we're in test mode, exit after one iteration
+            if self.settings.test_run:
+                break
 
         # Record the final results with W&B if using
         if self.settings.wandb_run is not None:

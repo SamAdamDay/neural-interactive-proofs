@@ -41,7 +41,6 @@ class Trainer(ABC):
         self.settings = settings
 
         self.device = self.settings.device
-        self.environment = self.scenario_instance.environment
 
     @abstractmethod
     def train(self):
@@ -59,6 +58,16 @@ class ReinforcementLearningTrainer(Trainer):
     device : TorchDevice
         The device to use for training.
     """
+
+    def __init__(
+        self,
+        params: Parameters,
+        scenario_instance: ScenarioInstance,
+        settings: ExperimentSettings,
+    ):
+        super().__init__(params, scenario_instance, settings)
+
+        self.environment = self.scenario_instance.environment
 
     agent_names = ["prover", "verifier"]
 
@@ -203,7 +212,7 @@ class ReinforcementLearningTrainer(Trainer):
             replay_buffer.extend(data_view)
 
             for _ in range(self.params.ppo.num_epochs):
-                for i in range(
+                for _ in range(
                     self.params.ppo.frames_per_batch // self.params.ppo.minibatch_size
                 ):
                     # Sample a minibatch from the replay buffer
@@ -224,6 +233,14 @@ class ReinforcementLearningTrainer(Trainer):
                     )
                     optimizer.step()
                     optimizer.zero_grad()
+
+                    # If we're in test mode, exit after one iteration
+                    if self.settings.test_run:
+                        break
+
+                # If we're in test mode, exit after one iteration
+                if self.settings.test_run:
+                    break
 
             # Update the policy weights if the policy of the data collector and the
             # trained policy live on different devices.
@@ -246,3 +263,7 @@ class ReinforcementLearningTrainer(Trainer):
                 for agent_name in self.agent_names:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                 self.settings.wandb_run.log(to_log)
+
+            # If we're in test mode, exit after one iteration
+            if self.settings.test_run:
+                break

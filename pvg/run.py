@@ -39,6 +39,7 @@ def run_experiment(
     wandb_project: Optional[str] = None,
     run_id: Optional[str] = None,
     wandb_tags: list = [],
+    test_run: bool = False,
 ):
     """Build and run an experiment.
 
@@ -66,6 +67,10 @@ def run_experiment(
         The ID of the run. Required if use_wandb is True.
     wandb_tags : list[str], default=[]
         The tags to add to the W&B run.
+    test_run : bool, default=False
+        If True, the experiment is run in test mode. This means we do the smallest
+        number of iterations possible and then exit. This is useful for testing that
+        the experiment runs without errors.
     """
 
     # Set up Weights & Biases.
@@ -86,6 +91,7 @@ def run_experiment(
         tqdm_func=tqdm_func,
         logger=logger,
         ignore_cache=ignore_cache,
+        test_run=test_run,
     )
 
     # Build the scenario components of the experiment.

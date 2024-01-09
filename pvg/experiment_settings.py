@@ -31,6 +31,11 @@ class ExperimentSettings:
     ignore_cache : bool, default=False
         If True, when the dataset is loaded, the cache is ignored and the dataset is
         rebuilt from the raw data.
+    test_run : bool, default=False
+        If True, the experiment is run in test mode. This means we do the smallest
+        number of iterations possible and then exit. This is useful for testing that
+        the experiment runs without errors. It doesn't make sense to use this with
+        wandb_run.
     """
 
     device: TorchDevice = "cpu"
@@ -38,3 +43,8 @@ class ExperimentSettings:
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
+    test_run: bool = False
+
+    def __post_init__(self):
+        if self.test_run and self.wandb_run is not None:
+            raise ValueError("test_run cannot be True if wandb_run is not None.")
