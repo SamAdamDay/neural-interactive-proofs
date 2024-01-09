@@ -21,6 +21,8 @@
 5. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
    key](https://wandb.ai/settings#dangerzone))
 6. Install the `pvg` package locally in edit mode: `pip install -e .`
+7. (Optional, recommended) Install pre-commit, to auto-format with black before each
+   commit (see [below](#style-guide)): `pre-commit install`
 
 
 ## Running an experiment
@@ -64,7 +66,7 @@ Make sure all tests pass before committing.
 
 - The code is formatted using [`black`](https://black.readthedocs.io/en/stable/).
    * To format the whole repository, use `black .`
-   * Make sure you do this before committing
+   * If you installed pre-commit this will be done automatically on each commit.
    * On VS Code use `Ctrl+Shift+I` ("Format Document") to format the current file. It's
      useful to do this regularly.
 - The line length is 88 (see
