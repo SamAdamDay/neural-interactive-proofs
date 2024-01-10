@@ -440,17 +440,17 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         return True
 
     def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
+        # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
+        torch.multiprocessing.set_start_method("spawn", force=True)
+
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
-
+        
         # Create a list of tasks
         tasks = [
             (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
             for combo_index in range(len(combinations))
         ]
-
-        # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
-        torch.multiprocessing.set_start_method("spawn")
 
         # Create a pool of workers
         pool = TqdmMultiProcessPool(cmd_args.num_workers)
