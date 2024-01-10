@@ -140,6 +140,3 @@ aren't essential.
   rollout is actually two rollouts. At the beginning we sample two datapoints in a new
   batch dimension, and each round we swap these two. In the first round we ignore the
   verifier output. This way we use the output of both agents in every round.
-
-
-## Test section
