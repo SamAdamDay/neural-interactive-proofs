@@ -19,7 +19,7 @@ import wandb
 
 from pvg import (
     Parameters,
-    GraphIsomorphismParameters,
+    AgentsParameters,
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     ScenarioType,
@@ -73,17 +73,25 @@ def experiment_fn(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
-        graph_isomorphism=GraphIsomorphismParameters(
-            prover=GraphIsomorphismAgentParameters(
-                use_batch_norm=combo["use_batch_norm"],
-                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                num_gnn_layers=combo["prover_num_layers"],
-            ),
-            verifier=GraphIsomorphismAgentParameters(
-                use_batch_norm=combo["use_batch_norm"],
-                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                num_gnn_layers=combo["verifier_num_layers"],
-            ),
+        agents=AgentsParameters(
+            [
+                (
+                    "prover",
+                    GraphIsomorphismAgentParameters(
+                        use_batch_norm=combo["use_batch_norm"],
+                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                        num_gnn_layers=combo["prover_num_layers"],
+                    ),
+                ),
+                (
+                    "verifier",
+                    GraphIsomorphismAgentParameters(
+                        use_batch_norm=combo["use_batch_norm"],
+                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                        num_gnn_layers=combo["verifier_num_layers"],
+                    ),
+                ),
+            ]
         ),
         solo_agent=SoloAgentParameters(
             num_epochs=combo["num_epochs"],

@@ -27,11 +27,11 @@ Create a parameters object, using default values for ppo parameters, and others
 ...     scenario=Scenario.GRAPH_ISOMORPHISM,
 ...     trainer=Trainer.PPO,
 ...     dataset="eru10000",
-...     graph_isomorphism=GraphIsomorphismParameters(
-...         prover=GraphIsomorphismAgentParameters(
-...             d_gnn=128,
-...             use_batch_norm=False,
-...         ),
+...     agents=AgentsParams(
+...         [
+...             ("prover", GraphIsomorphismAgentParameters(d_gnn=128)),
+...             ("verifier", GraphIsomorphismAgentParameters(num_gnn_layers=2)),
+...         ],
 ...     ),
 ... )
 
@@ -51,9 +51,9 @@ Create a parameters object using a dictionary for the ppo parameters
 ... )
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from abc import ABC
-from typing import Optional
+from typing import Optional, ClassVar, OrderedDict
 from enum import auto as enum_auto
 
 import dacite
@@ -94,8 +94,32 @@ class SubParameters(BaseParameters, ABC):
     pass
 
 
+class AgentParameters(SubParameters, ABC):
+    """Base class for sub-parameters objects which define agents"""
+
+    is_random: ClassVar[bool] = False
+
+
+class RandomAgentParameters(AgentParameters):
+    """Parameters which specify a random agent"""
+
+    is_random: ClassVar[bool] = True
+
+
+class AgentsParameters(OrderedDict[str, AgentParameters], SubParameters):
+    """Parameters which specify the agents in the experiment.
+
+    A subclass of `OrderedDict`. Parameters should be specified as an iterable of
+    `(name, parameters)` pairs, where `name` is a string, and `parameters` is a
+    `AgentParameters` object.
+
+    The keys are the names of the agents, and the values are the parameters for each
+    agent.
+    """
+
+
 @dataclass
-class GraphIsomorphismAgentParameters(SubParameters):
+class GraphIsomorphismAgentParameters(AgentParameters):
     """Additional parameters for agents in the graph isomorphism experiment.
 
     Parameters
@@ -171,36 +195,6 @@ class GraphIsomorphismAgentParameters(SubParameters):
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
-
-
-@dataclass
-class GraphIsomorphismParameters(SubParameters):
-    """Additional parameters specific to the graph isomorphism experiment.
-
-    Parameters
-    ----------
-    prover : GraphIsomorphismAgentParameters
-        Parameters for the prover
-    verifier : GraphIsomorphismAgentParameters
-        Parameters for the prover
-    """
-
-    prover: Optional[GraphIsomorphismAgentParameters | dict] = None
-    verifier: Optional[GraphIsomorphismAgentParameters | dict] = None
-
-    def __post_init__(self):
-        # if isinstance(self.prover, dict):
-        #     self.prover = GraphIsomorphismAgentParameters.from_dict(self.prover)
-        # if isinstance(self.verifier, dict):
-        #     self.verifier = GraphIsomorphismAgentParameters.from_dict(self.verifier)
-        if self.prover is None:
-            self.prover = GraphIsomorphismAgentParameters()
-        elif isinstance(self.prover, dict):
-            self.prover = GraphIsomorphismAgentParameters.from_dict(self.prover)
-        if self.verifier is None:
-            self.verifier = GraphIsomorphismAgentParameters()
-        elif isinstance(self.verifier, dict):
-            self.verifier = GraphIsomorphismAgentParameters.from_dict(self.verifier)
 
 
 @dataclass
@@ -305,8 +299,11 @@ class Parameters(BaseParameters):
         The reward given to the verifier when it guesses correctly.
     verifier_terminated_penalty : float
         The reward given to the verifier if the episode terminates before it guesses.
-    graph_isomorphism : GraphIsomorphismParameters, optional
-        Additional parameters specific to the graph isomorphism experiment.
+    agents : AgentsParameters | OrderedDict[str, AgentParameters],
+    optional
+        Additional parameters for the agents. The keys are the names of the agents, and
+        the values are the parameters for each agent. If not provided, the default
+        parameters are used for each agent for a given scenario.
     ppo : PpoParameters, optional
         Additional parameters for PPO.
     solo_agent : SoloAgentParameters, optional
@@ -326,18 +323,25 @@ class Parameters(BaseParameters):
     verifier_reward: float = 1.0
     verifier_terminated_penalty: float = -1.0
 
-    graph_isomorphism: Optional[GraphIsomorphismParameters | dict] = None
+    agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
     ppo: Optional[PpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
-            if self.graph_isomorphism is None:
-                self.graph_isomorphism = GraphIsomorphismParameters()
-            elif isinstance(self.graph_isomorphism, dict):
-                self.graph_isomorphism = GraphIsomorphismParameters.from_dict(
-                    self.graph_isomorphism
+            if self.agents is None:
+                self.agents = AgentsParameters(
+                    [
+                        ("prover", GraphIsomorphismAgentParameters()),
+                        ("verifier", GraphIsomorphismAgentParameters()),
+                    ]
                 )
+            else:
+                for agent_name, agent_params in self.agents.items():
+                    if isinstance(agent_params, dict):
+                        self.agents[
+                            agent_name
+                        ] = GraphIsomorphismAgentParameters.from_dict(agent_params)
         if self.trainer == TrainerType.PPO:
             if self.ppo is None:
                 self.ppo = PpoParameters()

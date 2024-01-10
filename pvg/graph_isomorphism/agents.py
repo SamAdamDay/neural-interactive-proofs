@@ -70,7 +70,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
     params : Parameters
         The parameters of the experiment.
     agent_name : str
-        The name of the agent. Must be either "prover" or "verifier".
+        The name of the agent.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -84,14 +84,11 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        if agent_name == "prover":
-            self._agent_params = params.graph_isomorphism.prover
-            self.agent_index = PROVER_AGENT_NUM
-        elif agent_name == "verifier":
-            self._agent_params = params.graph_isomorphism.verifier
-            self.agent_index = VERIFIER_AGENT_NUM
-        else:
-            raise ValueError(f"Unknown agent name: {agent_name}")
+        self._agent_params = params.agents[agent_name]
+        for i, _agent_name in enumerate(params.agents):
+            if _agent_name == agent_name:
+                self.agent_index = i
+                break
 
     @classmethod
     def _run_masked_transformer(
@@ -186,7 +183,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     params : Parameters
         The parameters of the experiment.
     agent_name : str
-        The name of the agent. Must be either "prover" or "verifier".
+        The name of the agent.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -218,7 +215,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self.transformer = self._build_transformer()
 
     def _build_gnn(self, d_input: int) -> TensorDictSequential:
-        """Builds the GNN module for a prover or verifier.
+        """Builds the GNN module for an agent.
 
         Parameters
         ----------
@@ -293,7 +290,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
 
     def _build_transformer(self) -> TransformerEncoder:
-        """Builds the transformer module for a prover or verifier.
+        """Builds the transformer module for an agent.
 
         Returns
         -------
@@ -659,7 +656,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     params : Parameters
         The parameters of the experiment.
     agent_name : str
-        The name of the agent. Must be either "prover" or "verifier".
+        The name of the agent.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -786,7 +783,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     params : Parameters
         The parameters of the experiment.
     agent_name : str
-        The name of the agent. Must be either "prover" or "verifier".
+        The name of the agent.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -871,7 +868,7 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
     params : Parameters
         The parameters of the experiment.
     agent_name : str
-        The name of the agent. Must be either "prover" or "verifier".
+        The name of the agent.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -1139,6 +1136,8 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
     Parameters
     ----------
+    params : Parameters
+        The parameters of the experiment.
     bodies : dict[str, GraphIsomorphismAgentBody]
         The agent bodies to combine.
     """
@@ -1148,16 +1147,17 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
     def __init__(
         self,
+        params: Parameters,
         bodies: dict[str, GraphIsomorphismAgentBody],
     ) -> None:
-        super().__init__(bodies)
+        super().__init__(params, bodies)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
         round: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
-        for agent_name in self.agent_names:
+        for agent_name in self.params.agents:
             # Build the input dict for the agent body
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
@@ -1175,11 +1175,11 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
         # Stack the outputs
         node_level_repr = torch.stack(
-            [body_outputs[name]["node_level_repr"] for name in self.agent_names],
+            [body_outputs[name]["node_level_repr"] for name in self.params.agents],
             dim=-3,
         )
         graph_level_repr = torch.stack(
-            [body_outputs[name]["graph_level_repr"] for name in self.agent_names],
+            [body_outputs[name]["graph_level_repr"] for name in self.params.agents],
             dim=-2,
         )
 
@@ -1194,17 +1194,28 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
 
 class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
+    """A module which combines the agent policy heads for the graph isomorphism task.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    policy_heads : dict[str, GraphIsomorphismAgentPolicyHead]
+        The agent policy heads to combine.
+    """
+
     in_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
     out_keys = (("agents", "node_selected_logits"), ("agents", "decision_logits"))
 
     def __init__(
         self,
+        params: Parameters,
         policy_heads: dict[str, GraphIsomorphismAgentPolicyHead],
     ):
-        super().__init__(policy_heads)
+        super().__init__(params, policy_heads)
 
     def forward(self, head_output: TensorDictBase) -> TensorDict:
-        """Run the prover and verifier policy heads and combine their outputs.
+        """Run the agent policy heads and combine their outputs.
 
         Parameters
         ----------
@@ -1224,7 +1235,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self.agent_names):
+        for i, agent_name in enumerate(self.params.agents):
             input_td = TensorDict(
                 dict(
                     node_level_repr=head_output["agents", "node_level_repr"][
@@ -1240,11 +1251,14 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
         # Stack the outputs
         node_selected_logits = torch.stack(
-            [policy_outputs[name]["node_selected_logits"] for name in self.agent_names],
+            [
+                policy_outputs[name]["node_selected_logits"]
+                for name in self.params.agents
+            ],
             dim=-2,
         )
         decision_logits = torch.stack(
-            [policy_outputs[name]["decision_logits"] for name in self.agent_names],
+            [policy_outputs[name]["decision_logits"] for name in self.params.agents],
             dim=-2,
         )
 
@@ -1262,17 +1276,28 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
 
 class GraphIsomorphismCombinedValueHead(CombinedValueHead):
+    """A module which combines the agent value heads for the graph isomorphism task.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    value_heads : dict[str, GraphIsomorphismAgentValueHead]
+        The agent value heads to combine.
+    """
+
     in_keys = (("agents", "graph_level_repr"),)
     out_keys = (("agents", "value"),)
 
     def __init__(
         self,
+        params: Parameters,
         value_heads: dict[str, GraphIsomorphismAgentValueHead],
     ):
-        super().__init__(value_heads)
+        super().__init__(params, value_heads)
 
     def forward(self, head_output: TensorDictBase) -> TensorDict:
-        """Run the prover and verifier value heads and combine their values.
+        """Run the agent value heads and combine their values.
 
         Parameters
         ----------
@@ -1290,7 +1315,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 
         # Run the policy heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self.agent_names):
+        for i, agent_name in enumerate(self.params.agents):
             input_td = TensorDict(
                 dict(
                     node_level_repr=head_output["agents", "node_level_repr"][
@@ -1306,7 +1331,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 
         # Stack the outputs
         value = torch.stack(
-            [value_outputs[name]["value"] for name in self.agent_names], dim=-1
+            [value_outputs[name]["value"] for name in self.params.agents], dim=-1
         )
 
         return head_output.update(

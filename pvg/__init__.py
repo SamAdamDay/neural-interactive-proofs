@@ -1,6 +1,7 @@
 from .parameters import (
     Parameters,
-    GraphIsomorphismParameters,
+    AgentsParameters,
+    RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     PpoParameters,
