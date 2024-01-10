@@ -13,6 +13,7 @@
    nightly version of PyTorch):
 
    ```
+   pip install wheel
    pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
    pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
    ```
@@ -64,26 +65,36 @@ Make sure all tests pass before committing.
 ## Style guide
 
 - The code is formatted using [`black`](https://black.readthedocs.io/en/stable/).
-   * To format the whole repository, use `black .`
-   * If you installed pre-commit this will be done automatically on each commit.
-   * On VS Code use `Ctrl+Shift+I` ("Format Document") to format the current file. It's
-     useful to do this regularly.
+    * To format the whole repository, use `black .`
+    * If you installed pre-commit this will be done automatically on each commit.
+    * On VS Code use `Ctrl+Shift+I` ("Format Document") to format the current file. It's
+      useful to do this regularly.
 - The line length is 88 (see
   [rationale](https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#line-length))
-   * Black does its best to format to this line length
-   * Docstrings and comments are wrapped to this length
-   * Use the [Rewrap VS Code
-     extension](https://marketplace.visualstudio.com/items?itemName=stkb.rewrap) bound
-     to `Alt+Q` to re-wrap any comment or docstring to the line-length. Make sure to set
-     the ruler to 88 for this project.
+    * Black does its best to format to this line length
+    * Docstrings and comments are wrapped to this length
+    * Use the [Rewrap VS Code
+      extension](https://marketplace.visualstudio.com/items?itemName=stkb.rewrap) bound
+      to `Alt+Q` to re-wrap any comment or docstring to the line-length. Make sure to set
+      the ruler to 88 for this project.
 - All classes, functions and modules should have a docstring (Copilot helps with this)
-   * Docstrings are formatting using the [Numpydoc Style
-     Guide](https://numpydoc.readthedocs.io/en/latest/format.html)
+    * Docstrings are formatting using the [Numpydoc Style
+      Guide](https://numpydoc.readthedocs.io/en/latest/format.html)
 - Please add type hints to all functions
-   * [Jaxtyping](https://docs.kidger.site/jaxtyping/) is used for annotating tensors
-     with their shapes.
-      + E.g. `fun(arg: Float[Tensor, "batch feature"])`
-   * Strict type-checking is not enforced
+    * [Jaxtyping](https://docs.kidger.site/jaxtyping/) is used for annotating tensors
+      with their shapes.
+        + E.g. `fun(arg: Float[Tensor, "batch feature"])`
+    * Strict type-checking is not enforced
+
+
+## Git and pull requests
+
+- The main branch is protected so that changes can only come through pull requests
+- It's usually a good idea to have a different branch for each feature/PR
+- GitHub will run the following checks when you make a PR, which should pass before
+  merging.
+    * Is everything formatted correctly according to black?
+    * Do all the tests pass?
 
 
 ## Using Docker

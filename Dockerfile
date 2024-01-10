@@ -45,12 +45,15 @@ WORKDIR /root/pvg-experiments
 RUN pip install --upgrade pip \
     && pip install wheel cython \
     && pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121 \
-    && pip install -r requirements.txt \
+    && pip install -r requirements_dev.txt \
     && pip install -e . \
     && pip install nvitop
 
 # Apparently this is necessary to fully install primesieve
 RUN yes | pip uninstall primesieve && pip install --no-cache-dir primesieve
+
+# Install the pre-commit hooks
+RUN pre-commit install
 
 # Go back to the root
 WORKDIR /root
