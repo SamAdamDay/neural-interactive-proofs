@@ -10,11 +10,10 @@
    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
    ```
 4. Install the requirements (we use a nightly version of TorchRL, which requires a
-   nightly version of PyTorch; also installing torch-scatter is a pain):
+   nightly version of PyTorch):
 
    ```
    pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
-   pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.1.0+cu121.html
    pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
    ```
 
