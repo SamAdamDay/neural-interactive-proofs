@@ -36,11 +36,6 @@ import einops
 
 from tqdm import tqdm
 
-# Allow importing of Cython modules (needed for primesieve)
-import pyximport
-
-pyximport.install()
-
 from primesieve.numpy import n_primes
 
 from pvg.constants import GI_DATA_DIR
