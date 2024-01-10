@@ -69,8 +69,6 @@ class ReinforcementLearningTrainer(Trainer):
 
         self.environment = self.scenario_instance.environment
 
-    agent_names = ["prover", "verifier"]
-
     def train(self):
         """Train the agents."""
         # Setup
@@ -250,7 +248,7 @@ class ReinforcementLearningTrainer(Trainer):
             done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
             reward = tensordict_data.get(("next", "agents", "reward"))
             mean_rewards = {}
-            for i, agent_name in enumerate(self.agent_names):
+            for i, agent_name in enumerate(self.params.agents):
                 mean_rewards[agent_name] = reward[..., i][done].mean().item()
 
             # Compute the average episode length
@@ -260,7 +258,7 @@ class ReinforcementLearningTrainer(Trainer):
             # Log to W&B if using
             if self.settings.wandb_run is not None:
                 to_log = dict(mean_episode_length=mean_episode_length)
-                for agent_name in self.agent_names:
+                for agent_name in self.params.agents:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                 self.settings.wandb_run.log(to_log)
 

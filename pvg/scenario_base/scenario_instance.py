@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 import torch
 
@@ -73,22 +74,20 @@ class ScenarioInstance(ABC):
         The class for the combined value heads of the agents.
     """
 
-    scenario: ScenarioType
+    scenario: ClassVar[ScenarioType]
 
-    dataset_class: type[Dataset]
-    dataloader_class: type[DataLoader]
+    dataset_class: ClassVar[type[Dataset]]
+    dataloader_class: ClassVar[type[DataLoader]]
 
-    environment_class: type[Environment]
+    environment_class: ClassVar[type[Environment]]
 
-    body_class: type[AgentBody]
-    policy_head_class: type[AgentPolicyHead]
-    value_head_class: type[AgentValueHead]
-    solo_head_class: type[SoloAgentHead]
-    combined_body_class: type[CombinedBody]
-    combined_policy_head_class: type[CombinedPolicyHead]
-    combined_value_head_class: type[CombinedValueHead]
-
-    agent_names = ["prover", "verifier"]
+    body_class: ClassVar[type[AgentBody]]
+    policy_head_class: ClassVar[type[AgentPolicyHead]]
+    value_head_class: ClassVar[type[AgentValueHead]]
+    solo_head_class: ClassVar[type[SoloAgentHead]]
+    combined_body_class: ClassVar[type[CombinedBody]]
+    combined_policy_head_class: ClassVar[type[CombinedPolicyHead]]
+    combined_value_head_class: ClassVar[type[CombinedValueHead]]
 
     def __init__(self, params: Parameters, settings: ExperimentSettings):
         if params.scenario != self.scenario:
@@ -106,7 +105,7 @@ class ScenarioInstance(ABC):
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
-        for agent_name in self.agent_names:
+        for agent_name in params.agents:
             agent_dict = {}
 
             agent_dict["body"] = self.body_class(
@@ -142,11 +141,14 @@ class ScenarioInstance(ABC):
 
             # Create the combined agents
             self.combined_body = self.combined_body_class(
-                {name: self.agents[name].body for name in self.agent_names}
+                params,
+                {name: self.agents[name].body for name in params.agents},
             )
             self.combined_policy_head = self.combined_policy_head_class(
-                {name: self.agents[name].policy_head for name in self.agent_names}
+                params,
+                {name: self.agents[name].policy_head for name in params.agents},
             )
             self.combined_value_head = self.combined_value_head_class(
-                {name: self.agents[name].value_head for name in self.agent_names}
+                params,
+                {name: self.agents[name].value_head for name in params.agents},
             )

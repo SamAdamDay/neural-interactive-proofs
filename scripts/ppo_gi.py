@@ -12,7 +12,7 @@ import torch
 
 from pvg import (
     Parameters,
-    GraphIsomorphismParameters,
+    AgentsParameters,
     GraphIsomorphismAgentParameters,
     PpoParameters,
     ScenarioType,
@@ -64,13 +64,21 @@ def experiment_fn(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.PPO,
         dataset=combo["dataset_name"],
-        graph_isomorphism=GraphIsomorphismParameters(
-            prover=GraphIsomorphismAgentParameters(
-                num_gnn_layers=combo["prover_num_layers"],
-            ),
-            verifier=GraphIsomorphismAgentParameters(
-                num_gnn_layers=combo["verifier_num_layers"],
-            ),
+        agents=AgentsParameters(
+            [
+                (
+                    "prover",
+                    GraphIsomorphismAgentParameters(
+                        num_gnn_layers=combo["prover_num_layers"],
+                    ),
+                ),
+                (
+                    "verifier",
+                    GraphIsomorphismAgentParameters(
+                        num_gnn_layers=combo["verifier_num_layers"],
+                    ),
+                ),
+            ]
         ),
         ppo=PpoParameters(
             num_iterations=combo["num_iterations"],

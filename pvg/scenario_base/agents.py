@@ -88,14 +88,15 @@ class CombinedBody(TensorDictModuleBase, ABC):
 
     Parameters
     ----------
+    params : Parameters
+        The parameters of the experiment.
     bodies : dict[str, AgentBody]
         The agent bodies to combine.
     """
 
-    agent_names = ["prover", "verifier"]
-
-    def __init__(self, bodies: dict[str, AgentBody]):
+    def __init__(self, params: Parameters, bodies: dict[str, AgentBody]):
         super().__init__()
+        self.params = params
         self.bodies = bodies
 
         # Add the bodies as submodules, so that PyTorch knows about them
@@ -124,14 +125,15 @@ class CombinedPolicyHead(TensorDictModuleBase, ABC):
 
     Parameters
     ----------
+    params : Parameters
+        The parameters of the experiment.
     policy_heads : dict[str, AgentPolicyHead]
         The agent policy heads to combine.
     """
 
-    agent_names = ["prover", "verifier"]
-
-    def __init__(self, policy_heads: dict[str, AgentPolicyHead]):
+    def __init__(self, params: Parameters, policy_heads: dict[str, AgentPolicyHead]):
         super().__init__()
+        self.params = params
         self.policy_heads = policy_heads
 
         # Add the policy heads as submodules, so that PyTorch knows about them
@@ -160,14 +162,15 @@ class CombinedValueHead(TensorDictModuleBase, ABC):
 
     Parameters
     ----------
+    params : Parameters
+        The parameters of the experiment.
     value_heads : dict[str, AgentValueHead]
         The agent value heads to combine.
     """
 
-    agent_names = ["prover", "verifier"]
-
-    def __init__(self, value_heads: dict[str, AgentValueHead]):
+    def __init__(self, params: Parameters, value_heads: dict[str, AgentValueHead]):
         super().__init__()
+        self.params = params
         self.value_heads = value_heads
 
         # Add the value heads as submodules, so that PyTorch knows about them

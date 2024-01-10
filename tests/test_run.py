@@ -1,6 +1,6 @@
 from pvg import (
     Parameters,
-    GraphIsomorphismParameters,
+    AgentsParameters,
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     PpoParameters,
@@ -14,45 +14,53 @@ from pvg.utils.output import DummyTqdm
 def test_run_experiment():
     """Test running experiments with very basic parameters."""
 
-    # Very basic parameters for each scenario
-    scenario_params = {
-        ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismParameters(
-            prover=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                d_gnn=1,
-                d_gin_mlp=1,
-                num_heads=2,
-                num_transformer_layers=1,
-                d_transformer=2,
-                d_transformer_mlp=1,
-                d_node_selector=1,
-                num_node_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                d_critic=1,
-                num_critic_transformer_layers=1,
-                num_critic_layers=1,
-            ),
-            verifier=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                d_gnn=1,
-                d_gin_mlp=1,
-                num_heads=2,
-                num_transformer_layers=1,
-                d_transformer=2,
-                d_transformer_mlp=1,
-                d_node_selector=1,
-                num_node_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                d_critic=1,
-                num_critic_transformer_layers=1,
-                num_critic_layers=1,
-            ),
+    # Very agent parameters for each scenario
+    agents_params_dict = {
+        ScenarioType.GRAPH_ISOMORPHISM: AgentsParameters(
+            [
+                (
+                    "prover",
+                    GraphIsomorphismAgentParameters(
+                        num_gnn_layers=1,
+                        d_gnn=1,
+                        d_gin_mlp=1,
+                        num_heads=2,
+                        num_transformer_layers=1,
+                        d_transformer=2,
+                        d_transformer_mlp=1,
+                        d_node_selector=1,
+                        num_node_selector_layers=1,
+                        d_decider=1,
+                        num_decider_layers=1,
+                        d_value=1,
+                        num_value_layers=1,
+                        d_critic=1,
+                        num_critic_transformer_layers=1,
+                        num_critic_layers=1,
+                    ),
+                ),
+                (
+                    "verifier",
+                    GraphIsomorphismAgentParameters(
+                        num_gnn_layers=1,
+                        d_gnn=1,
+                        d_gin_mlp=1,
+                        num_heads=2,
+                        num_transformer_layers=1,
+                        d_transformer=2,
+                        d_transformer_mlp=1,
+                        d_node_selector=1,
+                        num_node_selector_layers=1,
+                        d_decider=1,
+                        num_decider_layers=1,
+                        d_value=1,
+                        num_value_layers=1,
+                        d_critic=1,
+                        num_critic_transformer_layers=1,
+                        num_critic_layers=1,
+                    ),
+                ),
+            ]
         )
     }
 
@@ -69,15 +77,18 @@ def test_run_experiment():
         ),
     }
 
-    for scenario_type, scenario_param in scenario_params.items():
+    for scenario_type, agents_param in agents_params_dict.items():
         for trainer_type, trainer_param in trainer_params.items():
             # Construct the parameters
-            params_dict = dict(
-                scenario=scenario_type, trainer=trainer_type, dataset="test"
+            params = Parameters.from_dict(
+                {
+                    "scenario": scenario_type,
+                    "trainer": trainer_type,
+                    "dataset": "test",
+                    "agents": agents_param,
+                    str(trainer_type): trainer_param,
+                }
             )
-            params_dict[str(scenario_type)] = scenario_param
-            params_dict[str(trainer_type)] = trainer_param
-            params = Parameters.from_dict(params_dict)
 
             # Run the experiment in test mode
             run_experiment(params, tqdm_func=DummyTqdm, test_run=True)
