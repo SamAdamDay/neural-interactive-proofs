@@ -54,9 +54,14 @@ Create a parameters object using a dictionary for the ppo parameters
 from dataclasses import dataclass, asdict
 from abc import ABC
 from typing import Optional
-from enum import StrEnum, auto as enum_auto
+from enum import auto as enum_auto
 
 import dacite
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from pvg.utils.future import StrEnum
 
 
 class ScenarioType(StrEnum):

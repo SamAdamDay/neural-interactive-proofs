@@ -33,17 +33,14 @@ from pvg.utils.experiments import (
 )
 from pvg.constants import GI_SOLO_AGENTS_RESULTS_DATA_DIR
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 TEST_SIZE = 0.2
 
 param_grid = dict(
     dataset_name=["eru10000"],
-    d_gnn=[16],
-    d_decider=[16],
     use_batch_norm=[True],
     use_pair_invariant_pooling=[True],
-    noise_sigma=[0.0],
-    num_epochs=[500],
+    num_epochs=[100],
     batch_size=[256],
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
@@ -78,20 +75,14 @@ def experiment_fn(
         dataset=combo["dataset_name"],
         graph_isomorphism=GraphIsomorphismParameters(
             prover=GraphIsomorphismAgentParameters(
-                d_gnn=combo["d_gnn"],
-                d_decider=combo["d_decider"],
                 use_batch_norm=combo["use_batch_norm"],
-                noise_sigma=combo["noise_sigma"],
                 use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                num_decider_layers=combo["prover_num_layers"],
+                num_gnn_layers=combo["prover_num_layers"],
             ),
             verifier=GraphIsomorphismAgentParameters(
-                d_gnn=combo["d_gnn"],
-                d_decider=combo["d_decider"],
                 use_batch_norm=combo["use_batch_norm"],
-                noise_sigma=combo["noise_sigma"],
                 use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                num_decider_layers=combo["verifier_num_layers"],
+                num_gnn_layers=combo["verifier_num_layers"],
             ),
         ),
         solo_agent=SoloAgentParameters(
@@ -100,6 +91,7 @@ def experiment_fn(
             learning_rate=combo["learning_rate"],
             body_lr_factor=combo["body_lr_factor"],
         ),
+        seed=combo["seed"],
     )
 
     use_wandb = cmd_args.wandb_project != ""
@@ -127,9 +119,6 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 
 
 if __name__ == "__main__":
-    # Make sure the results directory exists
-    Path(GI_SOLO_AGENTS_RESULTS_DATA_DIR).mkdir(parents=True, exist_ok=True)
-
     if MULTIPROCESS:
         experiment_class = MultiprocessHyperparameterExperiment
     else:
