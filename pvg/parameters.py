@@ -230,6 +230,9 @@ class PpoParameters(SubParameters):
         The PPO clip range.
     entropy_eps : float
         The coefficient of the entropy term in the PPO loss.
+    body_lr_factor : float
+        The learning rate factor for the body part of the model. This allows updating
+        the body at a different rate to the rest of the model.
     """
 
     # Sampling
@@ -247,6 +250,9 @@ class PpoParameters(SubParameters):
     lmbda: float = 0.95
     clip_epsilon: float = 0.2
     entropy_eps: float = 1e-4
+
+    # Agents
+    body_lr_factor: float = 1.0
 
 
 @dataclass
