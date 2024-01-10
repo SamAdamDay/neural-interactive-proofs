@@ -34,7 +34,7 @@ jobs:
         pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
     - name: Hack to get primesieve to work
       run: |
-        sed -i '1s/^/import import pyximport\npyximport.install()\n/' /opt/hostedtoolcache/Python/$(python --version | sed 's/Python //')/x64/lib/python3.11/site-packages/primesieve/numpy/__init__.py
+        sed -i '1s/^/import pyximport\npyximport.install()\n/' /opt/hostedtoolcache/Python/$(python --version | sed 's/Python //')/x64/lib/python3.11/site-packages/primesieve/numpy/__init__.py
     - name: Check formatting with black
       run: |
         # stop the build if there are black formatting errors
