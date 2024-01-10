@@ -13,6 +13,7 @@
    nightly version of PyTorch):
 
    ```
+   pip install wheel
    pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
    pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
    ```
