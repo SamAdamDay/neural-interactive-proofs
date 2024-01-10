@@ -52,6 +52,9 @@ RUN pip install --upgrade pip \
 # Apparently this is necessary to fully install primesieve
 RUN yes | pip uninstall primesieve && pip install --no-cache-dir primesieve
 
+# Install the pre-commit hooks
+RUN pre-commit install
+
 # Go back to the root
 WORKDIR /root
 
