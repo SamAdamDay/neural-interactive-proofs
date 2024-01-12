@@ -5,6 +5,7 @@ from .parameters import (
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     PpoParameters,
+    ImageClassificationParameters,
     ScenarioType,
     TrainerType,
 )

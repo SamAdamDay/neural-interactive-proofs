@@ -55,6 +55,7 @@ from dataclasses import dataclass, asdict, field
 from abc import ABC
 from typing import Optional, ClassVar, OrderedDict
 from enum import auto as enum_auto
+from textwrap import indent
 
 import dacite
 
@@ -68,6 +69,7 @@ class ScenarioType(StrEnum):
     """Enum for the scenario to run."""
 
     GRAPH_ISOMORPHISM = enum_auto()
+    IMAGE_CLASSIFICATION = enum_auto()
 
 
 class TrainerType(StrEnum):
@@ -277,6 +279,20 @@ class SoloAgentParameters(SubParameters):
 
 
 @dataclass
+class ImageClassificationParameters(SubParameters):
+    """Additional parameters for the image classification task.
+
+    Parameters
+    ----------
+    selected_classes : tuple[int, int]
+        The indices of the classes of the original dataset to select to use for the
+        binary classification task.
+    """
+
+    selected_classes: tuple[int, int] = (0, 1)
+
+
+@dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
 
@@ -309,6 +325,8 @@ class Parameters(BaseParameters):
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent".
+    image_classification : ImageClassificationParameters, optional
+        Additional parameters for the image classification task.
     """
 
     scenario: ScenarioType
@@ -326,6 +344,7 @@ class Parameters(BaseParameters):
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
     ppo: Optional[PpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    image_classification: Optional[ImageClassificationParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
@@ -342,6 +361,13 @@ class Parameters(BaseParameters):
                         self.agents[
                             agent_name
                         ] = GraphIsomorphismAgentParameters.from_dict(agent_params)
+        elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
+            if self.image_classification is None:
+                self.image_classification = ImageClassificationParameters()
+            elif isinstance(self.image_classification, dict):
+                self.image_classification = ImageClassificationParameters.from_dict(
+                    self.image_classification
+                )
         if self.trainer == TrainerType.PPO:
             if self.ppo is None:
                 self.ppo = PpoParameters()

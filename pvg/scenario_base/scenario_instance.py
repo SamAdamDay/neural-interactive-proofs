@@ -101,7 +101,7 @@ class ScenarioInstance(ABC):
 
         self.device = settings.device
 
-        self.dataset = self.dataset_class(params, self.device)
+        self.dataset = self.dataset_class(params, settings)
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
@@ -137,7 +137,7 @@ class ScenarioInstance(ABC):
         # Build additional components if the trainer is an RL trainer
         if self.params.trainer == TrainerType.PPO:
             # Create the environment
-            self.environment = self.environment_class(params, self.device)
+            self.environment = self.environment_class(params, settings)
 
             # Create the combined agents
             self.combined_body = self.combined_body_class(
