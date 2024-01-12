@@ -31,7 +31,7 @@ class ExperimentSettings:
     ignore_cache : bool, default=False
         If True, when the dataset is loaded, the cache is ignored and the dataset is
         rebuilt from the raw data.
-    settings : int, default=8
+    num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
