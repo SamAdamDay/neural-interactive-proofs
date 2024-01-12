@@ -89,7 +89,8 @@ class BaseParameters(ABC):
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
 
-        Turns enums into strings, and sub-parameters into dictionaries.
+        Turns enums into strings, and sub-parameters into dictionaries. Includes the
+        is_random parameter if it exists.
 
         Note this loses the ordering of the ordered dictionaries.
 
@@ -98,6 +99,8 @@ class BaseParameters(ABC):
         params_dict : dict
             A dictionary of the parameters.
         """
+
+        # Add all dataclass fields to the dictionary
         params_dict = {}
         for field in fields(self):
             value = getattr(self, field.name)
@@ -106,6 +109,12 @@ class BaseParameters(ABC):
             elif isinstance(value, (BaseParameters, AgentsParameters)):
                 value = value.to_dict()
             params_dict[field.name] = value
+
+        # Add the is_random parameter if it exists. This is not a field of the
+        # parameters object, but we want to include it in the dictionary.
+        if isinstance(self, AgentParameters) and hasattr(self, "is_random"):
+            params_dict["is_random"] = self.is_random
+
         return params_dict
 
 
