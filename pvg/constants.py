@@ -8,6 +8,7 @@ _root_dir = Path(_file_dir).parent.parent.absolute()
 
 DATA_DIR = os.path.join(_root_dir, "data")
 GI_DATA_DIR = os.path.join(DATA_DIR, "graph_isomorphism")
+IC_DATA_DIR = os.path.join(DATA_DIR, "image_classification")
 
 RESULTS_DIR = os.path.join(_root_dir, "results")
 RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")

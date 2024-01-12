@@ -31,6 +31,8 @@ class ExperimentSettings:
     ignore_cache : bool, default=False
         If True, when the dataset is loaded, the cache is ignored and the dataset is
         rebuilt from the raw data.
+    num_dataset_threads : int, default=8
+        The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -43,6 +45,7 @@ class ExperimentSettings:
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
+    num_dataset_threads: int = 8
     test_run: bool = False
 
     def __post_init__(self):

@@ -7,13 +7,16 @@ from abc import ABC, abstractmethod
 from typing import Union, Any
 import shutil
 import os
+from textwrap import indent
 
 import torch
 from torch import Tensor
 
 from tensordict import TensorDict
+from tensordict.utils import _td_fields
 
 from pvg.parameters import Parameters
+from pvg.experiment_settings import ExperimentSettings
 
 
 class Dataset(ABC):
@@ -28,36 +31,46 @@ class Dataset(ABC):
     - `processed_dir` (property): The path to the directory containing the processed
       data.
     - `_build_tensor_dict`: Build the tensordict from the raw data.
+    - `_download` (optional): Download the raw data.
 
     Parameters
     ----------
     params : Parameters
         The parameters for the experiment.
-    ignore_cache : bool, default=False
-        If True, the cache is ignored and the dataset is rebuilt from the raw data.
-    num_threads : int, default=8
-        The number of threads to use for saving the memory-mapped tensordict.
+    settings : ExperimentSettings
+        The settings for the experiment.
     """
 
     _tensor_dict: TensorDict
 
-    def __init__(
-        self, params: Parameters, ignore_cache: bool = False, num_threads: int = 8
-    ):
+    def __init__(self, params: Parameters, settings: ExperimentSettings):
         self.params = params
+        self.settings = settings
 
-        if not os.path.isdir(self.processed_dir) or ignore_cache:
+        # Download the raw data if this is implemented
+        try:
+            self._download()
+        except NotImplementedError:
+            pass
+
+        if not os.path.isdir(self.processed_dir) or settings.ignore_cache:
             # Delete the processed directory if it exists
-            if os.path.isdir(self.processed_dir) and ignore_cache:
+            if os.path.isdir(self.processed_dir) and settings.ignore_cache:
                 shutil.rmtree(self.processed_dir)
 
             # Create the tensordict and save it to disk as a memory-mapped file
             self._tensor_dict = self._build_tensor_dict()
-            self._tensor_dict.memmap_(self.processed_dir, num_threads=num_threads)
+            self._tensor_dict.memmap_(
+                self.processed_dir, num_threads=settings.num_dataset_threads
+            )
 
         else:
             # Load the memory-mapped tensordict
             self._tensor_dict = TensorDict.load_memmap(self.processed_dir)
+
+    def _download(self):
+        """Download the raw data."""
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -88,6 +101,16 @@ class Dataset(ABC):
 
     def __len__(self) -> int:
         return len(self._tensor_dict)
+
+    def __repr__(self) -> str:
+        # Adapted from TensorDictBase.__repr__
+        fields = _td_fields(self._tensor_dict)
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        batch_size_str = indent(f"batch_size={self._tensor_dict.batch_size}", 4 * " ")
+        device_str = indent(f"device={self._tensor_dict.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self._tensor_dict.is_shared()}", 4 * " ")
+        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        return f"{type(self).__name__}(\n{string})"
 
 
 class DataLoader(torch.utils.data.DataLoader):

@@ -1,6 +1,7 @@
 from torchrl.envs.utils import check_env_specs
 
 from pvg.parameters import Parameters, ScenarioType, TrainerType
+from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism.environment import GraphIsomorphismEnvironment
 
 
@@ -11,5 +12,6 @@ def test_environment_specs():
     environment_classes = [GraphIsomorphismEnvironment]
     for scenario_type, environment_class in zip(scenario_types, environment_classes):
         params = Parameters(scenario_type, TrainerType.PPO, "test")
-        env = environment_class(params)
+        settings = ExperimentSettings(device="cpu", test_run=True)
+        env = environment_class(params, settings)
         check_env_specs(env)

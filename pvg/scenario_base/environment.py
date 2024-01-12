@@ -17,7 +17,7 @@ from torchrl.envs import EnvBase
 
 from pvg.scenario_base import DataLoader, Dataset
 from pvg.parameters import Parameters
-from pvg.utils.types import TorchDevice
+from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
 
 
@@ -50,16 +50,17 @@ class Environment(EnvBase, ABC):
     def __init__(
         self,
         params: Parameters,
-        device: TorchDevice = "cpu",
+        settings: ExperimentSettings,
     ):
-        super().__init__(device=device)
+        super().__init__(device=settings.device)
         self.params = params
+        self.settings = settings
 
         # Create a random number generator
         self.rng = torch.Generator()
 
         # Load the dataset
-        self.dataset = self._dataset_class(params)
+        self.dataset = self._dataset_class(params, settings)
         self.data_cycler: Optional[VariableDataCycler] = None
 
         # The number of environments is the number of episodes we can fit in a batch
