@@ -139,3 +139,4 @@ dmypy.json
 
 # Processed data files
 data/**/processed*
+data/image_classification

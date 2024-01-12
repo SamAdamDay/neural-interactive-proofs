@@ -13,7 +13,17 @@ from pvg.constants import GI_DATA_DIR
 
 
 class GraphIsomorphismDataset(Dataset):
-    """A dataset for the graph isomorphism experiments."""
+    """A dataset for the graph isomorphism experiments.
+
+    Uses the a pre-generated set of graphs.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters for the experiment.
+    settings : ExperimentSettings
+        The settings for the experiment.
+    """
 
     adjacency_dtype = torch.int32
     x_dtype = torch.float32

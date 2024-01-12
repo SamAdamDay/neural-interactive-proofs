@@ -39,6 +39,7 @@ def run_experiment(
     wandb_project: Optional[str] = None,
     run_id: Optional[str] = None,
     wandb_tags: list = [],
+    num_dataset_threads: int = 8,
     test_run: bool = False,
 ):
     """Build and run an experiment.
@@ -67,6 +68,8 @@ def run_experiment(
         The ID of the run. Required if use_wandb is True.
     wandb_tags : list[str], default=[]
         The tags to add to the W&B run.
+    num_dataset_threads : int, default=8
+        The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -91,6 +94,7 @@ def run_experiment(
         tqdm_func=tqdm_func,
         logger=logger,
         ignore_cache=ignore_cache,
+        num_dataset_threads=num_dataset_threads,
         test_run=test_run,
     )
 
