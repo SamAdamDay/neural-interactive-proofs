@@ -23,6 +23,7 @@ from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
 )
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 MULTIPROCESS = True
 
@@ -91,8 +92,7 @@ def experiment_fn(
         seed=combo["seed"],
     )
 
-    use_wandb = cmd_args.wandb_project != ""
-    if use_wandb:
+    if cmd_args.use_wandb:
         wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
     else:
         wandb_tags = []
@@ -104,8 +104,9 @@ def experiment_fn(
         logger=logger,
         tqdm_func=tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
-        use_wandb=use_wandb,
+        use_wandb=cmd_args.use_wandb,
         wandb_project=cmd_args.wandb_project,
+        wandb_entity=cmd_args.wandb_entity,
         run_id=run_id,
         wandb_tags=wandb_tags,
     )
@@ -137,10 +138,21 @@ if __name__ == "__main__":
         "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
     )
     experiment.parser.add_argument(
+        "--use-wandb",
+        action="store_true",
+        help="Whether to use W&B to log the experiment",
+    )
+    experiment.parser.add_argument(
         "--wandb-project",
         type=str,
         help="The name of the W&B project to use",
-        default="",
+        default=WANDB_PROJECT,
+    )
+    experiment.parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        help="The name of the W&B entity to use",
+        default=WANDB_ENTITY,
     )
     experiment.parser.add_argument(
         "--tag",
