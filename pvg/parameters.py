@@ -51,7 +51,7 @@ Create a parameters object using a dictionary for the ppo parameters
 ... )
 """
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, fields
 from abc import ABC
 from typing import Optional, ClassVar, OrderedDict
 from enum import auto as enum_auto
@@ -86,8 +86,27 @@ class BaseParameters(ABC):
     def from_dict(cls, data):
         return dacite.from_dict(data_class=cls, data=data)
 
-    def to_dict(self):
-        return asdict(self)
+    def to_dict(self) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Turns enums into strings, and sub-parameters into dictionaries.
+
+        Note this loses the ordering of the ordered dictionaries.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
+        params_dict = {}
+        for field in fields(self):
+            value = getattr(self, field.name)
+            if isinstance(value, StrEnum):
+                value = value.value
+            elif isinstance(value, (BaseParameters, AgentsParameters)):
+                value = value.to_dict()
+            params_dict[field.name] = value
+        return params_dict
 
 
 class SubParameters(BaseParameters, ABC):
@@ -108,7 +127,7 @@ class RandomAgentParameters(AgentParameters):
     is_random: ClassVar[bool] = True
 
 
-class AgentsParameters(OrderedDict[str, AgentParameters], SubParameters):
+class AgentsParameters(OrderedDict[str, AgentParameters]):
     """Parameters which specify the agents in the experiment.
 
     A subclass of `OrderedDict`. Parameters should be specified as an iterable of
@@ -118,6 +137,23 @@ class AgentsParameters(OrderedDict[str, AgentParameters], SubParameters):
     The keys are the names of the agents, and the values are the parameters for each
     agent.
     """
+
+    def to_dict(self) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Turns sub-parameters into dictionaries.
+
+        Note this loses the ordering of the parameters.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
+        params_dict = {}
+        for param_name, param in self.items():
+            params_dict[param_name] = param.to_dict()
+        return params_dict
 
 
 @dataclass
