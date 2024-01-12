@@ -56,7 +56,7 @@ class Environment(EnvBase, ABC):
         self.params = params
 
         # Create a random number generator
-        self.rng = torch.Generator(device=device)
+        self.rng = torch.Generator()
 
         # Load the dataset
         self.dataset = self._dataset_class(params)
