@@ -6,6 +6,8 @@ When adding a new scenario or a new trainer, add the scenario and trainer to the
 below.
 """
 
+import sys
+import warnings
 from typing import Optional
 
 import wandb
@@ -109,6 +111,18 @@ def run_experiment(
         trainer = TRAINER_MAP[params.trainer](params, scenario_instance, settings)
     else:
         raise ValueError(f"Unknown trainer {params.trainer}")
+
+    # Suppress warnings about a batching rule not being implemented by PyTorch for
+    # aten::_scaled_dot_product_efficient_attention. We can't do anything about this
+    if not sys.warnoptions and not test_run:
+        warnings.filterwarnings(
+            "ignore",
+            message=(
+                "There is a performance drop because we have not yet implemented "
+                "the batching rule for aten::_scaled_dot_product_efficient_attention"
+            ),
+            category=UserWarning,
+        )
 
     # Run the experiment.
     trainer.train()
