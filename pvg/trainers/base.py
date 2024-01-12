@@ -174,12 +174,14 @@ class ReinforcementLearningTrainer(Trainer):
 
         optimizer = torch.optim.Adam(loss_module.parameters(), self.params.ppo.lr)
 
-        iterator = self.settings.tqdm_func(
-            collector, desc="Training", total=self.params.ppo.num_iterations
+        # Create a progress bar
+        pbar = self.settings.tqdm_func(
+            total=self.params.ppo.num_iterations, desc="Training"
         )
-        for tensordict_data in iterator:
-            # Expand the done and terminated to match the reward shape (this is expected by the
-            # value estimator)
+
+        for iteration, tensordict_data in enumerate(collector):
+            # Expand the done and terminated to match the reward shape (this is expected
+            # by the value estimator)
             tensordict_data.set(
                 ("next", "agents", "done"),
                 tensordict_data.get(("next", "done"))
@@ -260,8 +262,14 @@ class ReinforcementLearningTrainer(Trainer):
                 to_log = dict(mean_episode_length=mean_episode_length)
                 for agent_name in self.params.agents:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
-                self.settings.wandb_run.log(to_log)
+                self.settings.wandb_run.log(to_log, step=iteration)
 
             # If we're in test mode, exit after one iteration
             if self.settings.test_run:
                 break
+
+            # Update the progress bar
+            pbar.update(1)
+
+        # Close the progress bar
+        pbar.close()
