@@ -14,6 +14,10 @@ RESULTS_DIR = os.path.join(_root_dir, "results")
 RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")
 GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents")
 
+# Weights & Biases defaults
+WANDB_PROJECT = "pvg-experiments"
+WANDB_ENTITY = "lrhammond-team"
+
 # The indices of the agents when they are concatenated into a single tensor
 ### DO NOT CHANGE THESE VALUES ###
 ### THEY WILL BE REMOVED SOON ###

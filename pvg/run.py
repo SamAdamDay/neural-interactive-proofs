@@ -20,6 +20,7 @@ from pvg.scenario_base import ScenarioInstance
 from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
 from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
 from pvg.utils.types import TorchDevice, LoggingType
+from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
     ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismScenarioInstance,
@@ -38,7 +39,8 @@ def run_experiment(
     tqdm_func: callable = tqdm,
     ignore_cache: bool = False,
     use_wandb: bool = False,
-    wandb_project: Optional[str] = None,
+    wandb_project: str = WANDB_PROJECT,
+    wandb_entity: str = WANDB_ENTITY,
     run_id: Optional[str] = None,
     wandb_tags: list = [],
     num_dataset_threads: int = 8,
@@ -64,8 +66,10 @@ def run_experiment(
         rebuilt from the raw data.
     use_wandb : bool, default=False
         If True, log the experiment to Weights & Biases.
-    wandb_project : str, optional
-        The name of the W&B project to log to. Required if use_wandb is True.
+    wandb_project : str, default=WANDB_PROJECT
+        The name of the W&B project to log to.
+    wandb_entity : str, default=WANDB_ENTITY
+        The name of the W&B entity to log to.
     run_id : str, optional
         The ID of the run. Required if use_wandb is True.
     wandb_tags : list[str], default=[]
@@ -80,11 +84,11 @@ def run_experiment(
 
     # Set up Weights & Biases.
     if use_wandb:
-        if wandb_project is None:
-            raise ValueError("wandb_project must be specified if use_wandb is True.")
         if run_id is None:
             raise ValueError("run_id must be specified if use_wandb is True.")
-        wandb_run = wandb.init(project=wandb_project, name=run_id, tags=wandb_tags)
+        wandb_run = wandb.init(
+            project=wandb_project, entity=wandb_entity, name=run_id, tags=wandb_tags
+        )
         wandb_run.config.update(params.to_dict())
     else:
         wandb_run = None
