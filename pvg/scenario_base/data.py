@@ -11,6 +11,7 @@ from textwrap import indent
 
 import torch
 from torch import Tensor
+from torch.utils.data import DataLoader as TorchDataLoader
 
 from tensordict import TensorDict
 from tensordict.utils import _td_fields
@@ -113,7 +114,7 @@ class Dataset(ABC):
         return f"{type(self).__name__}(\n{string})"
 
 
-class DataLoader(torch.utils.data.DataLoader):
+class DataLoader(TorchDataLoader):
     """The dataloader class, which may be subclassed to add functionality.
 
     Works with a `Dataset` subclass. The dataloader will yield tensordicts.
