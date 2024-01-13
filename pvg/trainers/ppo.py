@@ -12,7 +12,7 @@ from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
 from pvg.utils.torchrl_objectives import ClipPPOLossMultipleActions
-from pvg.trainers.base import ReinforcementLearningTrainer
+from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
@@ -57,7 +57,8 @@ class PpoTrainer(ReinforcementLearningTrainer):
         # Combine the body, policy head and value head into a single model, and get the
         # full policy operator
         self._full_model = ActorValueOperator(body, policy_head, value_head)
-        self._policy = self._full_model.get_policy_operator()
+        self._policy_operator = self._full_model.get_policy_operator()
+        self._value_operator = self._full_model.get_value_operator()
 
     def _get_data_collector(self) -> SyncDataCollector:
         """Construct the data collector, which generates rollouts from the environment
@@ -69,7 +70,7 @@ class PpoTrainer(ReinforcementLearningTrainer):
         """
         return SyncDataCollector(
             self.environment,
-            self._policy,
+            self._policy_operator,
             device=self.device,
             storing_device=self.device,
             frames_per_batch=self.params.ppo.frames_per_batch,
@@ -106,8 +107,8 @@ class PpoTrainer(ReinforcementLearningTrainer):
 
         # Construct the loss module
         loss_module = ClipPPOLossMultipleActions(
-            actor=self._full_model.get_policy_operator(),
-            critic=self._full_model.get_value_operator(),
+            actor=self._policy_operator,
+            critic=self._value_operator,
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
             normalize_advantage=False,
