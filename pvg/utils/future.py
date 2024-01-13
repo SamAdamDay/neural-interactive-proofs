@@ -45,6 +45,6 @@ class StrEnum(str, ReprEnum):
         Return the lower-cased version of the member name.
         """
         return name.lower()
-    
+
     def __str__(self):
         return self._value_
