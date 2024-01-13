@@ -64,7 +64,10 @@ class DummyAgentPartMixin(AgentPart, ABC):
 
 
 class AgentBody(AgentPart, ABC):
-    """Base class for all agent bodies, which compute representations for heads."""
+    """Base class for all agent bodies, which compute representations for heads.
+
+    Representations should have dimension `params.d_representation`.
+    """
 
 
 class DummyAgentBody(DummyAgentPartMixin, AgentBody, ABC):

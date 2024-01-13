@@ -101,11 +101,6 @@ class BaseParameters(ABC):
                 value = value.to_dict()
             params_dict[field.name] = value
 
-        # Add the is_random parameter if it exists. This is not a field of the
-        # parameters object, but we want to include it in the dictionary.
-        if isinstance(self, AgentParameters) and hasattr(self, "is_random"):
-            params_dict["is_random"] = self.is_random
-
         return params_dict
 
 
@@ -120,7 +115,17 @@ class AgentParameters(SubParameters, ABC):
 
     is_random: ClassVar[bool] = False
 
+    def to_dict(self) -> dict:
+        params_dict = super().to_dict()
 
+        # Add the is_random parameter. This is not a field of the parameters object, but
+        # we want to include it in the dictionary.
+        params_dict["is_random"] = self.is_random
+
+        return params_dict
+
+
+@dataclass
 class RandomAgentParameters(AgentParameters):
     """Parameters which specify a random agent"""
 
@@ -346,6 +351,8 @@ class Parameters(BaseParameters):
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
     test_size : float
         The proportion of the dataset to use for testing.
+    d_representation : int
+        The dimension of each agent's body representation output.
     batch_size : int
         The number of simultaneous environments to run in parallel.
     prover_reward : float
@@ -377,6 +384,8 @@ class Parameters(BaseParameters):
     pretrain_agents: bool = False
 
     test_size: float = 0.2
+
+    d_representation: int = 16
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
@@ -473,7 +482,7 @@ def _process_agents_params(
                     **agent_params
                 )
 
-        elif isinstance(agent_params, agent_params_class):
+        elif isinstance(agent_params, (agent_params_class, RandomAgentParameters)):
             new_agents_params[agent_name] = agent_params
 
         else:
