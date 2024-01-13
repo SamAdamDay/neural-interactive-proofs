@@ -5,8 +5,11 @@ from pvg.scenario_base import DataLoader, ScenarioInstance
 from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 from pvg.graph_isomorphism.agents import (
     GraphIsomorphismAgentBody,
+    GraphIsomorphismDummyAgentBody,
     GraphIsomorphismAgentPolicyHead,
+    GraphIsomorphismRandomAgentPolicyHead,
     GraphIsomorphismAgentValueHead,
+    GraphIsomorphismConstantAgentValueHead,
     GraphIsomorphismSoloAgentHead,
     GraphIsomorphismCombinedBody,
     GraphIsomorphismCombinedPolicyHead,
@@ -51,8 +54,11 @@ class GraphIsomorphismScenarioInstance(ScenarioInstance):
     environment_class = GraphIsomorphismEnvironment
 
     body_class = GraphIsomorphismAgentBody
+    dummy_body_class = GraphIsomorphismDummyAgentBody
     policy_head_class = GraphIsomorphismAgentPolicyHead
+    random_policy_head_class = GraphIsomorphismRandomAgentPolicyHead
     value_head_class = GraphIsomorphismAgentValueHead
+    constant_value_head_class = GraphIsomorphismConstantAgentValueHead
     solo_head_class = GraphIsomorphismSoloAgentHead
     combined_body_class = GraphIsomorphismCombinedBody
     combined_policy_head_class = GraphIsomorphismCombinedPolicyHead

@@ -8,8 +8,11 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import Dataset, DataLoader
 from pvg.scenario_base.agents import (
     AgentBody,
+    DummyAgentBody,
     AgentPolicyHead,
+    RandomAgentPolicyHead,
     AgentValueHead,
+    ConstantAgentValueHead,
     SoloAgentHead,
     CombinedBody,
     CombinedPolicyHead,
@@ -60,10 +63,16 @@ class ScenarioInstance(ABC):
         The data loader class to use for the experiment.
     body_class : type[AgentBody]
         The class for the agent body.
+    dummy_body_class : type[DummyAgentBody]
+        The class for the dummy agent body.
     policy_head_class : type[AgentPolicyHead]
         The class for the agent policy head.
+    random_policy_head_class : type[RandomAgentPolicyHead]
+        The class for the random agent policy head.
     value_head_class : type[AgentValueHead]
         The class for the agent value head.
+    constant_value_head_class : type[RandomAgentValueHead]
+        The class for the random agent value head.
     solo_head_class : type[SoloAgentHead]
         The class for the solo agent head.
     combined_body_class : type[CombinedBody]
@@ -82,8 +91,11 @@ class ScenarioInstance(ABC):
     environment_class: ClassVar[type[Environment]]
 
     body_class: ClassVar[type[AgentBody]]
+    dummy_body_class: ClassVar[type[DummyAgentBody]]
     policy_head_class: ClassVar[type[AgentPolicyHead]]
+    random_policy_head_class: ClassVar[type[RandomAgentPolicyHead]]
     value_head_class: ClassVar[type[AgentValueHead]]
+    constant_value_head_class: ClassVar[type[ConstantAgentValueHead]]
     solo_head_class: ClassVar[type[SoloAgentHead]]
     combined_body_class: ClassVar[type[CombinedBody]]
     combined_policy_head_class: ClassVar[type[CombinedPolicyHead]]
@@ -105,34 +117,58 @@ class ScenarioInstance(ABC):
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
-        for agent_name in params.agents:
+        for agent_name, agent_params in params.agents.items():
             agent_dict = {}
 
-            agent_dict["body"] = self.body_class(
-                params=params,
-                device=self.device,
-                agent_name=agent_name,
-            )
+            # Random agents have a dummy body
+            if agent_params.is_random:
+                agent_dict["body"] = self.dummy_body_class(
+                    params=params,
+                    device=self.device,
+                    agent_name=agent_name,
+                )
+            else:
+                agent_dict["body"] = self.body_class(
+                    params=params,
+                    device=self.device,
+                    agent_name=agent_name,
+                )
 
             if params.trainer == TrainerType.PPO:
-                agent_dict["policy_head"] = self.policy_head_class(
-                    params=params,
-                    device=self.device,
-                    agent_name=agent_name,
-                )
-                agent_dict["value_head"] = self.value_head_class(
-                    params=params,
-                    device=self.device,
-                    agent_name=agent_name,
-                )
+                if agent_params.is_random:
+                    agent_dict["policy_head"] = self.random_policy_head_class(
+                        params=params,
+                        device=self.device,
+                        agent_name=agent_name,
+                    )
+                    agent_dict["value_head"] = self.constant_value_head_class(
+                        params=params,
+                        device=self.device,
+                        agent_name=agent_name,
+                    )
+                else:
+                    agent_dict["policy_head"] = self.policy_head_class(
+                        params=params,
+                        device=self.device,
+                        agent_name=agent_name,
+                    )
+                    agent_dict["value_head"] = self.value_head_class(
+                        params=params,
+                        device=self.device,
+                        agent_name=agent_name,
+                    )
             elif params.trainer == TrainerType.SOLO_AGENT:
+                if agent_params.is_random:
+                    raise ValueError(
+                        "Cannot use random agents with SOLO_AGENT trainer."
+                    )
                 agent_dict["solo_head"] = self.solo_head_class(
                     params=params,
                     device=self.device,
                     agent_name=agent_name,
                 )
 
-            self.agents[agent_name] = Agent.from_dict(agent_dict)
+            self.agents[agent_name] = Agent(**agent_dict)
 
         # Build additional components if the trainer is an RL trainer
         if self.params.trainer == TrainerType.PPO:

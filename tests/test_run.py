@@ -14,7 +14,7 @@ from pvg.utils.output import DummyTqdm
 def test_run_experiment():
     """Test running experiments with very basic parameters."""
 
-    # Very agent parameters for each scenario
+    # Very basic agent parameters for each scenario
     agents_params_dict = {
         ScenarioType.GRAPH_ISOMORPHISM: AgentsParameters(
             [
@@ -80,12 +80,46 @@ def test_run_experiment():
     for scenario_type, agents_param in agents_params_dict.items():
         for trainer_type, trainer_param in trainer_params.items():
             # Construct the parameters
-            params = Parameters.from_dict(
-                {
+            params = Parameters(
+                **{
                     "scenario": scenario_type,
                     "trainer": trainer_type,
                     "dataset": "test",
                     "agents": agents_param,
+                    str(trainer_type): trainer_param,
+                }
+            )
+
+            # Run the experiment in test mode
+            run_experiment(params, tqdm_func=DummyTqdm, test_run=True)
+
+
+def test_run_experiment_random_agents():
+    """Test running experiments with random agents and very basic parameters."""
+
+    # Very basic parameters for each trainer
+    trainer_params = {
+        TrainerType.PPO: PpoParameters(
+            num_iterations=8,
+            num_epochs=4,
+            minibatch_size=64,
+        ),
+    }
+
+    for scenario_type in [ScenarioType.GRAPH_ISOMORPHISM]:
+        for trainer_type, trainer_param in trainer_params.items():
+            # Construct the parameters
+            params = Parameters(
+                **{
+                    "scenario": scenario_type,
+                    "trainer": trainer_type,
+                    "dataset": "test",
+                    "agents": AgentsParameters(
+                        [
+                            ("prover", {"is_random": True}),
+                            ("verifier", {"is_random": True}),
+                        ]
+                    ),
                     str(trainer_type): trainer_param,
                 }
             )
