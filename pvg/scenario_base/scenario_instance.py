@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
+import numpy as np
+
 import torch
 
 from pvg.parameters import Parameters, ScenarioType, TrainerType
@@ -43,7 +45,8 @@ class ScenarioInstance(ABC):
     dataset : Dataset
         The dataset for the experiment.
     agents : dict[str, Agent]
-        The agents for the experiment.
+        The agents for the experiment. Each 'agent' is a dictionary containing all of
+        the agent parts.
     environment : Optional[Environment]
         The environment for the experiment, if the experiment is RL.
     combined_body : Optional[CombinedBody]
@@ -113,12 +116,22 @@ class ScenarioInstance(ABC):
 
         self.device = settings.device
 
+        # Set the random seed
+        torch.manual_seed(params.seed)
+        np.random.seed(params.seed)
+
+        # Create the dataset
         self.dataset = self.dataset_class(params, settings)
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
         for agent_name, agent_params in params.agents.items():
             agent_dict = {}
+
+            # Set the random seed based on the agent name
+            agent_seed = (params.seed + hash(agent_name)) % (2**32)
+            torch.manual_seed(agent_seed)
+            np.random.seed(agent_seed)
 
             # Random agents have a dummy body
             if agent_params.is_random:
@@ -157,10 +170,12 @@ class ScenarioInstance(ABC):
                         device=self.device,
                         agent_name=agent_name,
                     )
-            elif params.trainer == TrainerType.SOLO_AGENT:
+            if params.trainer == TrainerType.SOLO_AGENT or (
+                params.pretrain_agents and not agent_params.is_random
+            ):
                 if agent_params.is_random:
                     raise ValueError(
-                        "Cannot use random agents with SOLO_AGENT trainer."
+                        "Cannot use random agents with solo agent trainer."
                     )
                 agent_dict["solo_head"] = self.solo_head_class(
                     params=params,
