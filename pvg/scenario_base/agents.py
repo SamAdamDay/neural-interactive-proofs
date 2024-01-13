@@ -13,11 +13,10 @@ from typing import Optional, Any
 from dataclasses import dataclass
 
 import torch
+from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-
-import dacite
 
 from pvg.parameters import Parameters, TrainerType, ScenarioType
 from pvg.utils.types import TorchDevice
@@ -47,40 +46,57 @@ class AgentPart(TensorDictModuleBase, ABC):
         pass
 
 
+class DummyAgentPartMixin(AgentPart, ABC):
+    """A mixin for agent parts which are dummy (e.g. random or constant).
+
+    Adds a dummy parameter to the agent part, so that PyTorch can calculate gradients
+    and so that tensordict can determine the device.
+    """
+
+    def __init__(self, params: Parameters, device: TorchDevice | None = None):
+        super().__init__(params, device)
+        self.dummy_parameter = TorchParameter(torch.tensor(0.0, device=self.device))
+
+    def to(self, device: TorchDevice):
+        """Move the agent to the given device."""
+        self.device = device
+        self.dummy_parameter = self.dummy_parameter.to(device)
+
+
 class AgentBody(AgentPart, ABC):
     """Base class for all agent bodies, which compute representations for heads."""
 
-    pass
+
+class DummyAgentBody(DummyAgentPartMixin, AgentBody, ABC):
+    """A dummy agent body which does nothing."""
 
 
 class AgentHead(AgentPart, ABC):
     """Base class for all agent heads."""
 
-    pass
-
 
 class AgentPolicyHead(AgentHead, ABC):
     """Base class for all agent policy heads."""
 
-    pass
+
+class RandomAgentPolicyHead(DummyAgentPartMixin, AgentPolicyHead, ABC):
+    """A policy head which samples actions randomly."""
 
 
 class AgentValueHead(AgentHead, ABC):
     """Base class for all agent value heads, to the value of a state."""
 
-    pass
+
+class ConstantAgentValueHead(DummyAgentPartMixin, AgentValueHead, ABC):
+    """A value head which returns a constant value."""
 
 
 class AgentCriticHead(AgentHead, ABC):
     """Base class for all agent critic heads, to the value of a state-action pair."""
 
-    pass
-
 
 class SoloAgentHead(AgentHead, ABC):
     """Base class for all solo agent heads, which attempt the task on their own."""
-
-    pass
 
 
 class CombinedBody(TensorDictModuleBase, ABC):
@@ -191,7 +207,6 @@ class CombinedValueHead(TensorDictModuleBase, ABC):
         value_output : TensorDict
             The output of the combined value head.
         """
-        pass
 
 
 @dataclass
@@ -203,10 +218,6 @@ class Agent:
     value_head: Optional[AgentValueHead] = None
     critic_head: Optional[AgentCriticHead] = None
     solo_head: Optional[SoloAgentHead] = None
-
-    @classmethod
-    def from_dict(cls, data):
-        return dacite.from_dict(data_class=cls, data=data)
 
     def __post_init__(self):
         if self.policy_head is None and self.solo_head is None:

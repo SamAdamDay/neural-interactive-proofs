@@ -42,15 +42,18 @@ from pvg.scenario_base import (
     AgentPart,
     AgentBody,
     AgentHead,
+    DummyAgentBody,
     AgentPolicyHead,
-    AgentCriticHead,
+    RandomAgentPolicyHead,
     AgentValueHead,
+    ConstantAgentValueHead,
+    AgentCriticHead,
     SoloAgentHead,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
 )
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
 from pvg.utils.torch_modules import (
     PairedGaussianNoise,
     PairInvariantizer,
@@ -84,7 +87,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        self._agent_params = params.agents[agent_name]
+        self._agent_params: GraphIsomorphismAgentParameters = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
             if _agent_name == agent_name:
                 self.agent_index = i
@@ -491,6 +494,66 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         return self
 
 
+class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
+    """Dummy agent body for the graph isomorphism task."""
+
+    in_keys = ("x",)
+    out_keys = ("graph_level_repr", "node_level_repr")
+
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        """Returns dummy outputs.
+
+        Parameters
+        ----------
+        data : TensorDictBase
+            The data to run the GNN and transformer on. A TensorDictBase with
+            keys:
+
+            - "x" (... pair node feature): The graph node features (message history)
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 1): The output graph-level
+              representations.
+            - "node_level_repr" (... 2 max_nodes 1): The output node-level
+              representations.
+        """
+
+        # The size of the node dimension
+        max_num_nodes = data["x"].shape[-2]
+
+        # The dummy graph-level representations
+        graph_level_repr = torch.zeros(
+            *data.batch_size,
+            2,
+            1,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # The dummy node-level representations
+        node_level_repr = torch.zeros(
+            *data.batch_size,
+            2,
+            max_num_nodes,
+            1,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # Multiply the outputs by the dummy parameter, so that the gradients PyTorch
+        # doesn't complain about not having any gradients
+        graph_level_repr = graph_level_repr * self.dummy_parameter
+        node_level_repr = node_level_repr * self.dummy_parameter
+
+        return data.update(
+            dict(graph_level_repr=graph_level_repr, node_level_repr=node_level_repr)
+        )
+
+
 class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
     """Base class for all graph isomorphism agent heads.
 
@@ -773,6 +836,86 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.decider.to(device)
 
 
+class GraphIsomorphismRandomAgentPolicyHead(
+    GraphIsomorphismAgentPart, RandomAgentPolicyHead
+):
+    """Policy head for the graph isomorphism task yielding a uniform distribution."""
+
+    in_keys = ("graph_level_repr", "node_level_repr")
+
+    @property
+    def out_keys(self):
+        if self.decider:
+            return ("node_selected_logits",)
+        else:
+            return ("node_selected_logits", "decision_logits")
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[TorchDevice] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        # Determine if we should output a decision too
+        self.decider = agent_name == "verifier"
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Outputs a uniform distribution.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 1): The output graph-level
+              representations.
+            - "node_level_repr" (... 2 max_nodes 1): The output node-level
+              representations.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys (all zeros):
+
+            - "node_selected_logits" (... 2*max_nodes): A logit for each node,
+              indicating the probability that this node should be sent as a message to
+              the verifier.
+            - "decision_logits" (... 3): A logit for each of the three options: continue
+              exchanging messages, guess that the graphs are isomorphic, or guess that
+              the graphs are not isomorphic. Set to zeros when the decider is not
+              present.
+        """
+
+        max_num_nodes = body_output["node_level_repr"].shape[-2]
+
+        node_selected_logits = torch.zeros(
+            *body_output.batch_size,
+            2 * max_num_nodes,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        decision_logits = torch.zeros(
+            *body_output.batch_size,
+            3,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # Multiply the outputs by the dummy parameter, so that the gradients PyTorch
+        # doesn't complain about not having any gradients
+        node_selected_logits = node_selected_logits * self.dummy_parameter
+        decision_logits = decision_logits * self.dummy_parameter
+
+        return body_output.update(
+            dict(
+                node_selected_logits=node_selected_logits,
+                decision_logits=decision_logits,
+            )
+        )
+
+
 class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     """Value head for the graph isomorphism task.
 
@@ -855,6 +998,48 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         super().to(device)
         self.device = device
         self.value_mlp.to(device)
+
+
+class GraphIsomorphismConstantAgentValueHead(
+    GraphIsomorphismAgentHead, ConstantAgentValueHead
+):
+    """A constant value head for the graph isomorphism task."""
+
+    in_keys = ("graph_level_repr", "node_level_repr")
+    out_keys = ("value",)
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Returns a constant value.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 1): The output graph-level
+              representations.
+            - "node_level_repr" (... 2 max_nodes 1): The output node-level
+              representations.
+
+        Returns
+        -------
+        value_out : TensorDict
+            A tensor dict with keys:
+
+            - "value" (...): The 'value' for each batch item, which is a constant zero.
+        """
+
+        value = torch.zeros(
+            *body_output.batch_size,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # Multiply the output by the dummy parameter, so that the gradients PyTorch
+        # doesn't complain about not having any gradients
+        value = value * self.dummy_parameter
+
+        return body_output.update(dict(value=value))
 
 
 class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):

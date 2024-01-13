@@ -19,13 +19,16 @@ from .agents import (
     AgentPart,
     AgentBody,
     AgentHead,
+    DummyAgentBody,
     AgentPolicyHead,
+    RandomAgentPolicyHead,
     AgentCriticHead,
     AgentValueHead,
+    ConstantAgentValueHead,
     SoloAgentHead,
-    Agent,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
+    Agent,
 )
 from .scenario_instance import ScenarioInstance
