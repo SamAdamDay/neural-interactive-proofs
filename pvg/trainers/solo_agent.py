@@ -46,7 +46,7 @@ class SoloAgentTrainer(Trainer):
         dataset = self.scenario_instance.dataset
         train_dataset, test_dataset = random_split(
             dataset,
-            (1 - self.params.solo_agent.test_size, self.params.solo_agent.test_size),
+            (1 - self.params.test_size, self.params.test_size),
         )
 
         # Load the agents

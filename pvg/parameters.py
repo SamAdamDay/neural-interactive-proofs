@@ -302,16 +302,12 @@ class SoloAgentParameters(SubParameters):
     body_lr_factor : float
         The learning rate factor for the body part of the model. This allows updating
         the body at a different rate to the rest of the model.
-    test_size : float
-        The proportion of the dataset to use for testing.
     """
 
     num_epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.001
     body_lr_factor: float = 0.01
-
-    test_size: float = 0.2
 
 
 @dataclass
@@ -348,6 +344,8 @@ class Parameters(BaseParameters):
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
+    test_size : float
+        The proportion of the dataset to use for testing.
     batch_size : int
         The number of simultaneous environments to run in parallel.
     prover_reward : float
@@ -378,6 +376,8 @@ class Parameters(BaseParameters):
 
     max_message_rounds: int = 8
     pretrain_agents: bool = False
+
+    test_size: float = 0.2
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
