@@ -354,8 +354,7 @@ class Parameters(BaseParameters):
         The reward given to the verifier when it guesses correctly.
     verifier_terminated_penalty : float
         The reward given to the verifier if the episode terminates before it guesses.
-    agents : AgentsParameters | OrderedDict[str, AgentParameters],
-    optional
+    agents : AgentsParameters | OrderedDict[str, AgentParameters], optional
         Additional parameters for the agents. The keys are the names of the agents, and
         the values are the parameters for each agent. If not provided, the default
         parameters are used for each agent for a given scenario.
