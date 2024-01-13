@@ -306,7 +306,7 @@ class SoloAgentParameters(SubParameters):
         The proportion of the dataset to use for testing.
     """
 
-    num_epochs: int = 500
+    num_epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.001
     body_lr_factor: float = 0.01
@@ -340,9 +340,14 @@ class Parameters(BaseParameters):
         The RL trainer to use.
     dataset : str
         The dataset to use.
+    seed : int
+        The random seed.
     max_message_rounds : int
         The maximum number of rounds of messages, where the verifier sends a message,
         and the prover responds with a message.
+    pretrain_agents : bool
+        Whether to pretrain the agents in isolation before running the main training.
+        This pretrains the bodies of the agents using the parameters in `solo_agent`.
     batch_size : int
         The number of simultaneous environments to run in parallel.
     prover_reward : float
@@ -360,7 +365,7 @@ class Parameters(BaseParameters):
         Additional parameters for PPO.
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
-        "solo_agent".
+        "solo_agent" or when `pretrain_agents` is `True`.
     image_classification : ImageClassificationParameters, optional
         Additional parameters for the image classification task.
     """
@@ -372,6 +377,7 @@ class Parameters(BaseParameters):
     seed: int = 6198
 
     max_message_rounds: int = 8
+    pretrain_agents: bool = False
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
@@ -404,7 +410,7 @@ class Parameters(BaseParameters):
             elif isinstance(self.ppo, dict):
                 self.ppo = PpoParameters(**self.ppo)
 
-        elif self.trainer == TrainerType.SOLO_AGENT:
+        if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:
             if self.solo_agent is None:
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
