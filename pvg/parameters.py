@@ -101,11 +101,6 @@ class BaseParameters(ABC):
                 value = value.to_dict()
             params_dict[field.name] = value
 
-        # Add the is_random parameter if it exists. This is not a field of the
-        # parameters object, but we want to include it in the dictionary.
-        if isinstance(self, AgentParameters) and hasattr(self, "is_random"):
-            params_dict["is_random"] = self.is_random
-
         return params_dict
 
 
@@ -120,7 +115,17 @@ class AgentParameters(SubParameters, ABC):
 
     is_random: ClassVar[bool] = False
 
+    def to_dict(self) -> dict:
+        params_dict = super().to_dict()
 
+        # Add the is_random parameter. This is not a field of the parameters object, but
+        # we want to include it in the dictionary.
+        params_dict["is_random"] = self.is_random
+
+        return params_dict
+
+
+@dataclass
 class RandomAgentParameters(AgentParameters):
     """Parameters which specify a random agent"""
 
