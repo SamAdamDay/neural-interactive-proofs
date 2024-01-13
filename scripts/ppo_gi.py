@@ -13,6 +13,7 @@ import torch
 from pvg import (
     Parameters,
     AgentsParameters,
+    RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     PpoParameters,
     ScenarioType,
@@ -68,9 +69,7 @@ def experiment_fn(
             [
                 (
                     "prover",
-                    GraphIsomorphismAgentParameters(
-                        num_gnn_layers=combo["prover_num_layers"],
-                    ),
+                    RandomAgentParameters(),
                 ),
                 (
                     "verifier",

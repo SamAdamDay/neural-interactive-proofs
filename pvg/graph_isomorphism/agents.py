@@ -217,6 +217,10 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # Build the transformer
         self.transformer = self._build_transformer()
 
+        # Build the encoder going from the transformer output to the representation
+        # space
+        self.representation_encoder = self._build_representation_encoder()
+
     def _build_gnn(self, d_input: int) -> TensorDictSequential:
         """Builds the GNN module for an agent.
 
@@ -350,6 +354,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         return global_pooling
 
+    def _build_representation_encoder(self) -> Linear:
+        """Builds the encoder layer which translates to the representation space.
+
+        This is a simple linear layer ensures that the number of output features is
+        `params.d_representation`.
+
+        Returns
+        -------
+        representation_encoder : torch.nn.Linear
+            The encoder module
+        """
+        return Linear(
+            self._agent_params.d_transformer,
+            self.params.d_representation,
+            device=self.device,
+        )
+
     def forward(
         self,
         data: TensorDictBase,
@@ -380,9 +401,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         out : TensorDict
             A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes d_transformer): The output node-level
+            - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
               representations.
         """
 
@@ -475,6 +496,10 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             pair=2,
         )
 
+        # Run the node-level representations through the representation encoder
+        graph_level_repr = self.representation_encoder(graph_level_repr)
+        node_level_repr = self.representation_encoder(node_level_repr)
+
         return TensorDict(
             dict(
                 graph_level_repr=graph_level_repr,
@@ -491,6 +516,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self.global_pooling[-1].to(device)
         self.gnn_transformer_encoder.to(device)
         self.transformer.to(device)
+        self.representation_encoder.to(device)
         return self
 
 
@@ -506,8 +532,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         Parameters
         ----------
         data : TensorDictBase
-            The data to run the GNN and transformer on. A TensorDictBase with
-            keys:
+            The data to run the GNN and transformer on. A TensorDictBase with keys:
 
             - "x" (... pair node feature): The graph node features (message history)
 
@@ -516,10 +541,10 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         out : TensorDict
             A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 1): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes 1): The output node-level
-              representations.
+            - "node_level_repr" (... 2 max_nodes d_representation): The output
+              node-level representations.
         """
 
         # The size of the node dimension
@@ -529,7 +554,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         graph_level_repr = torch.zeros(
             *data.batch_size,
             2,
-            1,
+            self.params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -539,7 +564,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
             *data.batch_size,
             2,
             max_num_nodes,
-            1,
+            self.params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -698,7 +723,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The decider module.
         """
         return self._build_graph_level_mlp(
-            d_in=self._agent_params.d_transformer,
+            d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_decider,
             d_out=d_out,
             num_layers=self._agent_params.num_decider_layers,
@@ -759,7 +784,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             The node selector module.
         """
         return self._build_node_level_mlp(
-            d_in=self._agent_params.d_transformer,
+            d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_node_selector,
             d_out=1,
             num_layers=self._agent_params.num_node_selector_layers,
@@ -776,9 +801,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         body_output : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes d_transformer): The output node-level
+            - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
               representations.
 
         Returns
@@ -869,9 +894,9 @@ class GraphIsomorphismRandomAgentPolicyHead(
         body_output : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 1): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes 1): The output node-level
+            - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
               representations.
 
         Returns
@@ -953,7 +978,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
             The value module.
         """
         return self._build_graph_level_mlp(
-            d_in=self._agent_params.d_transformer,
+            d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_value,
             d_out=1,
             num_layers=self._agent_params.num_value_layers,
@@ -969,7 +994,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         body_output : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
 
         Returns
@@ -1168,10 +1193,10 @@ class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead
         critic_input : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (batch 2 d_transformer): The output graph-level
+            - "graph_level_repr" (batch 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (batch 2 max_nodes d_transformer): The output node-level
-              representations.
+            - "node_level_repr" (batch 2 max_nodes d_representation): The output
+              node-level representations.
             - "node_selected" (batch 2 max_nodes): Which node was selected to send as a
               message.
             - "decision" (batch): The decision made by the verifier.
@@ -1296,7 +1321,7 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
         body_output : TensorDict
             The output of the body module. A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 d_transformer): The output graph-level
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
 
         Returns
