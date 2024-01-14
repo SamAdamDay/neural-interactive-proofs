@@ -273,13 +273,13 @@ class PpoParameters(SubParameters):
     """
 
     # Sampling
-    frames_per_batch = 1000
-    num_iterations: int = 8
+    frames_per_batch: int = 1000
+    num_iterations: int = 1000
 
     # Training
     num_epochs: int = 4
     minibatch_size: int = 64
-    lr = 3e-4
+    lr: float = 3e-4
     max_grad_norm = 1.0
 
     # PPO
