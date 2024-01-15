@@ -26,7 +26,7 @@ from pvg.utils.experiments import (
 )
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 
 param_grid = dict(
     dataset_name=["eru10000"],
@@ -41,7 +41,7 @@ param_grid = dict(
     prover_num_layers=[5],
     verifier_num_layers=[2],
     random_prover=[False],
-    pretrain_agents=[True],
+    pretrain_agents=[False],
     seed=[8144, 820, 4173, 3992],
 )
 

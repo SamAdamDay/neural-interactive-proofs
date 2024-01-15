@@ -16,8 +16,7 @@ from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 
 from pvg.parameters import Parameters
-from pvg.scenario_base.scenario_instance import ScenarioInstance
-from pvg.scenario_base.environment import Environment
+from pvg.scenario_base import ScenarioInstance, Environment, RolloutSampler
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
 from pvg.trainers.solo_agent import SoloAgentTrainer
@@ -173,7 +172,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         torch.manual_seed(self.params.seed)
         np.random.seed(self.params.seed)
 
-        optimizer = torch.optim.Adam(loss_module.parameters(), self.params.ppo.lr)
+        # Create the rollout sampler, which will sample rollouts from the environment
+        # and save them to W&B
+        if self.settings.wandb_run is not None:
+            rollout_sampler = RolloutSampler(self.settings)
 
         # Create a progress bar
         pbar = self.settings.tqdm_func(
@@ -254,16 +256,19 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             for i, agent_name in enumerate(self.params.agents):
                 mean_rewards[agent_name] = reward[..., i][done].mean().item()
 
-            # Compute the average episode length
-            round = tensordict_data.get(("next", "round"))
-            mean_episode_length = round[done].float().mean().item()
-
-            # Log to W&B if using
             if self.settings.wandb_run is not None:
+                # Compute the average episode length
+                round = tensordict_data.get(("next", "round"))
+                mean_episode_length = round[done].float().mean().item()
+
+                # Log the mean episode length and mean rewards
                 to_log = dict(mean_episode_length=mean_episode_length)
                 for agent_name in self.params.agents:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                 self.settings.wandb_run.log(to_log, step=iteration)
+
+                # Sample rollouts from the data and save them to W&B
+                rollout_sampler.sample_and_save_rollouts(tensordict_data, iteration)
 
             # If we're in test mode, exit after one iteration
             if self.settings.test_run:

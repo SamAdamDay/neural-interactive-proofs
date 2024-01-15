@@ -9,13 +9,99 @@ import os
 import pickle
 from textwrap import indent
 
+import numpy as np
+
+import torch
+
+from tensordict import TensorDict
+
 import wandb
 
+from pvg.experiment_settings import ExperimentSettings
+from pvg.utils.data import tensordict_to_numpy_dict
 from pvg.constants import (
     ROLLOUT_SAMPLE_ARTIFACT_PREFIX,
+    ROLLOUT_SAMPLE_ARTIFACT_TYPE,
+    ROLLOUT_SAMPLE_FILENAME,
     WANDB_ENTITY,
     WANDB_PROJECT,
 )
+
+
+class RolloutSampler:
+    """Samples rollouts from an environment and saves them to W&B.
+
+    Parameters
+    ----------
+    settings : ExperimentSettings
+        The settings of the experiment.
+    """
+
+    def __init__(self, settings: ExperimentSettings):
+        self.settings = settings
+
+        # Make sure we have a W&B run
+        if settings.wandb_run is None:
+            raise ValueError("RolloutSampler requires a W&B run")
+
+        self._wandb_run = settings.wandb_run
+
+        # Load the W&B API
+        self._wandb_api = wandb.Api()
+
+        # Create and initial artifact
+        self._artifact = wandb.Artifact(
+            name=f"{ROLLOUT_SAMPLE_ARTIFACT_PREFIX}{self._wandb_run.name}",
+            type=ROLLOUT_SAMPLE_ARTIFACT_TYPE,
+        )
+        self._wandb_run.use_artifact(self._artifact)
+
+    def sample_and_save_rollouts(self, data: TensorDict, iteration: int):
+        """Sample rollouts from the given data and save them to W&B.
+
+        Parameters
+        ----------
+        data : TensorDict
+            The data to sample rollouts from.
+        iteration : int
+            The iteration of training we are on.
+        """
+
+        # Sample rollouts randomly from the data
+        bids = torch.where(
+            data["next", "done"],
+            torch.rand_like(data["next", "done"], dtype=torch.float32) + 1,
+            0.0,
+        )
+        _, index_flat = torch.topk(bids.flatten(), self.settings.num_rollout_samples)
+        batch_ids, episode_ids = np.unravel_index(
+            index_flat.detach().cpu().numpy(), bids.shape
+        )
+
+        rollout_samples: list[TensorDict] = []
+
+        for batch_id, episode_id in zip(batch_ids.flat, episode_ids.flat):
+            # Determine the start of the episode
+            episode_start_id = episode_id - 1
+            while (
+                episode_start_id >= 0
+                and not data["next", "done"][batch_id, episode_start_id]
+            ):
+                episode_start_id -= 1
+            episode_start_id += 1
+
+            # Get the rollout data
+            rollout_td = data[batch_id, episode_start_id : episode_id + 1]
+            rollout_samples.append(tensordict_to_numpy_dict(rollout_td))
+
+        # Save the rollout samples to W&B
+        self._artifact = self._artifact.new_draft()
+        with TemporaryDirectory() as temp_dir:
+            file_path = os.path.join(temp_dir, ROLLOUT_SAMPLE_FILENAME)
+            with open(file_path, "wb") as f:
+                pickle.dump(rollout_samples, f)
+            self._artifact.add_file(file_path, f"iteration_{iteration}")
+        self._wandb_run.use_artifact(self._artifact)
 
 
 class RolloutSamples(ABC):

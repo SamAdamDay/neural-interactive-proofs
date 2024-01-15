@@ -31,6 +31,9 @@ class ExperimentSettings:
     ignore_cache : bool, default=False
         If True, when the dataset is loaded, the cache is ignored and the dataset is
         rebuilt from the raw data.
+    num_rollout_samples : int, default=10
+        The number of rollout samples to collect and save per iteration of RL training.
+        These are useful to visualize the progress of the training.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
@@ -45,6 +48,7 @@ class ExperimentSettings:
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
+    num_rollout_samples: int = 10
     num_dataset_threads: int = 8
     test_run: bool = False
 
