@@ -31,3 +31,4 @@ from .agents import (
     GraphIsomorphismSoloAgentHead,
 )
 from .scenario_instance import GraphIsomorphismScenarioInstance
+from .rollout_samples import GraphIsomorphismRolloutSamples

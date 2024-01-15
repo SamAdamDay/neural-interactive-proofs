@@ -32,3 +32,4 @@ from .agents import (
     Agent,
 )
 from .scenario_instance import ScenarioInstance
+from .rollout_samples import RolloutSamples

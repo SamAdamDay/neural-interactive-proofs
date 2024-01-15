@@ -83,8 +83,6 @@ class BaseParameters(ABC):
         Turns enums into strings, and sub-parameters into dictionaries. Includes the
         is_random parameter if it exists.
 
-        Note this loses the ordering of the ordered dictionaries.
-
         Returns
         -------
         params_dict : dict
@@ -146,9 +144,10 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
 
-        Turns sub-parameters into dictionaries.
+        Adds a special key `_agent_order` which is a list of the agent names in the
+        order they appear in the dictionary.
 
-        Note this loses the ordering of the parameters.
+        Turns sub-parameters into dictionaries.
 
         Returns
         -------
@@ -158,6 +157,7 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
         params_dict = {}
         for param_name, param in self.items():
             params_dict[param_name] = param.to_dict()
+        params_dict["_agent_order"] = list(self.keys())
         return params_dict
 
 
@@ -247,7 +247,8 @@ class PpoParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int
-        The number of frames to sample per training iteration.
+        The number of frames to sample per training iteration. Should be divisible by
+        `max_message_rounds`.
     num_iterations : int
         The number of sampling and training iterations. `num_iterations *
         frames_per_batch` is the total number of frames sampled during training.
