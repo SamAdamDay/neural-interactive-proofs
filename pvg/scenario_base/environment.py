@@ -56,6 +56,8 @@ class Environment(EnvBase, ABC):
         self.params = params
         self.settings = settings
 
+        self.agent_names = list(params.agents.keys())
+
         # Create a random number generator
         self.rng = torch.Generator()
 

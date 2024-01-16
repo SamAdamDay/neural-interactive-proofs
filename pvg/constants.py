@@ -20,9 +20,3 @@ WANDB_ENTITY = "lrhammond-team"
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"
 ROLLOUT_SAMPLE_ARTIFACT_TYPE = "rollout_sample"
 ROLLOUT_SAMPLE_FILENAME = "rollout_sample.pkl"
-
-# The indices of the agents when they are concatenated into a single tensor
-### DO NOT CHANGE THESE VALUES ###
-### THEY WILL BE REMOVED SOON ###
-PROVER_AGENT_NUM = 0
-VERIFIER_AGENT_NUM = 1

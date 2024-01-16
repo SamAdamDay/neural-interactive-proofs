@@ -32,7 +32,6 @@ from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Float, Bool, Int
 
-from pvg.constants import PROVER_AGENT_NUM, VERIFIER_AGENT_NUM
 from pvg.scenario_base import (
     AgentPart,
     AgentBody,

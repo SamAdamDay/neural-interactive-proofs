@@ -66,9 +66,9 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
 
         # Add labels for the exchange of messages at the bottom
         message_label_trace = go.Scatter(
-            text=["Prover messages:", "Verifier messages:"],
-            x=[-0.15, -0.15],
-            y=[-1.3, -1.6],
+            text=[f"{name.capitalize()} messages:" for name in self.agent_names],
+            x=[-0.15] * len(self.agent_names),
+            y=[-1.3 - 0.3 * i for i in range(len(self.agent_names))],
             mode="text",
             textposition="middle left",
             visible=True,
@@ -176,7 +176,7 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
             timeline_node_colour = []
             for round, message in enumerate(rollout["next"]["message"].flat):
                 x = round * 0.125
-                y = -1.3 if round % 2 == 0 else -1.6
+                y = -1.3 - 0.3 * (round % 2)
                 timeline_node_x.append(x)
                 timeline_node_y.append(y)
                 if message < max_num_nodes:
@@ -222,7 +222,7 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
             )
 
         layout = go.Layout(
-            title="Prover-Verifier messages",
+            title="Graph Isomorphism Rollout Samples",
             showlegend=False,
             hovermode="closest",
             margin=dict(b=5, l=5, r=5, t=50),
