@@ -107,6 +107,9 @@ class RolloutSampler:
 class RolloutSamples(ABC):
     """A collection of rollout samples loaded from W&B.
 
+    Since this class has some cleanup, it should be used as a context manager, or else
+    the `finish` method should be called manually (see examples).
+
     Parameters
     ----------
     run_id : str
@@ -117,6 +120,19 @@ class RolloutSamples(ABC):
         The W&B entity to load the rollout samples from.
     wandb_project : str, default=WANDB_PROJECT
         The W&B project to load the rollout samples from.
+    silence_wandb : bool, default=True
+        Whether to suppress W&B output.
+
+    Examples
+    --------
+    Using the `RolloutSamples` class as a context manager:
+    >>> with RolloutSamples(run_id, iteration) as rollout_samples:
+    ...     rollout_samples.visualise()
+
+    Or manually calling the `finish` method:
+    >>> rollout_samples = RolloutSamples(run_id, iteration)
+    >>> rollout_samples.visualise()
+    >>> rollout_samples.finish()
     """
 
     def __init__(
@@ -125,19 +141,27 @@ class RolloutSamples(ABC):
         iteration: int,
         wandb_entity: str = WANDB_ENTITY,
         wandb_project: str = WANDB_PROJECT,
+        silence_wandb: bool = True,
     ):
         self.run_id = run_id
         self.iteration = iteration
         self.wandb_entity = wandb_entity
         self.wandb_project = wandb_project
 
-        # Load the W&B API
-        wandb_api = wandb.Api()
+        if silence_wandb:
+            os.environ["WANDB_SILENT"] = "true"
+
+        # Load the W&B run
+        self._wandb_run = wandb.init(
+            id=run_id, entity=wandb_entity, project=wandb_project, resume="must"
+        )
+
+        # Load the agent names in order
+        self.agent_names: list[str] = self._wandb_run.config["agents"]["_agent_order"]
 
         # Load the rollout samples from W&B
-        artifact = wandb_api.artifact(
-            f"{wandb_entity}/{wandb_project}/{ROLLOUT_SAMPLE_ARTIFACT_PREFIX}{run_id}"
-            f":latest"
+        artifact = self._wandb_run.use_artifact(
+            f"{ROLLOUT_SAMPLE_ARTIFACT_PREFIX}{run_id}:latest"
         )
         with TemporaryDirectory() as temp_dir:
             file_path = os.path.join(temp_dir, f"iteration_{iteration}")
@@ -145,16 +169,20 @@ class RolloutSamples(ABC):
             with open(file_path, "rb") as f:
                 self._rollout_samples = pickle.load(f)
 
-        # Load the W&B run
-        self._wandb_run = wandb_api.run(f"{wandb_entity}/{wandb_project}/{run_id}")
-
-        # Load the agent names in order
-        self.agent_names = self._wandb_run.config["agents"]["agents_order"]
-
     @abstractmethod
     def visualise(self):
         """Visualise the rollout samples."""
         pass
+
+    def finish(self):
+        """Finish the W&B run."""
+        self._wandb_run.finish()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.finish()
 
     def __getitem__(self, key):
         return self._rollout_samples[key]

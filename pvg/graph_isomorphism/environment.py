@@ -20,7 +20,6 @@ from jaxtyping import Float, Int, Bool
 from pvg.scenario_base import Environment
 from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 from pvg.utils.types import TorchDevice
-from pvg.constants import VERIFIER_AGENT_NUM, PROVER_AGENT_NUM
 
 
 class AdjacencyMatrixBox(Box):
@@ -288,9 +287,7 @@ class GraphIsomorphismEnvironment(Environment):
         done: Bool[Tensor, "batch"] = tensordict["done"]
 
         # Compute index of the agent whose turn it is. The prover goes first.
-        agent_index: Int[Tensor, "batch"] = round % 2
-        if PROVER_AGENT_NUM == 1:
-            agent_index = 1 - agent_index
+        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
 
         # Determine which graph contains the selected node and which node it is there
         # (batch agent)
@@ -314,31 +311,30 @@ class GraphIsomorphismEnvironment(Environment):
         ].long()
 
         # If the verifier has made a guess, compute the reward and terminate the episode
-        verifier_decision_made = (agent_index == VERIFIER_AGENT_NUM) & (
-            decision[:, VERIFIER_AGENT_NUM] != 2
+        verifier_agent_num = self.agent_names.index("verifier")
+        verifier_decision_made = (agent_index == verifier_agent_num) & (
+            decision[:, verifier_agent_num] != 2
         )
         done = done | verifier_decision_made
-        reward_verifier = (
-            verifier_decision_made & (decision[:, VERIFIER_AGENT_NUM] == y.squeeze())
+        reward: dict[str, int] = dict()
+        reward["verifier"] = (
+            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
         ).float()
-        reward_verifier = reward_verifier * self.params.verifier_reward
-        reward_prover = (
-            verifier_decision_made & (decision[:, VERIFIER_AGENT_NUM] == 1)
+        reward["verifier"] = reward["verifier"] * self.params.verifier_reward
+        reward["prover"] = (
+            verifier_decision_made & (decision[:, verifier_agent_num] == 1)
         ).float()
-        reward_prover = reward_prover * self.params.prover_reward
+        reward["prover"] = reward["prover"] * self.params.prover_reward
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         done = done | (round >= self.params.max_message_rounds - 1)
-        reward_verifier[
+        reward["verifier"][
             (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
         ] = self.params.verifier_terminated_penalty
 
         # Stack the rewards for the two agents
-        if PROVER_AGENT_NUM == 1:
-            reward = torch.stack([reward_verifier, reward_prover], dim=-1)
-        else:
-            reward = torch.stack([reward_prover, reward_verifier], dim=-1)
+        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
 
         # Put everything together
         next = TensorDict(
