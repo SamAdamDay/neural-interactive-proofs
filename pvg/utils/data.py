@@ -5,7 +5,7 @@ from typing import Optional
 
 import torch
 
-from tensordict.tensordict import TensorDict
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from pvg.scenario_base import DataLoader
 
@@ -76,3 +76,30 @@ class VariableDataCycler:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dataloader!r})"
+
+
+def tensordict_to_numpy_dict(data: TensorDictBase) -> dict:
+    """Convert a TensorDict to a dict of numpy arrays.
+
+    Parameters
+    ----------
+    data : TensorDictBase
+        The TensorDict to convert.
+
+    Returns
+    -------
+    data : dict
+        The dict of numpy arrays.
+    """
+
+    data = data.to_dict()
+
+    def to_numpy_dict(data: dict) -> dict:
+        for key, value in data.items():
+            if isinstance(value, torch.Tensor):
+                data[key] = value.detach().cpu().numpy()
+            else:
+                data[key] = to_numpy_dict(value)
+        return data
+
+    return to_numpy_dict(data)
