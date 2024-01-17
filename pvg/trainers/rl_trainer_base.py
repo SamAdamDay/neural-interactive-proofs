@@ -268,7 +268,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 self.settings.wandb_run.log(to_log, step=iteration)
 
                 # Sample rollouts from the data and save them to W&B
-                rollout_sampler.sample_and_save_rollouts(tensordict_data, iteration)
+                if (iteration + 1) % self.settings.rollout_sample_period == 0:
+                    rollout_sampler.sample_and_save_rollouts(tensordict_data, iteration)
 
             # If we're in test mode, exit after one iteration
             if self.settings.test_run:
