@@ -192,7 +192,7 @@ class GraphIsomorphismEnvironment(Environment):
 
     @property
     def max_num_nodes(self) -> int:
-        return self.dataset["x"].shape[-2]
+        return self.dataset["x"].shape[-1]
 
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
