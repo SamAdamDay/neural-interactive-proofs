@@ -87,7 +87,11 @@ def run_experiment(
         if run_id is None:
             raise ValueError("run_id must be specified if use_wandb is True.")
         wandb_run = wandb.init(
-            project=wandb_project, entity=wandb_entity, name=run_id, tags=wandb_tags
+            project=wandb_project,
+            entity=wandb_entity,
+            name=run_id,
+            tags=wandb_tags,
+            id=run_id,
         )
         wandb_run.config.update(params.to_dict())
     else:
