@@ -1,14 +1,22 @@
 """Graph isomorphism agents components.
 
 Contains classes for building agent bodies and heads for the graph isomorphism task.
+
+The structure of all agent bodies is the same:
+
+- A GNN module which takes as input the two graphs and the message history and outputs
+  node-level representations for each graph.
+- A global pooling module which takes as input the node-level representations and
+  outputs graph-level representations for each graph.
+- A transformer module which takes as input the graph-level representations and the
+  node-level representations for both graphs together with the most recent message and
+  outputs graph-level and node-level representations.
+- A representation encoder which takes as input the graph-level and node-level
+  representations and outputs the final representations.
 """
 
 from abc import ABC
-from typing import Optional, Callable
-from dataclasses import dataclass
-from math import sqrt
-from functools import partial
-from collections import OrderedDict
+from typing import Optional
 
 import torch
 from torch.nn import (
@@ -20,17 +28,14 @@ from torch.nn import (
 )
 from torch import Tensor
 import torch.nn.functional as F
-from torch.distributions import Categorical
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
-from torch_geometric.utils import to_networkx
-
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
-from jaxtyping import Float, Bool, Int
+from jaxtyping import Float, Int
 
 from pvg.scenario_base import (
     AgentPart,
@@ -172,8 +177,8 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
 class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     """Agent body for the graph isomorphism task.
 
-    Takes as input a pair of graphs and outputs node-level and graph-level
-    representations.
+    Takes as input a pair of graphs, message history and the most recent message and
+    outputs node-level and graph-level representations.
 
     Parameters
     ----------
@@ -526,7 +531,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         Parameters
         ----------
         data : TensorDictBase
-            The data to run the GNN and transformer on. A TensorDictBase with keys:
+            A TensorDictBase with keys:
 
             - "x" (... pair node feature): The graph node features (message history)
 
@@ -590,8 +595,12 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
     ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
 
-        This takes as input a TensorDict with key "node_level_repr" and outputs a
-        Tensor.
+        Shapes
+        ------
+        Input:
+            - node_level_repr: (... 2 max_nodes d_in)
+        Output:
+            - node_level_mlp_output: (... 2 max_nodes d_out)
 
         Parameters
         ----------
@@ -645,8 +654,12 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
     ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
 
-        This takes as input a TensorDict with key "graph_level_repr" and outputs a
-        Tensor.
+        Shapes
+        ------
+        Input:
+            - graph_level_repr: (... 2 d_in)
+        Output:
+            - graph_level_mlp_output: (... 2 d_out)
 
         Parameters
         ----------

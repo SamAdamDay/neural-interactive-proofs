@@ -307,6 +307,76 @@ class BatchNorm1dBatchDims(nn.BatchNorm1d):
         return x.reshape(*batch_shape, x.shape[-1])
 
 
+class TensorDictCat(TensorDictModuleBase):
+    """Concatenate the keys of a TensorDict.
+
+    Parameters
+    ----------
+    in_keys : NestedKey | Iterable[NestedKey]
+        The keys to concatenate.
+    out_key : NestedKey
+        The key of the concatenated tensor.
+    dim : int, default=0
+        The dimension to concatenate over.
+    """
+
+    def __init__(
+        self, in_keys: NestedKey | Iterable[NestedKey], out_key: NestedKey, dim=0
+    ):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = (out_key,)
+        self.dim = dim
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(
+            {
+                self.out_keys[0]: torch.cat(
+                    [tensordict[key] for key in self.in_keys], dim=self.dim
+                )
+            }
+        )
+
+
+class ParallelTensorDictModule(TensorDictModuleBase):
+    """Apply a module to each key of a TensorDict.
+
+    Parameters
+    ----------
+    module : nn.Module
+        The module to apply.
+    in_keys : NestedKey | Iterable[NestedKey]
+        The keys to apply the module to.
+    out_keys : NestedKey | Iterable[NestedKey]
+        The keys to store the output in.
+    """
+
+    def __init__(
+        self,
+        module: nn.Module,
+        in_keys: NestedKey | Iterable[NestedKey],
+        out_keys: NestedKey | Iterable[NestedKey],
+    ):
+        super().__init__()
+        self.module = module
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        if len(list(self.in_keys)) != len(list(self.out_keys)):
+            raise ValueError(
+                f"The number of input keys must be the same as the number of output "
+                f"keys. Got {len(list(self.in_keys))} input keys and "
+                f"{len(list(self.out_keys))} output keys."
+            )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(
+            {
+                out_key: self.module(tensordict[in_key])
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+            }
+        )
+
+
 class Print(nn.Module):
     """Print the shape or value of a tensor.
 

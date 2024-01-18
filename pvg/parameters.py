@@ -221,23 +221,61 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
+
     num_heads: int = 4
     num_transformer_layers: int = 4
     d_transformer: int = 16
     d_transformer_mlp: int = 64
     transformer_dropout: float = 0.0
+
     d_node_selector: int = 16
     num_node_selector_layers: int = 2
+
     d_decider: int = 16
     num_decider_layers: int = 2
+
     d_value: int = 16
     num_value_layers: int = 2
+
     d_critic: int = 16
     num_critic_transformer_layers: int = 2
     num_critic_layers: int = 2
+
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
+
+
+@dataclass
+class ImageClassificationAgentParameters(AgentParameters):
+    """Additional parameters for agents in the image classification experiment.
+
+    Parameters
+    ----------
+    num_conv_groups : int
+        The number of groups of convolutional layers in the agents's CNN.
+    num_convs_per_group : int
+        The number of convolutional layers in each group in the agents's CNN.
+    initial_num_channels : int
+        The number of channels in the first convolutional layer in the agents's CNN.
+    kernel_size : int
+        The kernel size of the convolutional layers in the agents's CNN.
+    stride : int
+        The stride of the convolutional layers in the agents's CNN.
+    d_decider : int
+        The dimension of the hidden layer in the agents's MLP which decides whether to
+        accept or reject.
+    num_decider_layers : int
+        The number of layers in the agents's decider MLP.
+    """
+
+    num_conv_groups: int = 2
+    num_convs_per_group: int = 2
+    initial_num_channels: int = 16
+    kernel_size: int = 3
+    stride: int = 1
+    d_decider: int = 16
+    num_decider_layers: int = 2
 
 
 @dataclass
