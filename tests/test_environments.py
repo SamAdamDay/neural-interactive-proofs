@@ -33,7 +33,6 @@ def test_graph_isomorphism_environment_step():
     """Make sure the GI environment step method works as expected."""
 
     batch_size = 12
-    num_nodes = batch_size // 2
     max_message_rounds = 6
 
     # Set up the environment.
@@ -56,21 +55,32 @@ def test_graph_isomorphism_environment_step():
     settings = ExperimentSettings(device="cpu", test_run=True)
     env = GraphIsomorphismEnvironment(params, settings)
 
+    max_num_nodes = env.max_num_nodes
+
+    # This test setup only works when the max number of nodes in the "test" dataset is
+    # 8. If this changes, this test will need to be updated.
+    assert max_num_nodes == 8
+
     # Set up the TensorDict to feed into the environment.
     env_td = TensorDict(
         dict(
-            adjacency=torch.zeros(batch_size, num_nodes, num_nodes, dtype=torch.int32),
-            node_mask=torch.ones(batch_size, num_nodes, dtype=torch.bool),
+            adjacency=torch.zeros(
+                batch_size, max_num_nodes, max_num_nodes, dtype=torch.int32
+            ),
+            node_mask=torch.ones(batch_size, max_num_nodes, dtype=torch.bool),
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.int32), max_message_rounds
             ),
             x=torch.zeros(
-                batch_size, 2, num_nodes, max_message_rounds, dtype=torch.float32
+                batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
             ),
             y=torch.tensor([0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]),
             agents=dict(
-                node_selected=torch.stack(
-                    [torch.arange(batch_size), torch.arange(batch_size - 1, -1, -1)]
+                node_selected=torch.tensor(
+                    [
+                        [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3],
+                        [7, 6, 5, 4, 3, 2, 1, 0, 3, 2, 1, 0],
+                    ]
                 ).transpose(0, 1),
                 decision=torch.tensor(
                     [[0] * batch_size, [0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 1, 1]]
@@ -83,7 +93,7 @@ def test_graph_isomorphism_environment_step():
 
     # Define the expected output.
     expected_x = torch.zeros(
-        batch_size, 2, num_nodes, max_message_rounds, dtype=torch.float32
+        batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
     )
     expected_message = torch.zeros(batch_size, dtype=torch.int64)
     for i in range(batch_size):
@@ -91,8 +101,8 @@ def test_graph_isomorphism_environment_step():
         agent_index = round % 2
         message = env_td["agents", "node_selected"][i, agent_index]
         expected_message[i] = message
-        graph_id = message // num_nodes
-        expected_x[i, graph_id, message % num_nodes, round] = 1
+        graph_id = message // max_num_nodes
+        expected_x[i, graph_id, message % max_num_nodes, round] = 1
     expected_next = TensorDict(
         dict(
             adjacency=env_td["adjacency"],
