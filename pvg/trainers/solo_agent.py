@@ -74,12 +74,15 @@ class SoloAgentTrainer(Trainer):
         # Create the optimizers, specifying the learning rates for the different parts of
         # the agent
         optimizers: dict[str, Optimizer] = {}
-        for agent_name in agents_params:
+        for agent_name, agent_params in agents_params.items():
+            if self.params.solo_agent.body_lr_factor is None:
+                body_lr_factor = agent_params.body_lr_factor
+            else:
+                body_lr_factor = self.params.solo_agent.body_lr_factor
             model_param_dict = [
                 {
                     "params": agents[agent_name].body.parameters(),
-                    "lr": self.params.solo_agent.learning_rate
-                    * self.params.solo_agent.body_lr_factor,
+                    "lr": self.params.solo_agent.learning_rate * body_lr_factor,
                 },
                 {
                     "params": agents[agent_name].solo_head.parameters(),
