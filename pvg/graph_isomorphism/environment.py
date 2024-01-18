@@ -189,10 +189,13 @@ class GraphIsomorphismEnvironment(Environment):
 
     _dataset_class = GraphIsomorphismDataset
     _int_dtype: torch.dtype = torch.int32
+    _max_num_nodes: Optional[int] = None
 
     @property
     def max_num_nodes(self) -> int:
-        return self.dataset["x"].shape[-1]
+        if self._max_num_nodes is None:
+            self._max_num_nodes = self.dataset["x"].shape[-2]
+        return self._max_num_nodes
 
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.

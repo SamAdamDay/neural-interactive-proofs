@@ -29,6 +29,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
+    scenario_instance : ScenarioInstance
+        The components of the experiment.
     device : TorchDevice
         The device to use for training.
     """

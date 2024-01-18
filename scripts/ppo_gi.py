@@ -95,6 +95,7 @@ def experiment_fn(
             lmbda=combo["lmbda"],
             clip_epsilon=combo["clip_epsilon"],
             entropy_eps=combo["entropy_eps"],
+            body_lr_factor=combo["body_lr_factor"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],

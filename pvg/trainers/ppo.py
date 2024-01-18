@@ -26,6 +26,8 @@ class PpoTrainer(ReinforcementLearningTrainer):
     ----------
     params : Parameters
         The parameters of the experiment.
+    scenario_instance : ScenarioInstance
+        The components of the experiment.
     device : TorchDevice
         The device to use for training.
     """
@@ -145,4 +147,33 @@ class PpoTrainer(ReinforcementLearningTrainer):
         torch.optim.Optimizer
             The optimizer.
         """
-        return torch.optim.Adam(loss_module.parameters(), self.params.ppo.lr)
+
+        # Set the learning rate of the agent bodies to be a factor of the learning rate
+        # of the loss module
+        model_param_dict = []
+        for agent_name, agent_params in self.params.agents.items():
+            # Determine the learning rate of the body. If the LR factor is set in the
+            # PPO parameters, use that. Otherwise, use the LR factor from the agent
+            # parameters.
+            if self.params.ppo.body_lr_factor is None:
+                body_lr = self.params.ppo.lr * agent_params.body_lr_factor
+            else:
+                body_lr = self.params.ppo.lr * self.params.ppo.body_lr_factor
+
+            body_params = [
+                param
+                for param_name, param in loss_module.named_parameters()
+                if param_name.startswith(f"actor_params.module_0_{agent_name}")
+            ]
+            model_param_dict.append(dict(params=body_params, lr=body_lr))
+
+        # Set the learning rate of all other parameters to be the learning rate of the
+        # loss module
+        non_body_params = [
+            param
+            for param_name, param in loss_module.named_parameters()
+            if not param_name.startswith("actor_params.module_0")
+        ]
+        model_param_dict.append(dict(params=non_body_params, lr=self.params.ppo.lr))
+
+        return torch.optim.Adam(model_param_dict)
