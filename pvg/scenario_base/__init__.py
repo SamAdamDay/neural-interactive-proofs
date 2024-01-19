@@ -22,7 +22,6 @@ from .agents import (
     DummyAgentBody,
     AgentPolicyHead,
     RandomAgentPolicyHead,
-    AgentCriticHead,
     AgentValueHead,
     ConstantAgentValueHead,
     SoloAgentHead,

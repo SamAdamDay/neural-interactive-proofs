@@ -94,10 +94,6 @@ class ConstantAgentValueHead(DummyAgentPartMixin, AgentValueHead, ABC):
     """A value head which returns a constant value."""
 
 
-class AgentCriticHead(AgentHead, ABC):
-    """Base class for all agent critic heads, to the value of a state-action pair."""
-
-
 class SoloAgentHead(AgentHead, ABC):
     """Base class for all solo agent heads, which attempt the task on their own."""
 
@@ -219,7 +215,6 @@ class Agent:
     body: AgentBody
     policy_head: Optional[AgentPolicyHead] = None
     value_head: Optional[AgentValueHead] = None
-    critic_head: Optional[AgentCriticHead] = None
     solo_head: Optional[SoloAgentHead] = None
 
     def __post_init__(self):
@@ -228,10 +223,5 @@ class Agent:
                 "An agent must have either a policy head or a solo head, or both."
             )
 
-        if self.policy_head is not None and (
-            self.value_head is None and self.critic_head is None
-        ):
-            raise ValueError(
-                "An agent with a policy head must have either a value head or a critic "
-                "head, or both."
-            )
+        if self.policy_head is not None and self.value_head is None:
+            raise ValueError("An agent with a policy head must have a value head")

@@ -182,13 +182,6 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         The number of layers in the agents's value MLP.
     include_round_in_value : bool
         Whether to include the round number in the agents's value MLP.
-    d_critic : int
-        The dimension of the hidden layer in the agents's MLP which estimates the value
-        function.
-    num_critic_transformer_layers : int
-        The number of transformer layers in the agents's critic.
-    num_critic_layers : int
-        The number of layers in the agents's critic MLP.
     use_batch_norm : bool
         Whether to use batch normalization in the agents's global pooling layer.
     noise_sigma : float
@@ -223,10 +216,6 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     d_value: int = 16
     num_value_layers: int = 2
     include_round_in_value: bool = True
-
-    d_critic: int = 16
-    num_critic_transformer_layers: int = 2
-    num_critic_layers: int = 2
 
     use_batch_norm: bool = True
     noise_sigma: float = 0.0

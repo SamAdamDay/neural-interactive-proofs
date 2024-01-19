@@ -43,9 +43,6 @@ def test_run_experiment():
                         num_decider_layers=1,
                         d_value=1,
                         num_value_layers=1,
-                        d_critic=1,
-                        num_critic_transformer_layers=1,
-                        num_critic_layers=1,
                     ),
                 ),
                 (
@@ -64,9 +61,6 @@ def test_run_experiment():
                         num_decider_layers=1,
                         d_value=1,
                         num_value_layers=1,
-                        d_critic=1,
-                        num_critic_transformer_layers=1,
-                        num_critic_layers=1,
                     ),
                 ),
             ]
