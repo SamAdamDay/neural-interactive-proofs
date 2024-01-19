@@ -377,6 +377,23 @@ class ParallelTensorDictModule(TensorDictModuleBase):
         )
 
 
+class OneHot(nn.Module):
+    """One-hot encode a tensor.
+
+    Parameters
+    ----------
+    num_classes : int, default=-1
+        The number of classes to one-hot encode.
+    """
+
+    def __init__(self, num_classes: int = -1):
+        super().__init__()
+        self.num_classes = num_classes
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.nn.functional.one_hot(x, self.num_classes).float()
+
+
 class Print(nn.Module):
     """Print the shape or value of a tensor.
 
@@ -411,3 +428,20 @@ class Print(nn.Module):
         else:
             print(x.shape)
         return x
+
+
+class TensorDictPrint(TensorDictModuleBase):
+    """Print a TensorDict."""
+
+    def __init__(
+        self,
+        in_keys: NestedKey | Iterable[NestedKey],
+        out_keys: NestedKey | Iterable[NestedKey],
+    ):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        print(tensordict)
+        return tensordict

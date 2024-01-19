@@ -240,7 +240,7 @@ class GraphIsomorphismEnvironment(Environment):
             round=DiscreteTensorSpec(
                 self.params.max_message_rounds,
                 shape=(self.num_envs,),
-                dtype=self._int_dtype,
+                dtype=torch.long,
             ),
             shape=(self.num_envs,),
         )

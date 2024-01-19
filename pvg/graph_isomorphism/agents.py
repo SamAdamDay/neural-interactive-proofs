@@ -59,7 +59,10 @@ from pvg.utils.torch_modules import (
     GIN,
     Squeeze,
     BatchNorm1dBatchDims,
+    OneHot,
+    TensorDictCat,
     Print,
+    TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
 
@@ -649,9 +652,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         d_hidden: int,
         d_out: int,
         num_layers: int,
+        include_round: bool = False,
         out_key: str = "graph_level_mlp_output",
         squeeze: bool = False,
-    ) -> TensorDictModule:
+    ) -> TensorDictSequential:
         """Builds an MLP which acts on the node-level representations.
 
         Shapes
@@ -673,6 +677,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The dimensionality of the output.
         num_layers : int
             The number of hidden layers in the MLP.
+        include_round : bool, default=False
+            Whether to include the round number as a (one-hot encoded) input to the MLP.
         out_key : str, default="graph_level_mlp_output"
             The tensordict key to use for the output of the MLP.
         squeeze : bool, default=False
@@ -681,37 +687,68 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
 
         Returns
         -------
-        node_level_mlp : TensorDictModule
+        node_level_mlp : TensorDictSequential
             The node-level MLP.
         """
-        layers = []
-
-        # Concatenate the two graph-level representations
-        layers.append(Rearrange("... pair d_in -> ... (pair d_in)"))
+        mlp_layers = []
 
         # The layers of the MLP
-        layers.append(Linear(2 * d_in, d_hidden))
-        layers.append(ReLU(inplace=True))
+        updated_d_in = 2 * d_in
+        if include_round:
+            updated_d_in += self.params.max_message_rounds + 1
+        mlp_layers.append(Linear(updated_d_in, d_hidden))
+        mlp_layers.append(ReLU(inplace=True))
         for _ in range(num_layers - 2):
-            layers.append(Linear(d_hidden, d_hidden))
-            layers.append(ReLU(inplace=True))
-        layers.append(Linear(d_hidden, d_out))
+            mlp_layers.append(Linear(d_hidden, d_hidden))
+            mlp_layers.append(ReLU(inplace=True))
+        mlp_layers.append(Linear(d_hidden, d_out))
 
         # Squeeze the output dimension if necessary
         if squeeze:
-            layers.append(Squeeze())
+            mlp_layers.append(Squeeze())
 
         # Make the layers into a sequential module, and wrap it in a TensorDictModule
-        sequential = Sequential(*layers)
-        tensor_dict_sequential = TensorDictModule(
-            sequential, in_keys=("graph_level_repr",), out_keys=(out_key,)
+        mlp = Sequential(*mlp_layers)
+        mlp = TensorDictModule(
+            mlp, in_keys=("graph_level_mlp_input",), out_keys=(out_key,)
         )
 
-        tensor_dict_sequential = tensor_dict_sequential.to(self.device)
+        # The final module includes one or two more things before the MLP
+        td_sequential_layers = []
 
-        return tensor_dict_sequential
+        # Concatenate the two graph-level representations
+        td_sequential_layers.append(
+            TensorDictModule(
+                Rearrange("... pair d_in -> ... (pair d_in)"),
+                in_keys=("graph_level_repr",),
+                out_keys=("graph_level_mlp_input",),
+            )
+        )
 
-    def _build_decider(self, d_out: int = 3) -> TensorDictModule:
+        if include_round:
+            # Add the round number as an input to the MLP
+            td_sequential_layers.append(
+                TensorDictModule(
+                    OneHot(num_classes=self.params.max_message_rounds + 1),
+                    in_keys=("round"),
+                    out_keys=("round_one_hot",),
+                )
+            )
+            td_sequential_layers.append(
+                TensorDictCat(
+                    in_keys=("graph_level_mlp_input", "round_one_hot"),
+                    out_key="graph_level_mlp_input",
+                    dim=-1,
+                ),
+            )
+
+        td_sequential_layers.append(mlp)
+
+        return TensorDictSequential(*td_sequential_layers).to(self.device)
+
+    def _build_decider(
+        self, d_out: int = 3, include_round: Optional[bool] = None
+    ) -> TensorDictModule:
         """Builds the module which produces a graph-pair level output.
 
         By default it is used to decide whether to continue exchanging messages. In this
@@ -723,17 +760,25 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         ----------
         d_out : int, default=3
             The dimensionality of the output.
+        include_round : bool, optional
+            Whether to include the round number as a (one-hot encoded) input to the MLP.
+            If not given, the value from the agent parameters is used.
 
         Returns
         -------
         decider : TensorDictModule
             The decider module.
         """
+
+        if include_round is None:
+            include_round = self._agent_params.include_round_in_decider
+
         return self._build_graph_level_mlp(
             d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_decider,
             d_out=d_out,
             num_layers=self._agent_params.num_decider_layers,
+            include_round=include_round,
             out_key="decision_logits",
         )
 
@@ -757,6 +802,13 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     """
 
     in_keys = ("graph_level_repr", "node_level_repr")
+
+    @property
+    def in_keys(self):
+        if self.decider is not None and self._agent_params.include_round_in_decider:
+            return ("graph_level_repr", "node_level_repr", "round")
+        else:
+            return ("graph_level_repr", "node_level_repr")
 
     @property
     def out_keys(self):
@@ -963,8 +1015,14 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("graph_level_repr",)
     out_keys = ("value",)
+
+    @property
+    def in_keys(self):
+        if self.decider is not None and self._agent_params.include_round_in_value:
+            return ("graph_level_repr", "round")
+        else:
+            return "graph_level_repr"
 
     def __init__(
         self,
@@ -989,6 +1047,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
             d_hidden=self._agent_params.d_value,
             d_out=1,
             num_layers=self._agent_params.num_value_layers,
+            include_round=self._agent_params.include_round_in_value,
             out_key="value",
             squeeze=True,
         )
@@ -1318,7 +1377,7 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     ):
         super().__init__(params, agent_name, device)
 
-        self.decider = self._build_decider(d_out=2)
+        self.decider = self._build_decider(d_out=2, include_round=False)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
         """Runs the solo agent head on the given body output.
@@ -1421,8 +1480,15 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         The agent policy heads to combine.
     """
 
-    in_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
-    out_keys = (("agents", "node_selected_logits"), ("agents", "decision_logits"))
+    in_keys = (
+        ("agents", "node_level_repr"),
+        ("agents", "graph_level_repr"),
+        "round",
+    )
+    out_keys = (
+        ("agents", "node_selected_logits"),
+        ("agents", "decision_logits"),
+    )
 
     def __init__(
         self,
@@ -1461,6 +1527,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
                     graph_level_repr=head_output["agents", "graph_level_repr"][
                         ..., i, :, :
                     ],
+                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )
@@ -1503,7 +1570,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
         The agent value heads to combine.
     """
 
-    in_keys = (("agents", "graph_level_repr"),)
+    in_keys = (("agents", "graph_level_repr"), "round")
     out_keys = (("agents", "value"),)
 
     def __init__(
@@ -1541,6 +1608,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
                     graph_level_repr=head_output["agents", "graph_level_repr"][
                         ..., i, :, :
                     ],
+                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )

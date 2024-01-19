@@ -173,11 +173,15 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         accept or reject.
     num_decider_layers : int
         The number of layers in the agents's decider MLP.
+    include_round_in_decider : bool
+        Whether to include the round number in the agents's decider MLP.
     d_value : int
         The dimension of the hidden layer in the agents's MLP which estimates the value
         function.
     num_value_layers : int
         The number of layers in the agents's value MLP.
+    include_round_in_value : bool
+        Whether to include the round number in the agents's value MLP.
     d_critic : int
         The dimension of the hidden layer in the agents's MLP which estimates the value
         function.
@@ -214,9 +218,11 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 
     d_decider: int = 16
     num_decider_layers: int = 2
+    include_round_in_decider: bool = True
 
     d_value: int = 16
     num_value_layers: int = 2
+    include_round_in_value: bool = True
 
     d_critic: int = 16
     num_critic_transformer_layers: int = 2
