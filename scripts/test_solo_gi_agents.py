@@ -80,6 +80,7 @@ def experiment_fn(
                         use_batch_norm=combo["use_batch_norm"],
                         use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
                         num_gnn_layers=combo["prover_num_layers"],
+                        body_lr_factor=combo["body_lr_factor"],
                     ),
                 ),
                 (
@@ -88,6 +89,7 @@ def experiment_fn(
                         use_batch_norm=combo["use_batch_norm"],
                         use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
                         num_gnn_layers=combo["verifier_num_layers"],
+                        body_lr_factor=combo["body_lr_factor"],
                     ),
                 ),
             ]
@@ -96,7 +98,6 @@ def experiment_fn(
             num_epochs=combo["num_epochs"],
             batch_size=combo["batch_size"],
             learning_rate=combo["learning_rate"],
-            body_lr_factor=combo["body_lr_factor"],
         ),
         seed=combo["seed"],
     )

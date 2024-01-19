@@ -109,7 +109,16 @@ class SubParameters(BaseParameters, ABC):
 
 
 class AgentParameters(SubParameters, ABC):
-    """Base class for sub-parameters objects which define agents"""
+    """Base class for sub-parameters objects which define agents
+
+    Parameters
+    ----------
+    body_lr_factor : float
+        The learning rate factor for the body part of the model. This allows updating
+        the body at a different rate to the rest of the model.
+    """
+
+    body_lr_factor: float = 1.0
 
     is_random: ClassVar[bool] = False
 
@@ -128,37 +137,6 @@ class RandomAgentParameters(AgentParameters):
     """Parameters which specify a random agent"""
 
     is_random: ClassVar[bool] = True
-
-
-class AgentsParameters(OrderedDict[str, AgentParameters]):
-    """Parameters which specify the agents in the experiment.
-
-    A subclass of `OrderedDict`. Parameters should be specified as an iterable of
-    `(name, parameters)` pairs, where `name` is a string, and `parameters` is a
-    `AgentParameters` object.
-
-    The keys are the names of the agents, and the values are the parameters for each
-    agent.
-    """
-
-    def to_dict(self) -> dict:
-        """Convert the parameters object to a dictionary.
-
-        Adds a special key `_agent_order` which is a list of the agent names in the
-        order they appear in the dictionary.
-
-        Turns sub-parameters into dictionaries.
-
-        Returns
-        -------
-        params_dict : dict
-            A dictionary of the parameters.
-        """
-        params_dict = {}
-        for param_name, param in self.items():
-            params_dict[param_name] = param.to_dict()
-        params_dict["_agent_order"] = list(self.keys())
-        return params_dict
 
 
 @dataclass
@@ -216,6 +194,9 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         Whether to use pair-invariant pooling in the agents's global pooling layer. This
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
+    body_lr_factor : float
+        The learning rate factor for the body part of the model. This allows updating
+        the body at a different rate to the rest of the model.
     """
 
     num_gnn_layers: int = 5
@@ -244,6 +225,38 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
+    body_lr_factor: float = 0.1
+
+
+class AgentsParameters(OrderedDict[str, AgentParameters]):
+    """Parameters which specify the agents in the experiment.
+
+    A subclass of `OrderedDict`. Parameters should be specified as an iterable of
+    `(name, parameters)` pairs, where `name` is a string, and `parameters` is a
+    `AgentParameters` object.
+
+    The keys are the names of the agents, and the values are the parameters for each
+    agent.
+    """
+
+    def to_dict(self) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Adds a special key `_agent_order` which is a list of the agent names in the
+        order they appear in the dictionary.
+
+        Turns sub-parameters into dictionaries.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
+        params_dict = {}
+        for param_name, param in self.items():
+            params_dict[param_name] = param.to_dict()
+        params_dict["_agent_order"] = list(self.keys())
+        return params_dict
 
 
 @dataclass
@@ -306,9 +319,9 @@ class PpoParameters(SubParameters):
         The PPO clip range.
     entropy_eps : float
         The coefficient of the entropy term in the PPO loss.
-    body_lr_factor : float
-        The learning rate factor for the body part of the model. This allows updating
-        the body at a different rate to the rest of the model.
+    body_lr_factor : float, optional
+        The learning rate factor for the body part of the model. If set this overrides
+        the `body_lr_factor` parameter of each agent.
     """
 
     # Sampling
@@ -328,7 +341,7 @@ class PpoParameters(SubParameters):
     entropy_eps: float = 1e-4
 
     # Agents
-    body_lr_factor: float = 1.0
+    body_lr_factor: Optional[float] = None
 
 
 @dataclass
@@ -343,15 +356,17 @@ class SoloAgentParameters(SubParameters):
         The batch size.
     learning_rate : float
         The learning rate.
-    body_lr_factor : float
-        The learning rate factor for the body part of the model. This allows updating
-        the body at a different rate to the rest of the model.
+    body_lr_factor : float, optional
+        The learning rate factor for the body part of the model. If set this overrides
+        the `body_lr_factor` parameter of each agent.
     """
 
     num_epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.001
-    body_lr_factor: float = 0.01
+
+    # Agents
+    body_lr_factor: Optional[float] = None
 
 
 @dataclass

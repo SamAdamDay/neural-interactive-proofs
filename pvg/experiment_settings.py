@@ -34,6 +34,9 @@ class ExperimentSettings:
     num_rollout_samples : int, default=10
         The number of rollout samples to collect and save per iteration of RL training.
         These are useful to visualize the progress of the training.
+    rollout_sample_period : int, default=50
+        The frequency with which to collect rollout samples. This is the number of
+        iterations of RL training between each collection of rollout samples.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
@@ -49,6 +52,7 @@ class ExperimentSettings:
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
+    rollout_sample_period: int = 50
     num_dataset_threads: int = 8
     test_run: bool = False
 
