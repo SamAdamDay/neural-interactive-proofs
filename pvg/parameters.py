@@ -234,6 +234,61 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     body_lr_factor: float = 0.1
 
 
+@dataclass
+class ImageClassificationAgentParameters(AgentParameters):
+    """Additional parameters for agents in the image classification experiment.
+
+    Parameters
+    ----------
+    num_conv_groups : int
+        The number of groups of convolutional layers in the agents's CNN.
+    num_convs_per_group : int
+        The number of convolutional layers in each group in the agents's CNN.
+    initial_num_channels : int
+        The number of channels in the first convolutional layer in the agents's CNN.
+    kernel_size : int
+        The kernel size of the convolutional layers in the agents's CNN.
+    stride : int
+        The stride of the convolutional layers in the agents's CNN.
+    d_latent_pixel_selector : int
+        The dimension of the hidden layer in the agents's MLP which selects a latent
+        pixel to send as a message.
+    num_latent_pixel_selector_layers : int
+        The number of layers in the agents's latent pixel selector MLP.
+    d_decider : int
+        The dimension of the hidden layer in the agents's MLP which decides whether
+        continue exchanging messages or to guess.
+    num_decider_layers : int
+        The number of layers in the agents's decider MLP.
+    include_round_in_decider : bool
+        Whether to include the round number in the agents's decider MLP.
+    d_value : int
+        The dimension of the hidden layer in the agents's MLP which estimates the value
+        function.
+    num_value_layers : int
+        The number of layers in the agents's value MLP.
+    include_round_in_value : bool
+        Whether to include the round number in the agents's value MLP.
+    """
+
+    num_conv_groups: int = 2
+    num_convs_per_group: int = 2
+    initial_num_channels: int = 16
+    kernel_size: int = 3
+    stride: int = 1
+
+    d_latent_pixel_selector: int = 16
+    num_latent_pixel_selector_layers: int = 2
+
+    d_decider: int = 16
+    num_decider_layers: int = 2
+    include_round_in_decider: bool = True
+
+    d_value: int = 16
+    num_value_layers: int = 2
+    include_round_in_value: bool = True
+
+
 class AgentsParameters(OrderedDict[str, AgentParameters]):
     """Parameters which specify the agents in the experiment.
 
@@ -263,38 +318,6 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
             params_dict[param_name] = param.to_dict()
         params_dict["_agent_order"] = list(self.keys())
         return params_dict
-
-
-@dataclass
-class ImageClassificationAgentParameters(AgentParameters):
-    """Additional parameters for agents in the image classification experiment.
-
-    Parameters
-    ----------
-    num_conv_groups : int
-        The number of groups of convolutional layers in the agents's CNN.
-    num_convs_per_group : int
-        The number of convolutional layers in each group in the agents's CNN.
-    initial_num_channels : int
-        The number of channels in the first convolutional layer in the agents's CNN.
-    kernel_size : int
-        The kernel size of the convolutional layers in the agents's CNN.
-    stride : int
-        The stride of the convolutional layers in the agents's CNN.
-    d_decider : int
-        The dimension of the hidden layer in the agents's MLP which decides whether to
-        accept or reject.
-    num_decider_layers : int
-        The number of layers in the agents's decider MLP.
-    """
-
-    num_conv_groups: int = 2
-    num_convs_per_group: int = 2
-    initial_num_channels: int = 16
-    kernel_size: int = 3
-    stride: int = 1
-    d_decider: int = 16
-    num_decider_layers: int = 2
 
 
 @dataclass

@@ -15,7 +15,7 @@ from pvg.constants import IC_DATA_DIR
 
 
 @dataclass
-class TorchVisionImageDataset:
+class TorchVisionDatasetProperties:
     """Details of a TorchVision image dataset.
 
     Parameters
@@ -32,20 +32,20 @@ class TorchVisionImageDataset:
     height: int
 
 
-IMAGE_DATASETS: dict[str, TorchVisionImageDataset] = dict(
-    mnist=TorchVisionImageDataset(
+IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
+    mnist=TorchVisionDatasetProperties(
         data_class=MNIST,
         num_channels=1,
         width=28,
         height=28,
     ),
-    fashion_mnist=TorchVisionImageDataset(
+    fashion_mnist=TorchVisionDatasetProperties(
         data_class=FashionMNIST,
         num_channels=1,
         width=28,
         height=28,
     ),
-    cifar10=TorchVisionImageDataset(
+    cifar10=TorchVisionDatasetProperties(
         data_class=CIFAR10,
         num_channels=3,
         width=32,

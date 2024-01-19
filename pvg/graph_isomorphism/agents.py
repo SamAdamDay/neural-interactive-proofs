@@ -183,6 +183,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     Takes as input a pair of graphs, message history and the most recent message and
     outputs node-level and graph-level representations.
 
+    Shapes
+    ------
+    Input:
+        - "x" (... pair node feature): The graph node features (message history)
+        - "adjacency" (... pair node node): The graph adjacency matrices
+        - "message" (...): The most recent message from the other agent
+        - "node_mask" (... pair node): Which nodes actually exist
+        - "ignore_message" (...): Whether to ignore any values in "message". For
+          example, in the first round the there is no message, and the "message" field
+          is set to a dummy value.
+
+    Output:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+
     Parameters
     ----------
     params : Parameters
@@ -601,9 +618,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - node_level_repr: (... 2 max_nodes d_in)
+            - "node_level_repr": (... 2 max_nodes d_in)
+
         Output:
-            - node_level_mlp_output: (... 2 max_nodes d_out)
+            - "node_level_mlp_output": (... 2 max_nodes d_out)
 
         Parameters
         ----------
@@ -661,9 +679,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - graph_level_repr: (... 2 d_in)
+            - "graph_level_repr": (... 2 d_in)
+
         Output:
-            - graph_level_mlp_output: (... 2 d_out)
+            - "graph_level_mlp_output": (... 2 d_out)
 
         Parameters
         ----------
@@ -788,8 +807,25 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     Takes as input the output of the agent body and outputs a policy distribution over
     the actions. Both agents select a node to send as a message, and the verifier also
-    decides whether to continue exchanging messages or to guess that the graphs are
-    isomorphic or not.
+    decides whether to guess that the graphs are isomorphic or not or to continue
+    exchanging messages.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+        - "round" (optional) (...): The current round number.
+
+    Output:
+        - "node_selected_logits" (... 2*max_nodes): A logit for each node, indicating
+          the probability that this node should be sent as a message to the verifier.
+        - "decision_logits" (optional) (... 3): A logit for each of the three options:
+          guess that the graphs are isomorphic,  guess that the graphs are not
+          isomorphic, or continue exchanging messages. Set to zeros when the decider is
+          not present.
 
     Parameters
     ----------
@@ -800,8 +836,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
-
-    in_keys = ("graph_level_repr", "node_level_repr")
 
     @property
     def in_keys(self):
@@ -862,8 +896,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
             - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-              representations.
+            - "node_level_repr" (... 2 max_nodes d_representation): The output
+              node-level representations.
 
         Returns
         -------
@@ -873,9 +907,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - "node_selected_logits" (... 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - "decision_logits" (... 3): A logit for each of the three options: continue
-              exchanging messages, guess that the graphs are isomorphic, or guess that
-              the graphs are not isomorphic. Set to zeros when the decider is not
+            - "decision_logits" (... 3): A logit for each of the three options: guess
+              that the graphs are isomorphic,  guess that the graphs are not isomorphic,
+              or continue exchanging messages. Set to zeros when the decider is not
               present.
         """
 
@@ -923,7 +957,23 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 class GraphIsomorphismRandomAgentPolicyHead(
     GraphIsomorphismAgentPart, RandomAgentPolicyHead
 ):
-    """Policy head for the graph isomorphism task yielding a uniform distribution."""
+    """Policy head for the graph isomorphism task yielding a uniform distribution.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+
+    Output:
+        - "node_selected_logits" (... 2*max_nodes): A logit for each node, indicating
+          the probability that this node should be sent as a message to the verifier.
+        - "decision_logits" (... 3): A logit for each of the three options: guess that
+          the graphs are isomorphic, guess that the graphs are not isomorphic, or
+          continue exchanging messages.
+    """
 
     in_keys = ("graph_level_repr", "node_level_repr")
 
@@ -1005,6 +1055,16 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     Takes as input the output of the agent body and outputs a value function.
 
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "round" (optional) (...): The current round number.
+
+    Output:
+        - "value" (...): The estimated value for each batch item
+
     Parameters
     ----------
     params : Parameters
@@ -1019,7 +1079,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     @property
     def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_value:
+        if self._agent_params.include_round_in_value:
             return ("graph_level_repr", "round")
         else:
             return "graph_level_repr"
@@ -1094,7 +1154,19 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 class GraphIsomorphismConstantAgentValueHead(
     GraphIsomorphismAgentHead, ConstantAgentValueHead
 ):
-    """A constant value head for the graph isomorphism task."""
+    """A constant value head for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+
+    Output:
+        - "value" (...): The 'value' for each batch item, which is a constant zero.
+    """
 
     in_keys = ("graph_level_repr", "node_level_repr")
     out_keys = ("value",)
@@ -1364,6 +1436,16 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 
     Solo agents try to solve the task on their own, without interacting with another
     agents.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+
+    Output:
+        - "decision_logits" (... 2): A logit for each of the two options: guess that the
+          graphs are isomorphic, or guess that the graphs are not isomorphic.
     """
 
     in_keys = ("graph_level_repr",)
@@ -1410,6 +1492,21 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 class GraphIsomorphismCombinedBody(CombinedBody):
     """A module which combines the agent bodies for the graph isomorphism task.
 
+    Shapes
+    ------
+    Input:
+        - "round" (...): The current round number.
+        - "x" (... pair node feature): The graph node features (message history)
+        - "adjacency" (... pair node node): The adjacency matrices.
+        - "message" (... pair node): The messages.
+        - "node_mask" (... pair node): Which nodes actually exist.
+
+    Output:
+        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
+          node-level representations.
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+
     Parameters
     ----------
     params : Parameters
@@ -1419,7 +1516,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     """
 
     in_keys = ("round", "x", "adjacency", "message", "node_mask")
-    out_keys = ("round", ("agents", "node_level_repr"), ("agents", "graph_level_repr"))
+    out_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
 
     def __init__(
         self,
@@ -1471,6 +1568,23 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
 class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     """A module which combines the agent policy heads for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
+          node-level representations.
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+        - "round" (...): The current round number.
+
+    Output:
+        - ("agents", "node_selected_logits") (... 2*max_nodes): A logit for each node,
+          indicating the probability that this node should be sent as a message to the
+          verifier.
+        - ("agents", "decision_logits") (... 3): A logit for each of the three options:
+          guess that the graphs are isomorphic, guess that the graphs are not
+          isomorphic, or continue exchanging messages.
 
     Parameters
     ----------
@@ -1561,6 +1675,16 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
 class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     """A module which combines the agent value heads for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+        - "round" (...): The current round number.
+
+    Output:
+        - ("agents", "value") (... 2): The estimated value for each batch item
 
     Parameters
     ----------

@@ -26,16 +26,13 @@ from typing import Optional
 import torch
 from torch.nn import Sequential, ReLU, Linear, Conv2d, MaxPool2d, Upsample
 from torch import Tensor
-import torch.nn.functional as F
-from torch.distributions import Categorical
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
-from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
-from jaxtyping import Float, Bool, Int
+from jaxtyping import Int
 
 from pvg.scenario_base import (
     AgentPart,
@@ -46,7 +43,6 @@ from pvg.scenario_base import (
     RandomAgentPolicyHead,
     AgentValueHead,
     ConstantAgentValueHead,
-    AgentCriticHead,
     SoloAgentHead,
     CombinedBody,
     CombinedPolicyHead,
@@ -54,14 +50,13 @@ from pvg.scenario_base import (
 )
 from pvg.parameters import (
     Parameters,
-    ImageClassificationParameters,
     ImageClassificationAgentParameters,
 )
 from pvg.utils.torch_modules import (
     Squeeze,
-    BatchNorm1dBatchDims,
     TensorDictCat,
     ParallelTensorDictModule,
+    OneHot,
     Print,
 )
 from pvg.utils.types import TorchDevice
@@ -120,6 +115,20 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Takes as input the image, message history and the most recent message and outputs
     the image-level and latent pixel-level representations.
 
+    Shapes
+    ------
+    Input:
+        - "x" (... max_message_rounds latent_width latent_height): The message history
+        - "image" (... num_channels width height): The image
+        - "message" (... latent_width latent_height): The most recent message
+        - "ignore_message" (...): Whether to ignore the message
+
+    Output:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+          The output latent-pixel-level representations.
+
     Parameters
     ----------
     params : Parameters
@@ -157,10 +166,10 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - message : (... max_message_rounds latent_width latent_height)
+            - "message" : (... max_message_rounds latent_width latent_height)
 
         Output:
-            - message_upsampled : (... max_message_rounds width height)
+            - "message_upsampled" : (... max_message_rounds width height)
 
         Returns
         -------
@@ -185,10 +194,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - x_upsampled : (... max_message_rounds width height) image : (...
+            - "x_upsampled" : (... max_message_rounds width height) image : (...
             num_channels width height)
+
         Output:
-            - latent_pixel_level_repr : (... initial_num_channels width height)
+            - "latent_pixel_level_repr" : (... initial_num_channels width height)
 
         Returns
         -------
@@ -219,10 +229,12 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - latent_pixel_level_repr : (... initial_num_channels width height)
+            - "latent_pixel_level_repr" : (... initial_num_channels width height)
+
         Output:
-            - latent_pixel_level_repr : (... latent_num_channels latent_width
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
             latent_height)
+
         where `latent_num_channels = initial_num_channels * 2**num_conv_groups`
 
         Returns
@@ -296,10 +308,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - latent_pixel_level_repr : (... latent_num_channels latent_width
-            - latent_height)
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
+            latent_height)
+
         Output:
-            - image_level_repr : (... latent_num_channels)
+            - "image_level_repr" : (... latent_num_channels)
 
         Returns
         -------
@@ -321,12 +334,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - image_level_repr : (... latent_num_channels)
-            - latent_pixel_level_repr : (... latent_num_channels latent_width
+            - "image_level_repr" : (... latent_num_channels)
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
               latent_height)
+
         Output:
-            - image_level_repr : (... d_representation)
-            - latent_pixel_level_repr : (... latent_width latent_height
+            - "image_level_repr" : (... d_representation)
+            - "latent_pixel_level_repr" : (... latent_width latent_height
               d_representation)
 
         Returns
@@ -360,10 +374,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the body on. A TensorDictBase with keys:
 
-            - "x" (... pair node feature): The graph node features (message history)
-            - "image" (... num_channels width height): The image
-            - "message" (... max_message_rounds latent_width latent_height): The message
+            - "x" (... max_message_rounds latent_width latent_height): The message
               history
+            - "image" (... num_channels width height): The image
+            - "message" (... latent_width latent_height): The message most recent
+              message
 
         Returns
         -------
@@ -386,7 +401,23 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
 
 class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgentBody):
-    """Dummy agent body for the image classification task."""
+    """Dummy agent body for the image classification task.
+
+    Shapes
+    ------
+    Input:
+        - "x" (... max_message_rounds latent_width latent_height): The message history
+        - "image" (... num_channels width height): The image
+        - "message" (... latent_width latent_height): The most recent message
+        - "ignore_message" (...): Whether to ignore the message
+
+    Output:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+          The output latent-pixel-level representations.
+
+    """
 
     in_keys = ("x", "image", "message", "ignore_message")
     out_keys = ("image_level_repr", "latent_pixel_level_repr")
@@ -397,22 +428,12 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
         Parameters
         ----------
         data : TensorDictBase
-            TensorDictBase with keys:
-
-            - "x" (... pair node feature): The graph node features (message history)
-            - "image" (... num_channels width height): The image
-            - "message" (... max_message_rounds latent_width latent_height): The message
-              history
+            The data to run the body on.
 
         Returns
         -------
         out : TensorDict
-            A tensor dict with keys:
-
-            - "image_level_repr" (... d_representation): The output image-level
-              representations.
-            - "latent_pixel_level_repr" (... latent_width latent_height
-              d_representation): The output latent-pixel-level representations.
+            The dummy outputs.
         """
 
         # The dummy image-level representations
@@ -423,7 +444,7 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
             dtype=torch.float32,
         )
 
-        # The dummy node-level representations
+        # The dummy latent-pixel-level representations
         latent_pixel_level_repr = torch.zeros(
             *data.batch_size,
             self._latent_width,
@@ -461,12 +482,13 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         num_layers: int,
         out_key: str = "latent_pixel_mlp_output",
     ) -> TensorDictModule:
-        """Builds an MLP which acts on the node-level representations.
+        """Builds an MLP which acts on the latent-pixel-level representations.
 
         Shapes
         ------
         Input:
             - latent_pixel_repr : (... latent_width latent_height d_in)
+
         Output:
             - latent_pixel_mlp_output : (... latent_width latent_height d_out)
 
@@ -486,7 +508,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         Returns
         -------
         latent_pixel_mlp : TensorDictModule
-            The node-level MLP.
+            The latent-pixel-level MLP.
         """
         layers = []
 
@@ -514,15 +536,17 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         d_hidden: int,
         d_out: int,
         num_layers: int,
+        include_round: bool = False,
         out_key: str = "image_level_mlp_output",
         squeeze: bool = False,
-    ) -> TensorDictModule:
-        """Builds an MLP which acts on the node-level representations.
+    ) -> TensorDictSequential:
+        """Builds an MLP which acts on the latent-pixel-level representations.
 
         Shapes
         ------
         Input:
             - image_level_repr : (... d_in)
+
         Output:
             - image_level_mlp_output : (... d_out)
 
@@ -536,6 +560,8 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             The dimensionality of the output.
         num_layers : int
             The number of hidden layers in the MLP.
+        include_round : bool, default=False
+            Whether to include the round number as a (one-hot encoded) input to the MLP.
         out_key : str, default="image_level_mlp_output"
             The tensordict key to use for the output of the MLP.
         squeeze : bool, default=False
@@ -544,32 +570,55 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
 
         Returns
         -------
-        latent_pixel_mlp : TensorDictModule
-            The node-level MLP.
+        latent_pixel_mlp : TensorDictSequential
+            The latent-pixel-level MLP.
         """
-        layers = []
+        mlp_layers = []
 
         # The layers of the MLP
-        layers.append(Linear(d_in, d_hidden))
-        layers.append(ReLU(inplace=True))
+        updated_d_in = d_in
+        if include_round:
+            updated_d_in += self.params.max_message_rounds + 1
+        mlp_layers.append(Linear(updated_d_in, d_hidden))
+        mlp_layers.append(ReLU(inplace=True))
         for _ in range(num_layers - 2):
-            layers.append(Linear(d_hidden, d_hidden))
-            layers.append(ReLU(inplace=True))
-        layers.append(Linear(d_hidden, d_out))
+            mlp_layers.append(Linear(d_hidden, d_hidden))
+            mlp_layers.append(ReLU(inplace=True))
+        mlp_layers.append(Linear(d_hidden, d_out))
 
         # Squeeze the output dimension if necessary
         if squeeze:
-            layers.append(Squeeze())
+            mlp_layers.append(Squeeze())
 
         # Make the layers into a sequential module, and wrap it in a TensorDictModule
-        sequential = Sequential(*layers)
-        tensor_dict_sequential = TensorDictModule(
-            sequential, in_keys=("image_level_repr",), out_keys=(out_key,)
+        mlp = Sequential(*mlp_layers)
+        mlp = TensorDictModule(
+            mlp, in_keys=("image_level_mlp_input",), out_keys=(out_key,)
         )
 
-        tensor_dict_sequential = tensor_dict_sequential.to(self.device)
+        # The final module includes one or two more things before the MLP
+        td_sequential_layers = []
 
-        return tensor_dict_sequential
+        if include_round:
+            # Add the round number as an input to the MLP
+            td_sequential_layers.append(
+                TensorDictModule(
+                    OneHot(num_classes=self.params.max_message_rounds + 1),
+                    in_keys=("round"),
+                    out_keys=("round_one_hot",),
+                )
+            )
+            td_sequential_layers.append(
+                TensorDictCat(
+                    in_keys=("image_level_mlp_input", "round_one_hot"),
+                    out_key="image_level_mlp_input",
+                    dim=-1,
+                ),
+            )
+
+        td_sequential_layers.append(mlp)
+
+        return TensorDictSequential(*td_sequential_layers).to(self.device)
 
     def _build_decider(self, d_out: int = 3) -> TensorDictModule:
         """Builds the module which produces a image-level output.
@@ -593,5 +642,707 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             d_hidden=self._agent_params.d_decider,
             d_out=d_out,
             num_layers=self._agent_params.num_decider_layers,
+            include_round=self._agent_params.include_round_in_decider,
             out_key="decision_logits",
+        )
+
+
+class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPolicyHead):
+    """Agent policy head for the image classification task.
+
+    Takes as input the output of the agent body and outputs a policy distribution over
+    the actions. Both agents select a node to send as a message, and the verifier also
+    decides whether to continue exchanging messages or to make a guess.
+
+    Shapes
+    ------
+    Input:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "latent_pixel_level_repr" (... latent_width latent_height
+          d_representation): The output latent-pixel-level representations.
+        - "round" (optional) (...): The round number.
+
+    Output:
+        - "latent_pixel_selected_logits" (... latent_width latent_height): A logit for
+          each latent pixel, indicating the probability that this latent pixel should be
+          sent as a message to the verifier.
+        - "decision_logits" (... 3): A logit for each of the three options: guess a
+          classification one way or the other, or continue exchanging messages. Set to
+          zeros when the decider is not present.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent.
+    device : TorchDevice, optional
+        The device to use for this agent part. If not given, the CPU is used.
+    """
+
+    @property
+    def in_keys(self):
+        if self.decider is not None and self._agent_params.include_round_in_decider:
+            return ("image_level_repr", "latent_pixel_level_repr", "round")
+        else:
+            return ("image_level_repr", "latent_pixel_level_repr")
+
+    @property
+    def out_keys(self):
+        if self.decider is None:
+            return ("latent_pixel_selected_logits",)
+        else:
+            return ("latent_pixel_selected_logits", "decision_logits")
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[TorchDevice] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        # Build the latent pixel selector module
+        self.latent_pixel_selector = self._build_latent_pixel_selector()
+
+        # Build the decider module if necessary
+        if agent_name == "verifier":
+            self.decider = self._build_decider()
+        else:
+            self.decider = None
+
+    def _build_latent_pixel_selector(self) -> TensorDictModule:
+        """Builds the module which selects which latent pixel to send as a message.
+
+        Returns
+        -------
+        latent_pixel_selector : TensorDictModule
+            The latent pixel selector module.
+        """
+        return self._build_latent_pixel_mlp(
+            d_in=self.params.d_representation,
+            d_hidden=self._agent_params.d_latent_pixel_selector,
+            d_out=1,
+            num_layers=self._agent_params.num_latent_pixel_selector_layers,
+            out_key="latent_pixel_selected_logits",
+        )
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the policy head on the given body output.
+
+        Runs the latent pixel selector module and the decider module if present.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "image_level_repr" (... d_representation): The output image-level
+              representations.
+            - "latent_pixel_level_repr" (... latent_width latent_height
+              d_representation): The output latent-pixel-level representations.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "latent_pixel_selected_logits" (... latent_width latent_height): A logit
+              for each latent pixel, indicating the probability that this latent pixel
+              should be sent as a message to the verifier.
+            - "decision_logits" (... 3): A logit for each of the three options: guess a
+              classification one way or the other, or continue exchanging messages. Set
+              to zeros when the decider is not present.
+        """
+
+        out_dict = {}
+
+        out_dict["latent_pixel_selected_logits"] = self.latent_pixel_selector(
+            body_output
+        )["latent_pixel_selected_logits"].squeeze(-1)
+
+        if self.decider is not None:
+            out_dict["decision_logits"] = self.decider(body_output)["decision_logits"]
+        else:
+            out_dict["decision_logits"] = torch.zeros(
+                (*body_output.batch_size, 3),
+                device=self.device,
+                dtype=torch.float32,
+            )
+
+        return TensorDict(out_dict, batch_size=body_output.batch_size)
+
+    def to(self, device: Optional[TorchDevice] = None):
+        super().to(device)
+        self.device = device
+        self.latent_pixel_selector.to(device)
+        if self.decider is not None:
+            self.decider.to(device)
+
+
+class ImageClassificationRandomAgentPolicyHead(
+    ImageClassificationAgentPart, RandomAgentPolicyHead
+):
+    """Policy head for the image classification task yielding a uniform distribution.
+
+    Shapes
+    ------
+    Input:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+          The output latent-pixel-level representations.
+
+    Output:
+        - "latent_pixel_selected_logits" (... latent_width latent_height): A logit for
+          each latent pixel, indicating the probability that this latent pixel should be
+          sent as a message to the verifier.
+        - "decision_logits" (... 3): A logit for each of the three options: guess a
+          classification one way or the other, or continue exchanging messages. Set to
+          zeros when the decider is not present.
+    """
+
+    in_keys = ("image_level_repr", "latent_pixel_level_repr")
+
+    @property
+    def out_keys(self):
+        if self.decider:
+            return ("latent_pixel_selected_logits",)
+        else:
+            return ("latent_pixel_selected_logits", "decision_logits")
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[TorchDevice] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        # Determine if we should output a decision too
+        self.decider = agent_name == "verifier"
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Outputs a uniform distribution.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with all zero outputs.
+        """
+
+        latent_pixel_selected_logits = torch.zeros(
+            *body_output.batch_size,
+            self._latent_width,
+            self._latent_height,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        decision_logits = torch.zeros(
+            *body_output.batch_size,
+            3,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # Multiply the outputs by the dummy parameter, so that the gradients PyTorch
+        # doesn't complain about not having any gradients
+        latent_pixel_selected_logits = (
+            latent_pixel_selected_logits * self.dummy_parameter
+        )
+        decision_logits = decision_logits * self.dummy_parameter
+
+        return body_output.update(
+            dict(
+                latent_pixel_selected_logits=latent_pixel_selected_logits,
+                decision_logits=decision_logits,
+            )
+        )
+
+
+class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValueHead):
+    """Value head for the image classification task.
+
+    Takes as input the output of the agent body and outputs a value function.
+
+    Shapes
+    ------
+    Input:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "round" (optional) (...): The round number.
+
+    Output:
+        - "value" (...): The estimated value for each batch item
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    agent_name : str
+        The name of the agent.
+    device : TorchDevice, optional
+        The device to use for this agent part. If not given, the CPU is used.
+    """
+
+    out_keys = ("value",)
+
+    @property
+    def in_keys(self):
+        if self._agent_params.include_round_in_value:
+            return ("image_level_repr", "round")
+        else:
+            return "image_level_repr"
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[TorchDevice] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        self.value_mlp = self._build_mlp()
+
+    def _build_mlp(self) -> TensorDictModule:
+        """Builds the module which computes the value function.
+
+        Returns
+        -------
+        value_mlp : TensorDictModule
+            The value module.
+        """
+        return self._build_image_level_mlp(
+            d_in=self.params.d_representation,
+            d_hidden=self._agent_params.d_value,
+            d_out=1,
+            num_layers=self._agent_params.num_value_layers,
+            include_round=self._agent_params.include_round_in_value,
+            out_key="value",
+            squeeze=True,
+        )
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the value head on the given body output.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "image_level_repr" (... d_representation): The output graph-level
+              representations.
+
+        Returns
+        -------
+        value_out : TensorDict
+            A tensor dict with keys:
+
+            - "value" (...): The estimated value for each batch item
+        """
+
+        if body_output.batch_size[0] == 0:
+            return TensorDict(
+                dict(
+                    value=torch.empty(
+                        (*body_output.batch_size,),
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                ),
+                batch_size=body_output.batch_size,
+            )
+
+        return self.value_mlp(body_output)
+
+    def to(self, device: Optional[TorchDevice] = None):
+        super().to(device)
+        self.device = device
+        self.value_mlp.to(device)
+
+
+class ImageClassificationConstantAgentValueHead(
+    ImageClassificationAgentHead, ConstantAgentValueHead
+):
+    """A constant value head for the image classification task.
+
+    Shapes
+    ------
+    Input:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+          The output latent-pixel-level representations.
+
+    Output:
+        - "value" (...): The 'value' for each batch item, which is a constant zero.
+    """
+
+    in_keys = ("image_level_repr", "latent_pixel_level_repr")
+    out_keys = ("value",)
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Returns a constant value.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module.
+
+        Returns
+        -------
+        value_out : TensorDict
+            A tensor dict with keys:
+
+            - "value" (...): The 'value' for each batch item, which is a constant zero.
+        """
+
+        value = torch.zeros(
+            *body_output.batch_size,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        # Multiply the output by the dummy parameter, so that the gradients PyTorch
+        # doesn't complain about not having any gradients
+        value = value * self.dummy_parameter
+
+        return body_output.update(dict(value=value))
+
+
+class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHead):
+    """Solo agent head for the image classification task.
+
+    Solo agents try to solve the task on their own, without interacting with another
+    agents.
+
+    Shapes
+    ------
+    Input:
+        - "image_level_repr" (... d_representation): The output image-level
+          representations.
+
+    Output:
+        - "decision_logits" (... 2): A logit for each of the two options: guess that the
+          graphs are isomorphic, or guess that the graphs are not isomorphic.
+    """
+
+    in_keys = ("image_level_repr",)
+    out_keys = ("decision_logits",)
+
+    def __init__(
+        self,
+        params: Parameters,
+        agent_name: str,
+        device: Optional[TorchDevice] = None,
+    ):
+        super().__init__(params, agent_name, device)
+
+        self.decider = self._build_decider(d_out=2, include_round=False)
+
+    def forward(self, body_output: TensorDict) -> TensorDict:
+        """Runs the solo agent head on the given body output.
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "image_level_repr" (... d_representation): The output graph-level
+              representations.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "decision_logits" (... 2): A logit for each of the two options: guess that
+              the graphs are isomorphic, or guess that the graphs are not isomorphic.
+        """
+
+        return self.decider(body_output)
+
+    def to(self, device: Optional[TorchDevice] = None):
+        super().to(device)
+        self.device = device
+        self.decider.to(device)
+
+
+class ImageClassificationCombinedBody(CombinedBody):
+    """A module which combines the agent bodies for the image classification task.
+
+    Shapes
+    ------
+    Input:
+        - "round" (...): The round number.
+        - "x" (... max_message_rounds latent_width latent_height): The message history
+        - "image" (... num_channels width height): The image
+
+    Output:
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
+          latent_height d_representation): The output latent-pixel-level
+          representations.
+        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+          image-level representations.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    bodies : dict[str, ImageClassificationAgentBody]
+        The agent bodies to combine.
+    """
+
+    in_keys = ("round", "x", "image", "message")
+    out_keys = (
+        "round",
+        ("agents", "latent_pixel_level_repr"),
+        ("agents", "image_level_repr"),
+    )
+
+    def __init__(
+        self,
+        params: Parameters,
+        bodies: dict[str, ImageClassificationAgentBody],
+    ) -> None:
+        super().__init__(params, bodies)
+
+    def forward(self, data: TensorDictBase) -> TensorDict:
+        round: Int[Tensor, "batch"] = data["round"]
+
+        # Run the agent bodies
+        body_outputs: dict[str, TensorDict] = {}
+        for agent_name in self.params.agents:
+            # Build the input dict for the agent body
+            input_dict = {}
+            for key in self.bodies[agent_name].in_keys:
+                if key == "ignore_message":
+                    input_dict[key] = round == 0
+                else:
+                    input_dict[key] = data[key]
+            input_td = TensorDict(
+                input_dict,
+                batch_size=data.batch_size,
+            )
+
+            # Run the agent body
+            body_outputs[agent_name] = self.bodies[agent_name](input_td)
+
+        # Stack the outputs
+        latent_pixel_level_repr = torch.stack(
+            [
+                body_outputs[name]["latent_pixel_level_repr"]
+                for name in self.params.agents
+            ],
+            dim=-4,
+        )
+        image_level_repr = torch.stack(
+            [body_outputs[name]["image_level_repr"] for name in self.params.agents],
+            dim=-2,
+        )
+
+        return data.update(
+            dict(
+                agents=dict(
+                    latent_pixel_level_repr=latent_pixel_level_repr,
+                    image_level_repr=image_level_repr,
+                )
+            )
+        )
+
+
+class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
+    """A module which combines the agent policy heads for the image classification task.
+
+    Shapes
+    ------
+    Input:
+        - "round" (...): The round number.
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
+          latent_height d_representation): The output latent-pixel-level
+          representations.
+        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+          image-level representations.
+
+    Output:
+        - ("agents", "latent_pixel_selected_logits") (... num_agents latent_width
+          latent_height): A logit for each latent pixel, indicating the probability that
+          this latent pixel should be sent as a message to the verifier.
+        - ("agents", "decision_logits") (... num_agents 3): A logit for each of the
+          three options: guess a classification one way or the other, or continue
+          exchanging messages. Set to zeros when the decider is not present.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    policy_heads : dict[str, ImageClassificationAgentPolicyHead]
+        The agent policy heads to combine.
+    """
+
+    in_keys = (
+        ("agents", "latent_pixel_level_repr"),
+        ("agents", "image_level_repr"),
+        "round",
+    )
+    out_keys = (
+        ("agents", "latent_pixel_selected_logits"),
+        ("agents", "decision_logits"),
+    )
+
+    def __init__(
+        self,
+        params: Parameters,
+        policy_heads: dict[str, ImageClassificationAgentPolicyHead],
+    ):
+        super().__init__(params, policy_heads)
+
+    def forward(self, head_output: TensorDictBase) -> TensorDict:
+        """Run the agent policy heads and combine their outputs.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input to the value heads. Should contain the keys:
+
+            - ("agents", "latent_pixel_level_repr"): The node-level representation from
+              the body.
+            - ("agents", "image_level_repr"): The node-level representation from the
+              body.
+
+        Returns
+        -------
+        tensordict: TensorDict
+            The tensordict update in place with the output of the value heads.
+        """
+
+        # Run the policy heads to obtain the probability distributions
+        policy_outputs: dict[str, TensorDict] = {}
+        for i, agent_name in enumerate(self.params.agents):
+            input_td = TensorDict(
+                dict(
+                    latent_pixel_level_repr=head_output[
+                        "agents", "latent_pixel_level_repr"
+                    ][..., i, :, :, :],
+                    image_level_repr=head_output["agents", "image_level_repr"][
+                        ..., i, :, :
+                    ],
+                    round=head_output["round"],
+                ),
+                batch_size=head_output.batch_size,
+            )
+            policy_outputs[agent_name] = self.policy_heads[agent_name](input_td)
+
+        # Stack the outputs
+        latent_pixel_selected_logits = torch.stack(
+            [
+                policy_outputs[name]["latent_pixel_selected_logits"]
+                for name in self.params.agents
+            ],
+            dim=-2,
+        )
+        decision_logits = torch.stack(
+            [policy_outputs[name]["decision_logits"] for name in self.params.agents],
+            dim=-2,
+        )
+
+        return head_output.update(
+            dict(
+                agents=TensorDict(
+                    dict(
+                        latent_pixel_selected_logits=latent_pixel_selected_logits,
+                        decision_logits=decision_logits,
+                    ),
+                    batch_size=head_output.batch_size,
+                )
+            )
+        )
+
+
+class ImageClassificationCombinedValueHead(CombinedValueHead):
+    """A module which combines the agent value heads for the image classification task.
+
+    Shapes
+    ------
+    Input:
+        - "round" (...): The round number.
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
+          latent_height d_representation): The output latent-pixel-level
+          representations.
+        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+          image-level representations.
+
+    Output:
+        - ("agents", "value") (... num_agents): The estimated value for each batch item
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    value_heads : dict[str, ImageClassificationAgentValueHead]
+        The agent value heads to combine.
+    """
+
+    in_keys = (("agents", "image_level_repr"), "round")
+    out_keys = (("agents", "value"),)
+
+    def __init__(
+        self,
+        params: Parameters,
+        value_heads: dict[str, ImageClassificationAgentValueHead],
+    ):
+        super().__init__(params, value_heads)
+
+    def forward(self, head_output: TensorDictBase) -> TensorDict:
+        """Run the agent value heads and combine their values.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input to the value heads. Should contain the keys:
+
+            - ("agents", "image_level_repr"): The node-level representation from the
+              body.
+
+        Returns
+        -------
+        tensordict: TensorDict
+            The tensordict update in place with the output of the value heads.
+        """
+
+        # Run the policy heads to obtain the value estimates
+        value_outputs: dict[str, TensorDict] = {}
+        for i, agent_name in enumerate(self.params.agents):
+            input_td = TensorDict(
+                dict(
+                    latent_pixel_level_repr=head_output[
+                        "agents", "latent_pixel_level_repr"
+                    ][..., i, :, :, :],
+                    image_level_repr=head_output["agents", "image_level_repr"][
+                        ..., i, :, :
+                    ],
+                    round=head_output["round"],
+                ),
+                batch_size=head_output.batch_size,
+            )
+            value_outputs[agent_name] = self.value_heads[agent_name](input_td)
+
+        # Stack the outputs
+        value = torch.stack(
+            [value_outputs[name]["value"] for name in self.params.agents], dim=-1
+        )
+
+        return head_output.update(
+            dict(
+                agents=TensorDict(
+                    dict(value=value),
+                    batch_size=head_output.batch_size,
+                )
+            ),
         )
