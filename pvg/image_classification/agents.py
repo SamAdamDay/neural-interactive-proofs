@@ -497,10 +497,10 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
 
         # The layers of the MLP
         layers.append(Linear(d_in, d_hidden))
-        layers.append(self.activation_function(inplace=True))
+        layers.append(self.activation_function())
         for _ in range(num_layers - 2):
             layers.append(Linear(d_hidden, d_hidden))
-            layers.append(self.activation_function(inplace=True))
+            layers.append(self.activation_function())
         layers.append(Linear(d_hidden, d_out))
 
         # Make the layers into a sequential module and wrap it in a TensorDictModule
@@ -556,10 +556,10 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
 
         # The layers of the MLP
         layers.append(Linear(d_in, d_hidden))
-        layers.append(self.activation_function(inplace=True))
+        layers.append(self.activation_function())
         for _ in range(num_layers - 2):
             layers.append(Linear(d_hidden, d_hidden))
-            layers.append(self.activation_function(inplace=True))
+            layers.append(self.activation_function())
         layers.append(Linear(d_hidden, d_out))
 
         # Squeeze the output dimension if necessary

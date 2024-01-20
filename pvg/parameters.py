@@ -51,7 +51,7 @@ Create a parameters object using a dictionary for the ppo parameters
 from dataclasses import dataclass, asdict, fields
 from abc import ABC
 from typing import Optional, ClassVar, OrderedDict
-from enum import auto as enum_auto, property as enum_property
+from enum import auto as enum_auto
 from textwrap import indent
 
 try:
