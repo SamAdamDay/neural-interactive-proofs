@@ -18,6 +18,7 @@ from pvg import (
     PpoParameters,
     ScenarioType,
     TrainerType,
+    ActivationType,
     run_experiment,
 )
 from pvg.utils.experiments import (
@@ -37,11 +38,13 @@ param_grid = dict(
     lmbda=[0.95],
     clip_epsilon=[0.2],
     entropy_eps=[0.0001],
+    lr=[0.0003],
     body_lr_factor=[0.01],
     prover_num_layers=[5],
     verifier_num_layers=[2],
     random_prover=[False],
     pretrain_agents=[False],
+    activation_function=[ActivationType.RELU],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -68,6 +71,7 @@ def experiment_fn(
     else:
         prover_params = GraphIsomorphismAgentParameters(
             num_gnn_layers=combo["prover_num_layers"],
+            activation_function=combo["activation_function"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -83,6 +87,7 @@ def experiment_fn(
                     "verifier",
                     GraphIsomorphismAgentParameters(
                         num_gnn_layers=combo["verifier_num_layers"],
+                        activation_function=combo["activation_function"],
                     ),
                 ),
             ]
@@ -96,6 +101,7 @@ def experiment_fn(
             clip_epsilon=combo["clip_epsilon"],
             entropy_eps=combo["entropy_eps"],
             body_lr_factor=combo["body_lr_factor"],
+            lr=combo["lr"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],

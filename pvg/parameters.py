@@ -74,6 +74,18 @@ class TrainerType(StrEnum):
     SOLO_AGENT = enum_auto()
 
 
+class ActivationType(StrEnum):
+    """Enum for the activation function to use.
+
+    To add a new activation function, add it to this enum, and add the corresponding
+    function to `ACTIVATION_CLASSES` in `pvg.utils.torch_modules`.
+    """
+
+    RELU = enum_auto()
+    TANH = enum_auto()
+    SIGMOID = enum_auto()
+
+
 class BaseParameters(ABC):
     """Base class for parameters objects."""
 
@@ -145,6 +157,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 
     Parameters
     ----------
+    activation_function : ActivationType
+        The activation function to use.
     num_gnn_layers : int
         The number of layers in the agents's GNN.
     d_gnn : int
@@ -196,6 +210,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         the body at a different rate to the rest of the model.
     """
 
+    activation_function: ActivationType = ActivationType.RELU
+
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
@@ -229,6 +245,8 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     Parameters
     ----------
+    activation_function : ActivationType
+        The activation function to use.
     num_conv_groups : int
         The number of groups of convolutional layers in the agents's CNN.
     num_convs_per_group : int
@@ -259,6 +277,8 @@ class ImageClassificationAgentParameters(AgentParameters):
     include_round_in_value : bool
         Whether to include the round number in the agents's value MLP.
     """
+
+    activation_function: ActivationType = ActivationType.RELU
 
     num_conv_groups: int = 2
     num_convs_per_group: int = 2

@@ -8,6 +8,7 @@ from .parameters import (
     ImageClassificationParameters,
     ScenarioType,
     TrainerType,
+    ActivationType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment

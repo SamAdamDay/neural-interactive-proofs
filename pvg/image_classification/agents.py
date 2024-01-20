@@ -7,7 +7,7 @@ The structure of all agent bodies is the same:
 - An encoder layer, which takes as input the image and the message history and outputs
   the initial pixel-level encodings.
 - A sequence of `num_conv_groups` groups of convolutional layers. 
-    + Each layer is followed by a ReLU and each group by a max pooling layer. 
+    + Each layer is followed by a non-linearity and each group by a max pooling layer. 
     + For each group we halve the output size and double the number of channels. 
     + The number of convolutional layers in each group is given by the
       `num_convs_per_group` parameter. 
@@ -24,7 +24,7 @@ from abc import ABC
 from typing import Optional
 
 import torch
-from torch.nn import Sequential, ReLU, Linear, Conv2d, MaxPool2d, Upsample
+from torch.nn import Sequential, Linear, Conv2d, MaxPool2d, Upsample
 from torch import Tensor
 
 from tensordict import TensorDictBase, TensorDict
@@ -53,6 +53,7 @@ from pvg.parameters import (
     ImageClassificationAgentParameters,
 )
 from pvg.utils.torch_modules import (
+    ACTIVATION_CLASSES,
     Squeeze,
     TensorDictCat,
     ParallelTensorDictModule,
@@ -107,6 +108,10 @@ class ImageClassificationAgentPart(AgentPart, ABC):
             2**self._agent_params.num_conv_groups
             * self._agent_params.initial_num_channels
         )
+
+        self.activation_function = ACTIVATION_CLASSES[
+            self._agent_params.activation_function
+        ]
 
 
 class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
@@ -268,7 +273,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 else:
                     in_channels = 2**i * self._agent_params.initial_num_channels
 
-                # Add the convolutional layer and ReLU
+                # Add the convolutional layer and non-linearity
                 cnn_encoder.append(
                     TensorDictModule(
                         Conv2d(
@@ -285,7 +290,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 )
                 cnn_encoder.append(
                     TensorDictModule(
-                        ReLU(),
+                        self.activation_function(),
                         in_keys="latent_pixel_level_repr",
                         out_keys="latent_pixel_level_repr",
                     )
@@ -514,10 +519,10 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
 
         # The layers of the MLP
         layers.append(Linear(d_in, d_hidden))
-        layers.append(ReLU(inplace=True))
+        layers.append(self.activation_function())
         for _ in range(num_layers - 2):
             layers.append(Linear(d_hidden, d_hidden))
-            layers.append(ReLU(inplace=True))
+            layers.append(self.activation_function())
         layers.append(Linear(d_hidden, d_out))
 
         # Make the layers into a sequential module and wrap it in a TensorDictModule
@@ -580,10 +585,10 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         if include_round:
             updated_d_in += self.params.max_message_rounds + 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
-        mlp_layers.append(ReLU(inplace=True))
+        mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
             mlp_layers.append(Linear(d_hidden, d_hidden))
-            mlp_layers.append(ReLU(inplace=True))
+            mlp_layers.append(self.activation_function())
         mlp_layers.append(Linear(d_hidden, d_out))
 
         # Squeeze the output dimension if necessary
