@@ -20,6 +20,7 @@ import os
 from abc import ABC, abstractmethod
 import logging
 from functools import partial
+import multiprocessing
 
 from sklearn.model_selection import ParameterGrid
 
@@ -29,6 +30,7 @@ from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
+from tqdm_multiprocess.std import init_worker
 
 
 # Hack to be able to pickle the command arguments
@@ -79,6 +81,23 @@ class MultiLineFormatter(logging.Formatter):
         indent = " " * self.get_header_length(record)
         head, *trailing = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in trailing)
+
+
+class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
+    """A TqdmMultiProcessPool that allows setting maxtasksperchild"""
+
+    def __init__(self, process_count, max_tasks_per_child=None):
+        self.mp_manager = multiprocessing.Manager()
+        self.logging_queue = self.mp_manager.Queue()
+        self.tqdm_queue = self.mp_manager.Queue()
+        self.global_tqdm_queue = self.mp_manager.Queue()
+        self.process_count = process_count
+        worker_init_function = partial(init_worker, self.logging_queue)
+        self.mp_pool = multiprocessing.Pool(
+            self.process_count,
+            worker_init_function,
+            maxtasksperchild=max_tasks_per_child,
+        )
 
 
 class HyperparameterExperiment(ABC):
@@ -395,6 +414,20 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             default=1,
             help="The number of workers to use for multiprocessing",
         )
+        self.parser.add_argument(
+            "--max-tasks-per-child",
+            type=int,
+            default=1,
+            help=(
+                "The maximum number of tasks each worker can run before being replaced"
+            ),
+        )
+        self.parser.add_argument(
+            "--num-skip",
+            type=int,
+            default=0,
+            help="The number of initial tasks to skip. Useful to resume an experiment",
+        )
 
     def _task_fn(
         self,
@@ -451,9 +484,12 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
             for combo_index in range(len(combinations))
         ]
+        tasks = tasks[cmd_args.num_skip :]
 
         # Create a pool of workers
-        pool = TqdmMultiProcessPool(cmd_args.num_workers)
+        pool = TqdmMultiProcessPoolMaxTasks(
+            cmd_args.num_workers, max_tasks_per_child=cmd_args.max_tasks_per_child
+        )
 
         with tqdm(total=len(combinations), dynamic_ncols=True) as global_progress:
             global_progress.set_description("Total progress")
