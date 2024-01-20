@@ -414,8 +414,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             default=1,
             help="The number of workers to use for multiprocessing",
         )
-
-        # Add various arguments
         self.parser.add_argument(
             "--max-tasks-per-child",
             type=int,
@@ -423,6 +421,12 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             help=(
                 "The maximum number of tasks each worker can run before being replaced"
             ),
+        )
+        self.parser.add_argument(
+            "--num-skip",
+            type=int,
+            default=0,
+            help="The number of initial tasks to skip. Useful to resume an experiment",
         )
 
     def _task_fn(
@@ -480,6 +484,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
             for combo_index in range(len(combinations))
         ]
+        tasks = tasks[cmd_args.num_skip :]
 
         # Create a pool of workers
         pool = TqdmMultiProcessPoolMaxTasks(
