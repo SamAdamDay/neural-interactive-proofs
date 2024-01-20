@@ -15,6 +15,13 @@ import einops
 from jaxtyping import Float, Bool
 
 
+ACTIVATION_CLASSES = dict(
+    relu=nn.ReLU,
+    tanh=nn.Tanh,
+    sigmoid=nn.Sigmoid,
+)
+
+
 class GlobalMaxPool(nn.Module):
     """Global max pooling layer over a dimension.
 

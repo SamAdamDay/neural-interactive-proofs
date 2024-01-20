@@ -18,6 +18,7 @@ from pvg import (
     PpoParameters,
     ScenarioType,
     TrainerType,
+    ActivationType,
     run_experiment,
 )
 from pvg.utils.experiments import (
@@ -42,6 +43,7 @@ param_grid = dict(
     verifier_num_layers=[2],
     random_prover=[False],
     pretrain_agents=[False],
+    activation_function=[ActivationType.RELU],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -68,6 +70,7 @@ def experiment_fn(
     else:
         prover_params = GraphIsomorphismAgentParameters(
             num_gnn_layers=combo["prover_num_layers"],
+            activation_function=combo["activation_function"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -83,6 +86,7 @@ def experiment_fn(
                     "verifier",
                     GraphIsomorphismAgentParameters(
                         num_gnn_layers=combo["verifier_num_layers"],
+                        activation_function=combo["activation_function"],
                     ),
                 ),
             ]

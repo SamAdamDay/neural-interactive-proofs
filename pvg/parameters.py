@@ -51,7 +51,7 @@ Create a parameters object using a dictionary for the ppo parameters
 from dataclasses import dataclass, asdict, fields
 from abc import ABC
 from typing import Optional, ClassVar, OrderedDict
-from enum import auto as enum_auto
+from enum import auto as enum_auto, property as enum_property
 from textwrap import indent
 
 try:
@@ -72,6 +72,18 @@ class TrainerType(StrEnum):
 
     PPO = enum_auto()
     SOLO_AGENT = enum_auto()
+
+
+class ActivationType(StrEnum):
+    """Enum for the activation function to use.
+
+    To add a new activation function, add it to this enum, and add the corresponding
+    function to `ACTIVATION_CLASSES` in `pvg.utils.torch_modules`.
+    """
+
+    RELU = enum_auto()
+    TANH = enum_auto()
+    SIGMOID = enum_auto()
 
 
 class BaseParameters(ABC):
@@ -145,6 +157,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 
     Parameters
     ----------
+    activation_function : ActivationType
+        The activation function to use.
     num_gnn_layers : int
         The number of layers in the agents's GNN.
     d_gnn : int
@@ -202,6 +216,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         The learning rate factor for the body part of the model. This allows updating
         the body at a different rate to the rest of the model.
     """
+
+    activation_function: ActivationType = ActivationType.RELU
 
     num_gnn_layers: int = 5
     d_gnn: int = 16
@@ -271,6 +287,8 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     Parameters
     ----------
+    activation_function : ActivationType
+        The activation function to use.
     num_conv_groups : int
         The number of groups of convolutional layers in the agents's CNN.
     num_convs_per_group : int
@@ -287,6 +305,8 @@ class ImageClassificationAgentParameters(AgentParameters):
     num_decider_layers : int
         The number of layers in the agents's decider MLP.
     """
+
+    activation_function: ActivationType = ActivationType.RELU
 
     num_conv_groups: int = 2
     num_convs_per_group: int = 2
