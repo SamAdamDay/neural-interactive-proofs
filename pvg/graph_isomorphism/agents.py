@@ -20,7 +20,6 @@ from typing import Optional
 
 import torch
 from torch.nn import (
-    ReLU,
     Linear,
     TransformerEncoder,
     TransformerEncoderLayer,
@@ -52,8 +51,13 @@ from pvg.scenario_base import (
     CombinedPolicyHead,
     CombinedValueHead,
 )
-from pvg.parameters import Parameters, GraphIsomorphismAgentParameters
+from pvg.parameters import (
+    Parameters,
+    GraphIsomorphismAgentParameters,
+    RandomAgentParameters,
+)
 from pvg.utils.torch_modules import (
+    ACTIVATION_CLASSES,
     PairedGaussianNoise,
     PairInvariantizer,
     GIN,
@@ -89,11 +93,18 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        self._agent_params: GraphIsomorphismAgentParameters = params.agents[agent_name]
+        self._agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters = (
+            params.agents[agent_name]
+        )
         for i, _agent_name in enumerate(params.agents):
             if _agent_name == agent_name:
                 self.agent_index = i
                 break
+
+        if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
+            self.activation_function = ACTIVATION_CLASSES[
+                self._agent_params.activation_function
+            ]
 
     @classmethod
     def _run_masked_transformer(
@@ -249,7 +260,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         for _ in range(self._agent_params.num_gnn_layers):
             gnn_layers.append(
                 TensorDictModule(
-                    ReLU(inplace=True), in_keys=("gnn_repr",), out_keys=("gnn_repr",)
+                    self.activation_function(inplace=True),
+                    in_keys=("gnn_repr",),
+                    out_keys=("gnn_repr",),
                 )
             )
             gnn_layers.append(
@@ -259,7 +272,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                             self._agent_params.d_gnn,
                             self._agent_params.d_gin_mlp,
                         ),
-                        ReLU(inplace=True),
+                        self.activation_function(inplace=True),
                         Linear(
                             self._agent_params.d_gin_mlp,
                             self._agent_params.d_gnn,
@@ -627,10 +640,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
 
         # The layers of the MLP
         layers.append(Linear(d_in, d_hidden))
-        layers.append(ReLU(inplace=True))
+        layers.append(self.activation_function(inplace=True))
         for _ in range(num_layers - 2):
             layers.append(Linear(d_hidden, d_hidden))
-            layers.append(ReLU(inplace=True))
+            layers.append(self.activation_function(inplace=True))
         layers.append(Linear(d_hidden, d_out))
 
         # Concatenate the pair and node dimensions
@@ -697,10 +710,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         if include_round:
             updated_d_in += self.params.max_message_rounds + 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
-        mlp_layers.append(ReLU(inplace=True))
+        mlp_layers.append(self.activation_function(inplace=True))
         for _ in range(num_layers - 2):
             mlp_layers.append(Linear(d_hidden, d_hidden))
-            mlp_layers.append(ReLU(inplace=True))
+            mlp_layers.append(self.activation_function(inplace=True))
         mlp_layers.append(Linear(d_hidden, d_out))
 
         # Squeeze the output dimension if necessary
