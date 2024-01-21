@@ -27,7 +27,7 @@ from pvg.utils.experiments import (
 )
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 TEST_SIZE = 0.2
 
 param_grid = dict(
