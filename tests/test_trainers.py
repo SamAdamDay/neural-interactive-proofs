@@ -31,9 +31,6 @@ def test_gi_ppo_train_optimizer_groups():
         num_decider_layers=1,
         d_value=1,
         num_value_layers=1,
-        d_critic=1,
-        num_critic_transformer_layers=1,
-        num_critic_layers=1,
     )
 
     # Define the the different parameter options to test

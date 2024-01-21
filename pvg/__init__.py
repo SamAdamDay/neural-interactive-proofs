@@ -3,6 +3,7 @@ from .parameters import (
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
+    ImageClassificationAgentParameters,
     SoloAgentParameters,
     PpoParameters,
     ImageClassificationParameters,

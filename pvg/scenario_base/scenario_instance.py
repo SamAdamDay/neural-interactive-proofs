@@ -108,7 +108,7 @@ class ScenarioInstance(ABC):
         if params.scenario != self.scenario:
             raise ValueError(
                 f"Cannot build agents for scenario {params.scenario} "
-                f"with {self.__name__} parameters."
+                f"with {type(self).__name__} parameters."
             )
 
         self.params = params

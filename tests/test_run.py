@@ -4,6 +4,7 @@ from pvg import (
     Parameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
+    ImageClassificationAgentParameters,
     SoloAgentParameters,
     PpoParameters,
     ScenarioType,
@@ -43,9 +44,6 @@ def test_run_experiment():
                         num_decider_layers=1,
                         d_value=1,
                         num_value_layers=1,
-                        d_critic=1,
-                        num_critic_transformer_layers=1,
-                        num_critic_layers=1,
                     ),
                 ),
                 (
@@ -64,13 +62,38 @@ def test_run_experiment():
                         num_decider_layers=1,
                         d_value=1,
                         num_value_layers=1,
-                        d_critic=1,
-                        num_critic_transformer_layers=1,
-                        num_critic_layers=1,
                     ),
                 ),
             ]
-        )
+        ),
+        ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
+            [
+                (
+                    "prover",
+                    ImageClassificationAgentParameters(
+                        num_convs_per_group=1,
+                        d_latent_pixel_selector=1,
+                        num_latent_pixel_selector_layers=1,
+                        d_decider=1,
+                        num_decider_layers=1,
+                        d_value=1,
+                        num_value_layers=1,
+                    ),
+                ),
+                (
+                    "verifier",
+                    ImageClassificationAgentParameters(
+                        num_convs_per_group=1,
+                        d_latent_pixel_selector=1,
+                        num_latent_pixel_selector_layers=1,
+                        d_decider=1,
+                        num_decider_layers=1,
+                        d_value=1,
+                        num_value_layers=1,
+                    ),
+                ),
+            ]
+        ),
     }
 
     # Very basic parameters for each trainer

@@ -45,7 +45,6 @@ from pvg.scenario_base import (
     RandomAgentPolicyHead,
     AgentValueHead,
     ConstantAgentValueHead,
-    AgentCriticHead,
     SoloAgentHead,
     CombinedBody,
     CombinedPolicyHead,
@@ -62,7 +61,7 @@ from pvg.utils.torch_modules import (
     PairInvariantizer,
     GIN,
     Squeeze,
-    BatchNorm1dBatchDims,
+    BatchNorm1dSimulateBatchDims,
     OneHot,
     TensorDictCat,
     Print,
@@ -84,6 +83,8 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
+    _agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters
+
     def __init__(
         self,
         params: Parameters,
@@ -93,9 +94,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        self._agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters = (
-            params.agents[agent_name]
-        )
+        self._agent_params = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
             if _agent_name == agent_name:
                 self.agent_index = i
@@ -193,6 +192,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
     Takes as input a pair of graphs, message history and the most recent message and
     outputs node-level and graph-level representations.
+
+    Shapes
+    ------
+    Input:
+        - "x" (... pair node feature): The graph node features (message history)
+        - "adjacency" (... pair node node): The graph adjacency matrices
+        - "message" (...): The most recent message from the other agent
+        - "node_mask" (... pair node): Which nodes actually exist
+        - "ignore_message" (...): Whether to ignore any values in "message". For
+          example, in the first round the there is no message, and the "message" field
+          is set to a dummy value.
+
+    Output:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
 
     Parameters
     ----------
@@ -354,7 +370,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         ]
 
         if self._agent_params.use_batch_norm:
-            layers.append(BatchNorm1dBatchDims(num_features=self._agent_params.d_gnn))
+            layers.append(
+                BatchNorm1dSimulateBatchDims(num_features=self._agent_params.d_gnn)
+            )
 
         layers.append(
             PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),
@@ -614,9 +632,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - node_level_repr: (... 2 max_nodes d_in)
+            - "node_level_repr": (... 2 max_nodes d_in)
+
         Output:
-            - node_level_mlp_output: (... 2 max_nodes d_out)
+            - "node_level_mlp_output": (... 2 max_nodes d_out)
 
         Parameters
         ----------
@@ -674,9 +693,10 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - graph_level_repr: (... 2 d_in)
+            - "graph_level_repr": (... 2 d_in)
+
         Output:
-            - graph_level_mlp_output: (... 2 d_out)
+            - "graph_level_mlp_output": (... 2 d_out)
 
         Parameters
         ----------
@@ -801,8 +821,25 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     Takes as input the output of the agent body and outputs a policy distribution over
     the actions. Both agents select a node to send as a message, and the verifier also
-    decides whether to continue exchanging messages or to guess that the graphs are
-    isomorphic or not.
+    decides whether to guess that the graphs are isomorphic or not or to continue
+    exchanging messages.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+        - "round" (optional) (...): The current round number.
+
+    Output:
+        - "node_selected_logits" (... 2*max_nodes): A logit for each node, indicating
+          the probability that this node should be sent as a message to the verifier.
+        - "decision_logits" (optional) (... 3): A logit for each of the three options:
+          guess that the graphs are isomorphic,  guess that the graphs are not
+          isomorphic, or continue exchanging messages. Set to zeros when the decider is
+          not present.
 
     Parameters
     ----------
@@ -814,7 +851,12 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("graph_level_repr", "node_level_repr")
+    @property
+    def in_keys(self):
+        if self.decider is not None and self._agent_params.include_round_in_decider:
+            return ("graph_level_repr", "node_level_repr", "round")
+        else:
+            return ("graph_level_repr", "node_level_repr")
 
     @property
     def in_keys(self):
@@ -875,8 +917,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
             - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-              representations.
+            - "node_level_repr" (... 2 max_nodes d_representation): The output
+              node-level representations.
 
         Returns
         -------
@@ -886,9 +928,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - "node_selected_logits" (... 2*max_nodes): A logit for each node,
               indicating the probability that this node should be sent as a message to
               the verifier.
-            - "decision_logits" (... 3): A logit for each of the three options: continue
-              exchanging messages, guess that the graphs are isomorphic, or guess that
-              the graphs are not isomorphic. Set to zeros when the decider is not
+            - "decision_logits" (... 3): A logit for each of the three options: guess
+              that the graphs are isomorphic,  guess that the graphs are not isomorphic,
+              or continue exchanging messages. Set to zeros when the decider is not
               present.
         """
 
@@ -936,7 +978,23 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 class GraphIsomorphismRandomAgentPolicyHead(
     GraphIsomorphismAgentPart, RandomAgentPolicyHead
 ):
-    """Policy head for the graph isomorphism task yielding a uniform distribution."""
+    """Policy head for the graph isomorphism task yielding a uniform distribution.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+
+    Output:
+        - "node_selected_logits" (... 2*max_nodes): A logit for each node, indicating
+          the probability that this node should be sent as a message to the verifier.
+        - "decision_logits" (... 3): A logit for each of the three options: guess that
+          the graphs are isomorphic, guess that the graphs are not isomorphic, or
+          continue exchanging messages.
+    """
 
     in_keys = ("graph_level_repr", "node_level_repr")
 
@@ -1018,6 +1076,16 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     Takes as input the output of the agent body and outputs a value function.
 
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "round" (optional) (...): The current round number.
+
+    Output:
+        - "value" (...): The estimated value for each batch item
+
     Parameters
     ----------
     params : Parameters
@@ -1032,7 +1100,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     @property
     def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_value:
+        if self._agent_params.include_round_in_value:
             return ("graph_level_repr", "round")
         else:
             return "graph_level_repr"
@@ -1107,7 +1175,19 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 class GraphIsomorphismConstantAgentValueHead(
     GraphIsomorphismAgentHead, ConstantAgentValueHead
 ):
-    """A constant value head for the graph isomorphism task."""
+    """A constant value head for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+          representations.
+
+    Output:
+        - "value" (...): The 'value' for each batch item, which is a constant zero.
+    """
 
     in_keys = ("graph_level_repr", "node_level_repr")
     out_keys = ("value",)
@@ -1146,237 +1226,21 @@ class GraphIsomorphismConstantAgentValueHead(
         return body_output.update(dict(value=value))
 
 
-class GraphIsomorphismAgentCriticHead(GraphIsomorphismAgentHead, AgentCriticHead):
-    """Critic head for the graph isomorphism task.
-
-    Takes as input the output of the agent body and the actions taken and outputs a
-    value function.
-
-    Parameters
-    ----------
-    params : Parameters
-        The parameters of the experiment.
-    agent_name : str
-        The name of the agent.
-    device : TorchDevice, optional
-        The device to use for this agent part. If not given, the CPU is used.
-    """
-
-    in_keys = (
-        "graph_level_repr",
-        "node_level_repr",
-        ("agents", "node_selected"),
-        ("agents", "decision"),
-        "node_mask",
-    )
-    out_keys = ("value",)
-
-    def __init__(
-        self,
-        params: Parameters,
-        agent_name: str,
-        device: Optional[TorchDevice] = None,
-    ):
-        super().__init__(params, agent_name, device)
-
-        self.transformer_encoder = self._build_transformer_encoder()
-        self.transformer = self._build_transformer()
-        self.critic_mlp = self._build_mlp()
-
-    def _get_agent_level_tensordict_value(
-        self, key: str, tensordict: TensorDict
-    ) -> Tensor:
-        """Get a value from a TensorDict with agent-level keys.
-
-        Selects the value ["agents", key] from the tensordict, then selects the tensor
-        corresponding to the agent index.
-
-        Parameters
-        ----------
-        key : str
-            The key to get.
-        tensordict : TensorDict
-            The TensorDict to get the value from.
-
-        Returns
-        -------
-        value : Tensor
-            The value.
-        """
-        return tensordict["agents", key][..., self.agent_index]
-
-    def _build_transformer_encoder(self) -> Linear:
-        """Build the encoder layer from the hidden representations to the transformer
-
-        This is a simple linear layer, where the number of input features is
-        `d_transformer` + 1, where the extra feature encodes whether a node is in the
-        next message from to other agent, and the decision made (if any) one-hot
-        encoded, repeated across all tokens.
-
-        Returns
-        -------
-        transformer_encoder : torch.nn.Linear
-            The encoder module
-
-        """
-        return Linear(
-            self._agent_params.d_transformer + 4,
-            self._agent_params.d_transformer,
-            device=self.device,
-        )
-
-    def _build_transformer(self) -> TransformerEncoder:
-        """Builds the transformer which processes the next message.
-
-        Returns
-        -------
-        transformer : torch.nn.TransformerEncoder
-            The transformer module.
-        """
-
-        transformer = TransformerEncoder(
-            encoder_layer=TransformerEncoderLayer(
-                d_model=self._agent_params.d_transformer,
-                nhead=self._agent_params.num_heads,
-                batch_first=True,
-                dropout=self._agent_params.transformer_dropout,
-            ),
-            num_layers=self._agent_params.num_critic_transformer_layers,
-        )
-
-        transformer = transformer.to(self.device)
-
-        return transformer
-
-    def _build_mlp(self) -> TensorDictModule:
-        """Builds the module which computes the value function.
-
-        Returns
-        -------
-        critic_mlp : TensorDictModule
-            The critic module.
-        """
-        return self._build_graph_level_mlp(
-            d_in=self._agent_params.d_transformer,
-            d_hidden=self._agent_params.d_critic,
-            d_out=1,
-            num_layers=self._agent_params.num_critic_layers,
-            out_key="value",
-        )
-
-    def forward(self, critic_input: TensorDict) -> TensorDict:
-        """Runs the critic head on the given body output.
-
-        Parameters
-        ----------
-        critic_input : TensorDict
-            The output of the body module. A tensor dict with keys:
-
-            - "graph_level_repr" (batch 2 d_representation): The output graph-level
-              representations.
-            - "node_level_repr" (batch 2 max_nodes d_representation): The output
-              node-level representations.
-            - "node_selected" (batch 2 max_nodes): Which node was selected to send as a
-              message.
-            - "decision" (batch): The decision made by the verifier.
-            - "node_mask" (batch 2 max_nodes): Which nodes actually exist.
-
-        Returns
-        -------
-        critic_out : TensorDict
-            A tensor dict with keys:
-
-            - "value" (batch): The estimated value for each batch item
-        """
-
-        if critic_input.batch_size[0] == 0:
-            return TensorDict(
-                dict(
-                    value=torch.empty(
-                        (0,),
-                        device=self.device,
-                        dtype=torch.float32,
-                    )
-                ),
-                batch_size=0,
-            )
-
-        # The size of the node dimension
-        max_num_nodes = critic_input["node_level_repr"].shape[2]
-
-        # Concatenate the two graph-level representations and the node-level
-        # representations
-        # (batch, 2 + 2 * node, d_transformer)
-        transformer_input = torch.cat(
-            (
-                critic_input["graph_level_repr"],
-                rearrange(
-                    critic_input["node_level_repr"],
-                    "... pair node d_transformer -> ... (pair node) d_transformer",
-                ),
-            ),
-            dim=-2,
-        )
-
-        # Add the most recent message as a new one-hot feature
-        message_feature = F.one_hot(
-            self._get_agent_level_tensordict_value("node_selected", critic_input) + 2,
-            num_classes=2 + 2 * max_num_nodes,
-        )
-        message_feature = rearrange(message_feature, "... token -> ... token 1")
-
-        # Add the decision as new one-hot features
-        decision_features = F.one_hot(
-            self._get_agent_level_tensordict_value("decision", critic_input),
-            num_classes=3,
-        )
-        decision_features = repeat(
-            decision_features,
-            "... decision -> ... token decision",
-            token=2 + 2 * max_num_nodes,
-        )
-
-        # Concatenate everything together
-        transformer_input = torch.cat(
-            (transformer_input, message_feature, decision_features), dim=-1
-        )
-
-        # Run the transformer input through the encoder first
-        # (batch, 2 + 2 * max_nodes, d_transformer)
-        transformer_input = self.transformer_encoder(transformer_input)
-
-        # Run the transformer
-        # (batch, 2 + 2 * node, d_transformer)
-        transformer_output_flatter = self._run_masked_transformer(
-            transformer=self.transformer,
-            transformer_input=transformer_input,
-            node_mask=critic_input["node_mask"],
-        )
-
-        # Extract the graph-level representations, and feed them through the MLP
-        graph_level_repr = transformer_output_flatter[:, :2]
-        mlp_input = TensorDict(
-            dict(graph_level_repr=graph_level_repr),
-            batch_size=critic_input.batch_size,
-        )
-        critic_out = self.critic_mlp(mlp_input)
-        critic_out["value"] = critic_out["value"].squeeze(-1)
-
-        return critic_out
-
-    def to(self, device: Optional[TorchDevice] = None):
-        super().to(device)
-        self.device = device
-        self.transformer_encoder.to(device)
-        self.transformer.to(device)
-        self.critic_mlp.to(device)
-
-
 class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     """Solo agent head for the graph isomorphism task.
 
     Solo agents try to solve the task on their own, without interacting with another
     agents.
+
+    Shapes
+    ------
+    Input:
+        - "graph_level_repr" (... 2 d_representation): The output graph-level
+          representations.
+
+    Output:
+        - "decision_logits" (... 2): A logit for each of the two options: guess that the
+          graphs are isomorphic, or guess that the graphs are not isomorphic.
     """
 
     in_keys = ("graph_level_repr",)
@@ -1423,6 +1287,21 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 class GraphIsomorphismCombinedBody(CombinedBody):
     """A module which combines the agent bodies for the graph isomorphism task.
 
+    Shapes
+    ------
+    Input:
+        - "round" (...): The current round number.
+        - "x" (... pair node feature): The graph node features (message history)
+        - "adjacency" (... pair node node): The adjacency matrices.
+        - "message" (... pair node): The messages.
+        - "node_mask" (... pair node): Which nodes actually exist.
+
+    Output:
+        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
+          node-level representations.
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+
     Parameters
     ----------
     params : Parameters
@@ -1432,7 +1311,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     """
 
     in_keys = ("round", "x", "adjacency", "message", "node_mask")
-    out_keys = ("round", ("agents", "node_level_repr"), ("agents", "graph_level_repr"))
+    out_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
 
     def __init__(
         self,
@@ -1484,6 +1363,23 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
 class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     """A module which combines the agent policy heads for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
+          node-level representations.
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+        - "round" (...): The current round number.
+
+    Output:
+        - ("agents", "node_selected_logits") (... 2*max_nodes): A logit for each node,
+          indicating the probability that this node should be sent as a message to the
+          verifier.
+        - ("agents", "decision_logits") (... 3): A logit for each of the three options:
+          guess that the graphs are isomorphic, guess that the graphs are not
+          isomorphic, or continue exchanging messages.
 
     Parameters
     ----------
@@ -1574,6 +1470,16 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
 class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     """A module which combines the agent value heads for the graph isomorphism task.
+
+    Shapes
+    ------
+    Input:
+        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+          graph-level representations.
+        - "round" (...): The current round number.
+
+    Output:
+        - ("agents", "value") (... 2): The estimated value for each batch item
 
     Parameters
     ----------

@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader as TorchDataLoader
 
 import torchvision
-from torchvision.datasets import VisionDataset, MNIST, CIFAR10, FashionMNIST
+from torchvision.datasets import VisionDataset, MNIST, CIFAR10, FashionMNIST, FakeData
 from torchvision import transforms
 
 from tensordict import TensorDict
@@ -14,8 +14,27 @@ from pvg.scenario_base import Dataset
 from pvg.constants import IC_DATA_DIR
 
 
+class TestDataset(FakeData):
+    """A fake dataset for testing."""
+
+    def __init__(
+        self,
+        root=None,
+        train=None,
+        transform=None,
+        target_transform=None,
+        download=None,
+    ):
+        super().__init__(
+            image_size=(1, 28, 28),
+            num_classes=2,
+            transform=transform,
+            target_transform=target_transform,
+        )
+
+
 @dataclass
-class TorchVisionImageDataset:
+class TorchVisionDatasetProperties:
     """Details of a TorchVision image dataset.
 
     Parameters
@@ -32,20 +51,26 @@ class TorchVisionImageDataset:
     height: int
 
 
-IMAGE_DATASETS: dict[str, TorchVisionImageDataset] = dict(
-    mnist=TorchVisionImageDataset(
+IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
+    test=TorchVisionDatasetProperties(
+        data_class=TestDataset,
+        num_channels=1,
+        width=28,
+        height=28,
+    ),
+    mnist=TorchVisionDatasetProperties(
         data_class=MNIST,
         num_channels=1,
         width=28,
         height=28,
     ),
-    fashion_mnist=TorchVisionImageDataset(
+    fashion_mnist=TorchVisionDatasetProperties(
         data_class=FashionMNIST,
         num_channels=1,
         width=28,
         height=28,
     ),
-    cifar10=TorchVisionImageDataset(
+    cifar10=TorchVisionDatasetProperties(
         data_class=CIFAR10,
         num_channels=3,
         width=32,
@@ -74,7 +99,7 @@ class ImageClassificationDataset(Dataset):
             ]
         )
         torch_dataset = dataset_class(
-            self.raw_dir, train=True, transform=transform, download=True
+            root=self.raw_dir, train=True, transform=transform, download=True
         )
 
         # Get the whole dataset as a single batch
@@ -93,8 +118,8 @@ class ImageClassificationDataset(Dataset):
         # Create the pixel features, which are all zeros
         x = torch.zeros(
             images.shape[0],
-            *images.shape[-2:],
             self.params.max_message_rounds,
+            *images.shape[-2:],
             dtype=self.x_dtype,
         )
 
