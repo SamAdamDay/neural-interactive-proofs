@@ -61,7 +61,7 @@ from pvg.utils.torch_modules import (
     PairInvariantizer,
     GIN,
     Squeeze,
-    BatchNorm1dBatchDims,
+    BatchNorm1dSimulateBatchDims,
     OneHot,
     TensorDictCat,
     Print,
@@ -83,6 +83,8 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
+    _agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters
+
     def __init__(
         self,
         params: Parameters,
@@ -92,9 +94,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        self._agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters = (
-            params.agents[agent_name]
-        )
+        self._agent_params = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
             if _agent_name == agent_name:
                 self.agent_index = i
@@ -370,7 +370,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         ]
 
         if self._agent_params.use_batch_norm:
-            layers.append(BatchNorm1dBatchDims(num_features=self._agent_params.d_gnn))
+            layers.append(
+                BatchNorm1dSimulateBatchDims(num_features=self._agent_params.d_gnn)
+            )
 
         layers.append(
             PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),

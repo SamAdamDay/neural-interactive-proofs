@@ -247,12 +247,8 @@ class ImageClassificationAgentParameters(AgentParameters):
     ----------
     activation_function : ActivationType
         The activation function to use.
-    num_conv_groups : int
-        The number of groups of convolutional layers in the agents's CNN.
     num_convs_per_group : int
         The number of convolutional layers in each group in the agents's CNN.
-    initial_num_channels : int
-        The number of channels in the first convolutional layer in the agents's CNN.
     kernel_size : int
         The kernel size of the convolutional layers in the agents's CNN.
     stride : int
@@ -280,9 +276,7 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     activation_function: ActivationType = ActivationType.RELU
 
-    num_conv_groups: int = 2
     num_convs_per_group: int = 2
-    initial_num_channels: int = 16
     kernel_size: int = 3
     stride: int = 1
 
@@ -416,9 +410,16 @@ class ImageClassificationParameters(SubParameters):
     selected_classes : tuple[int, int]
         The indices of the classes of the original dataset to select to use for the
         binary classification task.
+    num_conv_groups : int
+        The number of groups of convolutional layers in each agents's CNN.
+    initial_num_channels : int
+        The number of channels in the first convolutional layer in each agents's CNN.
     """
 
     selected_classes: tuple[int, int] = (0, 1)
+
+    num_conv_groups: int = 2
+    initial_num_channels: int = 16
 
 
 @dataclass
@@ -490,13 +491,18 @@ class Parameters(BaseParameters):
 
     def __post_init__(self):
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
-            self.agents = _process_agents_params(
+            self.agents = self._process_agents_params(
                 self.agents,
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
             )
 
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
+            self.agents = self._process_agents_params(
+                self.agents,
+                ImageClassificationAgentParameters,
+                RandomAgentParameters,
+            )
             if self.image_classification is None:
                 self.image_classification = ImageClassificationParameters()
             elif isinstance(self.image_classification, dict):
@@ -516,71 +522,71 @@ class Parameters(BaseParameters):
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
 
+    @staticmethod
+    def _process_agents_params(
+        agents_params: AgentsParameters | OrderedDict[str, AgentParameters] | None,
+        agent_params_class: type[AgentParameters],
+        random_agent_params_class: type[RandomAgentParameters],
+    ) -> AgentsParameters:
+        """Process agent parameters passed to `Parameters`.
 
-def _process_agents_params(
-    agents_params: AgentsParameters | OrderedDict[str, AgentParameters] | None,
-    agent_params_class: type[AgentParameters],
-    random_agent_params_class: type[RandomAgentParameters],
-) -> AgentsParameters:
-    """Process agent parameters passed to `Parameters`.
+        Fills in missing agent parameters with the default parameters for the scenario.
 
-    Fills in missing agent parameters with the default parameters for the scenario.
+        Parameters
+        ----------
+        agents_params : AgentsParameters | OrderedDict[str, AgentParameters] | None
+            The agent parameters passed to `Parameters`.
+        agent_params_class : type[AgentParameters]
+            The class of the agent parameters for the scenario.
+        random_agent_params_class : type[RandomAgentParameters]
+            The class of the random agent parameters for the scenario.
 
-    Parameters
-    ----------
-    agents_params : AgentsParameters | OrderedDict[str, AgentParameters] | None
-        The agent parameters passed to `Parameters`.
-    agent_params_class : type[AgentParameters]
-        The class of the agent parameters for the scenario.
-    random_agent_params_class : type[RandomAgentParameters]
-        The class of the random agent parameters for the scenario.
+        Returns
+        -------
+        new_agents_params : AgentsParameters
+            The processed agent parameters.
+        """
 
-    Returns
-    -------
-    new_agents_params : AgentsParameters
-        The processed agent parameters.
-    """
-
-    # If no agent parameters are provided, use the default parameters for the scenario
-    if agents_params is None:
-        return AgentsParameters(
-            [
-                ("prover", agent_params_class()),
-                ("verifier", agent_params_class()),
-            ]
-        )
-
-    if not isinstance(agents_params, OrderedDict):
-        raise ValueError(
-            f"Agent parameters must be a (subclass of) OrderedDict, not"
-            f" {type(agents_params)}."
-        )
-
-    new_agents_params = AgentsParameters()
-
-    for agent_name, agent_params in agents_params.items():
-        # If the agent parameters are a dictionary, convert them to the appropriate
-        # class
-        if isinstance(agent_params, dict):
-            is_random = False
-            if "is_random" in agent_params:
-                is_random = agent_params.pop("is_random")
-            if is_random:
-                new_agents_params[agent_name] = random_agent_params_class(
-                    **agent_params
-                )
-            else:
-                new_agents_params[agent_name] = GraphIsomorphismAgentParameters(
-                    **agent_params
-                )
-
-        elif isinstance(agent_params, (agent_params_class, RandomAgentParameters)):
-            new_agents_params[agent_name] = agent_params
-
-        else:
-            raise ValueError(
-                f"Agent parameters for agent {agent_name} are not a dictionary"
-                f" nor {agent_params_class}."
+        # If no agent parameters are provided, use the default parameters for the scenario
+        if agents_params is None:
+            return AgentsParameters(
+                [
+                    ("prover", agent_params_class()),
+                    ("verifier", agent_params_class()),
+                ]
             )
 
-    return new_agents_params
+        if not isinstance(agents_params, OrderedDict):
+            raise ValueError(
+                f"Agent parameters must be a (subclass of) OrderedDict, not"
+                f" {type(agents_params)}."
+            )
+
+        new_agents_params = AgentsParameters()
+
+        for agent_name, agent_params in agents_params.items():
+            # If the agent parameters are a dictionary, convert them to the appropriate
+            # class
+            if isinstance(agent_params, dict):
+                is_random = False
+                if "is_random" in agent_params:
+                    is_random = agent_params.pop("is_random")
+                if is_random:
+                    new_agents_params[agent_name] = random_agent_params_class(
+                        **agent_params
+                    )
+                else:
+                    new_agents_params[agent_name] = GraphIsomorphismAgentParameters(
+                        **agent_params
+                    )
+
+            elif isinstance(agent_params, (agent_params_class, RandomAgentParameters)):
+                new_agents_params[agent_name] = agent_params
+
+            else:
+                raise ValueError(
+                    f"Agent parameters for agent {agent_name} are not a dictionary"
+                    f" nor {agent_params_class}."
+                )
+
+        return new_agents_params

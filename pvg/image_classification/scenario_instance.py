@@ -47,7 +47,7 @@ class ImageClassificationScenarioInstance(ScenarioInstance):
         The device to use for training.
     """
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    scenario = ScenarioType.IMAGE_CLASSIFICATION
 
     dataset_class = ImageClassificationDataset
     dataloader_class = DataLoader

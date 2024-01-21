@@ -18,12 +18,14 @@ from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import ScenarioInstance
 from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
+from pvg.image_classification import ImageClassificationScenarioInstance
 from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
     ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismScenarioInstance,
+    ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationScenarioInstance,
 }
 
 TRAINER_MAP: dict[TrainerType, Trainer] = {

@@ -24,12 +24,13 @@ from abc import ABC
 from typing import Optional
 
 import torch
-from torch.nn import Sequential, Linear, Conv2d, MaxPool2d, Upsample
+from torch.nn import Sequential, Linear
 from torch import Tensor
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
+from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Int
@@ -51,14 +52,20 @@ from pvg.scenario_base import (
 from pvg.parameters import (
     Parameters,
     ImageClassificationAgentParameters,
+    RandomAgentParameters,
 )
 from pvg.utils.torch_modules import (
     ACTIVATION_CLASSES,
     Squeeze,
+    UpsampleSimulateBatchDims,
+    MaxPool2dSimulateBatchDims,
+    Conv2dSimulateBatchDims,
     TensorDictCat,
     ParallelTensorDictModule,
+    TensorDictCloneKeys,
     OneHot,
     Print,
+    TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
 from pvg.image_classification.data import IMAGE_DATASETS
@@ -77,6 +84,8 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
+    _agent_params: ImageClassificationAgentParameters | RandomAgentParameters
+
     def __init__(
         self,
         params: Parameters,
@@ -86,32 +95,28 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         super().__init__(params, device)
         self.agent_name = agent_name
 
-        self._agent_params: ImageClassificationAgentParameters = params.agents[
-            agent_name
-        ]
+        self._agent_params = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
             if _agent_name == agent_name:
                 self.agent_index = i
                 break
 
-        # Get some dataset parameters
-        self._dataset_num_channels = IMAGE_DATASETS[params.dataset].num_channels
-        self._image_width = IMAGE_DATASETS[params.dataset].width
-        self._image_height = IMAGE_DATASETS[params.dataset].height
-        self._latent_width = (
-            self._image_width // 2**self._agent_params.num_conv_groups
+        # Get some parameters
+        self.num_conv_groups = self.params.image_classification.num_conv_groups
+        self.initial_num_channels = (
+            self.params.image_classification.initial_num_channels
         )
-        self._latent_height = (
-            self._image_height // 2**self._agent_params.num_conv_groups
-        )
-        self._latent_num_channels = (
-            2**self._agent_params.num_conv_groups
-            * self._agent_params.initial_num_channels
-        )
+        self.dataset_num_channels = IMAGE_DATASETS[params.dataset].num_channels
+        self.image_width = IMAGE_DATASETS[params.dataset].width
+        self.image_height = IMAGE_DATASETS[params.dataset].height
+        self.latent_width = self.image_width // 2**self.num_conv_groups
+        self.latent_height = self.image_height // 2**self.num_conv_groups
+        self.latent_num_channels = 2**self.num_conv_groups * self.initial_num_channels
 
-        self.activation_function = ACTIVATION_CLASSES[
-            self._agent_params.activation_function
-        ]
+        if isinstance(self._agent_params, ImageClassificationAgentParameters):
+            self.activation_function = ACTIVATION_CLASSES[
+                self._agent_params.activation_function
+            ]
 
 
 class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
@@ -123,15 +128,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... max_message_rounds latent_width latent_height): The message history
-        - "image" (... num_channels width height): The image
-        - "message" (... latent_width latent_height): The most recent message
+        - "x" (... max_message_rounds latent_height latent_width): The message history
+        - "image" (... num_channels height width): The image
+        - "message" (...): The most recent message
         - "ignore_message" (...): Whether to ignore the message
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
           The output latent-pixel-level representations.
 
     Parameters
@@ -155,26 +160,29 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     ):
         super().__init__(params, agent_name, device)
 
-        self.module_sequence = TensorDictSequential(
-            [
-                self.build_message_history_upsampler(),
-                self.build_initial_encoder(),
-                self.build_cnn_encoder(),
-                self.build_global_pooling(),
-                self.build_final_encoder(),
-            ]
-        ).to(self.device)
+        self.message_history_upsampler = self.build_message_history_upsampler().to(
+            device
+        )
+        self.initial_encoder = self.build_initial_encoder().to(device)
+        self.cnn_encoder = self.build_cnn_encoder().to(device)
+        self.global_pooling = self.build_global_pooling().to(device)
+        self.final_encoder = self.build_final_encoder().to(device)
 
     def build_message_history_upsampler(self) -> TensorDictModule:
-        """Build the module which upsamples the history to the size of the image.
+        """Build the module which upsamples the history and message.
+
+        The message history is upsampled to the size of the image, and the message is
+        upsampled to the twice the size of the latent pixel-level representations.
 
         Shapes
         ------
         Input:
-            - "message" : (... max_message_rounds latent_width latent_height)
+            - "x" : (... max_message_rounds latent_height latent_width)
+            - "message" : (... latent_height latent_width)
 
         Output:
-            - "message_upsampled" : (... max_message_rounds width height)
+            - "x_upsampled" : (... max_message_rounds height width)
+            - "message_image" : (... 1 2*latent_height 2*latent_width)
 
         Returns
         -------
@@ -182,8 +190,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             The module which upsamples the message history to the size of the image.
         """
         return TensorDictModule(
-            Upsample(
-                size=(self._dataset_num_channels, self._dataset_num_channels),
+            UpsampleSimulateBatchDims(
+                size=(self.image_height, self.image_width),
                 mode="nearest",
             ),
             in_keys="x",
@@ -199,11 +207,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x_upsampled" : (... max_message_rounds width height) image : (...
-            num_channels width height)
+            - "x_upsampled" : (... max_message_rounds height width) image : (...
+            num_channels height width)
 
         Output:
-            - "latent_pixel_level_repr" : (... initial_num_channels width height)
+            - "latent_pixel_level_repr" : (... initial_num_channels height width)
 
         Returns
         -------
@@ -211,21 +219,29 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             The initial encoding layer.
         """
         return TensorDictSequential(
-            [
-                TensorDictCat(
-                    in_keys=("x_upsampled", "image"),
-                    out_keys="latent_pixel_level_repr",
-                    dim=-3,
+            TensorDictCat(
+                in_keys=("x_upsampled", "image"),
+                out_key="latent_pixel_level_repr",
+                dim=-3,
+            ),
+            TensorDictModule(
+                Rearrange("... channel height width -> ... height width channel"),
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
+            TensorDictModule(
+                Linear(
+                    self.params.max_message_rounds + self.dataset_num_channels,
+                    self.initial_num_channels,
                 ),
-                TensorDictModule(
-                    Linear(
-                        self.params.max_message_rounds + self._dataset_num_channels,
-                        self._agent_params.initial_num_channels,
-                    ),
-                    in_keys="latent_pixel_level_repr",
-                    out_keys="latent_pixel_level_repr",
-                ),
-            ]
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
+            TensorDictModule(
+                Rearrange("... height width channel -> ... channel height width"),
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
         )
 
     def build_cnn_encoder(self) -> TensorDictSequential:
@@ -234,11 +250,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... initial_num_channels width height)
+            - "latent_pixel_level_repr" : (... initial_num_channels height width)
 
         Output:
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
-            latent_height)
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+            latent_width)
 
         where `latent_num_channels = initial_num_channels * 2**num_conv_groups`
 
@@ -248,38 +264,37 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             The sequence of groups of convolutional layers.
         """
         cnn_encoder = []
-        for i in range(self._agent_params.num_conv_groups):
+        for i in range(self.num_conv_groups):
             # Add the message as a new channel before the last group
-            if i == self._agent_params.num_conv_groups - 1:
+            if i == self.num_conv_groups - 1:
                 cnn_encoder.append(
                     TensorDictCat(
-                        in_keys=("latent_pixel_level_repr", "message"),
-                        out_keys="latent_pixel_level_repr",
+                        in_keys=("latent_pixel_level_repr", "message_image"),
+                        out_key="latent_pixel_level_repr",
+                        dim=-3,
                     )
                 )
 
             # Add the convolutional layers
             for j in range(self._agent_params.num_convs_per_group):
-                # Determine the number of input channels. In all groups except the first
+                # Determine the number of input channels. In all groups except the last
                 # the number of input channels is the same as the number of output
                 # channels of the previous group. In the last group we add the message
                 # as a new channel.
-                if j == 0 and i == self._agent_params.num_conv_groups - 1:
-                    in_channels = (
-                        2 ** (i - 1) * self._agent_params.initial_num_channels + 1
-                    )
-                elif j == 0 and i > 0:
-                    in_channels = 2 ** (i - 1) * self._agent_params.initial_num_channels
+                if j == 0:
+                    if i == self.num_conv_groups - 1:
+                        in_channels = 2**i * self.initial_num_channels + 1
+                    else:
+                        in_channels = 2**i * self.initial_num_channels
                 else:
-                    in_channels = 2**i * self._agent_params.initial_num_channels
+                    in_channels = 2 ** (i + 1) * self.initial_num_channels
 
                 # Add the convolutional layer and non-linearity
                 cnn_encoder.append(
                     TensorDictModule(
-                        Conv2d(
+                        Conv2dSimulateBatchDims(
                             in_channels=in_channels,
-                            out_channels=2**i
-                            * self._agent_params.initial_num_channels,
+                            out_channels=2 ** (i + 1) * self.initial_num_channels,
                             kernel_size=self._agent_params.kernel_size,
                             stride=self._agent_params.stride,
                             padding="same",
@@ -299,7 +314,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             # Add the max pooling layer after each group
             cnn_encoder.append(
                 TensorDictModule(
-                    MaxPool2d(kernel_size=2, stride=2),
+                    MaxPool2dSimulateBatchDims(kernel_size=2, stride=2),
                     in_keys="latent_pixel_level_repr",
                     out_keys="latent_pixel_level_repr",
                 )
@@ -307,30 +322,30 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         return TensorDictSequential(*cnn_encoder)
 
-    def build_global_pooling(self) -> TensorDictSequential:
+    def build_global_pooling(self) -> TensorDictModule:
         """Build the global pooling layer.
 
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
-            latent_height)
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+            latent_width)
 
         Output:
             - "image_level_repr" : (... latent_num_channels)
 
         Returns
         -------
-        TensorDictSequential
+        global_pooling : TensorDictModule
             The global pooling layer.
         """
-        return TensorDictSequential(
+        return TensorDictModule(
             Reduce("... channel height width -> ... channel", reduction="mean"),
             in_keys="latent_pixel_level_repr",
             out_keys="image_level_repr",
         )
 
-    def build_final_encoder(self) -> ParallelTensorDictModule:
+    def build_final_encoder(self) -> TensorDictSequential:
         """Build the final encoder.
 
         This rearranges the latent pixel-level representations to put the channel
@@ -340,35 +355,36 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         ------
         Input:
             - "image_level_repr" : (... latent_num_channels)
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_width
-              latent_height)
+            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+              latent_width)
 
         Output:
             - "image_level_repr" : (... d_representation)
-            - "latent_pixel_level_repr" : (... latent_width latent_height
+            - "latent_pixel_level_repr" : (... latent_height latent_width
               d_representation)
 
         Returns
         -------
-        ParallelTensorDictModule
+        final_encoder : TensorDictSequential
             The final encoder.
         """
         return TensorDictSequential(
-            [
-                TensorDict(
-                    Rearrange(
-                        "... latent_num_channels latent_width latent_height -> "
-                        "... latent_width latent_height latent_num_channels"
-                    ),
+            TensorDictModule(
+                Rearrange(
+                    "... latent_num_channels latent_height latent_width -> "
+                    "... latent_height latent_width latent_num_channels"
                 ),
-                ParallelTensorDictModule(
-                    Linear(
-                        in_features=2**self._agent_params.num_conv_groups
-                        * self._agent_params.initial_num_channels,
-                        out_features=self.params.d_representation,
-                    ),
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
+            ParallelTensorDictModule(
+                Linear(
+                    in_features=2**self.num_conv_groups * self.initial_num_channels,
+                    out_features=self.params.d_representation,
                 ),
-            ]
+                in_keys=("image_level_repr", "latent_pixel_level_repr"),
+                out_keys=("image_level_repr", "latent_pixel_level_repr"),
+            ),
         )
 
     def forward(self, data: TensorDictBase) -> TensorDict:
@@ -379,11 +395,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the body on. A TensorDictBase with keys:
 
-            - "x" (... max_message_rounds latent_width latent_height): The message
+            - "x" (... max_message_rounds latent_height latent_width): The message
               history
-            - "image" (... num_channels width height): The image
-            - "message" (... latent_width latent_height): The message most recent
-              message
+            - "image" (... num_channels height width): The image
+            - "message" (...): The message most recent message
+            - "ignore_message" (...): Whether to ignore the message. For example, in the
+              first round the there is no message, and the "message" field is set to a
+              dummy value.
 
         Returns
         -------
@@ -392,16 +410,73 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
             - "image_level_repr" (... d_representation): The output image-level
               representations.
-            - "latent_pixel_level_repr" (... latent_width latent_height
+            - "latent_pixel_level_repr" (... latent_height latent_width
               d_representation): The output latent-pixel-level representations.
         """
 
-        return self.module_sequence(data)
+        # Convert the message to a one-hot encoding of size (... 1 2*latent_height
+        # 2*latent_width)
+        message_image = torch.zeros(
+            *data.batch_size,
+            self.latent_height * self.latent_width,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        message_image = torch.scatter(
+            input=message_image,
+            dim=-1,
+            index=data["message"].unsqueeze(-1),
+            value=1,
+        )
+        message_image = rearrange(
+            message_image,
+            "... (latent_height latent_width) -> ... 1 latent_height latent_width",
+            latent_height=self.latent_height,
+            latent_width=self.latent_width,
+        )
+        message_image = repeat(
+            message_image,
+            "... 1 latent_height latent_width "
+            "-> ... 1 (latent_height 2) (latent_width 2)",
+        )
+
+        # If the message is to be ignored, set it to zero
+        message_image = torch.where(
+            data["ignore_message"][..., None, None, None],
+            0,
+            message_image,
+        )
+
+        # Add the message image to the data tensor dict
+        data = data.update(dict(message_image=message_image))
+
+        # Upsample the message history
+        data = self.message_history_upsampler(data)
+
+        # Encode the image and message history
+        data = self.initial_encoder(data)
+
+        # Encode the image and message history using the CNN encoder
+        data = self.cnn_encoder(data)
+
+        # Pool the latent pixel-level representations to obtain the image-level
+        # representations
+        data = self.global_pooling(data)
+
+        # Encode the image-level and latent pixel-level representations to obtain the
+        # final representations
+        data = self.final_encoder(data)
+
+        return data
 
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
-        self.module_sequence.to(self.device)
+        self.message_history_upsampler = self.message_history_upsampler.to(device)
+        self.initial_encoder = self.initial_encoder.to(device)
+        self.cnn_encoder = self.cnn_encoder.to(device)
+        self.global_pooling = self.global_pooling.to(device)
+        self.final_encoder = self.final_encoder.to(device)
         return self
 
 
@@ -411,15 +486,15 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
     Shapes
     ------
     Input:
-        - "x" (... max_message_rounds latent_width latent_height): The message history
-        - "image" (... num_channels width height): The image
-        - "message" (... latent_width latent_height): The most recent message
+        - "x" (... max_message_rounds latent_height latent_width): The message history
+        - "image" (... num_channels height width): The image
+        - "message" (...): The most recent message
         - "ignore_message" (...): Whether to ignore the message
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
           The output latent-pixel-level representations.
 
     """
@@ -452,8 +527,8 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
         # The dummy latent-pixel-level representations
         latent_pixel_level_repr = torch.zeros(
             *data.batch_size,
-            self._latent_width,
-            self._latent_height,
+            self.latent_width,
+            self.latent_height,
             self.params.d_representation,
             device=self.device,
             dtype=torch.float32,
@@ -485,6 +560,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         d_hidden: int,
         d_out: int,
         num_layers: int,
+        flatten_output: bool = True,
         out_key: str = "latent_pixel_mlp_output",
     ) -> TensorDictModule:
         """Builds an MLP which acts on the latent-pixel-level representations.
@@ -492,10 +568,10 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         Shapes
         ------
         Input:
-            - latent_pixel_repr : (... latent_width latent_height d_in)
+            - latent_pixel_level_repr : (... latent_height latent_width d_in)
 
         Output:
-            - latent_pixel_mlp_output : (... latent_width latent_height d_out)
+            - latent_pixel_mlp_output : (... latent_height*latent_width d_out)
 
         Parameters
         ----------
@@ -507,6 +583,8 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             The dimensionality of the output.
         num_layers : int
             The number of hidden layers in the MLP.
+        flatten_output : bool, default=True
+            Whether to flatten the output dimension to `latent_height * latent_width`.
         out_key : str, default="latent_pixel_mlp_output"
             The tensordict key to use for the output of the MLP.
 
@@ -525,10 +603,19 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             layers.append(self.activation_function())
         layers.append(Linear(d_hidden, d_out))
 
+        # Flatten the output dimension if necessary
+        if flatten_output:
+            layers.append(
+                Rearrange(
+                    "... latent_height latent_width d_out "
+                    "-> ... (latent_height latent_width) d_out"
+                )
+            )
+
         # Make the layers into a sequential module and wrap it in a TensorDictModule
         sequential = Sequential(*layers)
         tensor_dict_sequential = TensorDictModule(
-            sequential, in_keys=("latent_pixel_repr",), out_keys=(out_key,)
+            sequential, in_keys=("latent_pixel_level_repr",), out_keys=(out_key,)
         )
 
         tensor_dict_sequential = tensor_dict_sequential.to(self.device)
@@ -578,6 +665,34 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         latent_pixel_mlp : TensorDictSequential
             The latent-pixel-level MLP.
         """
+
+        # The final module includes one or two more things then the MLP
+        td_sequential_layers = []
+
+        if include_round:
+            # Add the round number as an input to the MLP
+            td_sequential_layers.append(
+                TensorDictModule(
+                    OneHot(num_classes=self.params.max_message_rounds + 1),
+                    in_keys=("round"),
+                    out_keys=("round_one_hot",),
+                )
+            )
+            td_sequential_layers.append(
+                TensorDictCat(
+                    in_keys=("image_level_repr", "round_one_hot"),
+                    out_key="image_level_mlp_input",
+                    dim=-1,
+                ),
+            )
+        else:
+            td_sequential_layers.append(
+                TensorDictCloneKeys(
+                    in_keys=("image_level_repr",), out_keys=("image_level_mlp_input",)
+                )
+            )
+
+        # The layers of the MLP
         mlp_layers = []
 
         # The layers of the MLP
@@ -601,31 +716,13 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             mlp, in_keys=("image_level_mlp_input",), out_keys=(out_key,)
         )
 
-        # The final module includes one or two more things before the MLP
-        td_sequential_layers = []
-
-        if include_round:
-            # Add the round number as an input to the MLP
-            td_sequential_layers.append(
-                TensorDictModule(
-                    OneHot(num_classes=self.params.max_message_rounds + 1),
-                    in_keys=("round"),
-                    out_keys=("round_one_hot",),
-                )
-            )
-            td_sequential_layers.append(
-                TensorDictCat(
-                    in_keys=("image_level_mlp_input", "round_one_hot"),
-                    out_key="image_level_mlp_input",
-                    dim=-1,
-                ),
-            )
-
         td_sequential_layers.append(mlp)
 
         return TensorDictSequential(*td_sequential_layers).to(self.device)
 
-    def _build_decider(self, d_out: int = 3) -> TensorDictModule:
+    def _build_decider(
+        self, d_out: int = 3, include_round: Optional[bool] = None
+    ) -> TensorDictModule:
         """Builds the module which produces a image-level output.
 
         By default it is used to decide whether to continue exchanging messages. In this
@@ -636,18 +733,25 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         ----------
         d_out : int, default=3
             The dimensionality of the output.
+        include_round : bool, optional
+            Whether to include the round number as a (one-hot encoded) input to the MLP.
+            If not given, the value from the agent parameters is used.
 
         Returns
         -------
         decider : TensorDictModule
             The decider module.
         """
+
+        if include_round is None:
+            include_round = self._agent_params.include_round_in_decider
+
         return self._build_image_level_mlp(
             d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_decider,
             d_out=d_out,
             num_layers=self._agent_params.num_decider_layers,
-            include_round=self._agent_params.include_round_in_decider,
+            include_round=include_round,
             out_key="decision_logits",
         )
 
@@ -664,12 +768,12 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
     Input:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_width latent_height
+        - "latent_pixel_level_repr" (... latent_height latent_width
           d_representation): The output latent-pixel-level representations.
         - "round" (optional) (...): The round number.
 
     Output:
-        - "latent_pixel_selected_logits" (... latent_width latent_height): A logit for
+        - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit for
           each latent pixel, indicating the probability that this latent pixel should be
           sent as a message to the verifier.
         - "decision_logits" (... 3): A logit for each of the three options: guess a
@@ -729,6 +833,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_latent_pixel_selector,
             d_out=1,
+            flatten_output=True,
             num_layers=self._agent_params.num_latent_pixel_selector_layers,
             out_key="latent_pixel_selected_logits",
         )
@@ -745,7 +850,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
             - "image_level_repr" (... d_representation): The output image-level
               representations.
-            - "latent_pixel_level_repr" (... latent_width latent_height
+            - "latent_pixel_level_repr" (... latent_height latent_width
               d_representation): The output latent-pixel-level representations.
 
         Returns
@@ -753,7 +858,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         out : TensorDict
             A tensor dict with keys:
 
-            - "latent_pixel_selected_logits" (... latent_width latent_height): A logit
+            - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit
               for each latent pixel, indicating the probability that this latent pixel
               should be sent as a message to the verifier.
             - "decision_logits" (... 3): A logit for each of the three options: guess a
@@ -796,11 +901,11 @@ class ImageClassificationRandomAgentPolicyHead(
     Input:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
           The output latent-pixel-level representations.
 
     Output:
-        - "latent_pixel_selected_logits" (... latent_width latent_height): A logit for
+        - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit for
           each latent pixel, indicating the probability that this latent pixel should be
           sent as a message to the verifier.
         - "decision_logits" (... 3): A logit for each of the three options: guess a
@@ -844,8 +949,7 @@ class ImageClassificationRandomAgentPolicyHead(
 
         latent_pixel_selected_logits = torch.zeros(
             *body_output.batch_size,
-            self._latent_width,
-            self._latent_height,
+            self.latent_width * self.latent_height,
             device=self.device,
             dtype=torch.float32,
         )
@@ -952,18 +1056,6 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
             - "value" (...): The estimated value for each batch item
         """
 
-        if body_output.batch_size[0] == 0:
-            return TensorDict(
-                dict(
-                    value=torch.empty(
-                        (*body_output.batch_size,),
-                        device=self.device,
-                        dtype=torch.float32,
-                    )
-                ),
-                batch_size=body_output.batch_size,
-            )
-
         return self.value_mlp(body_output)
 
     def to(self, device: Optional[TorchDevice] = None):
@@ -982,7 +1074,7 @@ class ImageClassificationConstantAgentValueHead(
     Input:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_width latent_height d_representation):
+        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
           The output latent-pixel-level representations.
 
     Output:
@@ -1086,12 +1178,12 @@ class ImageClassificationCombinedBody(CombinedBody):
     ------
     Input:
         - "round" (...): The round number.
-        - "x" (... max_message_rounds latent_width latent_height): The message history
-        - "image" (... num_channels width height): The image
+        - "x" (... max_message_rounds latent_height latent_width): The message history
+        - "image" (... num_channels height width): The image
 
     Output:
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
-          latent_height d_representation): The output latent-pixel-level
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
+          latent_width d_representation): The output latent-pixel-level
           representations.
         - ("agents", "image_level_repr") (... num_agents d_representation): The output
           image-level representations.
@@ -1169,16 +1261,16 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     ------
     Input:
         - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
-          latent_height d_representation): The output latent-pixel-level
-          representations.
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
+          latent_width d_representation): The output latent-pixel-level representations.
         - ("agents", "image_level_repr") (... num_agents d_representation): The output
           image-level representations.
 
     Output:
-        - ("agents", "latent_pixel_selected_logits") (... num_agents latent_width
-          latent_height): A logit for each latent pixel, indicating the probability that
-          this latent pixel should be sent as a message to the verifier.
+        - ("agents", "latent_pixel_selected_logits") (... num_agents
+          latent_height*latent_width): A logit for each latent pixel, indicating the
+          probability that this latent pixel should be sent as a message to the
+          verifier.
         - ("agents", "decision_logits") (... num_agents 3): A logit for each of the
           three options: guess a classification one way or the other, or continue
           exchanging messages. Set to zeros when the decider is not present.
@@ -1230,14 +1322,12 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self.params.agents):
+            latent_pixel_level_repr = head_output["agents", "latent_pixel_level_repr"]
+            image_level_repr = head_output["agents", "image_level_repr"]
             input_td = TensorDict(
                 dict(
-                    latent_pixel_level_repr=head_output[
-                        "agents", "latent_pixel_level_repr"
-                    ][..., i, :, :, :],
-                    image_level_repr=head_output["agents", "image_level_repr"][
-                        ..., i, :, :
-                    ],
+                    latent_pixel_level_repr=latent_pixel_level_repr[..., i, :, :, :],
+                    image_level_repr=image_level_repr[..., i, :],
                     round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
@@ -1277,8 +1367,8 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
     ------
     Input:
         - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_width
-          latent_height d_representation): The output latent-pixel-level
+        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
+          latent_width d_representation): The output latent-pixel-level
           representations.
         - ("agents", "image_level_repr") (... num_agents d_representation): The output
           image-level representations.
@@ -1324,14 +1414,12 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
         # Run the policy heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self.params.agents):
+            latent_pixel_level_repr = head_output["agents", "latent_pixel_level_repr"]
+            image_level_repr = head_output["agents", "image_level_repr"]
             input_td = TensorDict(
                 dict(
-                    latent_pixel_level_repr=head_output[
-                        "agents", "latent_pixel_level_repr"
-                    ][..., i, :, :, :],
-                    image_level_repr=head_output["agents", "image_level_repr"][
-                        ..., i, :, :
-                    ],
+                    latent_pixel_level_repr=latent_pixel_level_repr[..., i, :, :, :],
+                    image_level_repr=image_level_repr[..., i, :],
                     round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,

@@ -200,7 +200,8 @@ class GraphIsomorphismEnvironment(Environment):
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
 
-        Agents see the adjacency matrix and the messages sent so far. The "message" field contains the most recent message.
+        Agents see the adjacency matrix and the messages sent so far. The "message"
+        field contains the most recent message.
 
         Returns
         -------
@@ -252,7 +253,7 @@ class GraphIsomorphismEnvironment(Environment):
         node and a decision: reject, accept or continue (represented as 0, 1 or 2). The
         node is is a number between 0 and 2 * max_num_nodes - 1. If it is less than
         max_num_nodes, it is a node in the first graph, otherwise it is a node in the
-        second graph. The verifier is agent 0 and the prover is agent 1.
+        second graph.
 
         Returns
         -------
@@ -264,7 +265,7 @@ class GraphIsomorphismEnvironment(Environment):
                 node_selected=DiscreteTensorSpec(
                     2 * self.max_num_nodes,
                     shape=(self.num_envs, 2),
-                    dtype=self._int_dtype,
+                    dtype=torch.long,
                 ),
                 decision=DiscreteTensorSpec(
                     3,
@@ -289,7 +290,7 @@ class GraphIsomorphismEnvironment(Environment):
         decision: Int[Tensor, "batch agent"] = tensordict["agents", "decision"]
         done: Bool[Tensor, "batch"] = tensordict["done"]
 
-        # Compute index of the agent whose turn it is. The prover goes first.
+        # Compute index of the agent whose turn it is.
         agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
 
         # Determine which graph contains the selected node and which node it is there
