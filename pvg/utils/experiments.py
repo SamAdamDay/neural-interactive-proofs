@@ -461,7 +461,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         tqdm_func: Callable,
         global_tqdm: tqdm,
     ) -> bool:
-        info_prefix = f"[{combo_index}/{len(combinations)}] "
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
