@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader
@@ -40,6 +41,25 @@ class TestDataset(FakeData):
             num_classes=2,
             transform=transform,
             target_transform=target_transform,
+        )
+
+
+class SVHNTrainParameter(SVHN):
+    def __init__(
+        self,
+        root: str,
+        train: bool = True,
+        transform: Optional[callable] = None,
+        target_transform: Optional[callable] = None,
+        download: bool = False,
+    ) -> None:
+        split = "train" if train else "test"
+        super().__init__(
+            root=root,
+            split=split,
+            transform=transform,
+            target_transform=target_transform,
+            download=download,
         )
 
 
@@ -110,7 +130,7 @@ IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
         height=28,
     ),
     svhn=TorchVisionDatasetProperties(
-        data_class=SVHN,
+        data_class=SVHNTrainParameter,
         num_channels=3,
         width=32,
         height=32,
