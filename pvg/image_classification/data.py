@@ -147,15 +147,19 @@ class ImageClassificationDataset(Dataset):
         )
         images, labels = next(iter(full_dataset_loader))
 
+        # The generator used to turn the dataset into a binary classification problem
+        binurification_generator = torch.Generator()
+        binurification_generator.manual_seed(self.binarification_seed)
+
         if (
             self.params.dataset_options.binarification_method
             == BinarificationMethodType.MERGE
         ):
             # Shuffle the classes and merge them into two classes
-            generator = torch.Generator()
-            generator.manual_seed(self.binarification_seed)
             num_classes = len(torch.unique(labels))
-            shuffled_classes = torch.randperm(num_classes, generator=generator)
+            shuffled_classes = torch.randperm(
+                num_classes, generator=binurification_generator
+            )
             shuffled_labels = shuffled_classes[labels]
             labels = torch.where(shuffled_labels < num_classes // 2, 0, 1)
 
@@ -176,7 +180,13 @@ class ImageClassificationDataset(Dataset):
             == BinarificationMethodType.RANDOM
         ):
             # Select labels at random
-            labels = torch.randint(0, 2, labels.shape, dtype=self.y_dtype)
+            labels = torch.randint(
+                0,
+                2,
+                labels.shape,
+                dtype=self.y_dtype,
+                generator=binurification_generator,
+            )
 
         else:
             raise ValueError(
