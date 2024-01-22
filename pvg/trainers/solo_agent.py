@@ -92,7 +92,7 @@ class SoloAgentTrainer(Trainer):
             optimizers[agent_name] = Adam(model_param_dict)
 
         # Create the data loaders
-        test_loader = self.scenario_instance.dataloader_class(
+        train_dataloader = self.scenario_instance.dataloader_class(
             train_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
@@ -115,7 +115,7 @@ class SoloAgentTrainer(Trainer):
             total_loss = {agent_name: 0 for agent_name in agents_params}
             total_accuracy = {agent_name: 0 for agent_name in agents_params}
 
-            for data in test_loader:
+            for data in train_dataloader:
                 data: TensorDict
                 data = data.to(self.settings.device)
 
