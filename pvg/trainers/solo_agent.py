@@ -158,8 +158,8 @@ class SoloAgentTrainer(Trainer):
             if self.settings.wandb_run is not None and not as_pretraining:
                 to_log = {}
                 for agent_name in agents_params:
-                    train_loss = total_loss[agent_name] / len(test_loader)
-                    train_accuracy = total_accuracy[agent_name] / len(test_loader)
+                    train_loss = total_loss[agent_name] / len(train_dataloader)
+                    train_accuracy = total_accuracy[agent_name] / len(train_dataloader)
                     to_log[f"{agent_name}.train_loss"] = train_loss
                     to_log[f"{agent_name}.train_accuracy"] = train_accuracy
                 self.settings.wandb_run.log(to_log, step=epoch)
