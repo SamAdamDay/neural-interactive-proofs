@@ -25,6 +25,7 @@ from pvg import (
     ScenarioType,
     TrainerType,
     run_experiment,
+    prepare_experiment,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
@@ -126,6 +127,15 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
     return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
 
 
+def run_preparer_fn(combo: dict, cmd_args: Namespace):
+    params = Parameters(
+        scenario=ScenarioType.IMAGE_CLASSIFICATION,
+        trainer=TrainerType.SOLO_AGENT,
+        dataset=combo["dataset_name"],
+    )
+    prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+
+
 if __name__ == "__main__":
     if MULTIPROCESS:
         experiment_class = MultiprocessHyperparameterExperiment
@@ -136,6 +146,7 @@ if __name__ == "__main__":
         param_grid=param_grid,
         experiment_fn=experiment_fn,
         run_id_fn=run_id_fn,
+        run_preparer_fn=run_preparer_fn,
         experiment_name="TEST_SOLO_GI_AGENTS",
     )
     experiment.parser.add_argument(

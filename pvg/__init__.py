@@ -14,4 +14,4 @@ from .parameters import (
     BinarificationMethodType,
 )
 from .experiment_settings import ExperimentSettings
-from .run import run_experiment
+from .run import run_experiment, prepare_experiment

@@ -10,12 +10,13 @@ from pvg import (
     ScenarioType,
     TrainerType,
     run_experiment,
+    prepare_experiment,
 )
 from pvg.utils.output import DummyTqdm
 
 
-def test_run_experiment():
-    """Test running experiments with very basic parameters.
+def test_prepare_run_experiment():
+    """Test preparing and running experiments with very basic parameters.
 
     Tests all combinations of:
     - Scenario type
@@ -142,6 +143,9 @@ def test_run_experiment():
                 str(trainer_type): trainer_param,
             }
         )
+
+        # Prepare the experiment
+        prepare_experiment(params=params, test_run=True)
 
         # Run the experiment in test mode
         run_experiment(params, tqdm_func=DummyTqdm, test_run=True)
