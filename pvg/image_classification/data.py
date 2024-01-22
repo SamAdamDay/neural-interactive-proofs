@@ -5,7 +5,16 @@ import torch
 from torch.utils.data import DataLoader as TorchDataLoader
 
 import torchvision
-from torchvision.datasets import VisionDataset, MNIST, CIFAR10, FashionMNIST, FakeData
+from torchvision.datasets import (
+    VisionDataset,
+    MNIST,
+    CIFAR10,
+    FashionMNIST,
+    FakeData,
+    CIFAR100,
+    KMNIST,
+    SVHN,
+)
 from torchvision import transforms
 
 from tensordict import TensorDict
@@ -88,6 +97,24 @@ IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
         width=32,
         height=32,
         selected_classes=(3, 5),
+    ),
+    cifar100=TorchVisionDatasetProperties(
+        data_class=CIFAR100,
+        num_channels=3,
+        width=32,
+        height=32,
+    ),
+    kmnist=TorchVisionDatasetProperties(
+        data_class=KMNIST,
+        num_channels=1,
+        width=28,
+        height=28,
+    ),
+    svhn=TorchVisionDatasetProperties(
+        data_class=SVHN,
+        num_channels=3,
+        width=32,
+        height=32,
     ),
 )
 
