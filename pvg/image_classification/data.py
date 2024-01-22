@@ -59,9 +59,8 @@ class TorchVisionDatasetProperties:
         The height of the images in the dataset.
     selected_classes : tuple[int, int]
         When selecting two classes from the original dataset, the default two to select.
-    merge_shuffle_seed : int
-        When merging the classes to create a binary classification dataset, the seed to
-        use for shuffling the dataset before merging.
+    binarification_seed : int
+        The seed used when doing a randomised binarification.
     """
 
     data_class: type[VisionDataset]
@@ -69,7 +68,7 @@ class TorchVisionDatasetProperties:
     width: int
     height: int
     selected_classes: tuple[int, int] = (0, 1)
-    merge_shuffle_seed: int = 0
+    binarification_seed: int = 0
 
 
 IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
@@ -154,7 +153,7 @@ class ImageClassificationDataset(Dataset):
         ):
             # Shuffle the classes and merge them into two classes
             generator = torch.Generator()
-            generator.manual_seed(self.merge_shuffle_seed)
+            generator.manual_seed(self.binarification_seed)
             num_classes = len(torch.unique(labels))
             shuffled_classes = torch.randperm(num_classes, generator=generator)
             shuffled_labels = shuffled_classes[labels]
@@ -171,6 +170,14 @@ class ImageClassificationDataset(Dataset):
             images = images[index]
             labels = labels[index]
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
+
+        elif (
+            self.params.dataset_options.binarification_method
+            == BinarificationMethodType.RANDOM
+        ):
+            # Select labels at random
+            labels = torch.randint(0, 2, labels.shape, dtype=self.y_dtype)
+
         else:
             raise ValueError(
                 f"Unknown binarification method: "
@@ -199,8 +206,11 @@ class ImageClassificationDataset(Dataset):
         suffix = str(self.binarification_method).lower()
         if self.binarification_method == BinarificationMethodType.SELECT_TWO:
             suffix += f"_{self.selected_classes[0]}_{self.selected_classes[1]}"
-        elif self.binarification_method == BinarificationMethodType.MERGE:
-            suffix += f"_{self.merge_shuffle_seed}"
+        elif (
+            self.binarification_method == BinarificationMethodType.MERGE
+            or self.binarification_method == BinarificationMethodType.RANDOM
+        ):
+            suffix += f"_{self.binarification_seed}"
 
         return os.path.join(
             IC_DATA_DIR,
@@ -214,12 +224,12 @@ class ImageClassificationDataset(Dataset):
         return self.params.dataset_options.binarification_method
 
     @property
-    def merge_shuffle_seed(self) -> int:
+    def binarification_seed(self) -> int:
         """The seed to use for shuffling the dataset before merging."""
-        if self.params.dataset_options.merge_shuffle_seed is not None:
-            return self.params.dataset_options.merge_shuffle_seed
+        if self.params.dataset_options.binarification_seed is not None:
+            return self.params.dataset_options.binarification_seed
         else:
-            return IMAGE_DATASETS[self.params.dataset].merge_shuffle_seed
+            return IMAGE_DATASETS[self.params.dataset].binarification_seed
 
     @property
     def selected_classes(self) -> tuple[int, int]:
