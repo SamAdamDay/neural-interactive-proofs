@@ -74,6 +74,22 @@ class TrainerType(StrEnum):
     SOLO_AGENT = enum_auto()
 
 
+class BinarificationMethodType(StrEnum):
+    """Enum for ways of turning a multi-class classification task into a binary one.
+
+    Enums
+    -----
+    SELECT_TWO
+        Select two classes from the original dataset to use for the binary
+        classification task.
+    MERGE
+        Merge all classes from the original dataset into two classes.
+    """
+
+    SELECT_TWO = enum_auto()
+    MERGE = enum_auto()
+
+
 class ActivationType(StrEnum):
     """Enum for the activation function to use.
 
@@ -407,19 +423,37 @@ class ImageClassificationParameters(SubParameters):
 
     Parameters
     ----------
-    selected_classes : tuple[int, int]
-        The indices of the classes of the original dataset to select to use for the
-        binary classification task.
     num_conv_groups : int
         The number of groups of convolutional layers in each agents's CNN.
     initial_num_channels : int
         The number of channels in the first convolutional layer in each agents's CNN.
     """
 
-    selected_classes: tuple[int, int] = (0, 1)
-
     num_conv_groups: int = 2
     initial_num_channels: int = 16
+
+
+@dataclass
+class DatasetParameters(SubParameters):
+    """Additional parameters for the dataset.
+
+    Parameters
+    ----------
+    binarification_method : BinarificationMethodType
+        The method to use to turn the multi-class classification task into a binary
+        classification task.
+    selected_classes : tuple[int, int], optional
+        When selecting two classes from the original dataset, the indices of the classes
+        to select. If not provided, the default for the dataset is used.
+    merge_shuffle_seed : int, optional
+        When merging all classes from the original dataset into two classes, the seed
+        for the random number generator used to shuffle the dataset before merging. If
+        not provided, the default for the dataset is used.
+    """
+
+    binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
+    selected_classes: Optional[tuple[int, int]] = None
+    merge_shuffle_seed: Optional[int] = None
 
 
 @dataclass
@@ -465,6 +499,8 @@ class Parameters(BaseParameters):
         "solo_agent" or when `pretrain_agents` is `True`.
     image_classification : ImageClassificationParameters, optional
         Additional parameters for the image classification task.
+    dataset_options : DatasetParameters, optional
+        Additional parameters for the dataset.
     """
 
     scenario: ScenarioType
@@ -488,6 +524,7 @@ class Parameters(BaseParameters):
     ppo: Optional[PpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
     image_classification: Optional[ImageClassificationParameters | dict] = None
+    dataset_options: Optional[DatasetParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
@@ -521,6 +558,11 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
+
+        if self.dataset_options is None:
+            self.dataset_options = DatasetParameters()
+        elif isinstance(self.dataset_options, dict):
+            self.dataset_options = DatasetParameters(**self.dataset_options)
 
     @staticmethod
     def _process_agents_params(

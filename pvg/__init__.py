@@ -7,9 +7,11 @@ from .parameters import (
     SoloAgentParameters,
     PpoParameters,
     ImageClassificationParameters,
+    DatasetParameters,
     ScenarioType,
     TrainerType,
     ActivationType,
+    BinarificationMethodType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment
