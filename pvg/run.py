@@ -16,9 +16,15 @@ from tqdm import tqdm
 
 from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import ScenarioInstance
-from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
-from pvg.image_classification import ImageClassificationScenarioInstance
+from pvg.scenario_base import ScenarioInstance, RunPreparer
+from pvg.graph_isomorphism import (
+    GraphIsomorphismScenarioInstance,
+    GraphIsomorphismRunPreparer,
+)
+from pvg.image_classification import (
+    ImageClassificationScenarioInstance,
+    ImageClassificationRunPreparer,
+)
 from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
@@ -26,6 +32,11 @@ from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
     ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismScenarioInstance,
     ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationScenarioInstance,
+}
+
+RUN_PREPARER: dict[ScenarioType, RunPreparer] = {
+    ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismRunPreparer,
+    ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationRunPreparer,
 }
 
 TRAINER_MAP: dict[TrainerType, Trainer] = {
@@ -140,3 +151,46 @@ def run_experiment(
     # Close Weights & Biases.
     if use_wandb:
         wandb_run.finish()
+
+
+def prepare_experiment(
+    params: Parameters,
+    ignore_cache: bool = False,
+    num_dataset_threads: int = 8,
+    test_run: bool = False,
+):
+    """Prepare for running an experiment.
+
+    This is useful e.g. for downloading data before running an experiment. Without this,
+    if running multiple experiments in parallel, the initial runs will all start
+    downloading data at the same time, which can cause problems.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    ignore_cache : bool, default=False
+        If True, when the dataset is loaded, the cache is ignored and the dataset is
+        rebuilt from the raw data.
+    num_dataset_threads : int, default=8
+        The number of threads to use for saving the memory-mapped tensordict.
+    test_run : bool, default=False
+        If True, the experiment is run in test mode. This means we do the smallest
+        number of iterations possible and then exit. This is useful for testing that
+        the experiment runs without errors.
+    """
+
+    settings = ExperimentSettings(
+        device="cpu",
+        wandb_run=None,
+        logger=None,
+        ignore_cache=ignore_cache,
+        num_dataset_threads=num_dataset_threads,
+        test_run=test_run,
+    )
+
+    if params.scenario in RUN_PREPARER:
+        run_preparer: RunPreparer = RUN_PREPARER[params.scenario](params, settings)
+        run_preparer.prepare_run()
+    else:
+        raise ValueError(f"Unknown scenario {params.scenario}")

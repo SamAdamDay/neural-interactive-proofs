@@ -114,6 +114,7 @@ class HyperparameterExperiment(ABC):
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         arg_parser_description: str = "Run hyperparameter experiments",
     ):
         if run_id_fn is None:
@@ -125,6 +126,7 @@ class HyperparameterExperiment(ABC):
         self.experiment_fn = experiment_fn
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
+        self.run_preparer_fn = run_preparer_fn
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -210,6 +212,12 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
+    run_preparer_fn : Callable[[dict, Namespace], None], optional
+        A function that takes a single hyperparameter combination and prepares the run
+        for it. This is optional. It should take the form:
+            run_preparer_fn(combo, cmd_args)
+        where `combo` is a single combination of hyperparameters and `cmd_args` is the
+        command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
     output_width : int, default=70
@@ -223,6 +231,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter], None
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         experiment_name: str = "EXPERIMENT",
         output_width: int = 70,
     ):
@@ -231,6 +240,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
+            run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments sequentially",
         )
 
@@ -315,6 +325,11 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         )
         combinations = list(combinations)[cmd_args.num_skip :]
 
+        # Prepare the runs
+        if self.run_preparer_fn is not None:
+            for i, combo in combinations:
+                self.run_preparer_fn(combo, cmd_args)
+
         # Keep track of the results of the runs
         run_results = []
         for combo_num in range(len(combinations)):
@@ -382,6 +397,12 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
+    run_preparer_fn : Callable[[dict, Namespace], None], optional
+        A function that takes a single hyperparameter combination and prepares the run
+        for it. This is optional. It should take the form:
+            run_preparer_fn(combo, cmd_args)
+        where `combo` is a single combination of hyperparameters and `cmd_args` is the
+        command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
     """
@@ -393,6 +414,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter], None
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         experiment_name: str = "EXPERIMENT",
     ):
         super().__init__(
@@ -400,6 +422,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
+            run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments in parallel",
         )
 
@@ -438,7 +461,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         tqdm_func: Callable,
         global_tqdm: tqdm,
     ) -> bool:
-        info_prefix = f"[{combo_index}/{len(combinations)}] "
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
@@ -478,6 +501,13 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
+
+        print(self.run_preparer_fn)
+
+        # Prepare the runs
+        if self.run_preparer_fn is not None:
+            for combo in combinations:
+                self.run_preparer_fn(combo, cmd_args)
 
         # Create a list of tasks
         tasks = [

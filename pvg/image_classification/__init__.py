@@ -15,3 +15,4 @@ from .agents import (
 
 from .environment import ImageClassificationEnvironment
 from .scenario_instance import ImageClassificationScenarioInstance
+from .run_preparer import ImageClassificationRunPreparer
