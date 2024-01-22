@@ -502,8 +502,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
 
-        print(self.run_preparer_fn)
-
         # Prepare the runs
         if self.run_preparer_fn is not None:
             for combo in combinations:

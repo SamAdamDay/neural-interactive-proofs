@@ -84,10 +84,13 @@ class BinarificationMethodType(StrEnum):
         classification task.
     MERGE
         Merge all classes from the original dataset into two classes.
+    RANDOM
+        Select classes completely at random.
     """
 
     SELECT_TWO = enum_auto()
     MERGE = enum_auto()
+    RANDOM = enum_auto()
 
 
 class ActivationType(StrEnum):
@@ -445,15 +448,14 @@ class DatasetParameters(SubParameters):
     selected_classes : tuple[int, int], optional
         When selecting two classes from the original dataset, the indices of the classes
         to select. If not provided, the default for the dataset is used.
-    merge_shuffle_seed : int, optional
-        When merging all classes from the original dataset into two classes, the seed
-        for the random number generator used to shuffle the dataset before merging. If
-        not provided, the default for the dataset is used.
+    binarification_seed : int, optional
+        The seed used when doing a randomised binarification. If not provided, the
+        default for the dataset is used.
     """
 
     binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
     selected_classes: Optional[tuple[int, int]] = None
-    merge_shuffle_seed: Optional[int] = None
+    binarification_seed: Optional[int] = None
 
 
 @dataclass
