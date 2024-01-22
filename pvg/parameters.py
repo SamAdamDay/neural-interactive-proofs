@@ -210,7 +210,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         the body at a different rate to the rest of the model.
     """
 
-    activation_function: ActivationType = ActivationType.RELU
+    activation_function: ActivationType = ActivationType.TANH
 
     num_gnn_layers: int = 5
     d_gnn: int = 16
@@ -274,7 +274,7 @@ class ImageClassificationAgentParameters(AgentParameters):
         Whether to include the round number in the agents's value MLP.
     """
 
-    activation_function: ActivationType = ActivationType.RELU
+    activation_function: ActivationType = ActivationType.TANH
 
     num_convs_per_group: int = 2
     kernel_size: int = 3
@@ -363,14 +363,14 @@ class PpoParameters(SubParameters):
     # Training
     num_epochs: int = 4
     minibatch_size: int = 64
-    lr: float = 3e-4
+    lr: float = 0.003
     max_grad_norm = 1.0
 
     # PPO
-    gamma: float = 0.99
+    gamma: float = 0.9
     lmbda: float = 0.95
     clip_epsilon: float = 0.2
-    entropy_eps: float = 1e-4
+    entropy_eps: float = 0.001
 
     # Agents
     body_lr_factor: Optional[float] = None
