@@ -132,9 +132,6 @@ class ImageClassificationDataset(Dataset):
             shuffled_classes = torch.randperm(num_classes, generator=generator)
             shuffled_labels = shuffled_classes[labels]
             labels = torch.where(shuffled_labels < num_classes // 2, 0, 1)
-            print(shuffled_classes)
-            print(shuffled_labels)
-            print(labels.float().mean())
 
         elif (
             self.params.dataset_options.binarification_method
