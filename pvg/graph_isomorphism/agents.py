@@ -1293,7 +1293,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         - "round" (...): The current round number.
         - "x" (... pair node feature): The graph node features (message history)
         - "adjacency" (... pair node node): The adjacency matrices.
-        - "message" (... pair node): The messages.
+        - "message" (...): The most recent message.
         - "node_mask" (... pair node): Which nodes actually exist.
 
     Output:
@@ -1372,13 +1372,15 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         - ("agents", "graph_level_repr") (... 2 d_representation): The output
           graph-level representations.
         - "round" (...): The current round number.
+        - "node_mask" (... pair node): Which nodes actually exist.
+        - "message" (...): The most recent message.
 
     Output:
-        - ("agents", "node_selected_logits") (... 2*max_nodes): A logit for each node,
+        - ("agents", "node_selected_logits") (... 2 2*max_nodes): A logit for each node,
           indicating the probability that this node should be sent as a message to the
           verifier.
-        - ("agents", "decision_logits") (... 3): A logit for each of the three options:
-          guess that the graphs are isomorphic, guess that the graphs are not
+        - ("agents", "decision_logits") (... 2 3): A logit for each of the three
+          options: guess that the graphs are isomorphic, guess that the graphs are not
           isomorphic, or continue exchanging messages.
 
     Parameters
@@ -1393,6 +1395,8 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         ("agents", "node_level_repr"),
         ("agents", "graph_level_repr"),
         "round",
+        "node_mask",
+        "message",
     )
     out_keys = (
         ("agents", "node_selected_logits"),
@@ -1442,6 +1446,25 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
             )
             policy_outputs[agent_name] = self.policy_heads[agent_name](input_td)
 
+            # Make sure the prover only selects nodes in the opposite graph to the most
+            # recent message
+            if agent_name == "prover":
+                message = head_output["message"]
+                max_num_nodes = head_output["agents", "node_level_repr"].shape[-2]
+                other_graph = (message < max_num_nodes).long()
+                node_ok_mask = F.one_hot(other_graph, num_classes=2)
+                node_ok_mask = node_ok_mask.bool()
+                node_ok_mask = repeat(
+                    node_ok_mask, "... pair -> ... (pair node)", node=max_num_nodes
+                )
+                policy_outputs[agent_name]["node_selected_logits"] = torch.where(
+                    node_ok_mask,
+                    policy_outputs[agent_name]["node_selected_logits"],
+                    torch.full_like(
+                        policy_outputs[agent_name]["node_selected_logits"], -1e9
+                    ),
+                )
+
         # Stack the outputs
         node_selected_logits = torch.stack(
             [
@@ -1453,6 +1476,16 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         decision_logits = torch.stack(
             [policy_outputs[name]["decision_logits"] for name in self.params.agents],
             dim=-2,
+        )
+
+        # Make sure the agents only select nodes which exist
+        node_mask_flatter = rearrange(
+            head_output["node_mask"], "... pair node -> ... 1 (pair node)"
+        )
+        node_selected_logits = torch.where(
+            node_mask_flatter,
+            node_selected_logits,
+            torch.full_like(node_selected_logits, -1e9),
         )
 
         return head_output.update(
