@@ -18,7 +18,6 @@ from torchrl.data.tensor_specs import (
 from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import Environment
-from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 from pvg.utils.types import TorchDevice
 
 
@@ -187,7 +186,6 @@ class GraphIsomorphismEnvironment(Environment):
         The device on which the environment should be stored.
     """
 
-    _dataset_class = GraphIsomorphismDataset
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 

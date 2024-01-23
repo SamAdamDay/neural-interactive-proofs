@@ -43,7 +43,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     ):
         super().__init__(params, scenario_instance, settings)
 
-        self.environment = self.scenario_instance.environment
+        self.train_environment = self.scenario_instance.train_environment
 
     def train(self):
         """Train the agents."""
@@ -63,7 +63,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Run the training loop
         self._run_rl_training_loop(
-            self.environment,
+            self.train_environment,
             collector,
             replay_buffer,
             loss_module,
@@ -145,7 +145,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
     def _run_rl_training_loop(
         self,
-        environment: Environment,
+        train_environment: Environment,
         collector: DataCollectorBase,
         replay_buffer: ReplayBuffer,
         loss_module: LossModule,
@@ -156,7 +156,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         Parameters
         ----------
-        environment : Environment
+        train_environment : Environment
             The environment to train in.
         collector : DataCollectorBase
             The data collector to use for collecting data from the environment.
@@ -192,7 +192,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 tensordict_data.get(("next", "done"))
                 .unsqueeze(-1)
                 .expand(
-                    tensordict_data.get_item_shape(("next", environment.reward_key))
+                    tensordict_data.get_item_shape(
+                        ("next", train_environment.reward_key)
+                    )
                 ),
             )
             tensordict_data.set(
@@ -200,7 +202,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 tensordict_data.get(("next", "terminated"))
                 .unsqueeze(-1)
                 .expand(
-                    tensordict_data.get_item_shape(("next", environment.reward_key))
+                    tensordict_data.get_item_shape(
+                        ("next", train_environment.reward_key)
+                    )
                 ),
             )
 

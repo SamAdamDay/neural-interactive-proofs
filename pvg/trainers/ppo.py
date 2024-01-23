@@ -44,14 +44,14 @@ class PpoTrainer(ReinforcementLearningTrainer):
         # distribution
         policy_head = ProbabilisticActor(
             combined_policy_head,
-            spec=self.environment.action_spec,
+            spec=self.train_environment.action_spec,
             distribution_class=CompositeCategoricalDistribution,
             distribution_kwargs=dict(
                 key_transform=lambda x: ("agents", x),
                 log_prob_key=("agents", "sample_log_prob"),
             ),
             in_keys={out_key[1]: out_key for out_key in combined_policy_head.out_keys},
-            out_keys=self.environment.action_keys,
+            out_keys=self.train_environment.action_keys,
             return_log_prob=True,
             log_prob_key=("agents", "sample_log_prob"),
         )
@@ -71,7 +71,7 @@ class PpoTrainer(ReinforcementLearningTrainer):
             The data collector.
         """
         return SyncDataCollector(
-            self.environment,
+            self.train_environment,
             self._policy_operator,
             device=self.device,
             storing_device=self.device,
@@ -116,8 +116,8 @@ class PpoTrainer(ReinforcementLearningTrainer):
             normalize_advantage=False,
         )
         loss_module.set_keys(
-            reward=self.environment.reward_key,
-            action=self.environment.action_keys,
+            reward=self.train_environment.reward_key,
+            action=self.train_environment.action_keys,
             sample_log_prob=("agents", "sample_log_prob"),
             value=("agents", "value"),
             done=("agents", "done"),

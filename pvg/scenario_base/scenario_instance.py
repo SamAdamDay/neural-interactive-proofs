@@ -121,7 +121,7 @@ class ScenarioInstance(ABC):
         np.random.seed(params.seed)
 
         # Create the dataset
-        self.dataset = self.dataset_class(params, settings)
+        self.train_dataset = self.dataset_class(params, settings)
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
@@ -188,7 +188,9 @@ class ScenarioInstance(ABC):
         # Build additional components if the trainer is an RL trainer
         if self.params.trainer == TrainerType.PPO:
             # Create the environment
-            self.environment = self.environment_class(params, settings)
+            self.train_environment = self.environment_class(
+                params, settings, self.train_dataset
+            )
 
             # Create the combined agents
             self.combined_body = self.combined_body_class(
