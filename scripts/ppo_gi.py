@@ -134,7 +134,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
+        scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
     )
