@@ -40,13 +40,18 @@ class Dataset(ABC):
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
+    train : bool
+        Whether to load the training or test set.
     """
 
     _tensor_dict: TensorDict
 
-    def __init__(self, params: Parameters, settings: ExperimentSettings):
+    def __init__(
+        self, params: Parameters, settings: ExperimentSettings, train: bool = True
+    ):
         self.params = params
         self.settings = settings
+        self.train = train
 
         # Download the raw data if this is implemented
         try:

@@ -32,15 +32,18 @@ class GraphIsomorphismDataset(Dataset):
     @property
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        return os.path.join(GI_DATA_DIR, self.params.dataset, "raw")
+        sub_dir = "train" if self.train else "test"
+        return os.path.join(GI_DATA_DIR, self.params.dataset, "raw", sub_dir)
 
     @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
+        sub_dir = "train" if self.train else "test"
         return os.path.join(
             GI_DATA_DIR,
             self.params.dataset,
             f"processed_{self.params.max_message_rounds}",
+            sub_dir,
         )
 
     def _build_tensor_dict(self) -> TensorDict:
