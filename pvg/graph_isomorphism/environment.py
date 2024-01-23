@@ -319,6 +319,9 @@ class GraphIsomorphismEnvironment(Environment):
         verifier_decision_made = (agent_index == verifier_agent_num) & (
             decision[:, verifier_agent_num] != 2
         )
+        verifier_decision_made = verifier_decision_made & (
+            round >= self.params.min_message_rounds - 1
+        )
         done = done | verifier_decision_made
         reward: dict[str, int] = dict()
         reward["verifier"] = (

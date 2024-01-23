@@ -43,6 +43,7 @@ def test_graph_isomorphism_environment_step():
         "test",
         ppo=PpoParameters(frames_per_batch=batch_size * max_message_rounds),
         max_message_rounds=max_message_rounds,
+        min_message_rounds=1,
         agents=AgentsParameters(
             [
                 ("prover", GraphIsomorphismAgentParameters()),
