@@ -473,8 +473,11 @@ class Parameters(BaseParameters):
     seed : int
         The random seed.
     max_message_rounds : int
-        The maximum number of rounds of messages, where the verifier sends a message,
-        and the prover responds with a message.
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one agent.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, verifier cannot
+        guess.
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
@@ -512,6 +515,7 @@ class Parameters(BaseParameters):
     seed: int = 6198
 
     max_message_rounds: int = 8
+    min_message_rounds: int = 1
     pretrain_agents: bool = False
 
     test_size: float = 0.2
