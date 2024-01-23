@@ -17,8 +17,10 @@ from pvg import (
     ImageClassificationAgentParameters,
     ImageClassificationParameters,
     SoloAgentParameters,
+    DatasetParameters,
     ScenarioType,
     TrainerType,
+    BinarificationMethodType,
     run_experiment,
     prepare_experiment,
 )
@@ -44,6 +46,9 @@ param_grid = dict(
     verifier_num_decider_layers=[2],
     num_conv_groups=[2],
     initial_num_channels=[16],
+    binarification_method=[BinarificationMethodType.MERGE],
+    binarification_seed=[None],
+    selected_classes=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -96,6 +101,11 @@ def experiment_fn(
         image_classification=ImageClassificationParameters(
             num_conv_groups=combo["num_conv_groups"],
             initial_num_channels=combo["initial_num_channels"],
+        ),
+        dataset_options=DatasetParameters(
+            binarification_method=combo["binarification_method"],
+            binarification_seed=combo["binarification_seed"],
+            selected_classes=combo["selected_classes"],
         ),
         seed=combo["seed"],
     )
