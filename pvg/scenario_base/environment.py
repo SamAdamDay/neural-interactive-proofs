@@ -27,7 +27,6 @@ class Environment(EnvBase, ABC):
     To implement a new environment, subclass this class and implement the following
     attribute and methods:
 
-    - `_dataset_class`: The dataset class to use for the environment.
     - `_get_observation_spec`: The specification of the agent observations.
     - `_get_action_spec`: The specification of the agent actions.
     - `_get_state_spec` (optional): The specification of the states space.
@@ -42,19 +41,23 @@ class Environment(EnvBase, ABC):
         The parameters of the experiment.
     device : TorchDevice
         The device on which to run the environment.
+    dataset : Dataset
+        The dataset for the environment.
     """
 
-    _dataset_class: type[Dataset]
     _int_dtype: torch.dtype = (torch.int,)
 
     def __init__(
         self,
         params: Parameters,
         settings: ExperimentSettings,
+        dataset: Dataset,
+        train: bool = True,
     ):
         super().__init__(device=settings.device)
         self.params = params
         self.settings = settings
+        self.train = train
 
         self.agent_names = list(params.agents.keys())
 
@@ -62,7 +65,7 @@ class Environment(EnvBase, ABC):
         self.rng = torch.Generator()
 
         # Load the dataset
-        self.dataset = self._dataset_class(params, settings)
+        self.dataset = dataset
         self.data_cycler: Optional[VariableDataCycler] = None
 
         # The number of environments is the number of episodes we can fit in a batch

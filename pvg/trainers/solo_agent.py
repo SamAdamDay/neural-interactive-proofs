@@ -51,7 +51,7 @@ class SoloAgentTrainer(Trainer):
 
         logger.info("Loading dataset and agents...")
 
-        dataset = self.scenario_instance.dataset
+        dataset = self.scenario_instance.train_dataset
         train_dataset, test_dataset = random_split(
             dataset,
             (1 - self.params.test_size, self.params.test_size),

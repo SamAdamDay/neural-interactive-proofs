@@ -377,6 +377,8 @@ class PpoParameters(SubParameters):
     body_lr_factor : float, optional
         The learning rate factor for the body part of the model. If set this overrides
         the `body_lr_factor` parameter of each agent.
+    num_test_iterations : int
+        The number of iterations to run the test for.
     """
 
     # Sampling
@@ -397,6 +399,9 @@ class PpoParameters(SubParameters):
 
     # Agents
     body_lr_factor: Optional[float] = None
+
+    # Testing
+    num_test_iterations: int = 10
 
 
 @dataclass

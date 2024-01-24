@@ -158,7 +158,7 @@ class ImageClassificationDataset(Dataset):
             ]
         )
         torch_dataset = dataset_class(
-            root=self.raw_dir, train=True, transform=transform, download=True
+            root=self.raw_dir, train=self.train, transform=transform, download=True
         )
 
         # Get the whole dataset as a single batch
@@ -242,10 +242,13 @@ class ImageClassificationDataset(Dataset):
         ):
             suffix += f"_{self.binarification_seed}"
 
+        sub_dir = "train" if self.train else "test"
+
         return os.path.join(
             IC_DATA_DIR,
             self.params.dataset,
             f"processed_{self.params.max_message_rounds}_{suffix}",
+            sub_dir,
         )
 
     @property

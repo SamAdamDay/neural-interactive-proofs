@@ -18,7 +18,7 @@ from jaxtyping import Float, Int, Bool
 
 from pvg.parameters import Parameters
 from pvg.scenario_base import Environment
-from pvg.image_classification.data import ImageClassificationDataset, IMAGE_DATASETS
+from pvg.image_classification.data import IMAGE_DATASETS
 from pvg.utils.types import TorchDevice
 
 
@@ -35,7 +35,6 @@ class ImageClassificationEnvironment(Environment):
         The device on which the environment should be stored.
     """
 
-    _dataset_class = ImageClassificationDataset
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 

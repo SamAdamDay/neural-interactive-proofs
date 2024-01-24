@@ -47,8 +47,10 @@ class ScenarioInstance(ABC):
     agents : dict[str, Agent]
         The agents for the experiment. Each 'agent' is a dictionary containing all of
         the agent parts.
-    environment : Optional[Environment]
-        The environment for the experiment, if the experiment is RL.
+    train_environment : Optional[Environment]
+        The train environment for the experiment, if the experiment is RL.
+    test_environment : Optional[Environment]
+        The environment for testing the agents, which uses the test dataset.
     combined_body : Optional[CombinedBody]
         The combined body of the agents, if the agents are combined.
     combined_policy_head : Optional[CombinedPolicyHead]
@@ -120,8 +122,9 @@ class ScenarioInstance(ABC):
         torch.manual_seed(params.seed)
         np.random.seed(params.seed)
 
-        # Create the dataset
-        self.dataset = self.dataset_class(params, settings)
+        # Create the datasets
+        self.train_dataset = self.dataset_class(params, settings, train=True)
+        self.test_dataset = self.dataset_class(params, settings, train=False)
 
         # Create the agents
         self.agents: dict[str, Agent] = {}
@@ -187,8 +190,13 @@ class ScenarioInstance(ABC):
 
         # Build additional components if the trainer is an RL trainer
         if self.params.trainer == TrainerType.PPO:
-            # Create the environment
-            self.environment = self.environment_class(params, settings)
+            # Create the environments
+            self.train_environment = self.environment_class(
+                params, settings, self.train_dataset, train=True
+            )
+            self.test_environment = self.environment_class(
+                params, settings, self.test_dataset, train=False
+            )
 
             # Create the combined agents
             self.combined_body = self.combined_body_class(
