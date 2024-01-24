@@ -15,7 +15,7 @@ RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")
 GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents")
 
 # Weights & Biases defaults
-WANDB_PROJECT = "pvg-experiments"
+WANDB_PROJECT = "pvg-sandbox"
 WANDB_ENTITY = "lrhammond-team"
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"
 ROLLOUT_SAMPLE_ARTIFACT_TYPE = "rollout_sample"

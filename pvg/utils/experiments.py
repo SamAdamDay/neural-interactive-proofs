@@ -405,6 +405,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    default_num_workers : int, default=1
+        The default number of workers to use for multiprocessing.
     """
 
     def __init__(
@@ -416,6 +418,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         experiment_name: str = "EXPERIMENT",
+        default_num_workers: int = 1,
     ):
         super().__init__(
             param_grid=param_grid,
@@ -434,7 +437,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         self.parser.add_argument(
             "--num-workers",
             type=int,
-            default=1,
+            default=default_num_workers,
             help="The number of workers to use for multiprocessing",
         )
         self.parser.add_argument(
