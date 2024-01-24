@@ -77,6 +77,7 @@ class GraphIsomorphismAgentHooks(AgentHooks):
     """Holder for hooks to run at various points in the agent forward pass."""
 
     gnn_output: Optional[callable] = None
+    gnn_output_rounded: Optional[callable] = None
     pooled_gnn_output: Optional[callable] = None
     gnn_output_flatter: Optional[callable] = None
     transformer_input_initial: Optional[callable] = None
@@ -495,6 +496,14 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         if hooks is not None and hooks.gnn_output is not None:
             hooks.gnn_output(gnn_output)
+
+        if self._agent_params.gnn_output_digits is not None:
+            gnn_output = torch.round(
+                gnn_output, decimals=self._agent_params.gnn_output_digits
+            )
+
+        if hooks is not None and hooks.gnn_output_rounded is not None:
+            hooks.gnn_output_rounded(gnn_output)
 
         # Obtain the graph-level representations by pooling
         # (batch, pair, d_gnn)

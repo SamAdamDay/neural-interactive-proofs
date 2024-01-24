@@ -186,6 +186,9 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     d_gin_mlp : int
         The dimension of the hidden layers in the agents's Graph Isomorphism Network
         MLP.
+    gnn_output_digits : int, optional
+        The number of digits in the output of the agents's GNN. If not provided, the
+        output is not rounded.
     num_heads : int
         The number of heads in the agents's transformer.
     num_transformer_layers : int
@@ -234,6 +237,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
+    gnn_output_digits: Optional[int] = None
 
     num_heads: int = 4
     num_transformer_layers: int = 4
