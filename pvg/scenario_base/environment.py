@@ -52,10 +52,12 @@ class Environment(EnvBase, ABC):
         params: Parameters,
         settings: ExperimentSettings,
         dataset: Dataset,
+        train: bool = True,
     ):
         super().__init__(device=settings.device)
         self.params = params
         self.settings = settings
+        self.train = train
 
         self.agent_names = list(params.agents.keys())
 

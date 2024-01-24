@@ -62,15 +62,20 @@ class PpoTrainer(ReinforcementLearningTrainer):
         self._policy_operator = self._full_model.get_policy_operator()
         self._value_operator = self._full_model.get_value_operator()
 
-    def _get_data_collector(self) -> SyncDataCollector:
-        """Construct the data collector, which generates rollouts from the environment
+    def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
+        """Construct the data collectors, which generate rollouts from the environment
+
+        Constructs a collector for both the train and the test environment.
 
         Returns
         -------
-        collector : SyncDataCollector
-            The data collector.
+        train_collector : SyncDataCollector
+            The train data collector.
+        test_collector : SyncDataCollector
+            The test data collector.
         """
-        return SyncDataCollector(
+
+        train_collector = SyncDataCollector(
             self.train_environment,
             self._policy_operator,
             device=self.device,
@@ -79,6 +84,18 @@ class PpoTrainer(ReinforcementLearningTrainer):
             total_frames=self.params.ppo.frames_per_batch
             * self.params.ppo.num_iterations,
         )
+
+        test_collector = SyncDataCollector(
+            self.test_environment,
+            self._policy_operator,
+            device=self.device,
+            storing_device=self.device,
+            frames_per_batch=self.params.ppo.frames_per_batch,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_test_iterations,
+        )
+
+        return train_collector, test_collector
 
     def _get_replay_buffer(self) -> ReplayBuffer:
         """Construct the replay buffer, which will store the rollouts
