@@ -10,9 +10,11 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from functools import partial
 
 import torch
+from torch import Tensor
 from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDict, TensorDictBase
@@ -20,6 +22,36 @@ from tensordict.nn import TensorDictModuleBase
 
 from pvg.parameters import Parameters, TrainerType, ScenarioType
 from pvg.utils.types import TorchDevice
+
+
+@dataclass
+class AgentHooks:
+    """Holder for hooks to run at various points in the agent forward pass."""
+
+    @classmethod
+    def create_recorder_hooks(cls, storage: dict | TensorDict) -> "AgentHooks":
+        """Create hooks to record the agent's output.
+
+        Parameters
+        ----------
+        storage : dict | TensorDict
+            The dictionary to store the agent's output in.
+
+        Returns
+        -------
+        hooks : AgentHooks
+            The hooks to record the agent's output.
+        """
+
+        def recorder_hook(name: str, storage: dict | TensorDict, output: Tensor):
+            storage[name] = output
+
+        cls_args = {
+            field.name: partial(recorder_hook, field.name, storage)
+            for field in fields(cls)
+        }
+
+        return cls(**cls_args)
 
 
 class AgentPart(TensorDictModuleBase, ABC):

@@ -17,6 +17,7 @@ The structure of all agent bodies is the same:
 
 from abc import ABC
 from typing import Optional
+from dataclasses import dataclass
 
 import torch
 from torch.nn import (
@@ -37,6 +38,7 @@ from einops.layers.torch import Rearrange, Reduce
 from jaxtyping import Float, Int
 
 from pvg.scenario_base import (
+    AgentHooks,
     AgentPart,
     AgentBody,
     AgentHead,
@@ -68,6 +70,26 @@ from pvg.utils.torch_modules import (
     TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
+
+
+@dataclass
+class GraphIsomorphismAgentHooks(AgentHooks):
+    """Holder for hooks to run at various points in the agent forward pass."""
+
+    gnn_output: Optional[callable] = None
+    gnn_output_rounded: Optional[callable] = None
+    pooled_gnn_output: Optional[callable] = None
+    gnn_output_flatter: Optional[callable] = None
+    transformer_input_initial: Optional[callable] = None
+    pooled_feature: Optional[callable] = None
+    message_feature: Optional[callable] = None
+    transformer_input_pre_encoder: Optional[callable] = None
+    transformer_input: Optional[callable] = None
+    transformer_output_flatter: Optional[callable] = None
+    graph_level_repr_pre_encoder: Optional[callable] = None
+    node_level_repr_pre_encoder: Optional[callable] = None
+    graph_level_repr: Optional[callable] = None
+    node_level_repr: Optional[callable] = None
 
 
 class GraphIsomorphismAgentPart(AgentPart, ABC):
@@ -407,6 +429,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def forward(
         self,
         data: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
         """Obtain graph-level and node-level representations by running components
 
@@ -427,7 +450,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             - "ignore_message" (...): Whether to ignore any values in "message". For
               example, in the first round the there is no message, and the "message"
               field is set to a dummy value.
-
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -470,18 +494,38 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # (batch, pair, max_nodes, d_gnn)
         gnn_output = self.gnn(data)["gnn_repr"]
 
+        if hooks is not None and hooks.gnn_output is not None:
+            hooks.gnn_output(gnn_output)
+
+        if self._agent_params.gnn_output_digits is not None:
+            gnn_output = torch.round(
+                gnn_output, decimals=self._agent_params.gnn_output_digits
+            )
+
+        if hooks is not None and hooks.gnn_output_rounded is not None:
+            hooks.gnn_output_rounded(gnn_output)
+
         # Obtain the graph-level representations by pooling
         # (batch, pair, d_gnn)
         pooled_gnn_output = self.global_pooling(gnn_output)
+
+        if hooks is not None and hooks.pooled_gnn_output is not None:
+            hooks.pooled_gnn_output(pooled_gnn_output)
 
         # Flatten the two batch dimensions in the graph representation and mask
         gnn_output_flatter = rearrange(
             gnn_output, "... pair node feature -> ... (pair node) feature"
         )
 
+        if hooks is not None and hooks.gnn_output_flatter is not None:
+            hooks.gnn_output_flatter(gnn_output_flatter)
+
         # Add the graph-level representations to the transformer input
         # (..., 2 + 2 * node, d_gnn + 3)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=-2)
+
+        if hooks is not None and hooks.transformer_input_initial is not None:
+            hooks.transformer_input_initial(transformer_input)
 
         # Add extra features to distinguish the pooled representations from the
         # node-level representations
@@ -494,6 +538,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         pooled_feature[..., 0, 0] = 1
         pooled_feature[..., 1, 1] = 1
 
+        if hooks is not None and hooks.pooled_feature is not None:
+            hooks.pooled_feature(pooled_feature)
+
         # Add the most recent message as a new one-hot feature
         message_feature = F.one_hot(
             data["message"] + 2, num_classes=2 + 2 * max_num_nodes
@@ -503,14 +550,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
         message_feature = rearrange(message_feature, "... token -> ... token 1")
 
+        if hooks is not None and hooks.message_feature is not None:
+            hooks.message_feature(message_feature)
+
         # Concatenate everything together
         transformer_input = torch.cat(
             (transformer_input, pooled_feature, message_feature), dim=-1
         )
 
+        if hooks is not None and hooks.transformer_input_pre_encoder is not None:
+            hooks.transformer_input_pre_encoder(transformer_input)
+
         # Run the transformer input through the encoder first
         # (..., 2 + 2 * node, d_transformer)
         transformer_input = self.gnn_transformer_encoder(transformer_input)
+
+        if hooks is not None and hooks.transformer_input is not None:
+            hooks.transformer_input(transformer_input)
 
         # Run the transformer
         # (..., 2 + 2 * node, d_transformer)
@@ -519,6 +575,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             transformer_input=transformer_input,
             node_mask=data["node_mask"],
         )
+
+        if hooks is not None and hooks.transformer_output_flatter is not None:
+            hooks.transformer_output_flatter(transformer_output_flatter)
 
         # Extract the graph-level representations and rearrange the rest to have two
         # batch dims
@@ -529,9 +588,19 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             pair=2,
         )
 
+        if hooks is not None and hooks.graph_level_repr_pre_encoder is not None:
+            hooks.graph_level_repr_pre_encoder(graph_level_repr)
+        if hooks is not None and hooks.node_level_repr_pre_encoder is not None:
+            hooks.node_level_repr_pre_encoder(node_level_repr)
+
         # Run the node-level representations through the representation encoder
         graph_level_repr = self.representation_encoder(graph_level_repr)
         node_level_repr = self.representation_encoder(node_level_repr)
+
+        if hooks is not None and hooks.graph_level_repr is not None:
+            hooks.graph_level_repr(graph_level_repr)
+        if hooks is not None and hooks.node_level_repr is not None:
+            hooks.node_level_repr(node_level_repr)
 
         return TensorDict(
             dict(
@@ -559,7 +628,11 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
     in_keys = ("x",)
     out_keys = ("graph_level_repr", "node_level_repr")
 
-    def forward(self, data: TensorDictBase) -> TensorDict:
+    def forward(
+        self,
+        data: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Returns dummy outputs.
 
         Parameters
@@ -568,6 +641,9 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
             A TensorDictBase with keys:
 
             - "x" (... pair node feature): The graph node features (message history)
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -905,7 +981,11 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             out_key="node_selected_logits",
         )
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Runs the policy head on the given body output.
 
         Runs the node selector module and the decider module if present.
@@ -919,6 +999,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               representations.
             - "node_level_repr" (... 2 max_nodes d_representation): The output
               node-level representations.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1016,7 +1099,11 @@ class GraphIsomorphismRandomAgentPolicyHead(
         # Determine if we should output a decision too
         self.decider = agent_name == "verifier"
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Outputs a uniform distribution.
 
         Parameters
@@ -1028,6 +1115,9 @@ class GraphIsomorphismRandomAgentPolicyHead(
               representations.
             - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
               representations.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1133,7 +1223,11 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
             squeeze=True,
         )
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Runs the value head on the given body output.
 
         Parameters
@@ -1143,6 +1237,9 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
             - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1192,7 +1289,11 @@ class GraphIsomorphismConstantAgentValueHead(
     in_keys = ("graph_level_repr", "node_level_repr")
     out_keys = ("value",)
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Returns a constant value.
 
         Parameters
@@ -1204,6 +1305,9 @@ class GraphIsomorphismConstantAgentValueHead(
               representations.
             - "node_level_repr" (... 2 max_nodes 1): The output node-level
               representations.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1256,7 +1360,11 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 
         self.decider = self._build_decider(d_out=2, include_round=False)
 
-    def forward(self, body_output: TensorDict) -> TensorDict:
+    def forward(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Runs the solo agent head on the given body output.
 
         Parameters
@@ -1266,6 +1374,9 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
 
             - "graph_level_repr" (... 2 d_representation): The output graph-level
               representations.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1320,7 +1431,11 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     ) -> None:
         super().__init__(params, bodies)
 
-    def forward(self, data: TensorDictBase) -> TensorDict:
+    def forward(
+        self,
+        data: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         round: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
@@ -1339,7 +1454,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
             )
 
             # Run the agent body
-            body_outputs[agent_name] = self.bodies[agent_name](input_td)
+            body_outputs[agent_name] = self.bodies[agent_name](input_td, hooks=hooks)
 
         # Stack the outputs
         node_level_repr = torch.stack(
@@ -1410,7 +1525,11 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     ):
         super().__init__(params, policy_heads)
 
-    def forward(self, head_output: TensorDictBase) -> TensorDict:
+    def forward(
+        self,
+        head_output: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Run the agent policy heads and combine their outputs.
 
         Parameters
@@ -1422,6 +1541,9 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
               body.
             - ("agents", "graph_level_repr"): The node-level representation from the
               body.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1444,7 +1566,9 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
                 ),
                 batch_size=head_output.batch_size,
             )
-            policy_outputs[agent_name] = self.policy_heads[agent_name](input_td)
+            policy_outputs[agent_name] = self.policy_heads[agent_name](
+                input_td, hooks=hooks
+            )
 
             # Make sure the prover only selects nodes in the opposite graph to the most
             # recent message
@@ -1532,7 +1656,11 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     ):
         super().__init__(params, value_heads)
 
-    def forward(self, head_output: TensorDictBase) -> TensorDict:
+    def forward(
+        self,
+        head_output: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
         """Run the agent value heads and combine their values.
 
         Parameters
@@ -1542,6 +1670,9 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 
             - ("agents", "graph_level_repr"): The node-level representation from the
               body.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
@@ -1564,7 +1695,9 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
                 ),
                 batch_size=head_output.batch_size,
             )
-            value_outputs[agent_name] = self.value_heads[agent_name](input_td)
+            value_outputs[agent_name] = self.value_heads[agent_name](
+                input_td, hooks=hooks
+            )
 
         # Stack the outputs
         value = torch.stack(
