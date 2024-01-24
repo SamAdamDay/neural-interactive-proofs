@@ -139,8 +139,10 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace):
 if __name__ == "__main__":
     if MULTIPROCESS:
         experiment_class = MultiprocessHyperparameterExperiment
+        extra_args = dict(default_num_workers=4)
     else:
         experiment_class = SequentialHyperparameterExperiment
+        extra_args = dict()
 
     experiment = experiment_class(
         param_grid=param_grid,
@@ -148,6 +150,8 @@ if __name__ == "__main__":
         run_id_fn=run_id_fn,
         run_preparer_fn=run_preparer_fn,
         experiment_name="TEST_SOLO_GI_AGENTS",
+        default_num_workers=4,
+        **extra_args,
     )
     experiment.parser.add_argument(
         "--run-infix",
