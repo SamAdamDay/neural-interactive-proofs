@@ -16,6 +16,7 @@ method is used to build the agents using the given parameters.
 from .data import Dataset, DataLoader
 from .environment import Environment
 from .agents import (
+    AgentHooks,
     AgentPart,
     AgentBody,
     AgentHead,
