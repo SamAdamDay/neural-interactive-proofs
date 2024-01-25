@@ -81,15 +81,15 @@ def experiment_fn(
         agents=AgentsParameters(
             [
                 (
-                    "prover",
-                    prover_params,
-                ),
-                (
                     "verifier",
                     GraphIsomorphismAgentParameters(
                         num_gnn_layers=combo["verifier_num_layers"],
                         activation_function=combo["activation_function"],
                     ),
+                ),
+                (
+                    "prover",
+                    prover_params,
                 ),
             ]
         ),

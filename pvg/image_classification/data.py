@@ -134,6 +134,7 @@ IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
         num_channels=3,
         width=32,
         height=32,
+        binarification_seed=2,
     ),
 )
 

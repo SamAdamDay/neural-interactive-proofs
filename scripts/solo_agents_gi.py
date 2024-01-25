@@ -76,20 +76,20 @@ def experiment_fn(
         agents=AgentsParameters(
             [
                 (
-                    "prover",
-                    GraphIsomorphismAgentParameters(
-                        use_batch_norm=combo["use_batch_norm"],
-                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                        num_gnn_layers=combo["prover_num_layers"],
-                        body_lr_factor=combo["body_lr_factor"],
-                    ),
-                ),
-                (
                     "verifier",
                     GraphIsomorphismAgentParameters(
                         use_batch_norm=combo["use_batch_norm"],
                         use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
                         num_gnn_layers=combo["verifier_num_layers"],
+                        body_lr_factor=combo["body_lr_factor"],
+                    ),
+                ),
+                (
+                    "prover",
+                    GraphIsomorphismAgentParameters(
+                        use_batch_norm=combo["use_batch_norm"],
+                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                        num_gnn_layers=combo["prover_num_layers"],
                         body_lr_factor=combo["body_lr_factor"],
                     ),
                 ),
