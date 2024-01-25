@@ -500,6 +500,8 @@ class Parameters(BaseParameters):
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
         The reward given to the verifier when it guesses correctly.
+    verifier_incorrect_penalty : float
+        The penalty given to the verifier when it guesses incorrectly.
     verifier_terminated_penalty : float
         The reward given to the verifier if the episode terminates before it guesses.
     verifier_no_guess_reward : float
@@ -535,6 +537,7 @@ class Parameters(BaseParameters):
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
+    verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.01
 

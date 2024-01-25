@@ -61,6 +61,7 @@ def test_graph_isomorphism_environment_step():
         verifier_reward=2,
         verifier_terminated_penalty=-4,
         verifier_no_guess_reward=8,
+        verifier_incorrect_penalty=-16,
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
     dataset = GraphIsomorphismDataset(params, settings)
@@ -132,9 +133,9 @@ def test_graph_isomorphism_environment_step():
                         [0, 0],
                         [0, -4],
                         [0, 0],
+                        [0, -16],
                         [0, 0],
-                        [0, 0],
-                        [1, 0],
+                        [1, -16],
                         [0, 0],
                         [1, 2],
                     ],
