@@ -15,8 +15,6 @@ import numpy as np
 
 import torch
 
-import wandb
-
 from pvg import (
     Parameters,
     AgentsParameters,
@@ -152,42 +150,5 @@ if __name__ == "__main__":
         experiment_name="TEST_SOLO_GI_AGENTS",
         default_num_workers=4,
         **extra_args,
-    )
-    experiment.parser.add_argument(
-        "--run-infix",
-        type=str,
-        help="The string to add in the middle of the run ID",
-        default="a",
-    )
-    experiment.parser.add_argument(
-        "--gpu-num", type=int, help="The (0-based) number of the GPU to use", default=0
-    )
-    experiment.parser.add_argument(
-        "--use-wandb",
-        action="store_true",
-        help="Whether to use W&B to log the experiment",
-    )
-    experiment.parser.add_argument(
-        "--wandb-project",
-        type=str,
-        help="The name of the W&B project to use",
-        default=WANDB_PROJECT,
-    )
-    experiment.parser.add_argument(
-        "--wandb-entity",
-        type=str,
-        help="The name of the W&B entity to use",
-        default=WANDB_ENTITY,
-    )
-    experiment.parser.add_argument(
-        "--tag",
-        type=str,
-        default="",
-        help="An optional tag for the W&B run",
-    )
-    experiment.parser.add_argument(
-        "--ignore-cache",
-        action="store_true",
-        help="Ignore the cache and rebuild the dataset from the raw data",
     )
     experiment.run()

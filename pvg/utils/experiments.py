@@ -26,11 +26,16 @@ from sklearn.model_selection import ParameterGrid
 
 import torch
 
+import wandb
+
+from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
+
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 
 # Hack to be able to pickle the command arguments
@@ -145,6 +150,50 @@ class HyperparameterExperiment(ABC):
             action="store_true",
         )
 
+        # Add parser arguments for W&B
+        self.parser.add_argument(
+            "--run-infix",
+            type=str,
+            help="The string to add in the middle of the run ID",
+            default="a",
+        )
+        self.parser.add_argument(
+            "--use-wandb",
+            action="store_true",
+            help="Whether to use W&B to log the experiment",
+        )
+        self.parser.add_argument(
+            "--wandb-project",
+            type=str,
+            help="The name of the W&B project to use",
+            default=WANDB_PROJECT,
+        )
+        self.parser.add_argument(
+            "--wandb-entity",
+            type=str,
+            help="The name of the W&B entity to use",
+            default=WANDB_ENTITY,
+        )
+        self.parser.add_argument(
+            "--tag",
+            type=str,
+            default="",
+            help="An optional tag for the W&B run",
+        )
+
+        # Other experiment settings
+        self.parser.add_argument(
+            "--gpu-num",
+            type=int,
+            help="The (0-based) number of the GPU to use",
+            default=0,
+        )
+        self.parser.add_argument(
+            "--ignore-cache",
+            action="store_true",
+            help="Ignore the cache and rebuild the dataset from the raw data",
+        )
+
         # Create a logging formatter
         self.logging_formatter = MultiLineFormatter(
             fmt="[%(asctime)s %(levelname)s] %(message)s", datefmt="%x %X"
@@ -175,6 +224,18 @@ class HyperparameterExperiment(ABC):
 
         # Run the experiment
         self._run(cmd_args, base_logger)
+
+        # Send a W&B alert to say the experiment is finished
+        if cmd_args.use_wandb:
+            plain_run_id = self.run_id_fn(9999, cmd_args)
+            wandb.alert(
+                title=f"{plain_run_id} finished",
+                text=(
+                    f"This hyperparameter experiment for {self.experiment_name}"
+                    f" has finished."
+                ),
+                level=WandbAlertLevel.INFO,
+            )
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
