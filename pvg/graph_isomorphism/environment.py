@@ -286,7 +286,7 @@ class GraphIsomorphismEnvironment(Environment):
             "agents", "node_selected"
         ]
         decision: Int[Tensor, "batch agent"] = tensordict["agents", "decision"]
-        done: Bool[Tensor, "batch"] = tensordict["done"]
+        done: Int[Tensor, "batch"] = tensordict["done"]
 
         # Compute index of the agent whose turn it is.
         agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
@@ -337,6 +337,12 @@ class GraphIsomorphismEnvironment(Environment):
         reward["verifier"][
             (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
         ] = self.params.verifier_terminated_penalty
+
+        # If the verifier has not made a guess and it's their turn, given them a small
+        # reward for continuing
+        reward["verifier"][
+            (agent_index == verifier_agent_num) & ~done
+        ] = self.params.verifier_no_guess_reward
 
         # Stack the rewards for the two agents
         reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)

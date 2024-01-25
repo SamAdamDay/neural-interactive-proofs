@@ -60,6 +60,7 @@ def test_graph_isomorphism_environment_step():
         prover_reward=1,
         verifier_reward=2,
         verifier_terminated_penalty=-4,
+        verifier_no_guess_reward=8,
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
     dataset = GraphIsomorphismDataset(params, settings)
@@ -93,10 +94,10 @@ def test_graph_isomorphism_environment_step():
                     ]
                 ).transpose(0, 1),
                 decision=torch.tensor(
-                    [[0] * batch_size, [0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 1, 1]]
+                    [[0] * batch_size, [0, 0, 1, 2, 2, 2, 0, 0, 1, 1, 1, 1]]
                 ).transpose(0, 1),
             ),
-            done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0]),
+            done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
         ),
         batch_size=batch_size,
     )
@@ -119,7 +120,7 @@ def test_graph_isomorphism_environment_step():
             node_mask=env_td["node_mask"],
             x=expected_x,
             round=env_td["round"] + 1,
-            done=torch.tensor([0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1]),
+            done=torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool),
             message=expected_message,
             agents=dict(
                 reward=torch.tensor(
@@ -127,7 +128,7 @@ def test_graph_isomorphism_environment_step():
                         [0, 0],
                         [0, 2],
                         [0, 0],
-                        [1, 2],
+                        [0, 8],
                         [0, 0],
                         [0, -4],
                         [0, 0],
