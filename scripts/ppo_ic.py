@@ -86,7 +86,7 @@ def experiment_fn(
             activation_function=combo["activation_function"],
         )
     params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
+        scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.PPO,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
