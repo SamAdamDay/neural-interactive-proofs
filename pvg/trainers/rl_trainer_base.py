@@ -20,6 +20,11 @@ from pvg.scenario_base import ScenarioInstance, Environment, RolloutSampler
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
 from pvg.trainers.solo_agent import SoloAgentTrainer
+from pvg.model_cache import (
+    cached_models_exist,
+    save_model_state_dicts,
+    load_cached_model_state_dicts,
+)
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):
@@ -34,6 +39,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     device : TorchDevice
         The device to use for training.
     """
+
+    PRETRAINED_MODEL_CACHE_PARAM_KEYS = [
+        "scenario",
+        "dataset",
+        "agents",
+        "seed",
+        "test_size",
+        "d_representation",
+        "solo_agent",
+        "image_classification",
+        "dataset_options",
+    ]
 
     def __init__(
         self,
@@ -80,11 +97,38 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         This just uses the SoloAgentTrainer class.
         """
 
-        # Train the agents in isolation
-        solo_agent_trainer = SoloAgentTrainer(
-            self.params, self.scenario_instance, self.settings
+        # The body models of the agents
+        body_model_dict = {
+            agent_name: agent.body
+            for agent_name, agent in self.scenario_instance.agents.items()
+        }
+
+        # Get the parameters that define the model cache
+        model_cache_params = self.params.to_dict()
+        model_cache_params = dict(
+            (key, value)
+            for key, value in model_cache_params.items()
+            if key in self.PRETRAINED_MODEL_CACHE_PARAM_KEYS
         )
-        solo_agent_trainer.train(as_pretraining=True)
+
+        # Load the cached models if they exist
+        if not self.settings.ignore_cache and cached_models_exist(
+            model_cache_params, "solo_agents"
+        ):
+            load_cached_model_state_dicts(
+                body_model_dict, model_cache_params, "solo_agents"
+            )
+        else:
+            # Train the agents in isolation
+            solo_agent_trainer = SoloAgentTrainer(
+                self.params, self.scenario_instance, self.settings
+            )
+            solo_agent_trainer.train(as_pretraining=True)
+
+            # Save the models
+            save_model_state_dicts(
+                body_model_dict, model_cache_params, "solo_agents", overwrite=True
+            )
 
         # Put the agents (back) in training mode
         for agent in self.scenario_instance.agents.values():

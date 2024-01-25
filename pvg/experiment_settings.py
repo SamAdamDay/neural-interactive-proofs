@@ -29,8 +29,7 @@ class ExperimentSettings:
     logger : logging.Logger | logging.LoggerAdapter, optional
         The logger to log to. If None, the trainer will create a logger.
     ignore_cache : bool, default=False
-        If True, when the dataset is loaded, the cache is ignored and the dataset is
-        rebuilt from the raw data.
+        If True, the dataset and model cache are ignored and rebuilt.
     num_rollout_samples : int, default=10
         The number of rollout samples to collect and save per iteration of RL training.
         These are useful to visualize the progress of the training.
@@ -41,8 +40,8 @@ class ExperimentSettings:
         The number of threads to use for saving the memory-mapped tensordict.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
-        number of iterations possible and then exit. This is useful for testing that
-        the experiment runs without errors. It doesn't make sense to use this with
+        number of iterations possible and then exit. This is useful for testing that the
+        experiment runs without errors. It doesn't make sense to use this with
         wandb_run.
     """
 

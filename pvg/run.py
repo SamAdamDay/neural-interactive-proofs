@@ -75,8 +75,7 @@ def run_experiment(
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
     ignore_cache : bool, default=False
-        If True, when the dataset is loaded, the cache is ignored and the dataset is
-        rebuilt from the raw data.
+        If True, the dataset and model cache are ignored and rebuilt.
     use_wandb : bool, default=False
         If True, log the experiment to Weights & Biases.
     wandb_project : str, default=WANDB_PROJECT
