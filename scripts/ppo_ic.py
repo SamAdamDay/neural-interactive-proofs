@@ -29,7 +29,7 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
-    dataset_name=["test"],
+    dataset_name=["svhn"],
     num_iterations=[1000],
     num_epochs=[4],
     minibatch_size=[256],
@@ -51,7 +51,7 @@ param_grid = dict(
     binarification_seed=[None],
     selected_classes=[None],
     activation_function=[ActivationType.TANH],
-    pretrain_num_epochs=[1],
+    pretrain_num_epochs=[50],
     pretrain_batch_size=[256],
     pretrain_learning_rate=[0.001],
     pretrain_body_lr_factor=[1.0],
