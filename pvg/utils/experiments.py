@@ -29,11 +29,16 @@ import torch
 import wandb
 
 from wandb import AlertLevel as WandbAlertLevel
+import wandb
+
+from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
+
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
@@ -224,6 +229,18 @@ class HyperparameterExperiment(ABC):
 
         # Run the experiment
         self._run(cmd_args, base_logger)
+
+        # Send a W&B alert to say the experiment is finished
+        if cmd_args.use_wandb:
+            plain_run_id = self.run_id_fn(9999, cmd_args)
+            wandb.alert(
+                title=f"{plain_run_id} finished",
+                text=(
+                    f"This hyperparameter experiment for {self.experiment_name}"
+                    f" has finished."
+                ),
+                level=WandbAlertLevel.INFO,
+            )
 
         # Send a W&B alert to say the experiment is finished
         if cmd_args.use_wandb:
