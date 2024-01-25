@@ -1,8 +1,4 @@
-"""Test solo graph isomorphism agents using a grid of hyperparameters.
-
-A solo agent is one which does not interact with any other agents, but instead tries to
-solve the graph isomorphism problem on its own.
-"""
+"""PPO graph isomorphism experiment using a grid of hyperparameters."""
 
 from argparse import Namespace
 import os
@@ -81,15 +77,15 @@ def experiment_fn(
         agents=AgentsParameters(
             [
                 (
-                    "prover",
-                    prover_params,
-                ),
-                (
                     "verifier",
                     GraphIsomorphismAgentParameters(
                         num_gnn_layers=combo["verifier_num_layers"],
                         activation_function=combo["activation_function"],
                     ),
+                ),
+                (
+                    "prover",
+                    prover_params,
                 ),
             ]
         ),
@@ -135,7 +131,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.SOLO_AGENT,
+        trainer=TrainerType.PPO,
         dataset=combo["dataset_name"],
     )
     prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)

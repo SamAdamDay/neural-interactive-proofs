@@ -1,29 +1,23 @@
-"""Test solo graph isomorphism agents using a grid of hyperparameters.
-
-A solo agent is one which does not interact with any other agents, but instead tries to
-solve the graph isomorphism problem on its own.
-"""
+"""PPO image classification experiment using a grid of hyperparameters."""
 
 from argparse import Namespace
 import os
-import json
-from pathlib import Path
-from typing import Callable
 import logging
 
-import numpy as np
-
 import torch
-
-import wandb
 
 from pvg import (
     Parameters,
     AgentsParameters,
-    GraphIsomorphismAgentParameters,
+    RandomAgentParameters,
+    ImageClassificationAgentParameters,
+    ImageClassificationParameters,
+    PpoParameters,
     SoloAgentParameters,
     ScenarioType,
     TrainerType,
+    ActivationType,
+    BinarificationMethodType,
     run_experiment,
     prepare_experiment,
 )
@@ -34,20 +28,34 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 MULTIPROCESS = True
-TEST_SIZE = 0.2
 
 param_grid = dict(
-    dataset_name=["eru10000"],
-    use_batch_norm=[True],
-    use_pair_invariant_pooling=[True],
-    num_epochs=[100],
-    batch_size=[256],
-    learning_rate=[0.001],
-    learning_rate_scheduler=[None],
-    freeze_body=[False],
-    body_lr_factor=[0.01],
-    prover_num_layers=[5],
-    verifier_num_layers=[2],
+    dataset_name=["svhn"],
+    num_iterations=[1000],
+    num_epochs=[4],
+    minibatch_size=[256],
+    gamma=[0.9],
+    lmbda=[0.95],
+    clip_epsilon=[0.2],
+    entropy_eps=[0.001],
+    lr=[0.003],
+    body_lr_factor=[1.0],
+    prover_convs_per_group=[4],
+    prover_num_decider_layers=[3],
+    verifier_convs_per_group=[1],
+    verifier_num_decider_layers=[2],
+    num_conv_groups=[1],
+    initial_num_channels=[16],
+    random_prover=[False],
+    pretrain_agents=[True],
+    binarification_method=[BinarificationMethodType.MERGE],
+    binarification_seed=[None],
+    selected_classes=[None],
+    activation_function=[ActivationType.TANH],
+    pretrain_num_epochs=[50],
+    pretrain_batch_size=[256],
+    pretrain_learning_rate=[0.001],
+    pretrain_body_lr_factor=[1.0],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -56,7 +64,7 @@ def experiment_fn(
     combo: dict,
     run_id: str,
     cmd_args: Namespace,
-    tqdm_func: Callable,
+    tqdm_func: callable,
     logger: logging.Logger,
 ):
     logger.info(f"Starting run {run_id}")
@@ -69,37 +77,56 @@ def experiment_fn(
         os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
+    if combo["random_prover"]:
+        prover_params = RandomAgentParameters()
+    else:
+        prover_params = ImageClassificationAgentParameters(
+            num_convs_per_group=combo["prover_convs_per_group"],
+            num_decider_layers=combo["prover_num_decider_layers"],
+            activation_function=combo["activation_function"],
+        )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.SOLO_AGENT,
+        trainer=TrainerType.PPO,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             [
                 (
                     "verifier",
-                    GraphIsomorphismAgentParameters(
-                        use_batch_norm=combo["use_batch_norm"],
-                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                        num_gnn_layers=combo["verifier_num_layers"],
-                        body_lr_factor=combo["body_lr_factor"],
+                    ImageClassificationAgentParameters(
+                        num_convs_per_group=combo["verifier_convs_per_group"],
+                        num_decider_layers=combo["verifier_num_decider_layers"],
+                        activation_function=combo["activation_function"],
                     ),
                 ),
                 (
                     "prover",
-                    GraphIsomorphismAgentParameters(
-                        use_batch_norm=combo["use_batch_norm"],
-                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                        num_gnn_layers=combo["prover_num_layers"],
-                        body_lr_factor=combo["body_lr_factor"],
-                    ),
+                    prover_params,
                 ),
             ]
         ),
-        solo_agent=SoloAgentParameters(
+        ppo=PpoParameters(
+            num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
-            batch_size=combo["batch_size"],
-            learning_rate=combo["learning_rate"],
+            minibatch_size=combo["minibatch_size"],
+            gamma=combo["gamma"],
+            lmbda=combo["lmbda"],
+            clip_epsilon=combo["clip_epsilon"],
+            entropy_eps=combo["entropy_eps"],
+            body_lr_factor=combo["body_lr_factor"],
+            lr=combo["lr"],
         ),
+        image_classification=ImageClassificationParameters(
+            num_conv_groups=combo["num_conv_groups"],
+            initial_num_channels=combo["initial_num_channels"],
+        ),
+        solo_agent=SoloAgentParameters(
+            num_epochs=combo["pretrain_num_epochs"],
+            batch_size=combo["pretrain_batch_size"],
+            learning_rate=combo["pretrain_learning_rate"],
+            body_lr_factor=combo["pretrain_body_lr_factor"],
+        ),
+        pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],
     )
 
@@ -124,13 +151,13 @@ def experiment_fn(
 
 
 def run_id_fn(combo_index: int, cmd_args: Namespace):
-    return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
+    return f"ppo_ic_{cmd_args.run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.SOLO_AGENT,
+        scenario=ScenarioType.IMAGE_CLASSIFICATION,
+        trainer=TrainerType.PPO,
         dataset=combo["dataset_name"],
     )
     prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
@@ -149,8 +176,7 @@ if __name__ == "__main__":
         experiment_fn=experiment_fn,
         run_id_fn=run_id_fn,
         run_preparer_fn=run_preparer_fn,
-        experiment_name="TEST_SOLO_GI_AGENTS",
-        default_num_workers=4,
+        experiment_name="PPO_IC",
         **extra_args,
     )
     experiment.parser.add_argument(

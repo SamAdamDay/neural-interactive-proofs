@@ -34,17 +34,17 @@ MULTIPROCESS = True
 TEST_SIZE = 0.2
 
 param_grid = dict(
-    dataset_name=["fashion_mnist"],
-    num_epochs=[100],
+    dataset_name=["svhn"],
+    num_epochs=[50],
     batch_size=[256],
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
     body_lr_factor=[1.0],
     prover_convs_per_group=[4],
     prover_num_decider_layers=[3],
-    verifier_convs_per_group=[2],
+    verifier_convs_per_group=[1],
     verifier_num_decider_layers=[2],
-    num_conv_groups=[2],
+    num_conv_groups=[1],
     initial_num_channels=[16],
     binarification_method=[BinarificationMethodType.MERGE],
     binarification_seed=[None],
@@ -77,17 +77,17 @@ def experiment_fn(
         agents=AgentsParameters(
             [
                 (
-                    "prover",
-                    ImageClassificationAgentParameters(
-                        num_convs_per_group=combo["prover_convs_per_group"],
-                        num_decider_layers=combo["prover_num_decider_layers"],
-                    ),
-                ),
-                (
                     "verifier",
                     ImageClassificationAgentParameters(
                         num_convs_per_group=combo["verifier_convs_per_group"],
                         num_decider_layers=combo["verifier_num_decider_layers"],
+                    ),
+                ),
+                (
+                    "prover",
+                    ImageClassificationAgentParameters(
+                        num_convs_per_group=combo["prover_convs_per_group"],
+                        num_decider_layers=combo["prover_num_decider_layers"],
                     ),
                 ),
             ]

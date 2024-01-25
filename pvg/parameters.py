@@ -441,7 +441,7 @@ class ImageClassificationParameters(SubParameters):
         The number of channels in the first convolutional layer in each agents's CNN.
     """
 
-    num_conv_groups: int = 2
+    num_conv_groups: int = 1
     initial_num_channels: int = 16
 
 
