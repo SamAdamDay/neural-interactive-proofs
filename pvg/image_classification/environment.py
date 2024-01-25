@@ -185,10 +185,13 @@ class ImageClassificationEnvironment(Environment):
         )
         done = done | verifier_decision_made
         reward: dict[str, int] = dict()
-        reward["verifier"] = (
+        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
+        reward["verifier"][
             verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
-        ).float()
-        reward["verifier"] = reward["verifier"] * self.params.verifier_reward
+        ] = self.params.verifier_reward
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
+        ] = self.params.verifier_incorrect_penalty
         reward["prover"] = (
             verifier_decision_made & (decision[:, verifier_agent_num] == 1)
         ).float()
