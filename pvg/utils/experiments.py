@@ -242,18 +242,6 @@ class HyperparameterExperiment(ABC):
                 level=WandbAlertLevel.INFO,
             )
 
-        # Send a W&B alert to say the experiment is finished
-        if cmd_args.use_wandb:
-            plain_run_id = self.run_id_fn(9999, cmd_args)
-            wandb.alert(
-                title=f"{plain_run_id} finished",
-                text=(
-                    f"This hyperparameter experiment for {self.experiment_name}"
-                    f" has finished."
-                ),
-                level=WandbAlertLevel.INFO,
-            )
-
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
     """A class to run an experiment over a grid of hyperparameters in sequence.
