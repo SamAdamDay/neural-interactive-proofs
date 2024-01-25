@@ -191,7 +191,7 @@ class HyperparameterExperiment(ABC):
         self.parser.add_argument(
             "--ignore-cache",
             action="store_true",
-            help="Ignore the cache and rebuild the dataset from the raw data",
+            help="Ignore the dataset and model cache and rebuild from scratch.",
         )
 
         # Create a logging formatter
