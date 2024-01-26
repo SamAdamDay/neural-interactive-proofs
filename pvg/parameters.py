@@ -237,7 +237,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
-    gnn_output_digits: Optional[int] = None
+    gnn_output_digits: Optional[int] = 4
 
     num_heads: int = 4
     num_transformer_layers: int = 4
@@ -539,7 +539,7 @@ class Parameters(BaseParameters):
     verifier_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
-    verifier_no_guess_reward: float = 0.01
+    verifier_no_guess_reward: float = 0.0
 
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
     ppo: Optional[PpoParameters | dict] = None
