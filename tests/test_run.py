@@ -112,13 +112,6 @@ def test_prepare_run_experiment():
         ),
         TrainerType.SPG: SpgParameters(
             variant=SpgVariant.LOLA,
-            names=tuple(
-                list(agents_params_dict.values())[0].keys()
-            ),  # Assuming only one scenario
-            stackelberg_sequence=(("verifier",), ("prover",)),
-            num_iterations=8,
-            num_epochs=4,
-            minibatch_size=64,
         ),
     }
 

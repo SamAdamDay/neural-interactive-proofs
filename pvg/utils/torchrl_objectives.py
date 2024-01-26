@@ -13,7 +13,6 @@ from pvg.parameters import SpgVariant
 from pvg.utils.maths import dot, ihvp
 
 from torch import distributions as d
-from typing import Tuple
 
 from torchrl.objectives import PPOLoss, ClipPPOLoss
 
@@ -289,7 +288,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         actor,
         critic,
         variant: SpgVariant,
-        stackelberg_sequence: Tuple[Tuple[int]],
+        stackelberg_sequence: tuple[tuple[int]],
         names: list[str],
         ihvp: dict,
         clip_epsilon,

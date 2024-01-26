@@ -50,7 +50,7 @@ Create a parameters object using a dictionary for the ppo parameters
 
 from dataclasses import dataclass, asdict, fields
 from abc import ABC
-from typing import Optional, ClassVar, OrderedDict, Tuple
+from typing import Optional, ClassVar, OrderedDict
 from enum import auto as enum_auto
 from textwrap import indent
 
@@ -435,10 +435,10 @@ class SpgParameters(SubParameters):
     ----------
     variant : SpgVariant
         The variant of SPG to use.
-    stackelberg_sequence : Tuple[Tuple[str]]
+    stackelberg_sequence : tuple[tuple[str]]
         The sequence of agents to use in the Stackelberg game. The leaders first then
         their respective followers, and so forth.
-    names : Tuple[str]
+    names : tuple[str]
         The names of the agents in the Stackelberg game, in the order they were created
         (to enable mapping between agent names and indices).
     ihvp_variant : IhvpVariant
@@ -451,24 +451,8 @@ class SpgParameters(SubParameters):
         The damping factor to use in the IHVP approximation.
     """
 
-    def __init__(
-        self,
-        variant: SpgVariant,
-        stackelberg_sequence: Tuple[Tuple[str]],
-        names: Tuple[str],
-        **kwargs,
-    ):
-        for n in range(len(names)):
-            for m in names[n + 1 :]:
-                if names[n] in m:
-                    raise ValueError(f'Agent name "{n}" is a substring of "{m}"')
-                elif m in names[n]:
-                    raise ValueError(f'Agent name "{m}" is a substring of "{n}"')
-        self.names = names
-        self.stackelberg_sequence = [
-            tuple(names.index(n) for n in g) for g in stackelberg_sequence
-        ]  # Convert to using integers to refer to the agents at this point
-        self.variant = variant
+    variant: SpgVariant = SpgVariant.SPG
+    stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
 
     # IHVP
     ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
