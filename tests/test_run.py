@@ -6,7 +6,9 @@ from pvg import (
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     SoloAgentParameters,
-    PpoParameters,
+    CommonPpoParameters,
+    SpgParameters,
+    SpgVariant,  # TODO Ideally combine this with SpgParameters
     ScenarioType,
     TrainerType,
     run_experiment,
@@ -103,10 +105,13 @@ def test_prepare_run_experiment():
             num_epochs=1,
             batch_size=1,
         ),
-        TrainerType.PPO: PpoParameters(
+        TrainerType.VANILLA_PPO: CommonPpoParameters(
             num_iterations=8,
             num_epochs=4,
             minibatch_size=64,
+        ),
+        TrainerType.SPG: SpgParameters(
+            variant=SpgVariant.LOLA,
         ),
     }
 

@@ -25,7 +25,7 @@ from pvg.image_classification import (
     ImageClassificationScenarioInstance,
     ImageClassificationRunPreparer,
 )
-from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
+from pvg.trainers import Trainer, SoloAgentTrainer, VanillaPpoTrainer, SpgTrainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
@@ -41,7 +41,8 @@ RUN_PREPARER: dict[ScenarioType, RunPreparer] = {
 
 TRAINER_MAP: dict[TrainerType, Trainer] = {
     TrainerType.SOLO_AGENT: SoloAgentTrainer,
-    TrainerType.PPO: PpoTrainer,
+    TrainerType.VANILLA_PPO: VanillaPpoTrainer,
+    TrainerType.SPG: SpgTrainer,
 }
 
 

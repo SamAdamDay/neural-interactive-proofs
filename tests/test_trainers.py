@@ -6,11 +6,11 @@ from pvg import (
     TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
-    PpoParameters,
+    CommonPpoParameters,
     ExperimentSettings,
 )
 from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
-from pvg.trainers.ppo import PpoTrainer
+from pvg.trainers.vanilla_ppo import VanillaPpoTrainer
 
 
 def test_gi_ppo_train_optimizer_groups():
@@ -37,9 +37,9 @@ def test_gi_ppo_train_optimizer_groups():
     params_list = [
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.PPO,
+            TrainerType.VANILLA_PPO,
             "test",
-            ppo=PpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
                 [
                     (
@@ -59,9 +59,9 @@ def test_gi_ppo_train_optimizer_groups():
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.PPO,
+            TrainerType.VANILLA_PPO,
             "test",
-            ppo=PpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
                 [
                     (
@@ -81,9 +81,9 @@ def test_gi_ppo_train_optimizer_groups():
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.PPO,
+            TrainerType.VANILLA_PPO,
             "test",
-            ppo=PpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
                 [
                     (
@@ -103,9 +103,9 @@ def test_gi_ppo_train_optimizer_groups():
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.PPO,
+            TrainerType.VANILLA_PPO,
             "test",
-            ppo=PpoParameters(lr=3.0, body_lr_factor=0.01),
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.01),
             agents=AgentsParameters(
                 [
                     (
@@ -140,7 +140,7 @@ def test_gi_ppo_train_optimizer_groups():
         scenario_instance = GraphIsomorphismScenarioInstance(params, settings)
 
         # Create the trainer and get the loss module and optimizer
-        trainer = PpoTrainer(params, scenario_instance, settings)
+        trainer = VanillaPpoTrainer(params, scenario_instance, settings)
         trainer._train_setup()
         loss_module, _ = trainer._get_loss_module_and_gae()
         optimizer = trainer._get_optimizer(loss_module)

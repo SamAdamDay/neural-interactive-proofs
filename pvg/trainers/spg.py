@@ -1,4 +1,4 @@
-"""PPO RL trainer."""
+"""Stackelberg Policy Gradient RL trainer."""
 
 import torch
 
@@ -11,23 +11,20 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
-from pvg.utils.torchrl_objectives import ClipPPOLossMultipleActions
+from pvg.utils.torchrl_objectives import SpgLoss
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
-class PpoTrainer(ReinforcementLearningTrainer):
-    """Proximal Policy Optimization trainer.
+class SpgTrainer(ReinforcementLearningTrainer):
+    """Stackelberg Policy Gradient trainer
 
-    Implements a multi-agent PPO algorithm, specifically IPPO, since the value estimator
-    is not shared between agents.
+    Implements an n-player version of Stackelberg Policy Gradient / Opponent-Shaping
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
-    scenario_instance : ScenarioInstance
-        The components of the experiment.
     device : TorchDevice
         The device to use for training.
     """
@@ -60,7 +57,6 @@ class PpoTrainer(ReinforcementLearningTrainer):
         # full policy operator
         self._full_model = ActorValueOperator(body, policy_head, value_head)
         self._policy_operator = self._full_model.get_policy_operator()
-        self._value_operator = self._full_model.get_value_operator()
 
     def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
         """Construct the data collectors, which generate rollouts from the environment
@@ -86,7 +82,7 @@ class PpoTrainer(ReinforcementLearningTrainer):
         )
 
         test_collector = SyncDataCollector(
-            self.test_environment,
+            self.train_environment,
             self._policy_operator,
             device=self.device,
             storing_device=self.device,
@@ -113,21 +109,35 @@ class PpoTrainer(ReinforcementLearningTrainer):
             batch_size=self.params.ppo.minibatch_size,
         )
 
-    def _get_loss_module_and_gae(self) -> tuple[ClipPPOLossMultipleActions, GAE]:
+    def _get_loss_module_and_gae(self) -> tuple[SpgLoss, GAE]:
         """Construct the loss module and the generalized advantage estimator
 
         Returns
         -------
-        loss_module : ClipPPOLossMultipleActions
+        loss_module : SpgLoss
             The loss module.
         gae : GAE
             The generalized advantage estimator.
         """
 
         # Construct the loss module
-        loss_module = ClipPPOLossMultipleActions(
-            actor=self._policy_operator,
-            critic=self._value_operator,
+        agent_names = list(self.params.agents.keys())
+        stackelberg_sequence_int = [
+            tuple(agent_names.index(name) for name in group)
+            for group in self.params.spg.stackelberg_sequence
+        ]
+        loss_module = SpgLoss(
+            actor=self._full_model.get_policy_operator(),
+            critic=self._full_model.get_value_operator(),
+            variant=self.params.spg.variant,
+            stackelberg_sequence=stackelberg_sequence_int,
+            names=agent_names,
+            ihvp={
+                "variant": self.params.spg.ihvp_variant,
+                "num_iterations": self.params.spg.ihvp_num_iterations,
+                "rank": self.params.spg.ihvp_rank,
+                "rho": self.params.spg.ihvp_rho,
+            },
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
             normalize_advantage=False,

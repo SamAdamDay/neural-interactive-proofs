@@ -67,11 +67,29 @@ class ScenarioType(StrEnum):
     IMAGE_CLASSIFICATION = enum_auto()
 
 
+class SpgVariant(StrEnum):
+    """Enum for SPG variants."""
+
+    SPG = enum_auto()
+    PSPG = enum_auto()
+    LOLA = enum_auto()
+    POLA = enum_auto()
+    SOS = enum_auto()  # TODO
+    PSOS = enum_auto()  # TODO
+
+
+class IhvpVariant(StrEnum):
+    CONJ_GRAD = enum_auto()
+    NEUMANN = enum_auto()
+    NYSTROM = enum_auto()
+
+
 class TrainerType(StrEnum):
     """Enum for the RL trainer to use."""
 
-    PPO = enum_auto()
+    VANILLA_PPO = enum_auto()
     SOLO_AGENT = enum_auto()
+    SPG = enum_auto()
 
 
 class BinarificationMethodType(StrEnum):
@@ -347,8 +365,8 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
 
 
 @dataclass
-class PpoParameters(SubParameters):
-    """Additional parameters for PPO.
+class CommonPpoParameters(SubParameters):
+    """Common parameters for PPO trainers.
 
     Parameters
     ----------
@@ -402,6 +420,45 @@ class PpoParameters(SubParameters):
 
     # Testing
     num_test_iterations: int = 10
+
+
+@dataclass
+class VanillaPpoParameters(SubParameters):
+    """Additional parameters for the vanilla PPO trainer."""
+
+
+@dataclass
+class SpgParameters(SubParameters):
+    """Additional parameters for SPG and its variants.
+
+    Parameters
+    ----------
+    variant : SpgVariant
+        The variant of SPG to use.
+    stackelberg_sequence : tuple[tuple[str]]
+        The sequence of agents to use in the Stackelberg game. The leaders first then
+        their respective followers, and so forth.
+    names : tuple[str]
+        The names of the agents in the Stackelberg game, in the order they were created
+        (to enable mapping between agent names and indices).
+    ihvp_variant : IhvpVariant
+        The variant of IHVP to use.
+    ihvp_num_iterations : int
+        The number of iterations to use in the IHVP approximation.
+    ihvp_rank : int
+        The rank of the approximation to use in the IHVP approximation.
+    ihvp_rho : float
+        The damping factor to use in the IHVP approximation.
+    """
+
+    variant: SpgVariant = SpgVariant.SPG
+    stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
+
+    # IHVP
+    ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
+    ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
+    ihvp_rank: int = 5  # Default value taken from hypergrad package example
+    ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
 
 
 @dataclass
@@ -511,7 +568,11 @@ class Parameters(BaseParameters):
         the values are the parameters for each agent. If not provided, the default
         parameters are used for each agent for a given scenario.
     ppo : PpoParameters, optional
-        Additional parameters for PPO.
+        Common parameters for PPO trainers.
+    vanilla_ppo : VanillaPpoParameters, optional
+        Additional parameters for the vanilla PPO trainer.
+    spg : SpgParameters, optional
+        Additional parameters for SPG and its variants.
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
@@ -542,8 +603,10 @@ class Parameters(BaseParameters):
     verifier_no_guess_reward: float = 0.01
 
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
-    ppo: Optional[PpoParameters | dict] = None
+    ppo: Optional[CommonPpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    vanilla_ppo: Optional[VanillaPpoParameters | dict] = None
+    spg: Optional[SpgParameters | dict] = None
     image_classification: Optional[ImageClassificationParameters | dict] = None
     dataset_options: Optional[DatasetParameters | dict] = None
 
@@ -568,17 +631,29 @@ class Parameters(BaseParameters):
                     **self.image_classification
                 )
 
-        if self.trainer == TrainerType.PPO:
+        if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
             if self.ppo is None:
-                self.ppo = PpoParameters()
+                self.ppo = CommonPpoParameters()
             elif isinstance(self.ppo, dict):
-                self.ppo = PpoParameters(**self.ppo)
+                self.ppo = CommonPpoParameters(**self.ppo)
+
+        if self.trainer == TrainerType.VANILLA_PPO:
+            if self.spg is None:
+                self.spg = VanillaPpoParameters()
+            elif isinstance(self.spg, dict):
+                self.spg = VanillaPpoParameters(**self.spg)
+        if self.trainer == TrainerType.SPG:
+            if self.spg is None:
+                self.spg = SpgParameters()
+            elif isinstance(self.spg, dict):
+                self.spg = SpgParameters(**self.spg)
 
         if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:
             if self.solo_agent is None:
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
+                self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
 
         if self.dataset_options is None:
             self.dataset_options = DatasetParameters()

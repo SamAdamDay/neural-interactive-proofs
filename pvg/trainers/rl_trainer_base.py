@@ -286,14 +286,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
                     # Compute the loss
                     loss_vals: TensorDict = loss_module(sub_data)
-                    loss_value = (
-                        loss_vals["loss_objective"]
-                        + loss_vals["loss_critic"]
-                        + loss_vals["loss_entropy"]
-                    )
+                    loss_module.compute_grads(loss_vals)
 
-                    # Take an optimization step
-                    loss_value.backward()
+                    # Clip gradients and update parameters
                     clip_grad_norm_(
                         loss_module.parameters(), self.params.ppo.max_grad_norm
                     )

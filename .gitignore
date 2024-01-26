@@ -137,6 +137,8 @@ dmypy.json
 # Swp files
 *.swp
 
+.DS_Store
+
 # Processed data files
 data/**/processed*
 data/image_classification
