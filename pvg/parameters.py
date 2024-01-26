@@ -53,7 +53,7 @@ Create a parameters object using a dictionary for the ppo parameters
 
 from dataclasses import dataclass, asdict, field
 from abc import ABC
-from typing import Optional, ClassVar, OrderedDict
+from typing import Optional, ClassVar, OrderedDict, Tuple
 from enum import auto as enum_auto
 
 import dacite
@@ -70,11 +70,29 @@ class ScenarioType(StrEnum):
     GRAPH_ISOMORPHISM = enum_auto()
 
 
+class SpgVariant(StrEnum):
+    """Enum for SPG variants."""
+
+    SPG = enum_auto()
+    PSPG = enum_auto()
+    LOLA = enum_auto()
+    POLA = enum_auto()
+    SOS = enum_auto()  # TODO
+    PSOS = enum_auto()  # TODO
+
+
+class IhvpVariant(StrEnum):
+    CONJ_GRAD = enum_auto()
+    NEUMANN = enum_auto()
+    NYSTROM = enum_auto()
+
+
 class TrainerType(StrEnum):
     """Enum for the RL trainer to use."""
 
     PPO = enum_auto()
     SOLO_AGENT = enum_auto()
+    SPG = enum_auto()
 
 
 class BaseParameters(ABC):
@@ -230,7 +248,7 @@ class PpoParameters(SubParameters):
     """
 
     # Sampling
-    frames_per_batch = 1000
+    frames_per_batch: int = 1000
     num_iterations: int = 8
 
     # Training
@@ -247,6 +265,99 @@ class PpoParameters(SubParameters):
 
     # Agents
     body_lr_factor: float = 1.0
+
+
+@dataclass
+class SpgParameters(SubParameters):
+    """Additional parameters for SPG and its variants.
+
+    Parameters
+    ----------
+    variant : SpgVariant
+        The variant of SPG to use.
+    stackelberg_sequence : Tuple[Tuple[str]]
+        The sequence of agents to use in the Stackelberg game. The leaders first then
+        their respective followers, and so forth.
+    names : Tuple[str]
+        The names of the agents in the Stackelberg game, in the order they were created
+        (to enable mapping between agent names and indices).
+    frames_per_batch : int
+        The number of frames to sample per training iteration.
+    num_iterations : int
+        The number of sampling and training iterations. `num_iterations *
+        frames_per_batch` is the total number of frames sampled during training.
+    num_epochs : int
+        The number of epochs per training iteration.
+    minibatch_size : int
+        The size of the minibatches in each optimization step.
+    lr : float
+        The learning rate.
+    max_grad_norm : float
+        The maximum norm of the gradients during optimization.
+    gamma : float
+        The discount factor.
+    lmbda : float
+        The GAE lambda parameter.
+    clip_epsilon : float
+        The PPO clip range.
+    entropy_eps : float
+        The coefficient of the entropy term in the PPO loss.
+    ihvp_variant : IhvpVariant
+        The variant of IHVP to use.
+    ihvp_num_iterations : int
+        The number of iterations to use in the IHVP approximation.
+    ihvp_rank : int
+        The rank of the approximation to use in the IHVP approximation.
+    ihvp_rho : float
+        The damping factor to use in the IHVP approximation.
+    body_lr_factor : float
+        The learning rate factor for the body part of the model. This allows updating
+        the body at a different rate to the rest of the model.
+    """
+
+    def __init__(
+        self,
+        variant: SpgVariant,
+        stackelberg_sequence: Tuple[Tuple[str]],
+        names: Tuple[str],
+        **kwargs,
+    ):
+        for n in range(len(names)):
+            for m in names[n + 1 :]:
+                if names[n] in m:
+                    raise ValueError(f'Agent name "{n}" is a substring of "{m}"')
+                elif m in names[n]:
+                    raise ValueError(f'Agent name "{m}" is a substring of "{n}"')
+        self.names = names
+        self.stackelberg_sequence = [
+            tuple(names.index(n) for n in g) for g in stackelberg_sequence
+        ]  # Convert to using integers to refer to the agents at this point
+        self.variant = variant
+
+    # Sampling
+    frames_per_batch: int = 1000
+    num_iterations: int = 8
+
+    # Training
+    num_epochs: int = 4
+    minibatch_size: int = 64
+    lr = 3e-4  # TODO needs to be able to vary between agents
+    max_grad_norm = 1.0
+
+    # PPO
+    gamma: float = 0.99
+    lmbda: float = 0.95
+    clip_epsilon: float = 0.2
+    entropy_eps: float = 1e-4
+
+    # IHVP
+    ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
+    ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
+    ihvp_rank: int = 5  # Default value taken from hypergrad package example
+    ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
+
+    # Agents
+    body_lr_factor: float = 1.0  # TODO needs to be able to vary between agents
 
 
 @dataclass
@@ -326,6 +437,7 @@ class Parameters(BaseParameters):
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
     ppo: Optional[PpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    spg: Optional[SpgParameters | dict] = None
 
     def __post_init__(self):
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
@@ -352,3 +464,8 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
+        elif self.trainer == TrainerType.SPG:
+            if self.spg is None:
+                self.spg = SpgParameters()
+            elif isinstance(self.spg, dict):
+                self.spg = SpgParameters.from_dict(self.spg)

@@ -4,6 +4,8 @@ from pvg import (
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     PpoParameters,
+    SpgParameters,
+    SpgVariant,  # TODO Ideally combine this with SpgParameters
     ScenarioType,
     TrainerType,
     run_experiment,
@@ -71,6 +73,16 @@ def test_run_experiment():
             batch_size=1,
         ),
         TrainerType.PPO: PpoParameters(
+            num_iterations=8,
+            num_epochs=4,
+            minibatch_size=64,
+        ),
+        TrainerType.SPG: SpgParameters(
+            variant=SpgVariant.LOLA,
+            names=tuple(
+                list(agents_params_dict.values())[0].keys()
+            ),  # Assuming only one scenario
+            stackelberg_sequence=(("verifier",), ("prover",)),
             num_iterations=8,
             num_epochs=4,
             minibatch_size=64,

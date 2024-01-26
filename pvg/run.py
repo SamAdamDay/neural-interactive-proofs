@@ -16,7 +16,7 @@ from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import ScenarioInstance
 from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
-from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer
+from pvg.trainers import Trainer, SoloAgentTrainer, PpoTrainer, SpgTrainer
 from pvg.utils.types import TorchDevice, LoggingType
 
 SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
@@ -26,6 +26,7 @@ SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
 TRAINER_MAP: dict[TrainerType, Trainer] = {
     TrainerType.SOLO_AGENT: SoloAgentTrainer,
     TrainerType.PPO: PpoTrainer,
+    TrainerType.SPG: SpgTrainer,
 }
 
 

@@ -114,7 +114,7 @@ class ScenarioInstance(ABC):
                 agent_name=agent_name,
             )
 
-            if params.trainer == TrainerType.PPO:
+            if params.trainer != TrainerType.SOLO_AGENT:
                 agent_dict["policy_head"] = self.policy_head_class(
                     params=params,
                     device=self.device,
@@ -125,7 +125,7 @@ class ScenarioInstance(ABC):
                     device=self.device,
                     agent_name=agent_name,
                 )
-            elif params.trainer == TrainerType.SOLO_AGENT:
+            else:
                 agent_dict["solo_head"] = self.solo_head_class(
                     params=params,
                     device=self.device,
@@ -135,7 +135,7 @@ class ScenarioInstance(ABC):
             self.agents[agent_name] = Agent.from_dict(agent_dict)
 
         # Build additional components if the trainer is an RL trainer
-        if self.params.trainer == TrainerType.PPO:
+        if self.params.trainer != TrainerType.SOLO_AGENT:
             # Create the environment
             self.environment = self.environment_class(params, self.device)
 

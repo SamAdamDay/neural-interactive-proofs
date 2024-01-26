@@ -172,10 +172,26 @@ class ReinforcementLearningTrainer(Trainer):
             The optimizer to use for optimizing the loss.
         """
 
-        optimizer = torch.optim.Adam(loss_module.parameters(), self.params.ppo.lr)
+        # TODO This is very hacky, but it breaks the hardcoded dependence on PPO without having to refactor the params class
+        if self.params.trainer == "ppo":
+            num_epochs = self.params.ppo.num_epochs
+            frames_per_batch = self.params.ppo.frames_per_batch
+            minibatch_size = self.params.ppo.minibatch_size
+            max_grad_norm = self.params.ppo.max_grad_norm
+            lr = self.params.ppo.lr
+            num_iterations = self.params.ppo.num_iterations
+        elif self.params.trainer == "spg":
+            num_epochs = self.params.spg.num_epochs
+            frames_per_batch = self.params.spg.frames_per_batch
+            minibatch_size = self.params.spg.minibatch_size
+            max_grad_norm = self.params.spg.max_grad_norm
+            lr = self.params.spg.lr
+            num_iterations = self.params.spg.num_iterations
+
+        optimizer = torch.optim.Adam(loss_module.parameters(), lr)
 
         iterator = self.settings.tqdm_func(
-            collector, desc="Training", total=self.params.ppo.num_iterations
+            collector, desc="Training", total=num_iterations
         )
         for tensordict_data in iterator:
             # Expand the done and terminated to match the reward shape (this is expected by the
@@ -209,26 +225,17 @@ class ReinforcementLearningTrainer(Trainer):
             data_view = tensordict_data.reshape(-1)
             replay_buffer.extend(data_view)
 
-            for _ in range(self.params.ppo.num_epochs):
-                for _ in range(
-                    self.params.ppo.frames_per_batch // self.params.ppo.minibatch_size
-                ):
+            for _ in range(num_epochs):
+                for _ in range(frames_per_batch // minibatch_size):
                     # Sample a minibatch from the replay buffer
                     sub_data = replay_buffer.sample()
 
-                    # Compute the loss
+                    # Compute the gradients from the loss values
                     loss_vals: TensorDict = loss_module(sub_data)
-                    loss_value = (
-                        loss_vals["loss_objective"]
-                        + loss_vals["loss_critic"]
-                        + loss_vals["loss_entropy"]
-                    )
+                    loss_module.compute_grads(loss_vals)
 
-                    # Take an optimization step
-                    loss_value.backward()
-                    clip_grad_norm_(
-                        loss_module.parameters(), self.params.ppo.max_grad_norm
-                    )
+                    # Clip gradients and update parameters
+                    clip_grad_norm_(loss_module.parameters(), max_grad_norm)
                     optimizer.step()
                     optimizer.zero_grad()
 

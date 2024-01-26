@@ -62,8 +62,14 @@ class Environment(EnvBase, ABC):
         self.dataset = self._dataset_class(params)
         self.data_cycler: Optional[VariableDataCycler] = None
 
+        # TODO Again, this is a bit of a hack, but it breaks the hard-coded dependence on PPO
+        if params.trainer == "ppo":
+            frames_per_batch = params.ppo.frames_per_batch
+        elif params.trainer == "spg":
+            frames_per_batch = params.spg.frames_per_batch
+
         # The number of environments is the number of episodes we can fit in a batch
-        self.num_envs = params.ppo.frames_per_batch // params.max_message_rounds
+        self.num_envs = frames_per_batch // params.max_message_rounds
         self.batch_size = (self.num_envs,)
 
         # Create environment specs

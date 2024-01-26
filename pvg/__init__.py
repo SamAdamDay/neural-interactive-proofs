@@ -5,6 +5,8 @@ from .parameters import (
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
     PpoParameters,
+    SpgParameters,
+    SpgVariant,
     ScenarioType,
     TrainerType,
 )
