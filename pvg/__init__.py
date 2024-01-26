@@ -5,7 +5,7 @@ from .parameters import (
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     SoloAgentParameters,
-    PpoParameters,
+    CommonPpoParameters,
     SpgParameters,
     SpgVariant,
     ImageClassificationParameters,

@@ -11,7 +11,7 @@ from pvg.parameters import (
     TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
-    PpoParameters,
+    CommonPpoParameters,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -30,7 +30,7 @@ def test_environment_specs():
     for scenario_type, dataset_class, environment_class in zip(
         scenario_types, dataset_classes, environment_classes
     ):
-        params = Parameters(scenario_type, TrainerType.PPO, "test")
+        params = Parameters(scenario_type, TrainerType.VANILLA_PPO, "test")
         settings = ExperimentSettings(device="cpu", test_run=True)
         dataset = dataset_class(params, settings)
         env = environment_class(params, settings, dataset)
@@ -46,9 +46,9 @@ def test_graph_isomorphism_environment_step():
     # Set up the environment.
     params = Parameters(
         ScenarioType.GRAPH_ISOMORPHISM,
-        TrainerType.PPO,
+        TrainerType.VANILLA_PPO,
         "test",
-        ppo=PpoParameters(frames_per_batch=batch_size * max_message_rounds),
+        ppo=CommonPpoParameters(frames_per_batch=batch_size * max_message_rounds),
         max_message_rounds=max_message_rounds,
         min_message_rounds=1,
         agents=AgentsParameters(

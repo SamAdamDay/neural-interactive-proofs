@@ -16,8 +16,8 @@ from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
-class PpoTrainer(ReinforcementLearningTrainer):
-    """Proximal Policy Optimization trainer.
+class VanillaPpoTrainer(ReinforcementLearningTrainer):
+    """Vanilla Proximal Policy Optimization trainer.
 
     Implements a multi-agent PPO algorithm, specifically IPPO, since the value estimator
     is not shared between agents.

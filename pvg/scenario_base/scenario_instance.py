@@ -150,7 +150,10 @@ class ScenarioInstance(ABC):
                     agent_name=agent_name,
                 )
 
-            if params.trainer == TrainerType.PPO or params.trainer == TrainerType.SPG:
+            if (
+                params.trainer == TrainerType.VANILLA_PPO
+                or params.trainer == TrainerType.SPG
+            ):
                 if agent_params.is_random:
                     agent_dict["policy_head"] = self.random_policy_head_class(
                         params=params,
@@ -189,7 +192,10 @@ class ScenarioInstance(ABC):
             self.agents[agent_name] = Agent(**agent_dict)
 
         # Build additional components if the trainer is an RL trainer
-        if params.trainer == TrainerType.PPO or params.trainer == TrainerType.SPG:
+        if (
+            params.trainer == TrainerType.VANILLA_PPO
+            or params.trainer == TrainerType.SPG
+        ):
             # Create the environments
             self.train_environment = self.environment_class(
                 params, settings, self.train_dataset, train=True

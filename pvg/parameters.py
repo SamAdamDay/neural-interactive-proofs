@@ -87,7 +87,7 @@ class IhvpVariant(StrEnum):
 class TrainerType(StrEnum):
     """Enum for the RL trainer to use."""
 
-    PPO = enum_auto()
+    VANILLA_PPO = enum_auto()
     SOLO_AGENT = enum_auto()
     SPG = enum_auto()
 
@@ -365,8 +365,8 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
 
 
 @dataclass
-class PpoParameters(SubParameters):
-    """Additional parameters for PPO.
+class CommonPpoParameters(SubParameters):
+    """Common parameters for PPO trainers.
 
     Parameters
     ----------
@@ -423,6 +423,11 @@ class PpoParameters(SubParameters):
 
 
 @dataclass
+class VanillaPpoParameters(SubParameters):
+    """Additional parameters for the vanilla PPO trainer."""
+
+
+@dataclass
 class SpgParameters(SubParameters):
     """Additional parameters for SPG and its variants.
 
@@ -436,27 +441,6 @@ class SpgParameters(SubParameters):
     names : Tuple[str]
         The names of the agents in the Stackelberg game, in the order they were created
         (to enable mapping between agent names and indices).
-    frames_per_batch : int
-        The number of frames to sample per training iteration.
-    num_iterations : int
-        The number of sampling and training iterations. `num_iterations *
-        frames_per_batch` is the total number of frames sampled during training.
-    num_epochs : int
-        The number of epochs per training iteration.
-    minibatch_size : int
-        The size of the minibatches in each optimization step.
-    lr : float
-        The learning rate.
-    max_grad_norm : float
-        The maximum norm of the gradients during optimization.
-    gamma : float
-        The discount factor.
-    lmbda : float
-        The GAE lambda parameter.
-    clip_epsilon : float
-        The PPO clip range.
-    entropy_eps : float
-        The coefficient of the entropy term in the PPO loss.
     ihvp_variant : IhvpVariant
         The variant of IHVP to use.
     ihvp_num_iterations : int
@@ -465,9 +449,6 @@ class SpgParameters(SubParameters):
         The rank of the approximation to use in the IHVP approximation.
     ihvp_rho : float
         The damping factor to use in the IHVP approximation.
-    body_lr_factor : float
-        The learning rate factor for the body part of the model. This allows updating
-        the body at a different rate to the rest of the model.
     """
 
     def __init__(
@@ -489,30 +470,11 @@ class SpgParameters(SubParameters):
         ]  # Convert to using integers to refer to the agents at this point
         self.variant = variant
 
-    # Sampling
-    frames_per_batch: int = 1000
-    num_iterations: int = 8
-
-    # Training
-    num_epochs: int = 4
-    minibatch_size: int = 64
-    lr = 3e-4  # TODO needs to be able to vary between agents
-    max_grad_norm = 1.0
-
-    # PPO
-    gamma: float = 0.99
-    lmbda: float = 0.95
-    clip_epsilon: float = 0.2
-    entropy_eps: float = 1e-4
-
     # IHVP
     ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
     ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
     ihvp_rank: int = 5  # Default value taken from hypergrad package example
     ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
-
-    # Agents
-    body_lr_factor: float = 1.0  # TODO needs to be able to vary between agents
 
 
 @dataclass
@@ -622,7 +584,11 @@ class Parameters(BaseParameters):
         the values are the parameters for each agent. If not provided, the default
         parameters are used for each agent for a given scenario.
     ppo : PpoParameters, optional
-        Additional parameters for PPO.
+        Common parameters for PPO trainers.
+    vanilla_ppo : VanillaPpoParameters, optional
+        Additional parameters for the vanilla PPO trainer.
+    spg : SpgParameters, optional
+        Additional parameters for SPG and its variants.
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
@@ -653,8 +619,9 @@ class Parameters(BaseParameters):
     verifier_no_guess_reward: float = 0.01
 
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
-    ppo: Optional[PpoParameters | dict] = None
+    ppo: Optional[CommonPpoParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    vanilla_ppo: Optional[VanillaPpoParameters | dict] = None
     spg: Optional[SpgParameters | dict] = None
     image_classification: Optional[ImageClassificationParameters | dict] = None
     dataset_options: Optional[DatasetParameters | dict] = None
@@ -680,12 +647,18 @@ class Parameters(BaseParameters):
                     **self.image_classification
                 )
 
-        if self.trainer == TrainerType.PPO:
+        if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
             if self.ppo is None:
-                self.ppo = PpoParameters()
+                self.ppo = CommonPpoParameters()
             elif isinstance(self.ppo, dict):
-                self.ppo = PpoParameters(**self.ppo)
-        elif self.trainer == TrainerType.SPG:
+                self.ppo = CommonPpoParameters(**self.ppo)
+
+        if self.trainer == TrainerType.VANILLA_PPO:
+            if self.spg is None:
+                self.spg = VanillaPpoParameters()
+            elif isinstance(self.spg, dict):
+                self.spg = VanillaPpoParameters(**self.spg)
+        if self.trainer == TrainerType.SPG:
             if self.spg is None:
                 self.spg = SpgParameters()
             elif isinstance(self.spg, dict):

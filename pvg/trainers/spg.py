@@ -12,7 +12,7 @@ from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
 from pvg.utils.torchrl_objectives import SpgLoss
-from pvg.trainers.base import ReinforcementLearningTrainer
+from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
@@ -41,14 +41,14 @@ class SpgTrainer(ReinforcementLearningTrainer):
         # distribution
         policy_head = ProbabilisticActor(
             combined_policy_head,
-            spec=self.environment.action_spec,
+            spec=self.train_environment.action_spec,
             distribution_class=CompositeCategoricalDistribution,
             distribution_kwargs=dict(
                 key_transform=lambda x: ("agents", x),
                 log_prob_key=("agents", "sample_log_prob"),
             ),
             in_keys={out_key[1]: out_key for out_key in combined_policy_head.out_keys},
-            out_keys=self.environment.action_keys,
+            out_keys=self.train_environment.action_keys,
             return_log_prob=True,
             log_prob_key=("agents", "sample_log_prob"),
         )
@@ -56,25 +56,42 @@ class SpgTrainer(ReinforcementLearningTrainer):
         # Combine the body, policy head and value head into a single model, and get the
         # full policy operator
         self._full_model = ActorValueOperator(body, policy_head, value_head)
-        self._policy = self._full_model.get_policy_operator()
+        self._policy_operator = self._full_model.get_policy_operator()
 
-    def _get_data_collector(self) -> SyncDataCollector:
-        """Construct the data collector, which generates rollouts from the environment
+    def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
+        """Construct the data collectors, which generate rollouts from the environment
+
+        Constructs a collector for both the train and the test environment.
 
         Returns
         -------
-        collector : SyncDataCollector
-            The data collector.
+        train_collector : SyncDataCollector
+            The train data collector.
+        test_collector : SyncDataCollector
+            The test data collector.
         """
-        return SyncDataCollector(
-            self.environment,
-            self._policy,
+
+        train_collector = SyncDataCollector(
+            self.train_environment,
+            self._policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.spg.frames_per_batch,
-            total_frames=self.params.spg.frames_per_batch
-            * self.params.spg.num_iterations,
+            frames_per_batch=self.params.ppo.frames_per_batch,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_iterations,
         )
+
+        test_collector = SyncDataCollector(
+            self.train_environment,
+            self._policy_operator,
+            device=self.device,
+            storing_device=self.device,
+            frames_per_batch=self.params.ppo.frames_per_batch,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_test_iterations,
+        )
+
+        return train_collector, test_collector
 
     def _get_replay_buffer(self) -> ReplayBuffer:
         """Construct the replay buffer, which will store the rollouts
@@ -86,10 +103,10 @@ class SpgTrainer(ReinforcementLearningTrainer):
         """
         return ReplayBuffer(
             storage=LazyTensorStorage(
-                self.params.spg.frames_per_batch, device=self.device
+                self.params.ppo.frames_per_batch, device=self.device
             ),
             sampler=SamplerWithoutReplacement(),
-            batch_size=self.params.spg.minibatch_size,
+            batch_size=self.params.ppo.minibatch_size,
         )
 
     def _get_loss_module_and_gae(self) -> tuple[SpgLoss, GAE]:
@@ -116,13 +133,13 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 "rank": self.params.spg.ihvp_rank,
                 "rho": self.params.spg.ihvp_rho,
             },
-            clip_epsilon=self.params.spg.clip_epsilon,
-            entropy_coef=self.params.spg.entropy_eps,
+            clip_epsilon=self.params.ppo.clip_epsilon,
+            entropy_coef=self.params.ppo.entropy_eps,
             normalize_advantage=False,
         )
         loss_module.set_keys(
-            reward=self.environment.reward_key,
-            action=self.environment.action_keys,
+            reward=self.train_environment.reward_key,
+            action=self.train_environment.action_keys,
             sample_log_prob=("agents", "sample_log_prob"),
             value=("agents", "value"),
             done=("agents", "done"),
@@ -132,8 +149,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
         # Make the generalized advantage estimator
         loss_module.make_value_estimator(
             ValueEstimators.GAE,
-            gamma=self.params.spg.gamma,
-            lmbda=self.params.spg.lmbda,
+            gamma=self.params.ppo.gamma,
+            lmbda=self.params.ppo.lmbda,
         )
         gae = loss_module.value_estimator
 
@@ -152,4 +169,33 @@ class SpgTrainer(ReinforcementLearningTrainer):
         torch.optim.Optimizer
             The optimizer.
         """
-        return torch.optim.Adam(loss_module.parameters(), self.params.spg.lr)
+
+        # Set the learning rate of the agent bodies to be a factor of the learning rate
+        # of the loss module
+        model_param_dict = []
+        for agent_name, agent_params in self.params.agents.items():
+            # Determine the learning rate of the body. If the LR factor is set in the
+            # PPO parameters, use that. Otherwise, use the LR factor from the agent
+            # parameters.
+            if self.params.ppo.body_lr_factor is None:
+                body_lr = self.params.ppo.lr * agent_params.body_lr_factor
+            else:
+                body_lr = self.params.ppo.lr * self.params.ppo.body_lr_factor
+
+            body_params = [
+                param
+                for param_name, param in loss_module.named_parameters()
+                if param_name.startswith(f"actor_params.module_0_{agent_name}")
+            ]
+            model_param_dict.append(dict(params=body_params, lr=body_lr))
+
+        # Set the learning rate of all other parameters to be the learning rate of the
+        # loss module
+        non_body_params = [
+            param
+            for param_name, param in loss_module.named_parameters()
+            if not param_name.startswith("actor_params.module_0")
+        ]
+        model_param_dict.append(dict(params=non_body_params, lr=self.params.ppo.lr))
+
+        return torch.optim.Adam(model_param_dict)

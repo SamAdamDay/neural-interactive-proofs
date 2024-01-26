@@ -11,7 +11,7 @@ from pvg import (
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
-    PpoParameters,
+    CommonPpoParameters,
     ScenarioType,
     TrainerType,
     ActivationType,
@@ -71,7 +71,7 @@ def experiment_fn(
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.PPO,
+        trainer=TrainerType.VANILLA_PPO,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             [
@@ -88,7 +88,7 @@ def experiment_fn(
                 ),
             ]
         ),
-        ppo=PpoParameters(
+        ppo=CommonPpoParameters(
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
@@ -130,7 +130,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.PPO,
+        trainer=TrainerType.VANILLA_PPO,
         dataset=combo["dataset_name"],
     )
     prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
