@@ -476,6 +476,7 @@ def generate_gi_dataset(
     config: GraphIsomorphicDatasetConfig | dict,
     name: str,
     batch_size: int = 800000,
+    split_name: str = "train",
     device: TorchDevice = "cpu",
 ):
     """Generate a dataset of pairs of graphs with WL scores.
@@ -500,6 +501,8 @@ def generate_gi_dataset(
         dataset is saved, under `pvg.constants.GI_DATA_DIR`.
     batch_size : int, default=1000000
         The batch size to use when generating the graphs.
+    split_name : str, default="train"
+        The name of the split to save the dataset as.
     device : TorchDevice, default="cpu"
         The device to use for the computation.
     """
@@ -551,7 +554,7 @@ def generate_gi_dataset(
         sizes_a=sizes,
         sizes_b=sizes,
     )
-    data_dir = os.path.join(GI_DATA_DIR, name, "raw")
+    data_dir = os.path.join(GI_DATA_DIR, name, "raw", split_name)
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     dataset_filename = os.path.join(data_dir, "data.pt")
     torch.save(data, dataset_filename)

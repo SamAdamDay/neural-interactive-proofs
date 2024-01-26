@@ -1,0 +1,18 @@
+"""All components for the image classification task."""
+
+from .data import (
+    IMAGE_DATASETS,
+    TorchVisionDatasetProperties,
+    ImageClassificationDataset,
+)
+from .agents import (
+    ImageClassificationAgentPart,
+    ImageClassificationAgentBody,
+    ImageClassificationAgentPolicyHead,
+    ImageClassificationAgentValueHead,
+    ImageClassificationSoloAgentHead,
+)
+
+from .environment import ImageClassificationEnvironment
+from .scenario_instance import ImageClassificationScenarioInstance
+from .run_preparer import ImageClassificationRunPreparer

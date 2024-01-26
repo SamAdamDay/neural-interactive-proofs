@@ -29,5 +29,8 @@ from .agents import (
     GraphIsomorphismAgentPolicyHead,
     GraphIsomorphismAgentValueHead,
     GraphIsomorphismSoloAgentHead,
+    GraphIsomorphismAgentHooks,
 )
 from .scenario_instance import GraphIsomorphismScenarioInstance
+from .rollout_samples import GraphIsomorphismRolloutSamples
+from .run_preparer import GraphIsomorphismRunPreparer

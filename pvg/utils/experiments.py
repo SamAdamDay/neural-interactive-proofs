@@ -20,15 +20,27 @@ import os
 from abc import ABC, abstractmethod
 import logging
 from functools import partial
+import multiprocessing
 
 from sklearn.model_selection import ParameterGrid
 
 import torch
 
+import wandb
+
+from wandb import AlertLevel as WandbAlertLevel
+import wandb
+
+from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
+from tqdm_multiprocess.std import init_worker
+
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
+
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 
 # Hack to be able to pickle the command arguments
@@ -81,6 +93,23 @@ class MultiLineFormatter(logging.Formatter):
         return head + "".join(indent + line for line in trailing)
 
 
+class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
+    """A TqdmMultiProcessPool that allows setting maxtasksperchild"""
+
+    def __init__(self, process_count, max_tasks_per_child=None):
+        self.mp_manager = multiprocessing.Manager()
+        self.logging_queue = self.mp_manager.Queue()
+        self.tqdm_queue = self.mp_manager.Queue()
+        self.global_tqdm_queue = self.mp_manager.Queue()
+        self.process_count = process_count
+        worker_init_function = partial(init_worker, self.logging_queue)
+        self.mp_pool = multiprocessing.Pool(
+            self.process_count,
+            worker_init_function,
+            maxtasksperchild=max_tasks_per_child,
+        )
+
+
 class HyperparameterExperiment(ABC):
     """A base class to run an experiment over a grid of hyperparameters.
 
@@ -95,6 +124,7 @@ class HyperparameterExperiment(ABC):
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         arg_parser_description: str = "Run hyperparameter experiments",
     ):
         if run_id_fn is None:
@@ -106,6 +136,7 @@ class HyperparameterExperiment(ABC):
         self.experiment_fn = experiment_fn
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
+        self.run_preparer_fn = run_preparer_fn
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -122,6 +153,50 @@ class HyperparameterExperiment(ABC):
             "--verbose",
             help="Print additional info messages",
             action="store_true",
+        )
+
+        # Add parser arguments for W&B
+        self.parser.add_argument(
+            "--run-infix",
+            type=str,
+            help="The string to add in the middle of the run ID",
+            default="a",
+        )
+        self.parser.add_argument(
+            "--use-wandb",
+            action="store_true",
+            help="Whether to use W&B to log the experiment",
+        )
+        self.parser.add_argument(
+            "--wandb-project",
+            type=str,
+            help="The name of the W&B project to use",
+            default=WANDB_PROJECT,
+        )
+        self.parser.add_argument(
+            "--wandb-entity",
+            type=str,
+            help="The name of the W&B entity to use",
+            default=WANDB_ENTITY,
+        )
+        self.parser.add_argument(
+            "--tag",
+            type=str,
+            default="",
+            help="An optional tag for the W&B run",
+        )
+
+        # Other experiment settings
+        self.parser.add_argument(
+            "--gpu-num",
+            type=int,
+            help="The (0-based) number of the GPU to use",
+            default=0,
+        )
+        self.parser.add_argument(
+            "--ignore-cache",
+            action="store_true",
+            help="Ignore the dataset and model cache and rebuild from scratch.",
         )
 
         # Create a logging formatter
@@ -154,6 +229,18 @@ class HyperparameterExperiment(ABC):
 
         # Run the experiment
         self._run(cmd_args, base_logger)
+
+        # Send a W&B alert to say the experiment is finished
+        if cmd_args.use_wandb:
+            plain_run_id = self.run_id_fn(9999, cmd_args)
+            wandb.alert(
+                title=f"{plain_run_id} finished",
+                text=(
+                    f"This hyperparameter experiment for {self.experiment_name}"
+                    f" has finished."
+                ),
+                level=WandbAlertLevel.INFO,
+            )
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
@@ -191,6 +278,12 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
+    run_preparer_fn : Callable[[dict, Namespace], None], optional
+        A function that takes a single hyperparameter combination and prepares the run
+        for it. This is optional. It should take the form:
+            run_preparer_fn(combo, cmd_args)
+        where `combo` is a single combination of hyperparameters and `cmd_args` is the
+        command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
     output_width : int, default=70
@@ -204,6 +297,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter], None
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         experiment_name: str = "EXPERIMENT",
         output_width: int = 70,
     ):
@@ -212,6 +306,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
+            run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments sequentially",
         )
 
@@ -296,6 +391,11 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         )
         combinations = list(combinations)[cmd_args.num_skip :]
 
+        # Prepare the runs
+        if self.run_preparer_fn is not None:
+            for i, combo in combinations:
+                self.run_preparer_fn(combo, cmd_args)
+
         # Keep track of the results of the runs
         run_results = []
         for combo_num in range(len(combinations)):
@@ -363,8 +463,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
+    run_preparer_fn : Callable[[dict, Namespace], None], optional
+        A function that takes a single hyperparameter combination and prepares the run
+        for it. This is optional. It should take the form:
+            run_preparer_fn(combo, cmd_args)
+        where `combo` is a single combination of hyperparameters and `cmd_args` is the
+        command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    default_num_workers : int, default=1
+        The default number of workers to use for multiprocessing.
     """
 
     def __init__(
@@ -374,13 +482,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter], None
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
         experiment_name: str = "EXPERIMENT",
+        default_num_workers: int = 1,
     ):
         super().__init__(
             param_grid=param_grid,
             experiment_fn=experiment_fn,
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
+            run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments in parallel",
         )
 
@@ -392,8 +503,22 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         self.parser.add_argument(
             "--num-workers",
             type=int,
-            default=1,
+            default=default_num_workers,
             help="The number of workers to use for multiprocessing",
+        )
+        self.parser.add_argument(
+            "--max-tasks-per-child",
+            type=int,
+            default=1,
+            help=(
+                "The maximum number of tasks each worker can run before being replaced"
+            ),
+        )
+        self.parser.add_argument(
+            "--num-skip",
+            type=int,
+            default=0,
+            help="The number of initial tasks to skip. Useful to resume an experiment",
         )
 
     def _task_fn(
@@ -405,7 +530,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         tqdm_func: Callable,
         global_tqdm: tqdm,
     ) -> bool:
-        info_prefix = f"[{combo_index}/{len(combinations)}] "
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
@@ -446,14 +571,22 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
 
+        # Prepare the runs
+        if self.run_preparer_fn is not None:
+            for combo in combinations:
+                self.run_preparer_fn(combo, cmd_args)
+
         # Create a list of tasks
         tasks = [
             (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
             for combo_index in range(len(combinations))
         ]
+        tasks = tasks[cmd_args.num_skip :]
 
         # Create a pool of workers
-        pool = TqdmMultiProcessPool(cmd_args.num_workers)
+        pool = TqdmMultiProcessPoolMaxTasks(
+            cmd_args.num_workers, max_tasks_per_child=cmd_args.max_tasks_per_child
+        )
 
         with tqdm(total=len(combinations), dynamic_ncols=True) as global_progress:
             global_progress.set_description("Total progress")

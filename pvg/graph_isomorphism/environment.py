@@ -18,9 +18,7 @@ from torchrl.data.tensor_specs import (
 from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import Environment
-from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 from pvg.utils.types import TorchDevice
-from pvg.constants import VERIFIER_AGENT_NUM, PROVER_AGENT_NUM
 
 
 class AdjacencyMatrixBox(Box):
@@ -188,17 +186,20 @@ class GraphIsomorphismEnvironment(Environment):
         The device on which the environment should be stored.
     """
 
-    _dataset_class = GraphIsomorphismDataset
     _int_dtype: torch.dtype = torch.int32
+    _max_num_nodes: Optional[int] = None
 
     @property
     def max_num_nodes(self) -> int:
-        return self.dataset["x"].shape[-2]
+        if self._max_num_nodes is None:
+            self._max_num_nodes = self.dataset["x"].shape[-2]
+        return self._max_num_nodes
 
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
 
-        Agents see the adjacency matrix and the messages sent so far. The "message" field contains the most recent message.
+        Agents see the adjacency matrix and the messages sent so far. The "message"
+        field contains the most recent message.
 
         Returns
         -------
@@ -238,7 +239,7 @@ class GraphIsomorphismEnvironment(Environment):
             round=DiscreteTensorSpec(
                 self.params.max_message_rounds,
                 shape=(self.num_envs,),
-                dtype=self._int_dtype,
+                dtype=torch.long,
             ),
             shape=(self.num_envs,),
         )
@@ -250,7 +251,7 @@ class GraphIsomorphismEnvironment(Environment):
         node and a decision: reject, accept or continue (represented as 0, 1 or 2). The
         node is is a number between 0 and 2 * max_num_nodes - 1. If it is less than
         max_num_nodes, it is a node in the first graph, otherwise it is a node in the
-        second graph. The verifier is agent 0 and the prover is agent 1.
+        second graph.
 
         Returns
         -------
@@ -262,7 +263,7 @@ class GraphIsomorphismEnvironment(Environment):
                 node_selected=DiscreteTensorSpec(
                     2 * self.max_num_nodes,
                     shape=(self.num_envs, 2),
-                    dtype=self._int_dtype,
+                    dtype=torch.long,
                 ),
                 decision=DiscreteTensorSpec(
                     3,
@@ -285,12 +286,10 @@ class GraphIsomorphismEnvironment(Environment):
             "agents", "node_selected"
         ]
         decision: Int[Tensor, "batch agent"] = tensordict["agents", "decision"]
-        done: Bool[Tensor, "batch"] = tensordict["done"]
+        done: Int[Tensor, "batch"] = tensordict["done"]
 
-        # Compute index of the agent whose turn it is. The prover goes first.
-        agent_index: Int[Tensor, "batch"] = round % 2
-        if PROVER_AGENT_NUM == 1:
-            agent_index = 1 - agent_index
+        # Compute index of the agent whose turn it is.
+        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
 
         # Determine which graph contains the selected node and which node it is there
         # (batch agent)
@@ -314,31 +313,42 @@ class GraphIsomorphismEnvironment(Environment):
         ].long()
 
         # If the verifier has made a guess, compute the reward and terminate the episode
-        verifier_decision_made = (agent_index == VERIFIER_AGENT_NUM) & (
-            decision[:, VERIFIER_AGENT_NUM] != 2
+        verifier_agent_num = self.agent_names.index("verifier")
+        verifier_decision_made = (agent_index == verifier_agent_num) & (
+            decision[:, verifier_agent_num] != 2
+        )
+        verifier_decision_made = verifier_decision_made & (
+            round >= self.params.min_message_rounds - 1
         )
         done = done | verifier_decision_made
-        reward_verifier = (
-            verifier_decision_made & (decision[:, VERIFIER_AGENT_NUM] == y.squeeze())
+        reward: dict[str, int] = dict()
+        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
+        ] = self.params.verifier_reward
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
+        ] = self.params.verifier_incorrect_penalty
+        reward["prover"] = (
+            verifier_decision_made & (decision[:, verifier_agent_num] == 1)
         ).float()
-        reward_verifier = reward_verifier * self.params.verifier_reward
-        reward_prover = (
-            verifier_decision_made & (decision[:, VERIFIER_AGENT_NUM] == 1)
-        ).float()
-        reward_prover = reward_prover * self.params.prover_reward
+        reward["prover"] = reward["prover"] * self.params.prover_reward
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         done = done | (round >= self.params.max_message_rounds - 1)
-        reward_verifier[
+        reward["verifier"][
             (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
         ] = self.params.verifier_terminated_penalty
 
+        # If the verifier has not made a guess and it's their turn, given them a small
+        # reward for continuing
+        reward["verifier"][
+            (agent_index == verifier_agent_num) & ~done
+        ] = self.params.verifier_no_guess_reward
+
         # Stack the rewards for the two agents
-        if PROVER_AGENT_NUM == 1:
-            reward = torch.stack([reward_verifier, reward_prover], dim=-1)
-        else:
-            reward = torch.stack([reward_prover, reward_verifier], dim=-1)
+        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
 
         # Put everything together
         next = TensorDict(

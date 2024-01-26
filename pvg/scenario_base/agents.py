@@ -10,17 +10,48 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from functools import partial
 
 import torch
+from torch import Tensor
+from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
-import dacite
-
 from pvg.parameters import Parameters, TrainerType, ScenarioType
 from pvg.utils.types import TorchDevice
+
+
+@dataclass
+class AgentHooks:
+    """Holder for hooks to run at various points in the agent forward pass."""
+
+    @classmethod
+    def create_recorder_hooks(cls, storage: dict | TensorDict) -> "AgentHooks":
+        """Create hooks to record the agent's output.
+
+        Parameters
+        ----------
+        storage : dict | TensorDict
+            The dictionary to store the agent's output in.
+
+        Returns
+        -------
+        hooks : AgentHooks
+            The hooks to record the agent's output.
+        """
+
+        def recorder_hook(name: str, storage: dict | TensorDict, output: Tensor):
+            storage[name] = output
+
+        cls_args = {
+            field.name: partial(recorder_hook, field.name, storage)
+            for field in fields(cls)
+        }
+
+        return cls(**cls_args)
 
 
 class AgentPart(TensorDictModuleBase, ABC):
@@ -47,40 +78,56 @@ class AgentPart(TensorDictModuleBase, ABC):
         pass
 
 
-class AgentBody(AgentPart, ABC):
-    """Base class for all agent bodies, which compute representations for heads."""
+class DummyAgentPartMixin(AgentPart, ABC):
+    """A mixin for agent parts which are dummy (e.g. random or constant).
 
-    pass
+    Adds a dummy parameter to the agent part, so that PyTorch can calculate gradients
+    and so that tensordict can determine the device.
+    """
+
+    def __init__(self, params: Parameters, device: TorchDevice | None = None):
+        super().__init__(params, device)
+        self.dummy_parameter = TorchParameter(torch.tensor(0.0, device=self.device))
+
+    def to(self, device: TorchDevice):
+        """Move the agent to the given device."""
+        self.device = device
+        self.dummy_parameter = self.dummy_parameter.to(device)
+
+
+class AgentBody(AgentPart, ABC):
+    """Base class for all agent bodies, which compute representations for heads.
+
+    Representations should have dimension `params.d_representation`.
+    """
+
+
+class DummyAgentBody(DummyAgentPartMixin, AgentBody, ABC):
+    """A dummy agent body which does nothing."""
 
 
 class AgentHead(AgentPart, ABC):
     """Base class for all agent heads."""
 
-    pass
-
 
 class AgentPolicyHead(AgentHead, ABC):
     """Base class for all agent policy heads."""
 
-    pass
+
+class RandomAgentPolicyHead(DummyAgentPartMixin, AgentPolicyHead, ABC):
+    """A policy head which samples actions randomly."""
 
 
 class AgentValueHead(AgentHead, ABC):
     """Base class for all agent value heads, to the value of a state."""
 
-    pass
 
-
-class AgentCriticHead(AgentHead, ABC):
-    """Base class for all agent critic heads, to the value of a state-action pair."""
-
-    pass
+class ConstantAgentValueHead(DummyAgentPartMixin, AgentValueHead, ABC):
+    """A value head which returns a constant value."""
 
 
 class SoloAgentHead(AgentHead, ABC):
     """Base class for all solo agent heads, which attempt the task on their own."""
-
-    pass
 
 
 class CombinedBody(TensorDictModuleBase, ABC):
@@ -191,7 +238,6 @@ class CombinedValueHead(TensorDictModuleBase, ABC):
         value_output : TensorDict
             The output of the combined value head.
         """
-        pass
 
 
 @dataclass
@@ -201,12 +247,7 @@ class Agent:
     body: AgentBody
     policy_head: Optional[AgentPolicyHead] = None
     value_head: Optional[AgentValueHead] = None
-    critic_head: Optional[AgentCriticHead] = None
     solo_head: Optional[SoloAgentHead] = None
-
-    @classmethod
-    def from_dict(cls, data):
-        return dacite.from_dict(data_class=cls, data=data)
 
     def __post_init__(self):
         if self.policy_head is None and self.solo_head is None:
@@ -214,10 +255,5 @@ class Agent:
                 "An agent must have either a policy head or a solo head, or both."
             )
 
-        if self.policy_head is not None and (
-            self.value_head is None and self.critic_head is None
-        ):
-            raise ValueError(
-                "An agent with a policy head must have either a value head or a critic "
-                "head, or both."
-            )
+        if self.policy_head is not None and self.value_head is None:
+            raise ValueError("An agent with a policy head must have a value head")

@@ -13,7 +13,17 @@ from pvg.constants import GI_DATA_DIR
 
 
 class GraphIsomorphismDataset(Dataset):
-    """A dataset for the graph isomorphism experiments."""
+    """A dataset for the graph isomorphism experiments.
+
+    Uses the a pre-generated set of graphs.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters for the experiment.
+    settings : ExperimentSettings
+        The settings for the experiment.
+    """
 
     adjacency_dtype = torch.int32
     x_dtype = torch.float32
@@ -22,15 +32,18 @@ class GraphIsomorphismDataset(Dataset):
     @property
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        return os.path.join(GI_DATA_DIR, self.params.dataset, "raw")
+        sub_dir = "train" if self.train else "test"
+        return os.path.join(GI_DATA_DIR, self.params.dataset, "raw", sub_dir)
 
     @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
+        sub_dir = "train" if self.train else "test"
         return os.path.join(
             GI_DATA_DIR,
             self.params.dataset,
             f"processed_{self.params.max_message_rounds}",
+            sub_dir,
         )
 
     def _build_tensor_dict(self) -> TensorDict:

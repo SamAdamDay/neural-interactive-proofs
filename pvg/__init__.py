@@ -3,12 +3,17 @@ from .parameters import (
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
+    ImageClassificationAgentParameters,
     SoloAgentParameters,
     PpoParameters,
     SpgParameters,
     SpgVariant,
+    ImageClassificationParameters,
+    DatasetParameters,
     ScenarioType,
     TrainerType,
+    ActivationType,
+    BinarificationMethodType,
 )
 from .experiment_settings import ExperimentSettings
-from .run import run_experiment
+from .run import run_experiment, prepare_experiment

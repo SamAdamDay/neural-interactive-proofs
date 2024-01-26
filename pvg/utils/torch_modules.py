@@ -1,6 +1,7 @@
 """Handy PyTorch modules."""
 
 from typing import Callable, Optional, Iterable
+from abc import abstractmethod
 
 import torch
 from torch import Tensor
@@ -13,6 +14,87 @@ from tensordict.utils import NestedKey
 import einops
 
 from jaxtyping import Float, Bool
+
+
+ACTIVATION_CLASSES = dict(
+    relu=nn.ReLU,
+    tanh=nn.Tanh,
+    sigmoid=nn.Sigmoid,
+)
+
+
+class SimulateBatchDimsMixin:
+    """A mixin for simulating multiple batch dimensions.
+
+    Used for modules that don't support multiple batch dimensions, but can be simulated
+    by flattening the batch dimensions and then unflattening them after applying the
+    module.
+
+    Classes that use this mixin should implement the `feature_dims` property.
+    """
+
+    @property
+    @abstractmethod
+    def feature_dims(self) -> int:
+        """The number of non-batch dimensions."""
+        pass
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Get the shape of the batch dims
+        batch_shape = x.shape[: -self.feature_dims]
+
+        # Flatten the batch dims
+        x = x.reshape(-1, *x.shape[-self.feature_dims :])
+
+        # Apply the batch normalization
+        x = super().forward(x)
+
+        # Reshape the output to have the same shape as the input
+        return x.reshape(*batch_shape, *x.shape[-self.feature_dims :])
+
+
+class BatchNorm1dSimulateBatchDims(SimulateBatchDimsMixin, nn.BatchNorm1d):
+    """Batch normalization layer with arbitrary batch dimensions.
+
+    See `torch.nn.BatchNorm1d` for documentation.
+
+    Assumes an input of shape (... features).
+    """
+
+    feature_dims = 1
+
+
+class UpsampleSimulateBatchDims(SimulateBatchDimsMixin, nn.Upsample):
+    """Upsample layer with arbitrary batch dimensions.
+
+    See `torch.nn.Upsample` for documentation.
+
+    Assumes an input of shape (... channels height width).
+    """
+
+    feature_dims = 3
+
+
+class Conv2dSimulateBatchDims(SimulateBatchDimsMixin, nn.Conv2d):
+    """2D convolutional layer with arbitrary batch dimensions.
+
+    See `torch.nn.Conv2d` for documentation.
+
+    Assumes an input of shape (... channels height width).
+    """
+
+    feature_dims = 3
+
+
+class MaxPool2dSimulateBatchDims(SimulateBatchDimsMixin, nn.MaxPool2d):
+    """2D max pool layer with arbitrary batch dimensions.
+
+    See `torch.nn.MaxPool2d` for documentation.
+
+    Assumes an input of shape (... channels height width).
+    """
+
+    feature_dims = 3
 
 
 class GlobalMaxPool(nn.Module):
@@ -287,24 +369,126 @@ class Squeeze(nn.Module):
         return x.squeeze(self.dim)
 
 
-class BatchNorm1dBatchDims(nn.BatchNorm1d):
-    """Batch normalization layer with arbitrary batch dimensions.
+class TensorDictCat(TensorDictModuleBase):
+    """Concatenate the keys of a TensorDict.
 
-    See `torch.nn.BatchNorm1d` for documentation.
+    Parameters
+    ----------
+    in_keys : NestedKey | Iterable[NestedKey]
+        The keys to concatenate.
+    out_key : NestedKey
+        The key of the concatenated tensor.
+    dim : int, default=0
+        The dimension to concatenate over.
     """
 
+    def __init__(
+        self, in_keys: NestedKey | Iterable[NestedKey], out_key: NestedKey, dim=0
+    ):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = (out_key,)
+        self.dim = dim
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(
+            {
+                self.out_keys[0]: torch.cat(
+                    [tensordict[key] for key in self.in_keys], dim=self.dim
+                )
+            }
+        )
+
+
+class ParallelTensorDictModule(TensorDictModuleBase):
+    """Apply a module to each key of a TensorDict.
+
+    Parameters
+    ----------
+    module : nn.Module
+        The module to apply.
+    in_keys : NestedKey | Iterable[NestedKey]
+        The keys to apply the module to.
+    out_keys : NestedKey | Iterable[NestedKey]
+        The keys to store the output in.
+    """
+
+    def __init__(
+        self,
+        module: nn.Module,
+        in_keys: NestedKey | Iterable[NestedKey],
+        out_keys: NestedKey | Iterable[NestedKey],
+    ):
+        super().__init__()
+        self.module = module
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        if len(list(self.in_keys)) != len(list(self.out_keys)):
+            raise ValueError(
+                f"The number of input keys must be the same as the number of output "
+                f"keys. Got {len(list(self.in_keys))} input keys and "
+                f"{len(list(self.out_keys))} output keys."
+            )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(
+            {
+                out_key: self.module(tensordict[in_key])
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+            }
+        )
+
+
+class TensorDictCloneKeys(TensorDictModuleBase):
+    """Clone the keys of a TensorDict.
+
+    Parameters
+    ----------
+    in_keys : NestedKey | Iterable[NestedKey]
+        The keys to clone.
+    out_keys : NestedKey | Iterable[NestedKey]
+        The keys to store the cloned values in.
+    """
+
+    def __init__(
+        self,
+        in_keys: NestedKey | Iterable[NestedKey],
+        out_keys: NestedKey | Iterable[NestedKey],
+    ):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        if len(list(self.in_keys)) != len(list(self.out_keys)):
+            raise ValueError(
+                f"The number of input keys must be the same as the number of output "
+                f"keys. Got {len(list(self.in_keys))} input keys and "
+                f"{len(list(self.out_keys))} output keys."
+            )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(
+            {
+                out_key: tensordict[in_key]
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+            }
+        )
+
+
+class OneHot(nn.Module):
+    """One-hot encode a tensor.
+
+    Parameters
+    ----------
+    num_classes : int, default=-1
+        The number of classes to one-hot encode.
+    """
+
+    def __init__(self, num_classes: int = -1):
+        super().__init__()
+        self.num_classes = num_classes
+
     def forward(self, x: Tensor) -> Tensor:
-        # Get the shape of the batch dims
-        batch_shape = x.shape[:-1]
-
-        # Flatten the batch dims
-        x = x.reshape(-1, x.shape[-1])
-
-        # Apply the batch normalization
-        x = super().forward(x)
-
-        # Reshape the output to have the same shape as the input
-        return x.reshape(*batch_shape, x.shape[-1])
+        return torch.nn.functional.one_hot(x, self.num_classes).float()
 
 
 class Print(nn.Module):
@@ -341,3 +525,23 @@ class Print(nn.Module):
         else:
             print(x.shape)
         return x
+
+
+class TensorDictPrint(TensorDictModuleBase):
+    """Print a TensorDict."""
+
+    def __init__(
+        self,
+        keys: NestedKey | Iterable[NestedKey],
+    ):
+        super().__init__()
+        if isinstance(keys, str) or (
+            isinstance(keys, tuple) and isinstance(keys[0], str)
+        ):
+            keys = (keys,)
+        self.in_keys = keys
+        self.out_keys = keys
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        print(tensordict)
+        return tensordict

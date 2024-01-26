@@ -137,6 +137,11 @@ dmypy.json
 # Swp files
 *.swp
 
+.DS_Store
+
 # Processed data files
 data/**/processed*
-.DS_Store
+data/image_classification
+
+# Model cache
+model_cache

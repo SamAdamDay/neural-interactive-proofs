@@ -14,6 +14,7 @@ from torch.optim import Adam, Optimizer
 from tensordict import TensorDict
 
 from pvg.trainers.base import Trainer
+from pvg.parameters import AgentsParameters
 
 
 class SoloAgentTrainer(Trainer):
@@ -29,8 +30,15 @@ class SoloAgentTrainer(Trainer):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
-    def train(self):
-        """Train the agents."""
+    def train(self, as_pretraining: bool = False):
+        """Train the agents.
+
+        Parameters
+        ----------
+        as_pretraining : bool, default=False
+            Whether we're training the agents as a pretraining step. This affects the
+            output and what we log to W&B.
+        """
 
         torch.manual_seed(self.params.seed)
         np.random.seed(self.params.seed)
@@ -43,24 +51,38 @@ class SoloAgentTrainer(Trainer):
 
         logger.info("Loading dataset and agents...")
 
-        dataset = self.scenario_instance.dataset
+        dataset = self.scenario_instance.train_dataset
         train_dataset, test_dataset = random_split(
             dataset,
-            (1 - self.params.solo_agent.test_size, self.params.solo_agent.test_size),
+            (1 - self.params.test_size, self.params.test_size),
         )
 
-        # Load the agents
-        agents = self.scenario_instance.agents
+        # Select the non-random agents
+        agents_params = AgentsParameters(
+            [
+                (name, params)
+                for name, params in self.params.agents.items()
+                if not params.is_random
+            ]
+        )
+        agents = {
+            name: agent
+            for name, agent in self.scenario_instance.agents.items()
+            if name in agents_params
+        }
 
         # Create the optimizers, specifying the learning rates for the different parts of
         # the agent
         optimizers: dict[str, Optimizer] = {}
-        for agent_name in self.params.agents:
+        for agent_name, agent_params in agents_params.items():
+            if self.params.solo_agent.body_lr_factor is None:
+                body_lr_factor = agent_params.body_lr_factor
+            else:
+                body_lr_factor = self.params.solo_agent.body_lr_factor
             model_param_dict = [
                 {
                     "params": agents[agent_name].body.parameters(),
-                    "lr": self.params.solo_agent.learning_rate
-                    * self.params.solo_agent.body_lr_factor,
+                    "lr": self.params.solo_agent.learning_rate * body_lr_factor,
                 },
                 {
                     "params": agents[agent_name].solo_head.parameters(),
@@ -70,7 +92,7 @@ class SoloAgentTrainer(Trainer):
             optimizers[agent_name] = Adam(model_param_dict)
 
         # Create the data loaders
-        test_loader = self.scenario_instance.dataloader_class(
+        train_dataloader = self.scenario_instance.dataloader_class(
             train_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
@@ -82,15 +104,18 @@ class SoloAgentTrainer(Trainer):
             shuffle=False,
         )
 
-        # Train the agents
+        # Create a progress bar
+        desc = "Pretraining" if as_pretraining else "Training"
         pbar = self.settings.tqdm_func(
-            total=self.params.solo_agent.num_epochs, desc="Training"
+            total=self.params.solo_agent.num_epochs, desc=desc
         )
-        for epoch in range(self.params.solo_agent.num_epochs):
-            total_loss = {agent_name: 0 for agent_name in self.params.agents}
-            total_accuracy = {agent_name: 0 for agent_name in self.params.agents}
 
-            for data in test_loader:
+        # Train the agents
+        for epoch in range(self.params.solo_agent.num_epochs):
+            total_loss = {agent_name: 0 for agent_name in agents_params}
+            total_accuracy = {agent_name: 0 for agent_name in agents_params}
+
+            for data in train_dataloader:
                 data: TensorDict
                 data = data.to(self.settings.device)
 
@@ -104,7 +129,7 @@ class SoloAgentTrainer(Trainer):
                 )
 
                 # Train the agents on the batch
-                for agent_name in self.params.agents:
+                for agent_name in agents_params:
                     agents[agent_name].body.train()
                     agents[agent_name].solo_head.train()
                     optimizers[agent_name].zero_grad()
@@ -130,11 +155,11 @@ class SoloAgentTrainer(Trainer):
                     break
 
             # Log to W&B if using
-            if self.settings.wandb_run is not None:
+            if self.settings.wandb_run is not None and not as_pretraining:
                 to_log = {}
-                for agent_name in self.params.agents:
-                    train_loss = total_loss[agent_name] / len(test_loader)
-                    train_accuracy = total_accuracy[agent_name] / len(test_loader)
+                for agent_name in agents_params:
+                    train_loss = total_loss[agent_name] / len(train_dataloader)
+                    train_accuracy = total_accuracy[agent_name] / len(train_dataloader)
                     to_log[f"{agent_name}.train_loss"] = train_loss
                     to_log[f"{agent_name}.train_accuracy"] = train_accuracy
                 self.settings.wandb_run.log(to_log, step=epoch)
@@ -149,8 +174,8 @@ class SoloAgentTrainer(Trainer):
         # Close the progress bar
         pbar.close()
 
-        total_loss = {agent_name: 0 for agent_name in self.params.agents}
-        total_accuracy = {agent_name: 0 for agent_name in self.params.agents}
+        total_loss = {agent_name: 0 for agent_name in agents_params}
+        total_accuracy = {agent_name: 0 for agent_name in agents_params}
 
         # Test the agents
         logger.info("Testing...")
@@ -166,7 +191,7 @@ class SoloAgentTrainer(Trainer):
                 data.batch_size, device=self.settings.device, dtype=torch.bool
             )
 
-            for agent_name in self.params.agents:
+            for agent_name in agents_params:
                 agents[agent_name].body.eval()
                 agents[agent_name].solo_head.eval()
 
@@ -186,10 +211,11 @@ class SoloAgentTrainer(Trainer):
 
         # Record the final results with W&B if using
         if self.settings.wandb_run is not None:
+            prefix = "pretrain_" if as_pretraining else ""
             to_log = {}
-            for agent_name in self.params.agents:
+            for agent_name in agents_params:
                 test_loss = total_loss[agent_name] / len(test_loader)
                 test_accuracy = total_accuracy[agent_name] / len(test_loader)
-                to_log[f"{agent_name}.test_loss"] = test_loss
-                to_log[f"{agent_name}.test_accuracy"] = test_accuracy
+                to_log[f"{agent_name}.{prefix}test_loss"] = test_loss
+                to_log[f"{agent_name}.{prefix}test_accuracy"] = test_accuracy
             self.settings.wandb_run.log(to_log)

@@ -9,23 +9,28 @@ Contains base classes for:
 - Building agents
 - Holding the components of a scenario
 
-Scenarios should subclass the `AgentsBuilder` class, and its `build` factory class
+Scenarios should subclass the `ScenarioInstance` class, and its `build` factory class
 method is used to build the agents using the given parameters.
 """
 
 from .data import Dataset, DataLoader
 from .environment import Environment
 from .agents import (
+    AgentHooks,
     AgentPart,
     AgentBody,
     AgentHead,
+    DummyAgentBody,
     AgentPolicyHead,
-    AgentCriticHead,
+    RandomAgentPolicyHead,
     AgentValueHead,
+    ConstantAgentValueHead,
     SoloAgentHead,
-    Agent,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
+    Agent,
 )
 from .scenario_instance import ScenarioInstance
+from .rollout_samples import RolloutSamples, RolloutSampler
+from pvg.scenario_base.run_preparer import RunPreparer
