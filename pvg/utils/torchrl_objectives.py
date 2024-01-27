@@ -215,8 +215,8 @@ class PPOLossMultipleActions(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean(dim=0).item()
-            scale = advantage.std(dim=0).clamp_min(1e-6).item()
+            loc = advantage.mean(dim=0)
+            scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         _, log_weight, dist = self._log_weight(tensordict)
@@ -291,6 +291,8 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         stackelberg_sequence: tuple[tuple[int]],
         names: list[str],
         ihvp: dict,
+        body_lr_factors: list[float],
+        lr: float,
         clip_epsilon,
         entropy_coef,
         normalize_advantage,
@@ -314,6 +316,8 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             for i in self.agent_indices
         }
         self.ihvp = ihvp
+        self.body_lr_factors = body_lr_factors
+        self.lr = lr
         self.names = names
 
         try:
@@ -385,8 +389,8 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             advantage = tensordict.get(self.tensor_keys.advantage)
         # Normalise advantages per agent
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean(dim=0).item()
-            scale = advantage.std(dim=0).clamp_min(1e-6).item()
+            loc = advantage.mean(dim=0)
+            scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_prob, log_weight, dist = self._log_weight(tensordict)
@@ -448,9 +452,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
 
         return td_out
 
-    def compute_grads(
-        self, loss_vals: TensorDictBase
-    ):  # TODO add learning rates in (to gradient calculation and updates)
+    def compute_grads(self, loss_vals: TensorDictBase):
         """Compute and assign the gradients of the loss for each agent.
 
         Parameters
@@ -544,7 +546,22 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                 score_term = dot(multiplier, scores[j])
                 pg_term = dot(multiplier, objective_loss_grads[j][j])
                 for k in grad.keys():
-                    grad[k] += (score_term * p[0][k]) + (pg_term * p[1][k])
+                    # For LOLA and POLA we need to multiply the gradients by the
+                    # learning rate of the follower agent
+                    if (
+                        self.variant == SpgVariant.LOLA
+                        or self.variant == SpgVariant.POLA
+                    ):
+                        lr_coefficient = (
+                            self.body_lr_factors[j] * self.lr
+                            if k.startswith("actor_params.module_0")
+                            else self.lr
+                        )  # Different learning rate for body params
+                    else:
+                        lr_coefficient = 1.0
+                    grad[k] -= lr_coefficient * (score_term * p[0][k]) + (
+                        pg_term * p[1][k]
+                    )
 
             # All the gradient updates needed for agent i are stored in grad
             for param_name, param in self.named_parameters():

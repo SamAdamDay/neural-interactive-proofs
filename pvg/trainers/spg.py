@@ -138,9 +138,16 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 "rank": self.params.spg.ihvp_rank,
                 "rho": self.params.spg.ihvp_rho,
             },
+            body_lr_factors=[
+                agent_params.body_lr_factor
+                if self.params.ppo.body_lr_factor is None
+                else self.params.ppo.body_lr_factor
+                for _, agent_params in self.params.agents.items()
+            ],
+            lr=self.params.ppo.lr,
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
-            normalize_advantage=False,
+            normalize_advantage=True,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
