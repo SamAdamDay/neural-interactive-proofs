@@ -8,6 +8,7 @@ from .parameters import (
     CommonPpoParameters,
     SpgParameters,
     SpgVariant,
+    IhvpVariant,
     ImageClassificationParameters,
     DatasetParameters,
     ScenarioType,
