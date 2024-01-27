@@ -140,7 +140,6 @@ if __name__ == "__main__":
         run_id_fn=run_id_fn,
         run_preparer_fn=run_preparer_fn,
         experiment_name="TEST_SOLO_GI_AGENTS",
-        default_num_workers=4,
         **extra_args,
     )
     experiment.run()
