@@ -21,7 +21,6 @@ Examples
 import torch
 
 from .data import GraphIsomorphismDataset
-from .dataset_generation import generate_gi_dataset, GraphIsomorphicDatasetConfig
 from .environment import GraphIsomorphismEnvironment
 from .agents import (
     GraphIsomorphismAgentPart,
