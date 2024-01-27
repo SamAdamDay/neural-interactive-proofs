@@ -71,13 +71,13 @@ def nystrom(
     Returns: approximated implicit gradients
     """
 
+    device = f_params[0].device
+
     # Compute gradients
     f_grads = torch.autograd.grad(
         f_loss, f_params, retain_graph=True, create_graph=True
     )
-    indices = torch.randperm(
-        sum([p.numel() for p in f_params]), device=f_params[0].device
-    )[:rank]
+    indices = torch.randperm(sum([p.numel() for p in f_params]), device=device)[:rank]
     f_grads = torch.cat([g.reshape(-1) for g in f_grads])
 
     # Compute rank rows of the Hessian
@@ -101,7 +101,8 @@ def nystrom(
     m = c.take_along_dim(indices[None], dim=1)
     v = torch.cat([v.view(-1) for v in l_grads])
     x = 1 / rho * v - 1 / (rho**2) * c.t() @ torch.linalg.solve(
-        0.1 * rho * torch.eye(len(indices)) + m + 1 / rho * c @ c.t(), c @ v
+        0.1 * rho * torch.eye(len(indices), device=device) + m + 1 / rho * c @ c.t(),
+        c @ v,
     )  # We use a small extra identity matrix in case the matrix to be inversed is singular
 
     # Reformat (this is vector_to_params from https://github.com/moskomule/hypergrad/blob/main/hypergrad/utils.py)
