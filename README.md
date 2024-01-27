@@ -4,25 +4,32 @@
 
 1. Clone the repo
 2. Create a virtual environment
-3. Install prerequisites for [`primesieve`](https://pypi.org/project/primesieve/). On
-   Ubuntu/Debian this looks like:
-   ```
-   sudo apt install g++ python-dev-is-python3 libprimesieve-dev
-   ```
-4. Install the requirements (we use a nightly version of TorchRL, which requires a
+3. Install the requirements (we use a nightly version of TorchRL, which requires a
    nightly version of PyTorch):
 
-   ```
+   ```bash
    pip install wheel
    pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
    pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
    ```
 
-5. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
+4. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
    key](https://wandb.ai/settings#dangerzone))
-6. Install the `pvg` package locally in edit mode: `pip install -e .`
-7. (Optional, recommended) Install pre-commit, to auto-format with black before each
+5. Install the `pvg` package locally in edit mode: `pip install -e .`
+6. (Optional, recommended) Install pre-commit, to auto-format with black before each
    commit (see [below](#style-guide)): `pre-commit install`
+7. (Optional, only needed for dataset generation.) Install
+   [`primesieve`](https://pypi.org/project/primesieve/)
+    - Install the prerequisites. On Ubuntu/Debian this looks like:
+
+    ```bash
+    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
+    ```
+
+    - Install primesieve:
+   ```bash
+   pip install primesieve==2.3.2
+   ```
 
 
 ## Running an experiment
