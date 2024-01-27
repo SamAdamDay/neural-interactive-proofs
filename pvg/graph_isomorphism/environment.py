@@ -206,43 +206,46 @@ class GraphIsomorphismEnvironment(Environment):
         observation_spec : CompositeSpec
             The observation specification.
         """
-        return CompositeSpec(
-            adjacency=AdjacencyMatrixSpec(
+        base_observation_spec = super()._get_observation_spec()
+        base_observation_spec["adjacency"] = AdjacencyMatrixSpec(
+            self.max_num_nodes,
+            shape=(
+                self.num_envs,
+                2,
                 self.max_num_nodes,
-                shape=(self.num_envs, 2, self.max_num_nodes, self.max_num_nodes),
-                dtype=self._int_dtype,
-            ),
-            x=BinaryDiscreteTensorSpec(
-                self.params.max_message_rounds,
-                shape=(
-                    self.num_envs,
-                    2,
-                    self.max_num_nodes,
-                    self.params.max_message_rounds,
-                ),
-                dtype=torch.float,
-            ),
-            node_mask=BinaryDiscreteTensorSpec(
                 self.max_num_nodes,
-                shape=(
-                    self.num_envs,
-                    2,
-                    self.max_num_nodes,
-                ),
-                dtype=torch.bool,
             ),
-            message=DiscreteTensorSpec(
-                2 * self.max_num_nodes,
-                shape=(self.num_envs,),
-                dtype=torch.long,
-            ),
-            round=DiscreteTensorSpec(
-                self.params.max_message_rounds,
-                shape=(self.num_envs,),
-                dtype=torch.long,
-            ),
-            shape=(self.num_envs,),
+            dtype=self._int_dtype,
+            device=self.device,
         )
+        base_observation_spec["node_mask"] = BinaryDiscreteTensorSpec(
+            self.max_num_nodes,
+            shape=(
+                self.num_envs,
+                2,
+                self.max_num_nodes,
+            ),
+            dtype=torch.bool,
+            device=self.device,
+        )
+        base_observation_spec["x"] = BinaryDiscreteTensorSpec(
+            self.params.max_message_rounds,
+            shape=(
+                self.num_envs,
+                2,
+                self.max_num_nodes,
+                self.params.max_message_rounds,
+            ),
+            dtype=torch.float,
+            device=self.device,
+        )
+        base_observation_spec["message"] = DiscreteTensorSpec(
+            2 * self.max_num_nodes,
+            shape=(self.num_envs,),
+            dtype=torch.long,
+            device=self.device,
+        )
+        return base_observation_spec
 
     def _get_action_spec(self) -> CompositeSpec:
         """Get the specification of the agent actions.
@@ -258,22 +261,13 @@ class GraphIsomorphismEnvironment(Environment):
         action_spec : CompositeSpec
             The action specification.
         """
-        return CompositeSpec(
-            agents=CompositeSpec(
-                node_selected=DiscreteTensorSpec(
-                    2 * self.max_num_nodes,
-                    shape=(self.num_envs, 2),
-                    dtype=torch.long,
-                ),
-                decision=DiscreteTensorSpec(
-                    3,
-                    shape=(self.num_envs, 2),
-                    dtype=self._int_dtype,
-                ),
-                shape=(self.num_envs,),
-            ),
-            shape=(self.num_envs,),
+        base_action_spec = super()._get_action_spec()
+        base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
+            2 * self.max_num_nodes,
+            shape=(self.num_envs, 2),
+            dtype=torch.long,
         )
+        return base_action_spec
 
     def _compute_x_and_message(
         self,
@@ -363,5 +357,6 @@ class GraphIsomorphismEnvironment(Environment):
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0
         env_td["done"][mask] = False
+        env_td["decision_restriction"][mask] = 0
 
         return env_td

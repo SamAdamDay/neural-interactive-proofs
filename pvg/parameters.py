@@ -146,7 +146,7 @@ class InteractionProtocolType(StrEnum):
 
 
 DEFAULT_AGENT_NAMES = {
-    InteractionProtocolType.PVG: ("prover", "verifier"),
+    InteractionProtocolType.PVG: ("verifier", "prover"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
     InteractionProtocolType.DEBATE: ("prover1", "prover2", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover", "verifier"),

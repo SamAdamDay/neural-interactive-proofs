@@ -1180,12 +1180,12 @@ class ImageClassificationCombinedBody(CombinedBody):
         - "round" (...): The round number.
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
+        - "message" (...): The most recent message.
 
     Output:
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
-          latent_width d_representation): The output latent-pixel-level
-          representations.
-        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+          d_representation): The output latent-pixel-level representations.
+        - ("agents", "image_level_repr") (... agents d_representation): The output
           image-level representations.
 
     Parameters
@@ -1261,19 +1261,20 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     ------
     Input:
         - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
-          latent_width d_representation): The output latent-pixel-level representations.
-        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+          d_representation): The output latent-pixel-level representations.
+        - ("agents", "image_level_repr") (... agents d_representation): The output
           image-level representations.
+        - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "latent_pixel_selected_logits") (... num_agents
+        - ("agents", "latent_pixel_selected_logits") (... agents
           latent_height*latent_width): A logit for each latent pixel, indicating the
           probability that this latent pixel should be sent as a message to the
           verifier.
-        - ("agents", "decision_logits") (... num_agents 3): A logit for each of the
-          three options: guess a classification one way or the other, or continue
-          exchanging messages. Set to zeros when the decider is not present.
+        - ("agents", "decision_logits") (... agents 3): A logit for each of the three
+          options: guess a classification one way or the other, or continue exchanging
+          messages. Set to zeros when the decider is not present.
 
     Parameters
     ----------
@@ -1287,6 +1288,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         ("agents", "latent_pixel_level_repr"),
         ("agents", "image_level_repr"),
         "round",
+        "decision_restriction",
     )
     out_keys = (
         ("agents", "latent_pixel_selected_logits"),
@@ -1306,12 +1308,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         Parameters
         ----------
         tensordict : TensorDictBase
-            The input to the value heads. Should contain the keys:
-
-            - ("agents", "latent_pixel_level_repr"): The node-level representation from
-              the body.
-            - ("agents", "image_level_repr"): The node-level representation from the
-              body.
+            The input to the value heads.
 
         Returns
         -------
@@ -1347,6 +1344,11 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
             dim=-2,
         )
 
+        # Make sure the verifier only selects decisions which are allowed
+        decision_logits = self._restrict_decisions(
+            head_output["decision_restriction"], decision_logits
+        )
+
         return head_output.update(
             dict(
                 agents=TensorDict(
@@ -1367,14 +1369,13 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
     ------
     Input:
         - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... num_agents latent_height
-          latent_width d_representation): The output latent-pixel-level
-          representations.
-        - ("agents", "image_level_repr") (... num_agents d_representation): The output
+        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+          d_representation): The output latent-pixel-level representations.
+        - ("agents", "image_level_repr") (... agents d_representation): The output
           image-level representations.
 
     Output:
-        - ("agents", "value") (... num_agents): The estimated value for each batch item
+        - ("agents", "value") (... agents): The estimated value for each batch item
 
     Parameters
     ----------

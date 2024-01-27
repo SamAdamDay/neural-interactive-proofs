@@ -20,6 +20,10 @@ from torch.nn.parameter import Parameter as TorchParameter
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
+from einops import repeat
+
+from jaxtyping import Float, Int
+
 from pvg.parameters import Parameters, TrainerType, ScenarioType
 from pvg.utils.types import TorchDevice
 
@@ -202,6 +206,48 @@ class CombinedPolicyHead(TensorDictModuleBase, ABC):
             The output of the combined policy head.
         """
         pass
+
+    def _restrict_decisions(
+        self,
+        decision_restriction: Int[Tensor, "..."],
+        decision_logits: Float[Tensor, "... agents 3"],
+    ) -> TensorDictBase:
+        """Make sure the agent's decisions comply with the restrictions
+
+        Parameters
+        ----------
+        decision_restriction : Int[Tensor, "..."]
+            The restrictions on the agents' decisions. The possible values are:#
+
+                - 0: The verifier can decide anything.
+                - 1: The verifier can only decide to continue interacting.
+                - 2: The verifier can only make a guess.
+
+        decision_logits : Float[Tensor, "... agents 3"]
+            The logits for the agents' decisions.
+
+        Returns
+        -------
+        decision_logits : Float[Tensor, "... agents 3"]
+            The logits for the agents' decisions, with the restricted decisions set to
+            -1e9.
+        """
+
+        num_agents = len(self.params.agents)
+
+        no_guess_mask = decision_restriction == 1
+        no_guess_mask = repeat(no_guess_mask, f"... -> ... {num_agents} 3").clone()
+        no_guess_mask[..., :, 2] = False
+        decision_logits[no_guess_mask] = -1e9
+
+        no_continue_mask = decision_restriction == 2
+        no_continue_mask = repeat(
+            no_continue_mask, f"... -> ... {num_agents} 3"
+        ).clone()
+        no_continue_mask[..., :, :2] = False
+        decision_logits[no_continue_mask] = -1e9
+
+        return decision_logits
 
 
 class CombinedValueHead(TensorDictModuleBase, ABC):

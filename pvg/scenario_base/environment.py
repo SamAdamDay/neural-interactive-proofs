@@ -11,6 +11,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     BinaryDiscreteTensorSpec,
+    DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -86,23 +87,65 @@ class Environment(EnvBase, ABC):
     def _get_observation_spec(self) -> TensorSpec:
         """Get the specification of the agent observations.
 
+        The observation space has the following elements:
+
+        - `round`: The current round of the interaction.
+        - `decision_restriction`: The restriction on what the verifier can decide.
+            * 0: The verifier can decide anything.
+            * 1: The verifier can only decide to continue interacting.
+            * 2: The verifier can only make a guess.
+        - `x`: The message history.
+        - `message`: The next message.
+
+
+        Subclasses should call this method and add at least:
+
+        - `x`: The message history.
+        - `message`: The next message.
+
         Returns
         -------
         observation_spec : TensorSpec
             The observation specification.
         """
-        pass
+        return CompositeSpec(
+            round=DiscreteTensorSpec(
+                self.params.max_message_rounds,
+                shape=(self.num_envs,),
+                dtype=torch.long,
+            ),
+            decision_restriction=DiscreteTensorSpec(
+                3,
+                shape=(self.num_envs,),
+                dtype=self._int_dtype,
+            ),
+            shape=(self.num_envs,),
+            device=self.device,
+        )
 
     @abstractmethod
     def _get_action_spec(self) -> TensorSpec:
         """Get the specification of the agent actions.
+
+        Subclasses should call this method and add any additional action spaces.
 
         Returns
         -------
         action_spec : TensorSpec
             The action specification.
         """
-        pass
+        return CompositeSpec(
+            agents=CompositeSpec(
+                decision=DiscreteTensorSpec(
+                    3,
+                    shape=(self.num_envs, 2),
+                    dtype=self._int_dtype,
+                ),
+                shape=(self.num_envs,),
+            ),
+            shape=(self.num_envs,),
+            device=self.device,
+        )
 
     def _get_state_spec(self) -> TensorSpec:
         """Get the specification of the states space.
@@ -121,6 +164,7 @@ class Environment(EnvBase, ABC):
                 dtype=torch.long,
             ),
             shape=(self.num_envs,),
+            device=self.device,
         )
 
     def _get_reward_spec(self) -> TensorSpec:
@@ -137,6 +181,7 @@ class Environment(EnvBase, ABC):
                 shape=(self.num_envs,),
             ),
             shape=(self.num_envs,),
+            device=self.device,
         )
 
     def _get_done_spec(self) -> TensorSpec:
@@ -152,6 +197,7 @@ class Environment(EnvBase, ABC):
                 self.num_envs, shape=(self.num_envs,), dtype=torch.bool
             ),
             shape=(self.num_envs,),
+            device=self.device,
         )
 
     def _step(self, env_td: TensorDictBase) -> TensorDictBase:
@@ -179,14 +225,14 @@ class Environment(EnvBase, ABC):
 
         # The observations are passed through unchanged
         for key in self.observation_spec.keys():
-            if key not in ["x", "message", "round"]:
+            if key not in ["x", "message", "round", "decision_restriction"]:
                 next_td[key] = env_td[key]
 
         # Compute the message history and next message
         next_td = self._compute_x_and_message(env_td, next_td)
 
         # Compute the done signal and reward
-        next_td = self._compute_done_and_reward(env_td, next_td)
+        next_td = self._step_interaction_protocol(env_td, next_td)
 
         return next_td
 
@@ -214,12 +260,14 @@ class Environment(EnvBase, ABC):
             The updated 'next' tensordict.
         """
 
-    def _compute_done_and_reward(
+    def _step_interaction_protocol(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
     ) -> TensorDictBase:
-        """Compute the done signal and reward.
+        """Take a step in the interaction protocol.
+
+        Computes the done signal, reward and next decision restriction.
 
         Used in the `_step` method of the environment.
 
@@ -236,19 +284,19 @@ class Environment(EnvBase, ABC):
             The updated 'next' tensordict.
         """
         if self.params.interaction_protocol == InteractionProtocolType.PVG:
-            return self._compute_done_and_reward_pvg(env_td, next_td)
+            return self._step_pvg_protocol(env_td, next_td)
         else:
             raise NotImplementedError(
                 f"Interaction protocol {self.params.interaction_protocol} not "
                 "implemented."
             )
 
-    def _compute_done_and_reward_pvg(
+    def _step_pvg_protocol(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
     ) -> TensorDictBase:
-        """Compute the done signal and reward for the PVG interaction protocol.
+        """Take a step in the PVG interaction protocol.
 
         Parameters
         ----------
@@ -316,6 +364,7 @@ class Environment(EnvBase, ABC):
             ),
             batch_size=self.batch_size,
         )
+        next_td["decision_restriction"] = torch.zeros_like(done, dtype=self._int_dtype)
 
         return next_td
 
