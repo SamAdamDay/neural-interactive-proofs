@@ -19,7 +19,7 @@ from torchrl.envs import EnvBase
 from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import DataLoader, Dataset
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, InteractionProtocolType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
 
@@ -235,6 +235,35 @@ class Environment(EnvBase, ABC):
         next_td : TensorDictBase
             The updated 'next' tensordict.
         """
+        if self.params.interaction_protocol == InteractionProtocolType.PVG:
+            return self._compute_done_and_reward_pvg(env_td, next_td)
+        else:
+            raise NotImplementedError(
+                f"Interaction protocol {self.params.interaction_protocol} not "
+                "implemented."
+            )
+
+    def _compute_done_and_reward_pvg(
+        self,
+        env_td: TensorDictBase,
+        next_td: TensorDictBase,
+    ) -> TensorDictBase:
+        """Compute the done signal and reward for the PVG interaction protocol.
+
+        Parameters
+        ----------
+        env_td : TensorDictBase
+            The current observation and state.
+        next_td : TensorDictBase
+            The 'next' tensordict, to be updated with the done signal and reward.
+
+        Returns
+        -------
+        next_td : TensorDictBase
+            The updated 'next' tensordict.
+        """
+
+        protocol_params = self.params.pvg_protocol
 
         y: Int[Tensor, "batch 1"] = env_td["y"]
         round: Int[Tensor, "batch"] = env_td["round"]
@@ -254,27 +283,27 @@ class Environment(EnvBase, ABC):
         reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
         reward["verifier"][
             verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
-        ] = self.params.verifier_reward
+        ] = protocol_params.verifier_reward
         reward["verifier"][
             verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
-        ] = self.params.verifier_incorrect_penalty
+        ] = protocol_params.verifier_incorrect_penalty
         reward["prover"] = (
             verifier_decision_made & (decision[:, verifier_agent_num] == 1)
         ).float()
-        reward["prover"] = reward["prover"] * self.params.prover_reward
+        reward["prover"] = reward["prover"] * protocol_params.prover_reward
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         done = done | (round >= self.params.max_message_rounds - 1)
         reward["verifier"][
             (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
-        ] = self.params.verifier_terminated_penalty
+        ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
         # reward for continuing
         reward["verifier"][
             (agent_index == verifier_agent_num) & ~done
-        ] = self.params.verifier_no_guess_reward
+        ] = protocol_params.verifier_no_guess_reward
 
         # Stack the rewards for the two agents
         reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)

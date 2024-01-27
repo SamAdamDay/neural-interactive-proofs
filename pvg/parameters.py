@@ -50,7 +50,7 @@ Create a parameters object using a dictionary for the ppo parameters
 
 from dataclasses import dataclass, asdict, fields
 from abc import ABC
-from typing import Optional, ClassVar, OrderedDict
+from typing import Optional, ClassVar, OrderedDict, Iterable
 from enum import auto as enum_auto
 from textwrap import indent
 from itertools import product
@@ -122,6 +122,42 @@ class ActivationType(StrEnum):
     RELU = enum_auto()
     TANH = enum_auto()
     SIGMOID = enum_auto()
+
+
+class InteractionProtocolType(StrEnum):
+    """Enum for the interaction protocol to use in the environment.
+
+    Enums
+    -----
+    PVG
+        The full Prover-Verifier Game protocol.
+    ABSTRACT_DECISION_PROBLEM
+        The Abstract Decision Problem protocol.
+    DEBATE
+        The Debate protocol.
+    MERLIN_ARTHUR
+        The Merlin-Arthur classifier protocol.
+    """
+
+    PVG = enum_auto()
+    ABSTRACT_DECISION_PROBLEM = enum_auto()
+    DEBATE = enum_auto()
+    MERLIN_ARTHUR = enum_auto()
+
+
+DEFAULT_AGENT_NAMES = {
+    InteractionProtocolType.PVG: ("prover", "verifier"),
+    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
+    InteractionProtocolType.DEBATE: ("prover1", "prover2", "verifier"),
+    InteractionProtocolType.MERLIN_ARTHUR: ("prover", "verifier"),
+}
+
+DEFAULT_STACKELBERG_SEQUENCE = {
+    InteractionProtocolType.PVG: (("verifier",), ("prover",)),
+    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
+    InteractionProtocolType.DEBATE: (("verifier",), ("prover1", "prover2")),
+    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover",)),
+}
 
 
 class BaseParameters(ABC):
@@ -539,6 +575,31 @@ class DatasetParameters(SubParameters):
 
 
 @dataclass
+class PvgProtocolParameters(SubParameters):
+    """Additional parameters for the PVG protocol.
+
+    Parameters
+    ----------
+    prover_reward : float
+        The reward given to the prover when the verifier guesses "accept".
+    verifier_reward : float
+        The reward given to the verifier when it guesses correctly.
+    verifier_incorrect_penalty : float
+        The penalty given to the verifier when it guesses incorrectly.
+    verifier_terminated_penalty : float
+        The reward given to the verifier if the episode terminates before it guesses.
+    verifier_no_guess_reward : float
+        The reward given to the verifier if it does not make a guess in a round.
+    """
+
+    prover_reward: float = 1.0
+    verifier_reward: float = 1.0
+    verifier_incorrect_penalty: float = -1.0
+    verifier_terminated_penalty: float = -1.0
+    verifier_no_guess_reward: float = 0.0
+
+
+@dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
 
@@ -550,6 +611,8 @@ class Parameters(BaseParameters):
         The RL trainer to use.
     dataset : str
         The dataset to use.
+    protocol : Protocol
+        The interaction protocol between the agents.
     seed : int
         The random seed.
     max_message_rounds : int
@@ -567,16 +630,6 @@ class Parameters(BaseParameters):
         The dimension of each agent's body representation output.
     batch_size : int
         The number of simultaneous environments to run in parallel.
-    prover_reward : float
-        The reward given to the prover when the verifier guesses "accept".
-    verifier_reward : float
-        The reward given to the verifier when it guesses correctly.
-    verifier_incorrect_penalty : float
-        The penalty given to the verifier when it guesses incorrectly.
-    verifier_terminated_penalty : float
-        The reward given to the verifier if the episode terminates before it guesses.
-    verifier_no_guess_reward : float
-        The reward given to the verifier if it does not make a guess in a round.
     agents : AgentsParameters | OrderedDict[str, AgentParameters], optional
         Additional parameters for the agents. The keys are the names of the agents, and
         the values are the parameters for each agent. If not provided, the default
@@ -600,6 +653,8 @@ class Parameters(BaseParameters):
     trainer: TrainerType
     dataset: str
 
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
+
     seed: int = 6198
 
     max_message_rounds: int = 8
@@ -610,31 +665,31 @@ class Parameters(BaseParameters):
 
     d_representation: int = 16
 
-    prover_reward: float = 1.0
-    verifier_reward: float = 1.0
-    verifier_incorrect_penalty: float = -1.0
-    verifier_terminated_penalty: float = -1.0
-    verifier_no_guess_reward: float = 0.0
-
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
+
     ppo: Optional[CommonPpoParameters | dict] = None
-    solo_agent: Optional[SoloAgentParameters | dict] = None
     vanilla_ppo: Optional[VanillaPpoParameters | dict] = None
     spg: Optional[SpgParameters | dict] = None
+    solo_agent: Optional[SoloAgentParameters | dict] = None
+
     image_classification: Optional[ImageClassificationParameters | dict] = None
+
     dataset_options: Optional[DatasetParameters | dict] = None
 
+    pvg_protocol: Optional[PvgProtocolParameters | dict] = None
+
     def __post_init__(self):
+        # Convert graph isomorphism agent parameters to the appropriate class
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
-            self.agents = self._process_agents_params(
-                self.agents,
+            self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
             )
 
+        # Convert image classification agent parameters to the appropriate class, and
+        # convert the image classification parameters to the appropriate class
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
-            self.agents = self._process_agents_params(
-                self.agents,
+            self._process_agents_params(
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
             )
@@ -645,12 +700,14 @@ class Parameters(BaseParameters):
                     **self.image_classification
                 )
 
+        # Add common PPO parameters if they are not provided
         if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
             if self.ppo is None:
                 self.ppo = CommonPpoParameters()
             elif isinstance(self.ppo, dict):
                 self.ppo = CommonPpoParameters(**self.ppo)
 
+        # Convert PPO parameters for specific variants to the appropriate class
         if self.trainer == TrainerType.VANILLA_PPO:
             if self.spg is None:
                 self.spg = VanillaPpoParameters()
@@ -658,10 +715,15 @@ class Parameters(BaseParameters):
                 self.spg = VanillaPpoParameters(**self.spg)
         if self.trainer == TrainerType.SPG:
             if self.spg is None:
-                self.spg = SpgParameters()
+                self.spg = SpgParameters(
+                    stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[
+                        self.interaction_protocol
+                    ]
+                )
             elif isinstance(self.spg, dict):
                 self.spg = SpgParameters(**self.spg)
 
+        # Convert solo agent parameters to SoloAgentParameters
         if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:
             if self.solo_agent is None:
                 self.solo_agent = SoloAgentParameters()
@@ -669,14 +731,21 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
                 self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
 
+        # Convert interaction protocol parameters to InteractionProtocolParameters
+        if self.interaction_protocol == InteractionProtocolType.PVG:
+            if self.pvg_protocol is None:
+                self.pvg_protocol = PvgProtocolParameters()
+            elif isinstance(self.pvg_protocol, dict):
+                self.pvg_protocol = PvgProtocolParameters(**self.pvg_protocol)
+
+        # Convert dataset options to DatasetParameters
         if self.dataset_options is None:
             self.dataset_options = DatasetParameters()
         elif isinstance(self.dataset_options, dict):
             self.dataset_options = DatasetParameters(**self.dataset_options)
 
-    @staticmethod
     def _process_agents_params(
-        agents_params: AgentsParameters | OrderedDict[str, AgentParameters] | None,
+        self,
         agent_params_class: type[AgentParameters],
         random_agent_params_class: type[RandomAgentParameters],
     ) -> AgentsParameters:
@@ -686,37 +755,33 @@ class Parameters(BaseParameters):
 
         Parameters
         ----------
-        agents_params : AgentsParameters | OrderedDict[str, AgentParameters] | None
-            The agent parameters passed to `Parameters`.
         agent_params_class : type[AgentParameters]
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-
-        Returns
-        -------
-        new_agents_params : AgentsParameters
-            The processed agent parameters.
+        protocol_params_class : type[InteractionProtocolParameters]
+            The class of the interaction protocol parameters for the scenario.
         """
 
-        # If no agent parameters are provided, use the default parameters for the scenario
-        if agents_params is None:
-            return AgentsParameters(
+        # If no agent parameters are provided, use the default parameters for the
+        # protocol and scenario
+        if self.agents is None:
+            self.agents = AgentsParameters(
                 [
-                    ("prover", agent_params_class()),
-                    ("verifier", agent_params_class()),
+                    (name, agent_params_class())
+                    for name in DEFAULT_AGENT_NAMES[self.interaction_protocol]
                 ]
             )
 
-        if not isinstance(agents_params, OrderedDict):
+        if not isinstance(self.agents, OrderedDict):
             raise ValueError(
                 f"Agent parameters must be a (subclass of) OrderedDict, not"
-                f" {type(agents_params)}."
+                f" {type(self.agents)}."
             )
 
         new_agents_params = AgentsParameters()
 
-        for agent_name, agent_params in agents_params.items():
+        for agent_name, agent_params in self.agents.items():
             # If the agent parameters are a dictionary, convert them to the appropriate
             # class
             if isinstance(agent_params, dict):
@@ -741,4 +806,4 @@ class Parameters(BaseParameters):
                     f" nor {agent_params_class}."
                 )
 
-        return new_agents_params
+        self.agents = new_agents_params
