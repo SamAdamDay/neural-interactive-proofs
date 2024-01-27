@@ -215,8 +215,8 @@ class PPOLossMultipleActions(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean(dim=0).item()
-            scale = advantage.std(dim=0).clamp_min(1e-6).item()
+            loc = advantage.mean(dim=0)
+            scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         _, log_weight, dist = self._log_weight(tensordict)
@@ -377,8 +377,8 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             advantage = tensordict.get(self.tensor_keys.advantage)
         # Normalise advantages per agent
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean(dim=0).item()
-            scale = advantage.std(dim=0).clamp_min(1e-6).item()
+            loc = advantage.mean(dim=0)
+            scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_prob, log_weight, dist = self._log_weight(tensordict)

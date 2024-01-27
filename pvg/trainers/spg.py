@@ -140,7 +140,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
             },
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
-            normalize_advantage=False,
+            normalize_advantage=True,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
