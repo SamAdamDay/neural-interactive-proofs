@@ -52,10 +52,8 @@ def test_graph_isomorphism_environment_step():
         max_message_rounds=max_message_rounds,
         min_message_rounds=1,
         agents=AgentsParameters(
-            [
-                ("prover", GraphIsomorphismAgentParameters()),
-                ("verifier", GraphIsomorphismAgentParameters()),
-            ]
+            prover=GraphIsomorphismAgentParameters(),
+            verifier=GraphIsomorphismAgentParameters(),
         ),
         prover_reward=1,
         verifier_reward=2,

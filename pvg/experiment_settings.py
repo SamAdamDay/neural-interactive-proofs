@@ -51,7 +51,7 @@ class ExperimentSettings:
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
-    rollout_sample_period: int = 50
+    rollout_sample_period: int = 500
     num_dataset_threads: int = 8
     test_run: bool = False
 

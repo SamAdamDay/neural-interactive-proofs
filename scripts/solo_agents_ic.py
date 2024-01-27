@@ -75,22 +75,14 @@ def experiment_fn(
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
-            [
-                (
-                    "verifier",
-                    ImageClassificationAgentParameters(
-                        num_convs_per_group=combo["verifier_convs_per_group"],
-                        num_decider_layers=combo["verifier_num_decider_layers"],
-                    ),
-                ),
-                (
-                    "prover",
-                    ImageClassificationAgentParameters(
-                        num_convs_per_group=combo["prover_convs_per_group"],
-                        num_decider_layers=combo["prover_num_decider_layers"],
-                    ),
-                ),
-            ]
+            verifier=ImageClassificationAgentParameters(
+                num_convs_per_group=combo["verifier_convs_per_group"],
+                num_decider_layers=combo["verifier_num_decider_layers"],
+            ),
+            prover=ImageClassificationAgentParameters(
+                num_convs_per_group=combo["prover_convs_per_group"],
+                num_decider_layers=combo["prover_num_decider_layers"],
+            ),
         ),
         solo_agent=SoloAgentParameters(
             num_epochs=combo["num_epochs"],

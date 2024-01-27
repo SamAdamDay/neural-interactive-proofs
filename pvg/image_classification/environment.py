@@ -14,18 +14,14 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 
-from jaxtyping import Float, Int, Bool
+from jaxtyping import Float, Int
 
-from pvg.parameters import Parameters
 from pvg.scenario_base import Environment
 from pvg.image_classification.data import IMAGE_DATASETS
-from pvg.utils.types import TorchDevice
 
 
 class ImageClassificationEnvironment(Environment):
-    """The graph isomorphism RL environment.
-
-    Agents see the adjacency matrix and the messages sent so far.
+    """The image classification RL environment.
 
     Parameters
     ----------
@@ -143,20 +139,37 @@ class ImageClassificationEnvironment(Environment):
             shape=(self.num_envs,),
         )
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Perform a step in the environment."""
+    def _compute_x_and_message(
+        self,
+        env_td: TensorDictBase,
+        next_td: TensorDictBase,
+    ) -> TensorDictBase:
+        """Compute the message history and next message.
+
+        Used in the `_step` method of the environment.
+
+        Parameters
+        ----------
+        env_td : TensorDictBase
+            The current observation and state.
+        next_td : TensorDictBase
+            The 'next' tensordict, to be updated with the message history and next
+            message.
+
+        Returns
+        -------
+        next_td : TensorDictBase
+            The updated 'next' tensordict.
+        """
 
         # Extract the tensors from the dict
-        y: Int[Tensor, "batch 1"] = tensordict["y"]
-        x: Float[Tensor, "batch round latent_height latent_width"] = tensordict["x"]
-        round: Int[Tensor, "batch"] = tensordict["round"]
-        latent_pixel_selected: Int[Tensor, "batch agent"] = tensordict[
+        x: Float[Tensor, "batch round latent_height latent_width"] = env_td["x"]
+        round: Int[Tensor, "batch"] = env_td["round"]
+        latent_pixel_selected: Int[Tensor, "batch agent"] = env_td[
             "agents", "latent_pixel_selected"
         ]
-        decision: Int[Tensor, "batch agent"] = tensordict["agents", "decision"]
-        done: Bool[Tensor, "batch"] = tensordict["done"]
 
-        batch_size = y.shape[0]
+        batch_size = x.shape[0]
 
         # Compute index of the agent whose turn it is.
         agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
@@ -178,54 +191,11 @@ class ImageClassificationEnvironment(Environment):
         # Set the latent pixel selected by the agent whose turn it is as the message
         message = latent_pixel_selected[torch.arange(batch_size), agent_index].long()
 
-        # If the verifier has made a guess, compute the reward and terminate the episode
-        verifier_agent_num = self.agent_names.index("verifier")
-        verifier_decision_made = (agent_index == verifier_agent_num) & (
-            decision[:, verifier_agent_num] != 2
-        )
-        done = done | verifier_decision_made
-        reward: dict[str, int] = dict()
-        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
-        reward["verifier"][
-            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
-        ] = self.params.verifier_reward
-        reward["verifier"][
-            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
-        ] = self.params.verifier_incorrect_penalty
-        reward["prover"] = (
-            verifier_decision_made & (decision[:, verifier_agent_num] == 1)
-        ).float()
-        reward["prover"] = reward["prover"] * self.params.prover_reward
+        # Add the message history and next message to the next tensordict
+        next_td["x"] = x
+        next_td["message"] = message
 
-        # If we reach the end of the episode and the verifier has not made a guess,
-        # terminate it with a negative reward for the verifier
-        done = done | (round >= self.params.max_message_rounds - 1)
-        reward["verifier"][
-            (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
-        ] = self.params.verifier_terminated_penalty
-
-        # If the verifier has not made a guess and it's their turn, given them a small
-        # reward for continuing
-        reward["verifier"][
-            (agent_index == verifier_agent_num) & ~done
-        ] = self.params.verifier_no_guess_reward
-
-        # Stack the rewards for the two agents
-        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
-
-        # Put everything together
-        next = TensorDict(
-            dict(
-                image=tensordict["image"],
-                x=x,
-                message=message,
-                round=round + 1,
-                done=done,
-                agents=TensorDict(dict(reward=reward), batch_size=self.batch_size),
-            ),
-            batch_size=self.batch_size,
-        )
-        return next
+        return next_td
 
     def _masked_reset(
         self, env_td: TensorDictBase, mask: Tensor, data_batch: TensorDict

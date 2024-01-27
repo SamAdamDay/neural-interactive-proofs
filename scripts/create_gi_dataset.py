@@ -4,7 +4,10 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import torch
 
-from pvg.graph_isomorphism import generate_gi_dataset, GraphIsomorphicDatasetConfig
+from pvg.graph_isomorphism.dataset_generation import (
+    generate_gi_dataset,
+    GraphIsomorphicDatasetConfig,
+)
 
 # Set up the arg parser
 parser = ArgumentParser(

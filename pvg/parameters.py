@@ -53,6 +53,7 @@ from abc import ABC
 from typing import Optional, ClassVar, OrderedDict
 from enum import auto as enum_auto
 from textwrap import indent
+from itertools import product
 
 try:
     from enum import StrEnum
@@ -255,7 +256,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
-    gnn_output_digits: Optional[int] = None
+    gnn_output_digits: Optional[int] = 4
 
     num_heads: int = 4
     num_transformer_layers: int = 4
@@ -342,7 +343,20 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
 
     The keys are the names of the agents, and the values are the parameters for each
     agent.
+
+    Agent names must not be substrings of each other.
     """
+
+    def __init__(self, other=(), /, **kwds):
+        super().__init__(other, **kwds)
+
+        # Check that the agent names are not substrings of each other
+        for name_1, name_2 in product(self.keys(), repeat=2):
+            if name_1 != name_2 and name_1 in name_2:
+                raise ValueError(
+                    f"Agent names must not be substrings of each other, but {name_1}"
+                    f" is a substring of {name_2}."
+                )
 
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
@@ -600,7 +614,7 @@ class Parameters(BaseParameters):
     verifier_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
-    verifier_no_guess_reward: float = 0.01
+    verifier_no_guess_reward: float = 0.0
 
     agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
     ppo: Optional[CommonPpoParameters | dict] = None

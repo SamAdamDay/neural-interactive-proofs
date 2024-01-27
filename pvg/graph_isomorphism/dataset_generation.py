@@ -36,10 +36,15 @@ import einops
 
 from tqdm import tqdm
 
-# from primesieve.numpy import n_primes
-
 from pvg.constants import GI_DATA_DIR
 from pvg.utils.types import TorchDevice
+
+try:
+    from primesieve.numpy import n_primes
+except ImportError:
+    raise ImportError(
+        "The primesieve package is required to generate graph isomorphism datasets."
+    )
 
 
 @dataclass

@@ -41,20 +41,12 @@ def test_gi_ppo_train_optimizer_groups():
             "test",
             ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
-                [
-                    (
-                        "prover",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=1.0, **basic_agent_params
-                        ),
-                    ),
-                    (
-                        "verifier",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=1.0, **basic_agent_params
-                        ),
-                    ),
-                ]
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, **basic_agent_params
+                ),
             ),
         ),
         Parameters(
@@ -63,20 +55,12 @@ def test_gi_ppo_train_optimizer_groups():
             "test",
             ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
-                [
-                    (
-                        "prover",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=0.1, **basic_agent_params
-                        ),
-                    ),
-                    (
-                        "verifier",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=1.0, **basic_agent_params
-                        ),
-                    ),
-                ]
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, **basic_agent_params
+                ),
             ),
         ),
         Parameters(
@@ -85,20 +69,12 @@ def test_gi_ppo_train_optimizer_groups():
             "test",
             ppo=CommonPpoParameters(lr=3.0),
             agents=AgentsParameters(
-                [
-                    (
-                        "prover",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=1.0, **basic_agent_params
-                        ),
-                    ),
-                    (
-                        "verifier",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=0.1, **basic_agent_params
-                        ),
-                    ),
-                ]
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, **basic_agent_params
+                ),
             ),
         ),
         Parameters(
@@ -107,20 +83,12 @@ def test_gi_ppo_train_optimizer_groups():
             "test",
             ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.01),
             agents=AgentsParameters(
-                [
-                    (
-                        "prover",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=0.1, **basic_agent_params
-                        ),
-                    ),
-                    (
-                        "verifier",
-                        GraphIsomorphismAgentParameters(
-                            body_lr_factor=1.0, **basic_agent_params
-                        ),
-                    ),
-                ]
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, **basic_agent_params
+                ),
             ),
         ),
     ]

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 import torch
+from torch import Tensor
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -14,6 +15,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import EnvBase
+
+from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import DataLoader, Dataset
 from pvg.parameters import Parameters
@@ -151,7 +154,6 @@ class Environment(EnvBase, ABC):
             shape=(self.num_envs,),
         )
 
-    @abstractmethod
     def _step(self, env_td: TensorDictBase) -> TensorDictBase:
         """Perform a step in the environment.
 
@@ -162,10 +164,131 @@ class Environment(EnvBase, ABC):
 
         Returns
         -------
-        next : TensorDictBase
+        next_td : TensorDictBase
             The next observation, state, reward, and done signal.
         """
-        pass
+
+        # Create an initial next tensordict, which will be updated with the message
+        # history, next message, done signal and reward
+        next_td = TensorDict(
+            dict(
+                round=env_td["round"] + 1,
+            ),
+            batch_size=self.batch_size,
+        )
+
+        # The observations are passed through unchanged
+        for key in self.observation_spec.keys():
+            if key not in ["x", "message", "round"]:
+                next_td[key] = env_td[key]
+
+        # Compute the message history and next message
+        next_td = self._compute_x_and_message(env_td, next_td)
+
+        # Compute the done signal and reward
+        next_td = self._compute_done_and_reward(env_td, next_td)
+
+        return next_td
+
+    @abstractmethod
+    def _compute_x_and_message(
+        self,
+        env_td: TensorDictBase,
+        next_td: TensorDictBase,
+    ) -> TensorDictBase:
+        """Compute the message history and next message.
+
+        Used in the `_step` method of the environment.
+
+        Parameters
+        ----------
+        env_td : TensorDictBase
+            The current observation and state.
+        next_td : TensorDictBase
+            The 'next' tensordict, to be updated with the message history and next
+            message.
+
+        Returns
+        -------
+        next_td : TensorDictBase
+            The updated 'next' tensordict.
+        """
+
+    def _compute_done_and_reward(
+        self,
+        env_td: TensorDictBase,
+        next_td: TensorDictBase,
+    ) -> TensorDictBase:
+        """Compute the done signal and reward.
+
+        Used in the `_step` method of the environment.
+
+        Parameters
+        ----------
+        env_td : TensorDictBase
+            The current observation and state.
+        next_td : TensorDictBase
+            The 'next' tensordict, to be updated with the done signal and reward.
+
+        Returns
+        -------
+        next_td : TensorDictBase
+            The updated 'next' tensordict.
+        """
+
+        y: Int[Tensor, "batch 1"] = env_td["y"]
+        round: Int[Tensor, "batch"] = env_td["round"]
+        decision: Int[Tensor, "batch agent"] = env_td["agents", "decision"]
+        done: Bool[Tensor, "batch"] = env_td["done"]
+
+        # Compute index of the agent whose turn it is.
+        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+
+        # If the verifier has made a guess, compute the reward and terminate the episode
+        verifier_agent_num = self.agent_names.index("verifier")
+        verifier_decision_made = (agent_index == verifier_agent_num) & (
+            decision[:, verifier_agent_num] != 2
+        )
+        done = done | verifier_decision_made
+        reward: dict[str, int] = dict()
+        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
+        ] = self.params.verifier_reward
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
+        ] = self.params.verifier_incorrect_penalty
+        reward["prover"] = (
+            verifier_decision_made & (decision[:, verifier_agent_num] == 1)
+        ).float()
+        reward["prover"] = reward["prover"] * self.params.prover_reward
+
+        # If we reach the end of the episode and the verifier has not made a guess,
+        # terminate it with a negative reward for the verifier
+        done = done | (round >= self.params.max_message_rounds - 1)
+        reward["verifier"][
+            (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
+        ] = self.params.verifier_terminated_penalty
+
+        # If the verifier has not made a guess and it's their turn, given them a small
+        # reward for continuing
+        reward["verifier"][
+            (agent_index == verifier_agent_num) & ~done
+        ] = self.params.verifier_no_guess_reward
+
+        # Stack the rewards for the two agents
+        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
+
+        # Put the done signal and reward into the next tensordict
+        next_td["done"] = done
+        next_td["agents"] = TensorDict(
+            dict(
+                reward=reward,
+            ),
+            batch_size=self.batch_size,
+        )
+
+        return next_td
 
     def _reset(self, env_td: Optional[TensorDictBase] = None) -> TensorDictBase:
         """(Partially) reset the environment.

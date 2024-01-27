@@ -12,9 +12,12 @@ from pvg import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     CommonPpoParameters,
+    SpgParameters,
     ScenarioType,
     TrainerType,
     ActivationType,
+    SpgVariant,
+    IhvpVariant,
     run_experiment,
     prepare_experiment,
 )
@@ -26,6 +29,7 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
+    trainer=[TrainerType.SPG],
     dataset_name=["eru10000"],
     num_iterations=[1000],
     num_epochs=[4],
@@ -41,6 +45,12 @@ param_grid = dict(
     random_prover=[False],
     pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
+    spg_variant=[SpgVariant.SPG],
+    stackelberg_sequence=[(("verifier",), ("prover",))],
+    ihvp_variant=[IhvpVariant.NYSTROM],
+    ihvp_num_iterations=[5],
+    ihvp_rank=[5],
+    ihvp_rho=[0.1],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -74,19 +84,11 @@ def experiment_fn(
         trainer=TrainerType.VANILLA_PPO,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
-            [
-                (
-                    "verifier",
-                    GraphIsomorphismAgentParameters(
-                        num_gnn_layers=combo["verifier_num_layers"],
-                        activation_function=combo["activation_function"],
-                    ),
-                ),
-                (
-                    "prover",
-                    prover_params,
-                ),
-            ]
+            verifier=GraphIsomorphismAgentParameters(
+                num_gnn_layers=combo["verifier_num_layers"],
+                activation_function=combo["activation_function"],
+            ),
+            prover=prover_params,
         ),
         ppo=CommonPpoParameters(
             num_iterations=combo["num_iterations"],
@@ -98,6 +100,14 @@ def experiment_fn(
             entropy_eps=combo["entropy_eps"],
             body_lr_factor=combo["body_lr_factor"],
             lr=combo["lr"],
+        ),
+        spg=SpgParameters(
+            variant=combo["spg_variant"],
+            stackelberg_sequence=combo["stackelberg_sequence"],
+            ihvp_variant=combo["ihvp_variant"],
+            ihvp_num_iterations=combo["ihvp_num_iterations"],
+            ihvp_rank=combo["ihvp_rank"],
+            ihvp_rho=combo["ihvp_rho"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],
