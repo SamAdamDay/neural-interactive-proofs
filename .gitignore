@@ -144,4 +144,5 @@ data/**/processed*
 data/image_classification
 
 # Model cache
-model_cache
+model_cache/*/*
+!model_cache/solo_agents/svhn_*
