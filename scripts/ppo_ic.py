@@ -14,10 +14,13 @@ from pvg import (
     ImageClassificationParameters,
     CommonPpoParameters,
     SoloAgentParameters,
+    SpgParameters,
     ScenarioType,
     TrainerType,
     ActivationType,
     BinarificationMethodType,
+    SpgVariant,
+    IhvpVariant,
     run_experiment,
     prepare_experiment,
 )
@@ -29,6 +32,7 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
+    trainer=[TrainerType.SPG],
     dataset_name=["svhn"],
     num_iterations=[1000],
     num_epochs=[4],
@@ -55,6 +59,12 @@ param_grid = dict(
     pretrain_batch_size=[256],
     pretrain_learning_rate=[0.001],
     pretrain_body_lr_factor=[1.0],
+    spg_variant=[SpgVariant.SPG],
+    stackelberg_sequence=[(("verifier",), ("prover",))],
+    ihvp_variant=[IhvpVariant.NYSTROM],
+    ihvp_num_iterations=[5],
+    ihvp_rank=[5],
+    ihvp_rho=[0.1],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -86,7 +96,7 @@ def experiment_fn(
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.VANILLA_PPO,
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
@@ -116,6 +126,14 @@ def experiment_fn(
             batch_size=combo["pretrain_batch_size"],
             learning_rate=combo["pretrain_learning_rate"],
             body_lr_factor=combo["pretrain_body_lr_factor"],
+        ),
+        spg=SpgParameters(
+            variant=combo["spg_variant"],
+            stackelberg_sequence=combo["stackelberg_sequence"],
+            ihvp_variant=combo["ihvp_variant"],
+            ihvp_num_iterations=combo["ihvp_num_iterations"],
+            ihvp_rank=combo["ihvp_rank"],
+            ihvp_rho=combo["ihvp_rho"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],
