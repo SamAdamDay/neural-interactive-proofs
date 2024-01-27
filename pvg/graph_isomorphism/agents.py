@@ -358,6 +358,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             The transformer module.
         """
 
+        if self._agent_params.num_transformer_layers == 0:
+            return None
+
         transformer = TransformerEncoder(
             encoder_layer=TransformerEncoderLayer(
                 d_model=self._agent_params.d_transformer,
@@ -568,13 +571,16 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if hooks is not None and hooks.transformer_input is not None:
             hooks.transformer_input(transformer_input)
 
-        # Run the transformer
-        # (..., 2 + 2 * node, d_transformer)
-        transformer_output_flatter = self._run_masked_transformer(
-            transformer=self.transformer,
-            transformer_input=transformer_input,
-            node_mask=data["node_mask"],
-        )
+        if self.transformer is not None:
+            # Run the transformer
+            # (..., 2 + 2 * node, d_transformer)
+            transformer_output_flatter = self._run_masked_transformer(
+                transformer=self.transformer,
+                transformer_input=transformer_input,
+                node_mask=data["node_mask"],
+            )
+        else:
+            transformer_output_flatter = transformer_input
 
         if hooks is not None and hooks.transformer_output_flatter is not None:
             hooks.transformer_output_flatter(transformer_output_flatter)
@@ -617,7 +623,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self.global_pooling.to(device)
         self.global_pooling[-1].to(device)
         self.gnn_transformer_encoder.to(device)
-        self.transformer.to(device)
+        if self.transformer is not None:
+            self.transformer.to(device)
         self.representation_encoder.to(device)
         return self
 
