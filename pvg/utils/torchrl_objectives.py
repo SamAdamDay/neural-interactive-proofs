@@ -315,7 +315,15 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         }
         self.ihvp = ihvp
         self.names = names
-        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
+
+        try:
+            self.device = next(self.parameters()).device
+        except AttributeError:
+            self.device = torch.device("cpu")
+
+        self.register_buffer(
+            "clip_epsilon", torch.tensor(clip_epsilon, device=self.device)
+        )
 
     def get_followers(self):
         """
