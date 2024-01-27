@@ -74,19 +74,11 @@ def experiment_fn(
         trainer=TrainerType.VANILLA_PPO,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
-            [
-                (
-                    "verifier",
-                    GraphIsomorphismAgentParameters(
-                        num_gnn_layers=combo["verifier_num_layers"],
-                        activation_function=combo["activation_function"],
-                    ),
-                ),
-                (
-                    "prover",
-                    prover_params,
-                ),
-            ]
+            verifier=GraphIsomorphismAgentParameters(
+                num_gnn_layers=combo["verifier_num_layers"],
+                activation_function=combo["activation_function"],
+            ),
+            prover=prover_params,
         ),
         ppo=CommonPpoParameters(
             num_iterations=combo["num_iterations"],

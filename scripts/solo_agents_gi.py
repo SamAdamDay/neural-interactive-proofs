@@ -72,26 +72,18 @@ def experiment_fn(
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
-            [
-                (
-                    "verifier",
-                    GraphIsomorphismAgentParameters(
-                        use_batch_norm=combo["use_batch_norm"],
-                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                        num_gnn_layers=combo["verifier_num_layers"],
-                        body_lr_factor=combo["body_lr_factor"],
-                    ),
-                ),
-                (
-                    "prover",
-                    GraphIsomorphismAgentParameters(
-                        use_batch_norm=combo["use_batch_norm"],
-                        use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
-                        num_gnn_layers=combo["prover_num_layers"],
-                        body_lr_factor=combo["body_lr_factor"],
-                    ),
-                ),
-            ]
+            verifier=GraphIsomorphismAgentParameters(
+                use_batch_norm=combo["use_batch_norm"],
+                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                num_gnn_layers=combo["verifier_num_layers"],
+                body_lr_factor=combo["body_lr_factor"],
+            ),
+            prover=GraphIsomorphismAgentParameters(
+                use_batch_norm=combo["use_batch_norm"],
+                use_pair_invariant_pooling=combo["use_pair_invariant_pooling"],
+                num_gnn_layers=combo["prover_num_layers"],
+                body_lr_factor=combo["body_lr_factor"],
+            ),
         ),
         solo_agent=SoloAgentParameters(
             num_epochs=combo["num_epochs"],
