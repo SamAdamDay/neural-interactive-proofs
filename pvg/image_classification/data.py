@@ -215,6 +215,23 @@ class ImageClassificationDataset(Dataset):
                 f"{self.params.dataset_options.binarification_method}"
             )
 
+        # Make the dataset balanced if requested
+        if self.params.dataset_options.make_balanced:
+            permuted_indices = torch.randperm(len(labels))
+            images = images[permuted_indices]
+            labels = labels[permuted_indices]
+            index_0 = torch.where(labels == 0)[0]
+            index_1 = torch.where(labels == 1)[0]
+            num_classes_0 = (labels == 0).sum()
+            num_classes_1 = (labels == 1).sum()
+            if num_classes_0 > num_classes_1:
+                index_0 = index_0[:num_classes_1]
+            else:
+                index_1 = index_1[:num_classes_0]
+            index = torch.cat((index_0, index_1))
+            images = images[index]
+            labels = labels[index]
+
         # Create the pixel features, which are all zeros
         x = torch.zeros(
             images.shape[0],

@@ -538,11 +538,14 @@ class DatasetParameters(SubParameters):
     binarification_seed : int, optional
         The seed used when doing a randomised binarification. If not provided, the
         default for the dataset is used.
+    make_balanced : bool
+        Whether to make sure the dataset is balanced.
     """
 
     binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
     selected_classes: Optional[tuple[int, int]] = None
     binarification_seed: Optional[int] = None
+    make_balanced: bool = True
 
 
 @dataclass
