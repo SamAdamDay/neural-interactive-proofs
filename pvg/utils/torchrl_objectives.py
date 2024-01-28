@@ -291,7 +291,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         stackelberg_sequence: tuple[tuple[int]],
         names: list[str],
         ihvp: dict,
-        body_lr_factors: list[float],
+        agent_lr_factors: list[float],
         lr: float,
         clip_epsilon,
         entropy_coef,
@@ -316,7 +316,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             for i in self.agent_indices
         }
         self.ihvp = ihvp
-        self.body_lr_factors = body_lr_factors
+        self.agent_lr_factors = agent_lr_factors
         self.lr = lr
         self.names = names
 
@@ -552,11 +552,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                         self.variant == SpgVariant.LOLA
                         or self.variant == SpgVariant.POLA
                     ):
-                        lr_coefficient = (
-                            self.body_lr_factors[j] * self.lr
-                            if k.startswith("actor_params.module_0")
-                            else self.lr
-                        )  # Different learning rate for body params
+                        lr_coefficient = self.agent_lr_factors[j] * self.lr
                     else:
                         lr_coefficient = 1.0
                     grad[k] -= lr_coefficient * (score_term * p[0][k]) + (

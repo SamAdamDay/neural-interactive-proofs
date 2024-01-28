@@ -1,6 +1,7 @@
 """A generic reinforcement learning trainer."""
 
 from abc import ABC, abstractmethod
+import re
 
 import numpy as np
 
@@ -178,8 +179,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         """
         pass
 
-    @abstractmethod
-    def _get_optimizer(self, loss_module: LossModule) -> torch.optim.Optimizer:
+    def _get_optimizer(self, loss_module: LossModule) -> torch.optim.Adam:
         """Construct the optimizer for the loss module
 
         Parameters
@@ -192,7 +192,46 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         torch.optim.Optimizer
             The optimizer.
         """
-        pass
+
+        # Set the learning rate of the agent bodies to be a factor of the learning rate
+        # of the loss module
+        model_param_dict = []
+        for agent_name, agent_params in self.params.agents.items():
+            # The learning rate of the whole agent
+            agent_lr = agent_params.agent_lr_factor * self.params.ppo.lr
+
+            # Determine the learning rate of the body. If the LR factor is set in the
+            # PPO parameters, use that. Otherwise, use the LR factor from the agent
+            # parameters.
+            if self.params.ppo.body_lr_factor is None:
+                body_lr = agent_lr * agent_params.body_lr_factor
+            else:
+                body_lr = agent_lr * self.params.ppo.body_lr_factor
+
+            # Set the learning rate for the body parameters
+            body_params = [
+                param
+                for param_name, param in loss_module.named_parameters()
+                if param_name.startswith(f"actor_params.module_0_{agent_name}")
+            ]
+            model_param_dict.append(dict(params=body_params, lr=body_lr))
+
+            # Set the learning rate for the non-body parameters
+            def is_non_body_param(param_name: str):
+                if re.match(f"actor_params.module_[1-9]_{agent_name}", param_name):
+                    return True
+                if re.match(f"critic_params.module_[0-9]_{agent_name}", param_name):
+                    return True
+                return False
+
+            non_body_params = [
+                param
+                for param_name, param in loss_module.named_parameters()
+                if is_non_body_param(param_name)
+            ]
+            model_param_dict.append(dict(params=non_body_params, lr=agent_lr))
+
+        return torch.optim.Adam(model_param_dict)
 
     def _run_rl_training_loop(
         self,
