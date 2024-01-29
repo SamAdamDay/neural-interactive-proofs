@@ -1415,9 +1415,9 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         - "node_mask" (... pair node): Which nodes actually exist.
 
     Output:
-        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
-          node-level representations.
-        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+        - ("agents", "node_level_repr") (... agents max_nodes d_representation): The
+          output node-level representations.
+        - ("agents", "graph_level_repr") (... agents d_representation): The output
           graph-level representations.
 
     Parameters
@@ -1489,19 +1489,20 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     Shapes
     ------
     Input:
-        - ("agents", "node_level_repr") (... 2 max_nodes d_representation): The output
-          node-level representations.
-        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+        - ("agents", "node_level_repr") (... agents 2*max_nodes d_representation): The
+          output node-level representations.
+        - ("agents", "graph_level_repr") (... agents d_representation): The output
           graph-level representations.
         - "round" (...): The current round number.
         - "node_mask" (... pair node): Which nodes actually exist.
         - "message" (...): The most recent message.
+        - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "node_selected_logits") (... 2 2*max_nodes): A logit for each node,
-          indicating the probability that this node should be sent as a message to the
-          verifier.
-        - ("agents", "decision_logits") (... 2 3): A logit for each of the three
+        - ("agents", "node_selected_logits") (... agents 2*max_nodes): A logit for each
+          node, indicating the probability that this node should be sent as a message to
+          the verifier.
+        - ("agents", "decision_logits") (... agents 3): A logit for each of the three
           options: guess that the graphs are isomorphic, guess that the graphs are not
           isomorphic, or continue exchanging messages.
 
@@ -1519,6 +1520,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         "round",
         "node_mask",
         "message",
+        "decision_restriction",
     )
     out_keys = (
         ("agents", "node_selected_logits"),
@@ -1542,12 +1544,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         Parameters
         ----------
         tensordict : TensorDictBase
-            The input to the value heads. Should contain the keys:
-
-            - ("agents", "node_level_repr"): The node-level representation from the
-              body.
-            - ("agents", "graph_level_repr"): The node-level representation from the
-              body.
+            The input to the value heads.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -1619,6 +1616,11 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
             torch.full_like(node_selected_logits, -1e9),
         )
 
+        # Make sure the verifier only selects decisions which are allowed
+        decision_logits = self._restrict_decisions(
+            head_output["decision_restriction"], decision_logits
+        )
+
         return head_output.update(
             dict(
                 agents=TensorDict(
@@ -1638,12 +1640,12 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     Shapes
     ------
     Input:
-        - ("agents", "graph_level_repr") (... 2 d_representation): The output
+        - ("agents", "graph_level_repr") (... agents d_representation): The output
           graph-level representations.
         - "round" (...): The current round number.
 
     Output:
-        - ("agents", "value") (... 2): The estimated value for each batch item
+        - ("agents", "value") (... agents): The estimated value for each batch item
 
     Parameters
     ----------

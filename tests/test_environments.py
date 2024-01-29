@@ -12,6 +12,7 @@ from pvg.parameters import (
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     CommonPpoParameters,
+    PvgProtocolParameters,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -55,11 +56,13 @@ def test_graph_isomorphism_environment_step():
             prover=GraphIsomorphismAgentParameters(),
             verifier=GraphIsomorphismAgentParameters(),
         ),
-        prover_reward=1,
-        verifier_reward=2,
-        verifier_terminated_penalty=-4,
-        verifier_no_guess_reward=8,
-        verifier_incorrect_penalty=-16,
+        pvg_protocol=PvgProtocolParameters(
+            prover_reward=1,
+            verifier_reward=2,
+            verifier_terminated_penalty=-4,
+            verifier_no_guess_reward=8,
+            verifier_incorrect_penalty=-16,
+        ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
     dataset = GraphIsomorphismDataset(params, settings)

@@ -69,46 +69,43 @@ class ImageClassificationEnvironment(Environment):
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
 
-        Agents see the adjacency matrix and the messages sent so far. The "message"
-        field contains the most recent message.
+        Agents see the image and the messages sent so far. The "message" field contains
+        the most recent message.
 
         Returns
         -------
         observation_spec : CompositeSpec
             The observation specification.
         """
-        return CompositeSpec(
-            image=UnboundedContinuousTensorSpec(
-                shape=(
-                    self.num_envs,
-                    self.dataset_num_channels,
-                    self.image_width,
-                    self.image_height,
-                ),
-                dtype=torch.float,
+        base_observation_spec = super()._get_observation_spec()
+        base_observation_spec["image"] = UnboundedContinuousTensorSpec(
+            shape=(
+                self.num_envs,
+                self.dataset_num_channels,
+                self.image_width,
+                self.image_height,
             ),
-            x=BinaryDiscreteTensorSpec(
-                self.latent_height,
-                shape=(
-                    self.num_envs,
-                    self.params.max_message_rounds,
-                    self.latent_width,
-                    self.latent_height,
-                ),
-                dtype=torch.float,
-            ),
-            message=DiscreteTensorSpec(
-                self.latent_height * self.latent_width,
-                shape=(self.num_envs,),
-                dtype=torch.long,
-            ),
-            round=DiscreteTensorSpec(
-                self.params.max_message_rounds,
-                shape=(self.num_envs,),
-                dtype=torch.long,
-            ),
-            shape=(self.num_envs,),
+            dtype=torch.float,
+            device=self.device,
         )
+        base_observation_spec["x"] = BinaryDiscreteTensorSpec(
+            self.latent_height,
+            shape=(
+                self.num_envs,
+                self.params.max_message_rounds,
+                self.latent_width,
+                self.latent_height,
+            ),
+            dtype=torch.float,
+            device=self.device,
+        )
+        base_observation_spec["message"] = DiscreteTensorSpec(
+            self.latent_height * self.latent_width,
+            shape=(self.num_envs,),
+            dtype=torch.long,
+            device=self.device,
+        )
+        return base_observation_spec
 
     def _get_action_spec(self) -> CompositeSpec:
         """Get the specification of the agent actions.
@@ -122,22 +119,14 @@ class ImageClassificationEnvironment(Environment):
         action_spec : CompositeSpec
             The action specification.
         """
-        return CompositeSpec(
-            agents=CompositeSpec(
-                latent_pixel_selected=DiscreteTensorSpec(
-                    self.latent_height * self.latent_width,
-                    shape=(self.num_envs, 2),
-                    dtype=torch.long,
-                ),
-                decision=DiscreteTensorSpec(
-                    3,
-                    shape=(self.num_envs, 2),
-                    dtype=self._int_dtype,
-                ),
-                shape=(self.num_envs,),
-            ),
-            shape=(self.num_envs,),
+        base_action_spec = super()._get_action_spec()
+        base_action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
+            self.latent_height * self.latent_width,
+            shape=(self.num_envs, 2),
+            dtype=torch.long,
+            device=self.device,
         )
+        return base_action_spec
 
     def _compute_x_and_message(
         self,
@@ -226,5 +215,6 @@ class ImageClassificationEnvironment(Environment):
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0
         env_td["done"][mask] = False
+        env_td["decision_restriction"][mask] = 0
 
         return env_td

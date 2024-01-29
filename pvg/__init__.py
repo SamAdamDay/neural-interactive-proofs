@@ -7,14 +7,16 @@ from .parameters import (
     SoloAgentParameters,
     CommonPpoParameters,
     SpgParameters,
-    SpgVariant,
-    IhvpVariant,
     ImageClassificationParameters,
     DatasetParameters,
+    PvgProtocolParameters,
     ScenarioType,
     TrainerType,
     ActivationType,
     BinarificationMethodType,
+    SpgVariant,
+    IhvpVariant,
+    InteractionProtocolType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment
