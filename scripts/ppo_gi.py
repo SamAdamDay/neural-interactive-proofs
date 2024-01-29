@@ -44,6 +44,7 @@ param_grid = dict(
     prover_lr_factor=[1.0],
     verifier_num_layers=[2],
     verifier_lr_factor=[0.1],
+    num_transformer_layers=[1],
     random_prover=[False],
     pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
@@ -53,6 +54,9 @@ param_grid = dict(
     ihvp_num_iterations=[5],
     ihvp_rank=[5],
     ihvp_rho=[0.1],
+    shared_reward=[False],
+    normalize_advantage=[True],
+    min_message_rounds=[0],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -81,6 +85,7 @@ def experiment_fn(
             num_gnn_layers=combo["prover_num_layers"],
             activation_function=combo["activation_function"],
             agent_lr_factor=combo["prover_lr_factor"],
+            num_transformer_layers=combo["num_transformer_layers"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -91,6 +96,7 @@ def experiment_fn(
                 num_gnn_layers=combo["verifier_num_layers"],
                 activation_function=combo["activation_function"],
                 agent_lr_factor=combo["verifier_lr_factor"],
+                num_transformer_layers=combo["num_transformer_layers"],
             ),
             prover=prover_params,
         ),
@@ -104,6 +110,7 @@ def experiment_fn(
             entropy_eps=combo["entropy_eps"],
             body_lr_factor=combo["body_lr_factor"],
             lr=combo["lr"],
+            normalize_advantage=combo["normalize_advantage"],
         ),
         spg=SpgParameters(
             variant=combo["spg_variant"],
@@ -114,6 +121,8 @@ def experiment_fn(
             ihvp_rho=combo["ihvp_rho"],
         ),
         pretrain_agents=combo["pretrain_agents"],
+        shared_reward=combo["shared_reward"],
+        min_message_rounds=combo["min_message_rounds"],
         seed=combo["seed"],
     )
 

@@ -130,7 +130,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
             critic=self._value_operator,
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
-            normalize_advantage=True,
+            normalize_advantage=self.params.ppo.normalize_advantage,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

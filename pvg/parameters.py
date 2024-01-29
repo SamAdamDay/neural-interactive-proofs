@@ -475,6 +475,8 @@ class CommonPpoParameters(SubParameters):
         The PPO clip range.
     entropy_eps : float
         The coefficient of the entropy term in the PPO loss.
+    normalize_advantage : bool
+        Whether to normalise the advantages in the PPO loss.
     body_lr_factor : float, optional
         The learning rate factor for the body part of the model. If set this overrides
         the `body_lr_factor` parameter of each agent.
@@ -497,6 +499,7 @@ class CommonPpoParameters(SubParameters):
     lmbda: float = 0.95
     clip_epsilon: float = 0.2
     entropy_eps: float = 0.001
+    normalize_advantage: bool = True
 
     # Agents
     body_lr_factor: Optional[float] = None
