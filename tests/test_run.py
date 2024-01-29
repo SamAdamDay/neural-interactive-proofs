@@ -136,3 +136,6 @@ def test_prepare_run_experiment():
 
         # Run the experiment in test mode
         run_experiment(params, tqdm_func=DummyTqdm, test_run=True)
+
+
+test_prepare_run_experiment()

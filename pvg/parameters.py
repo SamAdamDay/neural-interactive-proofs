@@ -194,16 +194,22 @@ class SubParameters(BaseParameters, ABC):
     pass
 
 
+@dataclass
 class AgentParameters(SubParameters, ABC):
     """Base class for sub-parameters objects which define agents
 
     Parameters
     ----------
+    agent_lr_factor : float
+        The learning rate factor for the whole agent compared with the base learning
+        rate. This allows updating the agents at different rates.
     body_lr_factor : float
-        The learning rate factor for the body part of the model. This allows updating
-        the body at a different rate to the rest of the model.
+        The learning rate factor for the body part of the model compared with with whole
+        agent. This allows updating the body at a different rate to the rest of the
+        model.
     """
 
+    agent_lr_factor: float = 1.0
     body_lr_factor: float = 1.0
 
     is_random: ClassVar[bool] = False
@@ -314,6 +320,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     use_batch_norm: bool = True
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
+
     body_lr_factor: float = 0.1
 
 
@@ -567,11 +574,14 @@ class DatasetParameters(SubParameters):
     binarification_seed : int, optional
         The seed used when doing a randomised binarification. If not provided, the
         default for the dataset is used.
+    make_balanced : bool
+        Whether to make sure the dataset is balanced.
     """
 
     binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
     selected_classes: Optional[tuple[int, int]] = None
     binarification_seed: Optional[int] = None
+    make_balanced: bool = True
 
 
 @dataclass

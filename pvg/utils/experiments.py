@@ -38,9 +38,13 @@ from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
 
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
-
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
+from pvg.constants import (
+    WANDB_ENTITY,
+    WANDB_PROJECT,
+    WANDB_DUMMY_RUN_ENTITY,
+    WANDB_DUMMY_RUN_NAME,
+    WANDB_DUMMY_RUN_PROJECT,
+)
 
 
 # Hack to be able to pickle the command arguments
@@ -232,6 +236,12 @@ class HyperparameterExperiment(ABC):
 
         # Send a W&B alert to say the experiment is finished
         if cmd_args.use_wandb:
+            os.environ["WANDB_SILENT"] = "true"
+            dummy_run = wandb.init(
+                id=WANDB_DUMMY_RUN_NAME,
+                project=WANDB_DUMMY_RUN_PROJECT,
+                entity=WANDB_DUMMY_RUN_ENTITY,
+            )
             plain_run_id = self.run_id_fn(9999, cmd_args)
             wandb.alert(
                 title=f"{plain_run_id} finished",
@@ -241,6 +251,7 @@ class HyperparameterExperiment(ABC):
                 ),
                 level=WandbAlertLevel.INFO,
             )
+            dummy_run.finish()
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):

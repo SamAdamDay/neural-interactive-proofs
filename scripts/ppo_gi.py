@@ -41,7 +41,9 @@ param_grid = dict(
     lr=[0.003],
     body_lr_factor=[0.1],
     prover_num_layers=[5],
+    prover_lr_factor=[1.0],
     verifier_num_layers=[2],
+    verifier_lr_factor=[0.1],
     random_prover=[False],
     pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
@@ -78,6 +80,7 @@ def experiment_fn(
         prover_params = GraphIsomorphismAgentParameters(
             num_gnn_layers=combo["prover_num_layers"],
             activation_function=combo["activation_function"],
+            agent_lr_factor=combo["prover_lr_factor"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -87,6 +90,7 @@ def experiment_fn(
             verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=combo["verifier_num_layers"],
                 activation_function=combo["activation_function"],
+                agent_lr_factor=combo["verifier_lr_factor"],
             ),
             prover=prover_params,
         ),

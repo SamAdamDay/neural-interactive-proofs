@@ -203,4 +203,4 @@ def load_cached_model_state_dicts(
             raise ModelNotFoundError(
                 f"Model file {model_path} does not exist for model {name}."
             )
-        model.load_state_dict(torch.load(model_path))
+        model.load_state_dict(torch.load(model_path, map_location=model.device))
