@@ -266,6 +266,7 @@ class GraphIsomorphismEnvironment(Environment):
             2 * self.max_num_nodes,
             shape=(self.num_envs, 2),
             dtype=torch.long,
+            device=self.device,
         )
         return base_action_spec
 

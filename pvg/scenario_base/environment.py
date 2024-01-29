@@ -113,11 +113,13 @@ class Environment(EnvBase, ABC):
                 self.params.max_message_rounds,
                 shape=(self.num_envs,),
                 dtype=torch.long,
+                device=self.device,
             ),
             decision_restriction=DiscreteTensorSpec(
                 3,
                 shape=(self.num_envs,),
                 dtype=self._int_dtype,
+                device=self.device,
             ),
             shape=(self.num_envs,),
             device=self.device,
@@ -140,8 +142,10 @@ class Environment(EnvBase, ABC):
                     3,
                     shape=(self.num_envs, 2),
                     dtype=self._int_dtype,
+                    device=self.device,
                 ),
                 shape=(self.num_envs,),
+                device=self.device,
             ),
             shape=(self.num_envs,),
             device=self.device,
@@ -162,6 +166,7 @@ class Environment(EnvBase, ABC):
                 1,
                 shape=(self.num_envs, 1),
                 dtype=torch.long,
+                device=self.device,
             ),
             shape=(self.num_envs,),
             device=self.device,
@@ -177,8 +182,11 @@ class Environment(EnvBase, ABC):
         """
         return CompositeSpec(
             agents=CompositeSpec(
-                reward=UnboundedContinuousTensorSpec(shape=(self.num_envs, 2)),
+                reward=UnboundedContinuousTensorSpec(
+                    shape=(self.num_envs, 2), device=self.device
+                ),
                 shape=(self.num_envs,),
+                device=self.device,
             ),
             shape=(self.num_envs,),
             device=self.device,
@@ -194,7 +202,10 @@ class Environment(EnvBase, ABC):
         """
         return CompositeSpec(
             done=BinaryDiscreteTensorSpec(
-                self.num_envs, shape=(self.num_envs,), dtype=torch.bool
+                self.num_envs,
+                shape=(self.num_envs,),
+                dtype=torch.bool,
+                device=self.device,
             ),
             shape=(self.num_envs,),
             device=self.device,
