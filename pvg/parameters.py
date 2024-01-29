@@ -140,9 +140,9 @@ class InteractionProtocolType(StrEnum):
     """
 
     PVG = enum_auto()
-    ABSTRACT_DECISION_PROBLEM = enum_auto()
-    DEBATE = enum_auto()
-    MERLIN_ARTHUR = enum_auto()
+    ABSTRACT_DECISION_PROBLEM = enum_auto()  # TODO
+    DEBATE = enum_auto()  # TODO
+    MERLIN_ARTHUR = enum_auto()  # TODO
 
 
 DEFAULT_AGENT_NAMES = {
@@ -600,6 +600,9 @@ class PvgProtocolParameters(SubParameters):
         The reward given to the verifier if the episode terminates before it guesses.
     verifier_no_guess_reward : float
         The reward given to the verifier if it does not make a guess in a round.
+    shared_reward : bool
+        Whether to use a shared reward function, where the prover gets the same reward
+        as the verifier. This overrides `prover_reward`.
     """
 
     prover_reward: float = 1.0
@@ -607,6 +610,8 @@ class PvgProtocolParameters(SubParameters):
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
+
+    shared_reward: bool = False
 
 
 @dataclass

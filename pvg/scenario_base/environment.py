@@ -335,10 +335,13 @@ class Environment(EnvBase, ABC):
         reward["verifier"][
             verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
         ] = protocol_params.verifier_incorrect_penalty
-        reward["prover"] = (
-            verifier_decision_made & (decision[:, verifier_agent_num] == 1)
-        ).float()
-        reward["prover"] = reward["prover"] * protocol_params.prover_reward
+        if protocol_params.shared_reward:
+            reward["prover"] = reward["verifier"]
+        else:
+            reward["prover"] = (
+                verifier_decision_made & (decision[:, verifier_agent_num] == 1)
+            ).float()
+            reward["prover"] = reward["prover"] * protocol_params.prover_reward
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
