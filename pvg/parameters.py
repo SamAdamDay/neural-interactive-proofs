@@ -145,6 +145,32 @@ class InteractionProtocolType(StrEnum):
     MERLIN_ARTHUR = enum_auto()  # TODO
 
 
+class MinMessageRoundsSchedulerType(StrEnum):
+    """Enum for the scheduler to use for the minimum number of message rounds.
+
+    Enums
+    -----
+    CONSTANT
+        Use a constant `min_message_rounds` minimum number of message rounds.
+    LINEAR_DECREASE
+        Linearly increase the minimum number of message rounds over time, starting with
+        `min_message_rounds` and ending with 1.
+    LINEAR_INCREASE
+        Linearly decrease the minimum number of message rounds over time, starting with
+        1 and ending with `min_message_rounds`.
+    LINEAR_INCREASE_DECREASE
+        Linearly increase the minimum number of message rounds over time, starting with
+        `min_message_rounds` and ending with 1, then linearly decrease the minimum
+        number of message rounds over time, starting with 1 and ending with
+        `min_message_rounds`.
+    """
+
+    CONSTANT = enum_auto()
+    LINEAR_DECREASE = enum_auto()
+    LINEAR_INCREASE = enum_auto()
+    LINEAR_INCREASE_DECREASE = enum_auto()
+
+
 DEFAULT_AGENT_NAMES = {
     InteractionProtocolType.PVG: ("verifier", "prover"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
@@ -636,6 +662,9 @@ class Parameters(BaseParameters):
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, verifier cannot
         guess.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
@@ -673,7 +702,10 @@ class Parameters(BaseParameters):
     seed: int = 6198
 
     max_message_rounds: int = 8
-    min_message_rounds: int = 1
+    min_message_rounds: int = 0
+    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = (
+        MinMessageRoundsSchedulerType.CONSTANT
+    )
     pretrain_agents: bool = False
 
     test_size: float = 0.2
