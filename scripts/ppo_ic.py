@@ -67,6 +67,9 @@ param_grid = dict(
     ihvp_num_iterations=[5],
     ihvp_rank=[5],
     ihvp_rho=[0.1],
+    shared_reward=[False],
+    normalize_advantage=[True],
+    min_message_rounds=[0],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -120,6 +123,7 @@ def experiment_fn(
             entropy_eps=combo["entropy_eps"],
             body_lr_factor=combo["body_lr_factor"],
             lr=combo["lr"],
+            normalize_advantage=combo["normalize_advantage"],
         ),
         image_classification=ImageClassificationParameters(
             num_conv_groups=combo["num_conv_groups"],
@@ -140,6 +144,8 @@ def experiment_fn(
             ihvp_rho=combo["ihvp_rho"],
         ),
         pretrain_agents=combo["pretrain_agents"],
+        shared_reward=combo["shared_reward"],
+        min_message_rounds=combo["min_message_rounds"],
         seed=combo["seed"],
     )
 
