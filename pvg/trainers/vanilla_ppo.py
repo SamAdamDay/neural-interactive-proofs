@@ -11,7 +11,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
-from pvg.utils.torchrl_objectives import ClipPPOLossMultipleActions
+from pvg.utils.torchrl_objectives import ClipPPOLossImproved
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
@@ -113,7 +113,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
             batch_size=self.params.ppo.minibatch_size,
         )
 
-    def _get_loss_module_and_gae(self) -> tuple[ClipPPOLossMultipleActions, GAE]:
+    def _get_loss_module_and_gae(self) -> tuple[ClipPPOLossImproved, GAE]:
         """Construct the loss module and the generalized advantage estimator
 
         Returns
@@ -125,7 +125,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
         """
 
         # Construct the loss module
-        loss_module = ClipPPOLossMultipleActions(
+        loss_module = ClipPPOLossImproved(
             actor=self._policy_operator,
             critic=self._value_operator,
             clip_epsilon=self.params.ppo.clip_epsilon,

@@ -212,15 +212,19 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             body_params = [
                 param
                 for param_name, param in loss_module.named_parameters()
-                if param_name.startswith(f"actor_params.module_0_{agent_name}")
+                if param_name.startswith(f"actor_network_params.module_0_{agent_name}")
             ]
             model_param_dict.append(dict(params=body_params, lr=body_lr))
 
             # Set the learning rate for the non-body parameters
             def is_non_body_param(param_name: str):
-                if re.match(f"actor_params.module_[1-9]_{agent_name}", param_name):
+                if re.match(
+                    f"actor_network_params.module_[1-9]_{agent_name}", param_name
+                ):
                     return True
-                if re.match(f"critic_params.module_[0-9]_{agent_name}", param_name):
+                if re.match(
+                    f"critic_network_params.module_[0-9]_{agent_name}", param_name
+                ):
                     return True
                 return False
 
@@ -308,8 +312,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             with torch.no_grad():
                 gae(
                     tensordict_data,
-                    params=loss_module.critic_params,
-                    target_params=loss_module.target_critic_params,
+                    params=loss_module.critic_network_params,
+                    target_params=loss_module.target_critic_network_params,
                 )
 
             # Flatten the data and add it to the replay buffer

@@ -119,8 +119,8 @@ def test_gi_ppo_train_optimizer_groups():
             # Look for the parameter in the optimizer
             optimizer_has_param = False
             for param_group in optimizer.param_groups:
-                for optmizer_param in param_group["params"]:
-                    if param is optmizer_param:
+                for optimizer_param in param_group["params"]:
+                    if param is optimizer_param:
                         optimizer_lr = param_group["lr"]
                         optimizer_has_param = True
                         break
@@ -129,9 +129,9 @@ def test_gi_ppo_train_optimizer_groups():
             assert optimizer_has_param
 
             # Check that the learning rate is correct
-            if param_name.startswith("actor_params.module_0_prover"):
+            if param_name.startswith("actor_network_params.module_0_prover"):
                 assert optimizer_lr == pytest.approx(expected_lrs[i]["prover"])
-            elif param_name.startswith("actor_params.module_0_verifier"):
+            elif param_name.startswith("actor_network_params.module_0_verifier"):
                 assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier"])
             else:
                 assert optimizer_lr == pytest.approx(expected_lrs[i]["rest"])

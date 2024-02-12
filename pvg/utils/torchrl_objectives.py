@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, make_dataclass, field, fields
 from typing import Iterable
+import contextlib
 
 import torch
 
@@ -11,8 +12,6 @@ from tensordict.utils import NestedKey
 
 from pvg.parameters import SpgVariant
 from pvg.utils.maths import dot, ihvp
-
-from torch import distributions as d
 
 from torchrl.objectives import PPOLoss, ClipPPOLoss
 
@@ -140,16 +139,16 @@ class PPOLossMultipleActions(PPOLoss):
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
             ("next", self.tensor_keys.terminated),
-            *self.actor.in_keys,
-            *[("next", key) for key in self.actor.in_keys],
-            *self.critic.in_keys,
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic_network.in_keys,
         ]
         self._in_keys = list(set(keys))
 
     # Modified to output both log probabilities and log_weights
     def _log_weight(
         self, sample: TensorDictBase
-    ) -> tuple[torch.Tensor, torch.distributions.Distribution]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.distributions.Distribution]:
         """Compute the log weight for the given TensorDict sample.
 
         Parameters
@@ -183,13 +182,17 @@ class PPOLossMultipleActions(PPOLoss):
 
         action_tensordict = TensorDict(actions, batch_size=actions_batch_size)
 
-        with self.actor_params.to_module(self.actor):
-            dist = self.actor.get_dist(sample)
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
+            dist = self.actor_network.get_dist(sample)
 
         if not isinstance(dist, CompositeDistribution):
             raise RuntimeError(
                 f"Actor must return a CompositeDistribution to work with "
-                f"{self.__name__}, but got {dist}."
+                f"{type(self).__name__}, but got {dist}."
             )
 
         log_prob = dist.log_prob(action_tensordict).get(
@@ -203,6 +206,28 @@ class PPOLossMultipleActions(PPOLoss):
 
         return log_prob, log_weight, dist
 
+    def compute_grads(self, loss_vals: TensorDictBase):
+        """Compute the gradients of the loss.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
+        loss_value = (
+            loss_vals["loss_objective"]
+            + loss_vals["loss_critic"]
+            + loss_vals["loss_entropy"]
+        )
+        loss_value.backward()
+
+
+class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
+    """Clipped PPO loss which allows multiple actions keys and normalises advantages
+
+    See `torchrl.objectives.ClipPPOLoss` for more details
+    """
+
     # We modify the loss function to normalise per agent
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -210,7 +235,7 @@ class PPOLossMultipleActions(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_critic_params_detached,
+                params=self._cached_critic_network_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
@@ -249,30 +274,6 @@ class PPOLossMultipleActions(PPOLoss):
         td_out.set("ESS", ess.mean(dim=0).sum() / batch)
 
         return td_out
-
-    def compute_grads(self, loss_vals: TensorDictBase):
-        """Compute the gradients of the loss.
-
-        Parameters
-        ----------
-        loss_vals : TensorDictBase
-            The loss values.
-        """
-        loss_value = (
-            loss_vals["loss_objective"]
-            + loss_vals["loss_critic"]
-            + loss_vals["loss_entropy"]
-        )
-        loss_value.backward()
-
-
-class ClipPPOLossMultipleActions(PPOLossMultipleActions, ClipPPOLoss):
-    """Clipped PPO loss class which allows multiple actions keys
-
-    See `torchrl.objectives.ClipPPOLoss` for more details
-    """
-
-    pass
 
 
 class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
