@@ -44,7 +44,6 @@ WORKDIR /root/pvg-experiments
 # Install all the required packages
 RUN pip install --upgrade pip \
     && pip install wheel cython \
-    && pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121 \
     && pip install -r requirements_dev.txt \
     && pip install -e . \
     && pip install nvitop
