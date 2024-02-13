@@ -4,13 +4,11 @@
 
 1. Clone the repo
 2. Create a virtual environment
-3. Install the requirements (we use a nightly version of TorchRL, which requires a
-   nightly version of PyTorch):
+3. Install the requirements:
 
    ```bash
    pip install wheel
-   pip install torch==2.3.0.dev20240102+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
-   pip install -r requirements_dev.txt --find-links https://download.pytorch.org/whl/nightly/cu121
+   pip install -r requirements_dev.txt
    ```
 
 4. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
