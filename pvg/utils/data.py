@@ -103,3 +103,19 @@ def tensordict_to_numpy_dict(data: TensorDictBase) -> dict:
         return data
 
     return to_numpy_dict(data)
+
+
+def max_length_iterator(iterable, maxlen):
+    """An iterator that stops after a maximum length.
+
+    Parameters
+    ----------
+    iterable : Iterable
+        The iterable to iterate over.
+    maxlen : int
+        The maximum length to iterate over.
+    """
+    for i, item in enumerate(iterable):
+        if i >= maxlen:
+            break
+        yield item
