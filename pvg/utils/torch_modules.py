@@ -230,7 +230,7 @@ class PairInvariantizer(nn.Module):
 
 
 class GIN(TensorDictModuleBase):
-    """A graph isomorphism network (GIN) layer.
+    r"""A graph isomorphism network (GIN) layer.
 
     This is a message-passing layer that aggregates the features of the neighbours as
     follows:

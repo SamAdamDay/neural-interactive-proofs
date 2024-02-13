@@ -17,7 +17,7 @@ from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 
 from pvg.parameters import Parameters
-from pvg.scenario_base import ScenarioInstance, Environment, RolloutSampler
+from pvg.scenario_base import ScenarioInstance, Environment, ArtifactLogger
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
 from pvg.trainers.solo_agent import SoloAgentTrainer
@@ -274,10 +274,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         torch.manual_seed(self.params.seed)
         np.random.seed(self.params.seed)
 
-        # Create the rollout sampler, which will sample rollouts from the environment
-        # and save them to W&B
+        # Create the artifact logger, which will log things are various stages to W&B
         if self.settings.wandb_run is not None:
-            rollout_sampler = RolloutSampler(self.settings)
+            artifact_logger = ArtifactLogger(
+                self.settings, self.scenario_instance.agents
+            )
 
         # Create a progress bar
         pbar = self.settings.tqdm_func(
@@ -368,9 +369,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                 self.settings.wandb_run.log(to_log, step=iteration)
 
-                # Sample rollouts from the data and save them to W&B
-                if (iteration + 1) % self.settings.rollout_sample_period == 0:
-                    rollout_sampler.sample_and_save_rollouts(tensordict_data, iteration)
+                # Log artifacts to W&B if it's time to do so
+                artifact_logger.log(tensordict_data, iteration)
 
             # If we're in test mode, exit after one iteration
             if self.settings.test_run:

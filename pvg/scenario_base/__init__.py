@@ -32,5 +32,5 @@ from .agents import (
     Agent,
 )
 from .scenario_instance import ScenarioInstance
-from .rollout_samples import RolloutSamples, RolloutSampler
+from .artifact_logger import RolloutSamples, ArtifactLogger
 from pvg.scenario_base.run_preparer import RunPreparer
