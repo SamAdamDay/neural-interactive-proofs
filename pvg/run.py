@@ -105,6 +105,7 @@ def run_experiment(
             name=run_id,
             tags=wandb_tags,
             id=run_id,
+            resume="never",
         )
         wandb_run.config.update(params.to_dict())
     else:
