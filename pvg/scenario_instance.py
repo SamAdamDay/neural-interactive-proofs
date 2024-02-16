@@ -8,14 +8,18 @@ the factory `build_scenario_instance` function builds the correct components bas
 the parameters.
 """
 
-from dataclasses import dataclass
+from tempfile import TemporaryDirectory
+from dataclasses import dataclass, fields
 from typing import Optional
+from pathlib import Path
 
 import numpy as np
 
 import torch
 
-from pvg.parameters import Parameters, ScenarioType, TrainerType
+import wandb
+
+from pvg.parameters import Parameters, ScenarioType, TrainerType, AgentParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import Dataset
 from pvg.scenario_base.agents import (
@@ -32,6 +36,8 @@ from pvg.scenario_base.agents import (
     Agent,
 )
 from pvg.scenario_base.environment import Environment
+from pvg.artifact_logger import load_agent_checkpoint
+from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 
 
 SCENARIO_CLASS_REGISTRY: dict[ScenarioType, dict[type, type]] = {}
@@ -122,6 +128,19 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     for agent_name, agent_params in params.agents.items():
         agent_dict = {}
 
+        # If we're loading a checkpoint and parameters, get the run and replace the
+        # parameters with the ones from the checkpoint
+        if agent_params.load_checkpoint_and_parameters:
+            checkpoint_wandb_run = wandb.init(
+                id=agent_params.checkpoint_run_id,
+                entity=agent_params.checkpoint_entity,
+                project=agent_params.checkpoint_project,
+                resume="must",
+            )
+            agent_params.load_from_wandb_config(
+                checkpoint_wandb_run.config["agents"][agent_name]
+            )
+
         # Set the random seed based on the agent name
         agent_seed = (params.seed + hash(agent_name)) % (2**32)
         torch.manual_seed(agent_seed)
@@ -179,6 +198,30 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
             )
 
         agents[agent_name] = Agent(**agent_dict)
+
+        # Load the agent checkpoint if requested
+        if agent_params.load_checkpoint_and_parameters:
+            # Select the artifact to load
+            artifact = checkpoint_wandb_run.use_artifact(
+                f"{CHECKPOINT_ARTIFACT_PREFIX}{agent_params.checkpoint_run_id}:"
+                f"{agent_params.checkpoint_version}"
+            )
+
+            # Download the artifact and load the agent checkpoint into the agent
+            with TemporaryDirectory() as temp_dir:
+                artifact.download(root=temp_dir)
+                agent_path = Path(temp_dir).joinpath(agent_name)
+                for field in fields(agents[agent_name]):
+                    field_value = getattr(agents[agent_name], field.name)
+                    if isinstance(field_value, torch.nn.Module):
+                        state_dict = torch.load(
+                            agent_path.joinpath(f"{field.name}.pkl"),
+                            map_location=device,
+                        )
+                        field_value.load_state_dict(state_dict)
+
+            # Make sure to finish the W&B run
+            checkpoint_wandb_run.finish()
 
     # Build additional components if the trainer is an RL trainer
     train_environment = None

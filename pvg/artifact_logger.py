@@ -130,7 +130,7 @@ class ArtifactLogger:
 
         # Create an artifact to hold the checkpoint
         artifact = wandb.Artifact(
-            name=f"{CHECKPOINT_ARTIFACT_PREFIX}{self._wandb_run.name}",
+            name=f"{CHECKPOINT_ARTIFACT_PREFIX}{self._wandb_run.id}",
             type=CHECKPOINT_ARTIFACT_TYPE,
         )
 
