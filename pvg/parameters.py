@@ -60,6 +60,8 @@ try:
 except ImportError:
     from pvg.utils.future import StrEnum
 
+from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
+
 
 class ScenarioType(StrEnum):
     """Enum for the scenario to run."""
@@ -233,10 +235,42 @@ class AgentParameters(SubParameters, ABC):
         The learning rate factor for the body part of the model compared with with whole
         agent. This allows updating the body at a different rate to the rest of the
         model.
+    load_checkpoint_and_parameters : bool
+        Whether to load the agent model checkpoint and parameters from W&B. In this
+        case, all agent parameters are replaced by the parameters from the checkpoint.
+        Otherwise, the model is randomly initialised. If `True`, the `checkpoint_run_id`
+        parameter must be set.
+    checkpoint_entity : str
+        The entity of the W&B run to load the checkpoint from. If not provided, the
+        default is used.
+    checkpoint_project : str
+        The project of the W&B run to load the checkpoint from. If not provided, the
+        default is used.
+    checkpoint_run_id: str, optional
+        The ID of the W&B run to load the checkpoint from. Must be provided if
+        `load_checkpoint` is `True`.
+    checkpoint_version: str
+        The version of the checkpoint to load. If not provided, the latest version is
+        used.
     """
 
     agent_lr_factor: float = 1.0
     body_lr_factor: float = 1.0
+
+    load_checkpoint_and_parameters: bool = False
+    checkpoint_entity: str = WANDB_ENTITY
+    checkpoint_project: str = WANDB_PROJECT
+    checkpoint_run_id: Optional[str] = None
+    checkpoint_version: str = "latest"
+
+    # The parameters which are preserved when loading from W&B config
+    LOAD_PRESERVED_PARAMETERS: ClassVar[list[str]] = [
+        "load_checkpoint_and_parameters",
+        "checkpoint_entity",
+        "checkpoint_project",
+        "checkpoint_run_id",
+        "checkpoint_version",
+    ]
 
     is_random: ClassVar[bool] = False
 
@@ -248,6 +282,22 @@ class AgentParameters(SubParameters, ABC):
         params_dict["is_random"] = self.is_random
 
         return params_dict
+
+    def load_from_wandb_config(self, wandb_config: dict):
+        """Load the parameters from a W&B config dictionary.
+
+        Parameters
+        ----------
+        wandb_config : dict
+            The W&B config dictionary for this agent (e.g.
+            `wandb_run.config["agents"][agent_name]`).
+        """
+        for field in fields(self):
+            if field.name in self.LOAD_PRESERVED_PARAMETERS:
+                continue
+            if field.name in wandb_config:
+                setattr(self, field.name, wandb_config[field.name])
+        setattr(self, "is_random", wandb_config["is_random"])
 
 
 @dataclass
