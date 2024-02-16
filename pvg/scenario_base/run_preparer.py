@@ -6,7 +6,7 @@ experiments in parallel.
 
 from abc import ABC, abstractmethod
 
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 
 
@@ -37,3 +37,40 @@ class RunPreparer(ABC):
     def prepare_run(self):
         """Prepare the run."""
         pass
+
+
+RUN_PREPARER_REGISTRY: dict[ScenarioType, type[RunPreparer]] = {}
+
+
+def register_run_preparer(scenario: ScenarioType):
+    """Register a subclass of RunPreparer with a scenario.
+
+    Parameters
+    ----------
+    scenario : ScenarioType
+        The scenario with which to register the subclass.
+    """
+
+    def decorator(cls):
+        RUN_PREPARER_REGISTRY[scenario] = cls
+        return cls
+
+    return decorator
+
+
+def build_run_preparer(params: Parameters, settings: ExperimentSettings) -> RunPreparer:
+    """Build a subclass of RunPreparer based on the parameters.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters for the experiment.
+    settings : ExperimentSettings
+        The settings for the experiment.
+
+    Returns
+    -------
+    RunPreparer
+        The prepared run.
+    """
+    return RUN_PREPARER_REGISTRY[params.scenario](params, settings)

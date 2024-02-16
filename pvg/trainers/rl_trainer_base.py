@@ -17,7 +17,7 @@ from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 
 from pvg.parameters import Parameters
-from pvg.scenario_base import ScenarioInstance, Environment, ArtifactLogger
+from pvg.scenario_base import Environment
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
 from pvg.trainers.solo_agent import SoloAgentTrainer
@@ -26,6 +26,8 @@ from pvg.model_cache import (
     save_model_state_dicts,
     load_cached_model_state_dicts,
 )
+from pvg.scenario_instance import ScenarioInstance
+from pvg.artifact_logger import ArtifactLogger
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):

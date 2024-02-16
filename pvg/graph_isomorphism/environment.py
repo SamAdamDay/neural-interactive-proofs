@@ -17,7 +17,9 @@ from torchrl.data.tensor_specs import (
 
 from jaxtyping import Float, Int
 
+from pvg.parameters import ScenarioType
 from pvg.scenario_base import Environment
+from pvg.scenario_instance import register_scenario_class
 from pvg.utils.types import TorchDevice
 
 
@@ -173,6 +175,7 @@ class AdjacencyMatrixSpec(TensorSpec):
         return self
 
 
+@register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Environment)
 class GraphIsomorphismEnvironment(Environment):
     """The graph isomorphism RL environment.
 

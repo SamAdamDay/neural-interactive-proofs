@@ -49,10 +49,12 @@ from pvg.scenario_base import (
     CombinedPolicyHead,
     CombinedValueHead,
 )
+from pvg.scenario_instance import register_scenario_class
 from pvg.parameters import (
     Parameters,
     ImageClassificationAgentParameters,
     RandomAgentParameters,
+    ScenarioType,
 )
 from pvg.utils.torch_modules import (
     ACTIVATION_CLASSES,
@@ -69,6 +71,9 @@ from pvg.utils.torch_modules import (
 )
 from pvg.utils.types import TorchDevice
 from pvg.image_classification.data import IMAGE_DATASETS
+
+
+IC_SCENARIO = ScenarioType.IMAGE_CLASSIFICATION
 
 
 class ImageClassificationAgentPart(AgentPart, ABC):
@@ -119,6 +124,7 @@ class ImageClassificationAgentPart(AgentPart, ABC):
             ]
 
 
+@register_scenario_class(IC_SCENARIO, AgentBody)
 class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     """The body of an image classification agent.
 
@@ -480,6 +486,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         return self
 
 
+@register_scenario_class(IC_SCENARIO, DummyAgentBody)
 class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgentBody):
     """Dummy agent body for the image classification task.
 
@@ -756,6 +763,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         )
 
 
+@register_scenario_class(IC_SCENARIO, AgentPolicyHead)
 class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPolicyHead):
     """Agent policy head for the image classification task.
 
@@ -891,6 +899,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             self.decider.to(device)
 
 
+@register_scenario_class(IC_SCENARIO, RandomAgentPolicyHead)
 class ImageClassificationRandomAgentPolicyHead(
     ImageClassificationAgentPart, RandomAgentPolicyHead
 ):
@@ -975,6 +984,7 @@ class ImageClassificationRandomAgentPolicyHead(
         )
 
 
+@register_scenario_class(IC_SCENARIO, AgentValueHead)
 class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValueHead):
     """Value head for the image classification task.
 
@@ -1064,6 +1074,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self.value_mlp.to(device)
 
 
+@register_scenario_class(IC_SCENARIO, ConstantAgentValueHead)
 class ImageClassificationConstantAgentValueHead(
     ImageClassificationAgentHead, ConstantAgentValueHead
 ):
@@ -1113,6 +1124,7 @@ class ImageClassificationConstantAgentValueHead(
         return body_output.update(dict(value=value))
 
 
+@register_scenario_class(IC_SCENARIO, SoloAgentHead)
 class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHead):
     """Solo agent head for the image classification task.
 
@@ -1171,6 +1183,7 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         self.decider.to(device)
 
 
+@register_scenario_class(IC_SCENARIO, CombinedBody)
 class ImageClassificationCombinedBody(CombinedBody):
     """A module which combines the agent bodies for the image classification task.
 
@@ -1254,6 +1267,7 @@ class ImageClassificationCombinedBody(CombinedBody):
         )
 
 
+@register_scenario_class(IC_SCENARIO, CombinedPolicyHead)
 class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     """A module which combines the agent policy heads for the image classification task.
 
@@ -1362,6 +1376,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         )
 
 
+@register_scenario_class(IC_SCENARIO, CombinedValueHead)
 class ImageClassificationCombinedValueHead(CombinedValueHead):
     """A module which combines the agent value heads for the image classification task.
 

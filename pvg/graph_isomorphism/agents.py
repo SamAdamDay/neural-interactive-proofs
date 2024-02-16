@@ -52,10 +52,12 @@ from pvg.scenario_base import (
     CombinedPolicyHead,
     CombinedValueHead,
 )
+from pvg.scenario_instance import register_scenario_class
 from pvg.parameters import (
     Parameters,
     GraphIsomorphismAgentParameters,
     RandomAgentParameters,
+    ScenarioType,
 )
 from pvg.utils.torch_modules import (
     ACTIVATION_CLASSES,
@@ -70,6 +72,8 @@ from pvg.utils.torch_modules import (
     TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
+
+GI_SCENARIO = ScenarioType.GRAPH_ISOMORPHISM
 
 
 @dataclass
@@ -209,6 +213,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         return transformer_output
 
 
+@register_scenario_class(GI_SCENARIO, AgentBody)
 class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     """Agent body for the graph isomorphism task.
 
@@ -629,6 +634,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         return self
 
 
+@register_scenario_class(GI_SCENARIO, DummyAgentBody)
 class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
     """Dummy agent body for the graph isomorphism task."""
 
@@ -899,6 +905,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         )
 
 
+@register_scenario_class(GI_SCENARIO, AgentPolicyHead)
 class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead):
     """Agent policy head for the graph isomorphism task.
 
@@ -1065,6 +1072,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.decider.to(device)
 
 
+@register_scenario_class(GI_SCENARIO, RandomAgentPolicyHead)
 class GraphIsomorphismRandomAgentPolicyHead(
     GraphIsomorphismAgentPart, RandomAgentPolicyHead
 ):
@@ -1168,6 +1176,7 @@ class GraphIsomorphismRandomAgentPolicyHead(
         )
 
 
+@register_scenario_class(GI_SCENARIO, AgentValueHead)
 class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     """Value head for the graph isomorphism task.
 
@@ -1276,6 +1285,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         self.value_mlp.to(device)
 
 
+@register_scenario_class(GI_SCENARIO, ConstantAgentValueHead)
 class GraphIsomorphismConstantAgentValueHead(
     GraphIsomorphismAgentHead, ConstantAgentValueHead
 ):
@@ -1337,6 +1347,7 @@ class GraphIsomorphismConstantAgentValueHead(
         return body_output.update(dict(value=value))
 
 
+@register_scenario_class(GI_SCENARIO, SoloAgentHead)
 class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     """Solo agent head for the graph isomorphism task.
 
@@ -1402,6 +1413,7 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
         self.decider.to(device)
 
 
+@register_scenario_class(GI_SCENARIO, CombinedBody)
 class GraphIsomorphismCombinedBody(CombinedBody):
     """A module which combines the agent bodies for the graph isomorphism task.
 
@@ -1483,6 +1495,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         )
 
 
+@register_scenario_class(GI_SCENARIO, CombinedPolicyHead)
 class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     """A module which combines the agent policy heads for the graph isomorphism task.
 
@@ -1634,6 +1647,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         )
 
 
+@register_scenario_class(GI_SCENARIO, CombinedValueHead)
 class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     """A module which combines the agent value heads for the graph isomorphism task.
 

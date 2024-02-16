@@ -30,6 +30,5 @@ from .agents import (
     GraphIsomorphismSoloAgentHead,
     GraphIsomorphismAgentHooks,
 )
-from .scenario_instance import GraphIsomorphismScenarioInstance
-from .artifact_logger import GraphIsomorphismRolloutSamples
+from .rollout_samples import GraphIsomorphismRolloutSamples
 from .run_preparer import GraphIsomorphismRunPreparer

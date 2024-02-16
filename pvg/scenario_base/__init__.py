@@ -26,11 +26,15 @@ from .agents import (
     AgentValueHead,
     ConstantAgentValueHead,
     SoloAgentHead,
+    CombinedAgentPart,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
     Agent,
 )
-from .scenario_instance import ScenarioInstance
-from .artifact_logger import RolloutSamples, ArtifactLogger
-from pvg.scenario_base.run_preparer import RunPreparer
+from .rollout_samples import (
+    RolloutSamples,
+    register_rollout_samples_class,
+    build_rollout_samples,
+)
+from .run_preparer import RunPreparer, register_run_preparer, build_run_preparer

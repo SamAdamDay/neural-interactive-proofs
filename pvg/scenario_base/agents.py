@@ -134,7 +134,11 @@ class SoloAgentHead(AgentHead, ABC):
     """Base class for all solo agent heads, which attempt the task on their own."""
 
 
-class CombinedBody(TensorDictModuleBase, ABC):
+class CombinedAgentPart(TensorDictModuleBase, ABC):
+    """Base class for modules which combine agent parts together."""
+
+
+class CombinedBody(CombinedAgentPart, ABC):
     """A module which combines all the agent bodies together.
 
     Parameters
@@ -171,7 +175,7 @@ class CombinedBody(TensorDictModuleBase, ABC):
         pass
 
 
-class CombinedPolicyHead(TensorDictModuleBase, ABC):
+class CombinedPolicyHead(CombinedAgentPart, ABC):
     """A module which combines all the agent policy heads together.
 
     Parameters
@@ -250,7 +254,7 @@ class CombinedPolicyHead(TensorDictModuleBase, ABC):
         return decision_logits
 
 
-class CombinedValueHead(TensorDictModuleBase, ABC):
+class CombinedValueHead(CombinedAgentPart, ABC):
     """A module which combines all the agent value heads together.
 
     Parameters

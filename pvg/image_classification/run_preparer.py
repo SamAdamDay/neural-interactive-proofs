@@ -3,10 +3,12 @@
 Downloads and processes the data for the run.
 """
 
-from pvg.scenario_base import RunPreparer
+from pvg.parameters import ScenarioType
+from pvg.scenario_base import RunPreparer, register_run_preparer
 from pvg.image_classification.data import ImageClassificationDataset
 
 
+@register_run_preparer(ScenarioType.IMAGE_CLASSIFICATION)
 class ImageClassificationRunPreparer(RunPreparer):
     """Prepare for doing an image classification run.
 

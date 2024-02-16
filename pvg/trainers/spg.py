@@ -13,9 +13,12 @@ from torchrl.objectives import ValueEstimators
 
 from pvg.utils.torchrl_objectives import SpgLoss
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
+from pvg.trainers.registry import register_trainer
+from pvg.parameters import TrainerType
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
+@register_trainer(TrainerType.SPG)
 class SpgTrainer(ReinforcementLearningTrainer):
     """Stackelberg Policy Gradient trainer
 

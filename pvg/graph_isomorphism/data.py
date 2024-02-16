@@ -9,9 +9,12 @@ from torch_geometric.utils import to_dense_adj
 from einops import repeat
 
 from pvg.scenario_base import Dataset
+from pvg.parameters import ScenarioType
+from pvg.scenario_instance import register_scenario_class
 from pvg.constants import GI_DATA_DIR
 
 
+@register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Dataset)
 class GraphIsomorphismDataset(Dataset):
     """A dataset for the graph isomorphism experiments.
 
