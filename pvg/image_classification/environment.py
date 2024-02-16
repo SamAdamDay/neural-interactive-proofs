@@ -16,10 +16,13 @@ from torchrl.data.tensor_specs import (
 
 from jaxtyping import Float, Int
 
+from pvg.parameters import ScenarioType
 from pvg.scenario_base import Environment
+from pvg.scenario_instance import register_scenario_class
 from pvg.image_classification.data import IMAGE_DATASETS
 
 
+@register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Environment)
 class ImageClassificationEnvironment(Environment):
     """The image classification RL environment.
 

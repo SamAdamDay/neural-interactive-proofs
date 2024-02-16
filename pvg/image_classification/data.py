@@ -21,6 +21,8 @@ from torchvision import transforms
 from tensordict import TensorDict
 
 from pvg.parameters import BinarificationMethodType
+from pvg.parameters import ScenarioType
+from pvg.scenario_instance import register_scenario_class
 from pvg.scenario_base import Dataset
 from pvg.constants import IC_DATA_DIR
 
@@ -139,6 +141,7 @@ IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
 )
 
 
+@register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
 class ImageClassificationDataset(Dataset):
     """A dataset for the image classification task.
 

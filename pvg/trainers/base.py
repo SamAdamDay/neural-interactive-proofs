@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 
 from pvg.parameters import Parameters
-from pvg.scenario_base.scenario_instance import ScenarioInstance
+from pvg.scenario_instance import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 
 
@@ -16,8 +16,8 @@ class Trainer(ABC):
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
-    device : TorchDevice
-        The device to use for training.
+    settings : ExperimentSettings
+        The instance-specific settings of the experiment, like device, logging, etc.
     """
 
     def __init__(

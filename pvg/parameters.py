@@ -729,6 +729,22 @@ class Parameters(BaseParameters):
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
 
     def __post_init__(self):
+        # Convert any strings to enums
+        if not isinstance(self.scenario, ScenarioType):
+            self.scenario = ScenarioType[self.scenario]
+        if not isinstance(self.trainer, TrainerType):
+            self.trainer = TrainerType[self.trainer]
+        if not isinstance(self.interaction_protocol, InteractionProtocolType):
+            self.interaction_protocol = InteractionProtocolType[
+                self.interaction_protocol
+            ]
+        if not isinstance(
+            self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
+        ):
+            self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
+                self.min_message_rounds_scheduler
+            ]
+
         # Convert graph isomorphism agent parameters to the appropriate class
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             self._process_agents_params(

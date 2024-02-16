@@ -14,36 +14,15 @@ import wandb
 
 from tqdm import tqdm
 
-from pvg.parameters import Parameters, ScenarioType, TrainerType
+from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import ScenarioInstance, RunPreparer
-from pvg.graph_isomorphism import (
-    GraphIsomorphismScenarioInstance,
-    GraphIsomorphismRunPreparer,
-)
-from pvg.image_classification import (
-    ImageClassificationScenarioInstance,
-    ImageClassificationRunPreparer,
-)
-from pvg.trainers import Trainer, SoloAgentTrainer, VanillaPpoTrainer, SpgTrainer
+from pvg.scenario_base import build_run_preparer
+from pvg.scenario_instance import build_scenario_instance
+from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
-
-SCENARIO_MAP: dict[ScenarioType, ScenarioInstance] = {
-    ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismScenarioInstance,
-    ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationScenarioInstance,
-}
-
-RUN_PREPARER: dict[ScenarioType, RunPreparer] = {
-    ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismRunPreparer,
-    ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationRunPreparer,
-}
-
-TRAINER_MAP: dict[TrainerType, Trainer] = {
-    TrainerType.SOLO_AGENT: SoloAgentTrainer,
-    TrainerType.VANILLA_PPO: VanillaPpoTrainer,
-    TrainerType.SPG: SpgTrainer,
-}
+import pvg.graph_isomorphism
+import pvg.image_classification
 
 
 def run_experiment(
@@ -123,16 +102,10 @@ def run_experiment(
     )
 
     # Build the scenario components of the experiment.
-    if params.scenario in SCENARIO_MAP:
-        scenario_instance = SCENARIO_MAP[params.scenario](params, settings)
-    else:
-        raise ValueError(f"Unknown scenario {params.scenario}")
+    scenario_instance = build_scenario_instance(params, settings)
 
     # Build the trainer.
-    if params.trainer in TRAINER_MAP:
-        trainer = TRAINER_MAP[params.trainer](params, scenario_instance, settings)
-    else:
-        raise ValueError(f"Unknown trainer {params.trainer}")
+    trainer = build_trainer(params, scenario_instance, settings)
 
     # Suppress warnings about a batching rule not being implemented by PyTorch for
     # aten::_scaled_dot_product_efficient_attention. We can't do anything about this
@@ -190,8 +163,5 @@ def prepare_experiment(
         test_run=test_run,
     )
 
-    if params.scenario in RUN_PREPARER:
-        run_preparer: RunPreparer = RUN_PREPARER[params.scenario](params, settings)
-        run_preparer.prepare_run()
-    else:
-        raise ValueError(f"Unknown scenario {params.scenario}")
+    run_preparer = build_run_preparer(params, settings)
+    run_preparer.prepare_run()

@@ -9,8 +9,8 @@ from pvg import (
     CommonPpoParameters,
     ExperimentSettings,
 )
-from pvg.graph_isomorphism import GraphIsomorphismScenarioInstance
 from pvg.trainers.vanilla_ppo import VanillaPpoTrainer
+from pvg.scenario_instance import build_scenario_instance
 
 
 def test_gi_ppo_train_optimizer_groups():
@@ -105,7 +105,7 @@ def test_gi_ppo_train_optimizer_groups():
     for i, params in enumerate(params_list):
         # Create the experiment settings and scenario instance to pass to the trainer
         settings = ExperimentSettings(device="cpu", test_run=True)
-        scenario_instance = GraphIsomorphismScenarioInstance(params, settings)
+        scenario_instance = build_scenario_instance(params, settings)
 
         # Create the trainer and get the loss module and optimizer
         trainer = VanillaPpoTrainer(params, scenario_instance, settings)

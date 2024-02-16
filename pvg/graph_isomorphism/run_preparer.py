@@ -3,10 +3,12 @@
 Downloads and processes the data for the run.
 """
 
-from pvg.scenario_base import RunPreparer
+from pvg.parameters import ScenarioType
+from pvg.scenario_base import RunPreparer, register_run_preparer
 from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 
 
+@register_run_preparer(ScenarioType.GRAPH_ISOMORPHISM)
 class GraphIsomorphismRunPreparer(RunPreparer):
     """Prepare for doing an image classification run.
 

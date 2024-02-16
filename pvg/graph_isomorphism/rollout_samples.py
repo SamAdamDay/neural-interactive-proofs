@@ -9,9 +9,11 @@ import plotly.express as px
 
 import networkx as nx
 
-from pvg.scenario_base import RolloutSamples
+from pvg.parameters import ScenarioType
+from pvg.scenario_base import RolloutSamples, register_rollout_samples_class
 
 
+@register_rollout_samples_class(ScenarioType.GRAPH_ISOMORPHISM)
 class GraphIsomorphismRolloutSamples(RolloutSamples):
     """A message exchange in the graph isomorphism task."""
 

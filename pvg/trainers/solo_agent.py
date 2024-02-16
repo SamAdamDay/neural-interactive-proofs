@@ -13,10 +13,13 @@ from torch.optim import Adam, Optimizer
 
 from tensordict import TensorDict
 
+from pvg.scenario_base.data import DataLoader
 from pvg.trainers.base import Trainer
-from pvg.parameters import AgentsParameters
+from pvg.trainers.registry import register_trainer
+from pvg.parameters import AgentsParameters, TrainerType
 
 
+@register_trainer(TrainerType.SOLO_AGENT)
 class SoloAgentTrainer(Trainer):
     """Trainer for training agents in isolation.
 
@@ -92,13 +95,13 @@ class SoloAgentTrainer(Trainer):
             optimizers[agent_name] = Adam(model_param_dict)
 
         # Create the data loaders
-        train_dataloader = self.scenario_instance.dataloader_class(
+        train_dataloader = DataLoader(
             train_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
             generator=torch_generator,
         )
-        test_loader = self.scenario_instance.dataloader_class(
+        test_loader = DataLoader(
             test_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=False,
