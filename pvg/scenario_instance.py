@@ -36,7 +36,6 @@ from pvg.scenario_base.agents import (
     Agent,
 )
 from pvg.scenario_base.environment import Environment
-from pvg.artifact_logger import load_agent_checkpoint
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 
 
