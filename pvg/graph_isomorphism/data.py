@@ -119,6 +119,12 @@ class GraphIsomorphismDataset(Dataset):
         y = (data_dict["wl_scores"] == -1).to(self.y_dtype)
 
         return TensorDict(
-            dict(adjacency=adjacency, x=x, node_mask=node_mask, y=y),
+            dict(
+                adjacency=adjacency,
+                x=x,
+                node_mask=node_mask,
+                y=y,
+                wl_score=data_dict["wl_scores"],
+            ),
             batch_size=num_graph_pairs,
         )
