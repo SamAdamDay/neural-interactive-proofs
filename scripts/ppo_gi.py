@@ -30,7 +30,7 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
-    trainer=[TrainerType.PPO],
+    trainer=[TrainerType.VANILLA_PPO],
     dataset_name=["eru10000"],
     num_iterations=[25000],
     num_epochs=[4],
