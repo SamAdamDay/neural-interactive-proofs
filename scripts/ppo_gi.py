@@ -30,9 +30,9 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
-    trainer=[TrainerType.SPG],
+    trainer=[TrainerType.PPO],
     dataset_name=["eru10000"],
-    num_iterations=[1000],
+    num_iterations=[25000],
     num_epochs=[4],
     minibatch_size=[256],
     gamma=[0.9],
@@ -44,10 +44,10 @@ param_grid = dict(
     prover_num_layers=[5],
     prover_lr_factor=[1.0],
     verifier_num_layers=[2],
-    verifier_lr_factor=[0.1],
+    verifier_lr_factor=[1.0],
     num_transformer_layers=[1],
     random_prover=[False],
-    pretrain_agents=[False],
+    pretrain_agents=[True],
     activation_function=[ActivationType.TANH],
     spg_variant=[SpgVariant.SPG],
     stackelberg_sequence=[(("verifier",), ("prover",))],
