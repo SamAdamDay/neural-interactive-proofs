@@ -50,7 +50,7 @@ Create a parameters object using a dictionary for the ppo parameters
 
 from dataclasses import dataclass, asdict, fields
 from abc import ABC
-from typing import Optional, ClassVar, OrderedDict, Iterable
+from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
 from enum import auto as enum_auto
 from textwrap import indent
 from itertools import product
@@ -77,8 +77,8 @@ class SpgVariant(StrEnum):
     PSPG = enum_auto()
     LOLA = enum_auto()
     POLA = enum_auto()
-    SOS = enum_auto()  # TODO
-    PSOS = enum_auto()  # TODO
+    SOS = enum_auto()
+    PSOS = enum_auto()
 
 
 class IhvpVariant(StrEnum):
@@ -563,6 +563,9 @@ class VanillaPpoParameters(SubParameters):
     """Additional parameters for the vanilla PPO trainer."""
 
 
+SosParams = NamedTuple("SosParams", [("a", float), ("b", float)])
+
+
 @dataclass
 class SpgParameters(SubParameters):
     """Additional parameters for SPG and its variants.
@@ -574,9 +577,10 @@ class SpgParameters(SubParameters):
     stackelberg_sequence : tuple[tuple[str]]
         The sequence of agents to use in the Stackelberg game. The leaders first then
         their respective followers, and so forth.
-    names : tuple[str]
-        The names of the agents in the Stackelberg game, in the order they were created
-        (to enable mapping between agent names and indices).
+    additional_lola_term : bool
+        Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
+    sos_params : NamedTuple
+        The parameters for the SOS loss.
     ihvp_variant : IhvpVariant
         The variant of IHVP to use.
     ihvp_num_iterations : int
@@ -589,6 +593,10 @@ class SpgParameters(SubParameters):
 
     variant: SpgVariant = SpgVariant.SPG
     stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
+    additional_lola_term: bool = True
+    sos_params: NamedTuple = SosParams(
+        a=0.5, b=0.1
+    )  # Default values taken from the original paper
 
     # IHVP
     ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM

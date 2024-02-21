@@ -95,7 +95,7 @@ def test_prepare_run_experiment():
             minibatch_size=64,
         ),
         TrainerType.SPG: SpgParameters(
-            variant=SpgVariant.LOLA,
+            variant=SpgVariant.PSOS,
         ),
     }
 

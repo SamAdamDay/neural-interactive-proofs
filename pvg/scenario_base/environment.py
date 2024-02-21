@@ -302,6 +302,8 @@ class Environment(EnvBase, ABC):
                 "implemented."
             )
 
+    # TODO LH: new protocols go here
+
     def _step_pvg_protocol(
         self,
         env_td: TensorDictBase,
