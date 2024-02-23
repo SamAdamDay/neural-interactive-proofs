@@ -146,5 +146,3 @@ data/image_classification
 # Model cache
 model_cache/*/*
 !model_cache/solo_agents/svhn_*
-nip-key
-nip-key.pub
