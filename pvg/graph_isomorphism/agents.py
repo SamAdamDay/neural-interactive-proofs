@@ -68,6 +68,7 @@ from pvg.utils.torch_modules import (
     BatchNorm1dSimulateBatchDims,
     OneHot,
     TensorDictCat,
+    NormalizeOneHotMessageHistory,
     Print,
     TensorDictPrint,
 )
@@ -258,6 +259,14 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     ):
         super().__init__(params, agent_name, device)
 
+        # Build the message history normalizer if necessary
+        if self._agent_params.normalize_message_history:
+            self.message_history_normalizer = NormalizeOneHotMessageHistory(
+                max_message_rounds=self.params.max_message_rounds,
+                message_out_key="gnn_repr",
+                num_structure_dims=2,
+            )
+
         # Build up the GNN module
         self.gnn = self._build_gnn(
             d_input=self.params.max_message_rounds,
@@ -296,7 +305,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         gnn_layers.append(
             TensorDictModule(
                 Linear(d_input, self._agent_params.d_gnn),
-                in_keys=("x",),
+                in_keys=("gnn_repr",),
                 out_keys=("gnn_repr",),
             )
         )
@@ -475,28 +484,11 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # The size of the node dimension
         max_num_nodes = data["x"].shape[-2]
 
-        # If the data is empty, return empty outputs
-        if data.batch_size[0] == 0:
-            return TensorDict(
-                dict(
-                    graph_level_repr=torch.empty(
-                        (*data.batch_size, 2, self._agent_params.d_transformer),
-                        device=self.device,
-                        dtype=torch.float32,
-                    ),
-                    node_level_repr=torch.empty(
-                        (
-                            *data.batch_size,
-                            2,
-                            max_num_nodes,
-                            self._agent_params.d_transformer,
-                        ),
-                        device=self.device,
-                        dtype=torch.float32,
-                    ),
-                ),
-                batch_size=data.batch_size,
-            )
+        # Normalize the message history if necessary
+        if self._agent_params.normalize_message_history:
+            data = self.message_history_normalizer(data)
+        else:
+            data = data.update(dict(gnn_repr=data["x"]))
 
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
@@ -624,6 +616,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
+        if self._agent_params.normalize_message_history:
+            self.message_history_normalizer.to(device)
         self.gnn.to(device)
         self.global_pooling.to(device)
         self.global_pooling[-1].to(device)
