@@ -1,7 +1,7 @@
 """Extensions of TorchRL objectives to overcome limitations of the library."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable
+from typing import Iterable, NamedTuple
 import contextlib
 
 import torch
@@ -11,7 +11,7 @@ from tensordict.nn.distributions import CompositeDistribution
 from tensordict.utils import NestedKey
 
 from pvg.parameters import SpgVariant
-from pvg.utils.maths import dot, ihvp
+from pvg.utils.maths import dot_td, ihvp, compute_sos_update
 
 from torchrl.objectives import PPOLoss, ClipPPOLoss
 
@@ -292,6 +292,8 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         stackelberg_sequence: tuple[tuple[int]],
         names: list[str],
         ihvp: dict,
+        additional_lola_term: bool,
+        sos_params: NamedTuple,
         agent_lr_factors: list[float],
         lr: float,
         clip_epsilon,
@@ -311,12 +313,18 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         self.agent_groups = {
             i: stackelberg_sequence.index(g) for g in stackelberg_sequence for i in g
         }
-        self.followers = self.get_followers()
+        self.followers, self.all_followers = self.get_followers()
         self.leaders = {
             i: tuple(j for j in self.agent_indices if i in self.followers[j])
             for i in self.agent_indices
         }
+        self.all_leaders = {
+            i: tuple(j for j in self.agent_indices if i in self.all_followers[j])
+            for i in self.agent_indices
+        }
         self.ihvp = ihvp
+        self.additional_lola_term = additional_lola_term
+        self.sos_params = sos_params
         self.agent_lr_factors = agent_lr_factors
         self.lr = lr
         self.names = names
@@ -340,16 +348,22 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         """
 
         followers = {}
+        all_followers = {}
 
         for g in range(len(self.stackelberg_sequence)):
             if g != len(self.stackelberg_sequence) - 1:
+                all = []
+                for gg in range(g + 1, len(self.stackelberg_sequence)):
+                    all += self.stackelberg_sequence[gg]
                 for i in self.stackelberg_sequence[g]:
                     followers[i] = self.stackelberg_sequence[g + 1]
+                    all_followers[i] = tuple(all)
             else:
                 for i in self.stackelberg_sequence[g]:
                     followers[i] = ()
+                    all_followers[i] = ()
 
-        return followers
+        return followers, all_followers
 
     def get_actor_params(
         self, grads=False
@@ -405,8 +419,12 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
-        # Use vanilla A2C losses for SPG and LOLA
-        if self.variant == SpgVariant.SPG or self.variant == SpgVariant.LOLA:
+        # Use vanilla A2C losses for SPG and LOLA and SOS
+        if (
+            self.variant == SpgVariant.SPG
+            or self.variant == SpgVariant.LOLA
+            or self.variant == SpgVariant.SOS
+        ):
             probs = log_prob.exp()
             gains = {}
             for i in self.agent_indices:
@@ -416,8 +434,12 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                 log_prob.sum()
             )  # TODO we don't take a mean across samples (because the score multiplicands have already been averaged across samples), which I believe is correct in theory, but might need changed in practice
 
-        # Otherwise use the clipped PPO loss for PSPG and POLA
-        elif self.variant == SpgVariant.PSPG or self.variant == SpgVariant.POLA:
+        # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
+        elif (
+            self.variant == SpgVariant.PSPG
+            or self.variant == SpgVariant.POLA
+            or self.variant == SpgVariant.PSOS
+        ):
             gains = {}
             for i in self.agent_indices:
                 gain1 = log_weight.exp() * advantage[:, i].unsqueeze(dim=1)
@@ -486,30 +508,48 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                 return (score_coefficient, pg_coefficient)
 
             else:
-                for k in self.leaders[j]:
-                    p = jacobian_terms(i, k)
-                    temp_score_coefficient = (
-                        dot(objective_loss_grads[j][k], scores[k]) * p[0]
-                    ) + (
-                        dot(objective_loss_grads[j][k], objective_loss_grads[k][k])
-                        * p[1]
-                    )
-                    temp_pg_coefficient = (dot(scores[k], scores[k]) * p[0]) + (
-                        dot(scores[k], objective_loss_grads[k][k]) * p[1]
-                    )
+                score_coefficient = {}
+                pg_coefficient = {}
 
-                    if self.leaders[j](k) == 0:
+                for l in self.leaders[j]:
+                    p = jacobian_terms(i, l)
+
+                    # Score coefficient
+                    temp_score_coefficient_p0 = dot_td(
+                        objective_loss_grads[j][l], scores[l]
+                    )
+                    temp_score_coefficient_p1 = dot_td(
+                        objective_loss_grads[j][l], objective_loss_grads[l][l]
+                    )
+                    temp_score_coefficient = {}
+                    for k in p[0]:
+                        temp_score_coefficient[k] = (
+                            temp_score_coefficient_p0 * p[0][k]
+                        ) + (temp_score_coefficient_p1 * p[1][k])
+
+                    # Policy gradient coefficient
+                    temp_pg_coefficient_p0 = dot_td(scores[l], scores[l])
+                    temp_pg_coefficient_p1 = dot_td(
+                        scores[l], objective_loss_grads[l][l]
+                    )
+                    temp_pg_coefficient = {}
+                    for k in p[0]:
+                        temp_pg_coefficient[k] = (temp_pg_coefficient_p0 * p[0][k]) + (
+                            temp_pg_coefficient_p1 * p[1][k]
+                        )
+
+                    if len(score_coefficient) == 0:
                         score_coefficient = temp_score_coefficient
                         pg_coefficient = temp_pg_coefficient
                     else:
-                        for key in temp_score_coefficient.keys():
+                        for key in temp_score_coefficient:
                             score_coefficient[key] += temp_score_coefficient[key]
                             pg_coefficient[key] += temp_pg_coefficient[key]
 
                 return (score_coefficient, pg_coefficient)
 
         # TODO This is not very memory-efficient but it does prevent the gradients of
-        # the parameters getting messed up between calulcating JVPs and assigning
+        # the parameters getting messed up between calculating JVPs and assigning
         # gradients
         if self.variant == SpgVariant.SPG or self.variant == SpgVariant.PSPG:
             actor_params = self.get_actor_params()
@@ -525,47 +565,82 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                         self.ihvp["rank"],
                         self.ihvp["rho"],
                     )
-                    for j in self.followers[i]
+                    for j in self.all_followers[i]
                 }
                 for i in self.agent_indices
-                if len(self.followers[i]) > 0
+                if len(self.all_followers[i]) > 0
             }
 
-        for i in self.agent_indices:
-            grad = objective_loss_grads[i][i]
+        # The dictionaries are named after the terms in the paper "Stable Opponent Shaping in Differentiable Games" by Letcher et al.
+        xi = {}
+        H_0_xi = {}
+        chi = {}
+        total_derivatives = {}
 
-            for j in self.followers[i]:
+        for i in self.agent_indices:
+            xi.update(objective_loss_grads[i][i])
+            total_derivatives[i] = objective_loss_grads[i][i]
+            for k in total_derivatives[i].keys():
+                H_0_xi[k] = 0.0
+                chi[k] = 0.0
+
+            for j in self.all_followers[i]:
                 p = jacobian_terms(i, j)
-                # If using LOLA or POLA we effectively assume that the inverse Hessian
-                # is the identity matrix
-                if self.variant == SpgVariant.LOLA or self.variant == SpgVariant.POLA:
-                    multiplier = objective_loss_grads[i][j]
+
                 # Compute (an approximation of) the true Stackelberg gradient using an
                 # inverse Hessian vector product
-                elif self.variant == SpgVariant.SPG or self.variant == SpgVariant.PSPG:
+                if self.variant == SpgVariant.SPG or self.variant == SpgVariant.PSPG:
                     multiplier = ihvps[i][j]
-                score_term = dot(multiplier, scores[j])
-                pg_term = dot(multiplier, objective_loss_grads[j][j])
-                for k in grad.keys():
+                # If using other algorithms we effectively assume that the inverse Hessian
+                # is the identity matrix
+                else:
+                    multiplier = objective_loss_grads[i][j]
+
+                chi_score_term = dot_td(multiplier, scores[j])
+                chi_pg_term = dot_td(multiplier, objective_loss_grads[j][j])
+
+                H_0_xi_pg_term = dot_td(scores[j], total_derivatives[j])
+                H_0_xi_score_term = dot_td(
+                    objective_loss_grads[i][j], total_derivatives[j]
+                )
+
+                for k in total_derivatives[i].keys():
+                    if (
+                        self.variant == SpgVariant.SPG
+                        or self.variant == SpgVariant.PSPG
+                    ):
+                        lr_coefficient = 1.0
+                        H_0_xi_term = 0.0
                     # For LOLA and POLA we need to multiply the gradients by the
                     # learning rate of the follower agent
-                    if (
-                        self.variant == SpgVariant.LOLA
-                        or self.variant == SpgVariant.POLA
-                    ):
-                        lr_coefficient = self.agent_lr_factors[j] * self.lr
                     else:
-                        lr_coefficient = 1.0
-                    grad[k] -= lr_coefficient * (score_term * p[0][k]) + (
-                        pg_term * p[1][k]
-                    )
+                        lr_coefficient = self.agent_lr_factors[j] * self.lr
+                        if (
+                            self.additional_lola_term
+                            or self.variant == SpgVariant.SOS
+                            or self.variant == SpgVariant.PSOS
+                        ):
+                            H_0_xi_term = (
+                                H_0_xi_pg_term * objective_loss_grads[i][i][k]
+                            ) + (H_0_xi_score_term * scores[i][k])
 
-            # All the gradient updates needed for agent i are stored in grad
-            for param_name, param in self.named_parameters():
-                if param_name in grad.keys():
-                    param.grad = grad[
-                        param_name
-                    ]  # TODO check this actually sets the gradients correctly
+                    chi_term = (chi_score_term * p[0][k]) + (chi_pg_term * p[1][k])
+
+                    chi[k] += lr_coefficient * chi_term
+                    H_0_xi[k] += lr_coefficient * H_0_xi_term
+
+                    total_derivatives[i][k] -= lr_coefficient * (chi_term + H_0_xi_term)
+
+        if self.variant == SpgVariant.SOS or self.variant == SpgVariant.PSOS:
+            update = compute_sos_update(
+                xi, H_0_xi, chi, self.sos_params.a, self.sos_params.b
+            )
+        else:
+            update = {k: td[k] for td in total_derivatives for k in td}
+
+        for param_name, param in self.named_parameters():
+            if param_name[:5] == "actor":
+                param.grad = update[param_name]
 
         additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
         additional_loss.backward()

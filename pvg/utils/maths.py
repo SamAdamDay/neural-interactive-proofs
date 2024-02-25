@@ -1,13 +1,12 @@
 """Utilities for useful mathematical operations."""
 
-
 from pvg.parameters import IhvpVariant
 from typing import Tuple
 import torch
 from torch import Tensor
 
 
-def dot(td1, td2):
+def dot_td(td1, td2):
     """
     Calculate the dot product between two (parameter) dictionaries.
 
@@ -25,6 +24,77 @@ def dot(td1, td2):
         raise ValueError("td1 and td2 must have the same keys.")
     else:
         return sum((td1[k] * td2[k]).sum() for k in td1.keys())
+
+
+def sum_td(td1, td2):
+    """
+    Calculate the sum of two (parameter) dictionaries.
+
+    Parameters:
+    td1 (dict): The first dictionary.
+    td2 (dict): The second dictionary.
+
+    Returns:
+    dict: The sum product of the two dictionaries.
+
+    Raises:
+    ValueError: If td1 and td2 do not have the same keys.
+    """
+    if td1.keys() != td2.keys():
+        raise ValueError("td1 and td2 must have the same keys.")
+    else:
+        return {k: td1[k] + td2[k] for k in td1.keys()}
+
+
+def mul_td(td, c):
+    """
+    Calculate a scalar multiple of a (parameter) dictionaries.
+
+    Parameters:
+    td (dict): The dictionary.
+    c (float): The scalar.
+
+    Returns:
+    float: The scalar multiple of the dictionary.
+    """
+    return {k: td[k] * c for k in td.keys()}
+
+
+def compute_sos_update(xi, H_0_xi, chi, a, b):
+    """
+    Compute the update for the Stable Opponent Shaping (SOS) algorithm. See Algorithm 1 in the paper "Stable Opponent Shaping in Differentiable Games" by Letcher et al.
+
+    Args:
+        xi (dict): The vanilla individual updates.
+        H_0_xi (dict): See the original paper for a definition of this term.
+        chi (dict): See the original paper for a definition of this term.
+        a (float): A scaling factor (between 0 and 1).
+        b (float): A threshold value (between 0 and 1).
+
+    Returns:
+        dict: The update to be made to the parameters.
+
+    """
+
+    xi_0 = {}
+    for k in xi:
+        xi_0[k] = xi[k] - H_0_xi[k]
+    denom = -dot_td(chi, xi_0)
+    if denom >= 0.0:
+        p_1 = 1.0
+    else:
+        p_1 = min(1.0, -a * dot_td(xi_0, xi_0) / denom)
+    xi_norm_squared = dot_td(xi, xi)
+    if xi_norm_squared < b * b:
+        p_2 = xi_norm_squared
+    else:
+        p_2 = 1.0
+    p = min(p_1, p_2)
+    # Compute xi_p from xi_0
+    for k in xi_0:
+        xi_0[k] -= p * chi[k]
+
+    return xi_0
 
 
 def conjugate_gradient(

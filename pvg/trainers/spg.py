@@ -141,6 +141,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 "rank": self.params.spg.ihvp_rank,
                 "rho": self.params.spg.ihvp_rho,
             },
+            additional_lola_term=self.params.spg.additional_lola_term,
+            sos_params=self.params.spg.sos_params,
             agent_lr_factors=[
                 agent_params.agent_lr_factor
                 for agent_params in self.params.agents.values()
