@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 from dataclasses import dataclass, fields
 from typing import Optional
 from pathlib import Path
+import os
 
 import numpy as np
 
@@ -19,7 +20,7 @@ import torch
 
 import wandb
 
-from pvg.parameters import Parameters, ScenarioType, TrainerType, AgentParameters
+from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import Dataset
 from pvg.scenario_base.agents import (
@@ -117,6 +118,10 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     # Set the random seed
     torch.manual_seed(params.seed)
     np.random.seed(params.seed)
+
+    # Silence W&B if requested
+    if settings.silence_wandb:
+        os.environ["WANDB_SILENT"] = "true"
 
     # Create the datasets
     train_dataset = scenario_classes[Dataset](params, settings, train=True)
