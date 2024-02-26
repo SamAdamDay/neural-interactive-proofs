@@ -1461,11 +1461,11 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         # Stack the outputs
         node_level_repr = torch.stack(
             [body_outputs[name]["node_level_repr"] for name in self.params.agents],
-            dim=-3,
+            dim=-4,
         )
         graph_level_repr = torch.stack(
             [body_outputs[name]["graph_level_repr"] for name in self.params.agents],
-            dim=-2,
+            dim=-3,
         )
 
         return data.update(
