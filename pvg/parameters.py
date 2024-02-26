@@ -384,7 +384,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
-    gnn_output_digits: Optional[int] = 4
+    gnn_output_digits: Optional[int] = None
 
     num_heads: int = 4
     num_transformer_layers: int = 4

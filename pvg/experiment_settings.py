@@ -24,6 +24,8 @@ class ExperimentSettings:
         The device to use for training.
     wandb_run : wandb.wandb_sdk.wandb_run.Run, optional
         The W&B run to log to, if any.
+    silence_wandb : bool, default=True
+        Whether to suppress W&B output.
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
     logger : logging.Logger | logging.LoggerAdapter, optional
@@ -50,6 +52,7 @@ class ExperimentSettings:
 
     device: TorchDevice = "cpu"
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
+    silence_wandb: bool = True
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     ignore_cache: bool = False

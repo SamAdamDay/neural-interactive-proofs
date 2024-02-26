@@ -98,8 +98,7 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         agent_name: str,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, device)
-        self.agent_name = agent_name
+        super().__init__(params, agent_name, device)
 
         self._agent_params = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
