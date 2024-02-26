@@ -44,6 +44,7 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
             verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
@@ -59,6 +60,7 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
         ),
         ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
@@ -70,6 +72,7 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
             verifier=ImageClassificationAgentParameters(
                 num_convs_per_group=1,
@@ -79,6 +82,7 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
         ),
     }

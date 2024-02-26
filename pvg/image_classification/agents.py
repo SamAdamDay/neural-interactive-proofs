@@ -66,6 +66,7 @@ from pvg.utils.torch_modules import (
     ParallelTensorDictModule,
     TensorDictCloneKeys,
     OneHot,
+    NormalizeOneHotMessageHistory,
     Print,
     TensorDictPrint,
 )
@@ -166,6 +167,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     ):
         super().__init__(params, agent_name, device)
 
+        # Build the message history normalizer if necessary
+        if self._agent_params.normalize_message_history:
+            self.message_history_normalizer = NormalizeOneHotMessageHistory(
+                max_message_rounds=self.params.max_message_rounds,
+                message_out_key="x_normalized",
+                num_structure_dims=2,
+                round_dim_last=False,
+            )
+
         self.message_history_upsampler = self.build_message_history_upsampler().to(
             device
         )
@@ -200,7 +210,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 size=(self.image_height, self.image_width),
                 mode="nearest",
             ),
-            in_keys="x",
+            in_keys="x_normalized",
             out_keys="x_upsampled",
         )
 
@@ -455,6 +465,12 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         # Add the message image to the data tensor dict
         data = data.update(dict(message_image=message_image))
+
+        # Normalize the message history if necessary
+        if self._agent_params.normalize_message_history:
+            data = self.message_history_normalizer(data)
+        else:
+            data = data.update(dict(x_normalized=data["x"]))
 
         # Upsample the message history
         data = self.message_history_upsampler(data)
