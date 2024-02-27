@@ -265,7 +265,7 @@ class AgentParameters(SubParameters, ABC):
     agent_lr_factor: float = 1.0
     body_lr_factor: float = 1.0
 
-    normalize_message_history: bool = False
+    normalize_message_history: bool = True
 
     load_checkpoint_and_parameters: bool = False
     checkpoint_entity: str = WANDB_ENTITY
