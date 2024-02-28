@@ -28,6 +28,7 @@ from pvg.model_cache import (
 )
 from pvg.scenario_instance import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
+from pvg.utils.maths import logit_entropy
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):
@@ -353,26 +354,34 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # trained policy live on different devices.
             train_collector.update_policy_weights_()
 
-            # Compute the mean rewards for the done episodes, and the mean value
+            # Compute various statistics for the sampled episodes for logging
             done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
             reward = tensordict_data.get(("next", "agents", "reward"))
             value = tensordict_data.get(("agents", "value"))
+            decision_logits = tensordict_data.get(("agents", "decision_logits"))
             mean_rewards = {}
             mean_values = {}
+            mean_decision_entropy = {}
             for i, agent_name in enumerate(self.params.agents):
                 mean_rewards[agent_name] = reward[..., i][done].mean().item()
                 mean_values[agent_name] = value[..., i].mean().item()
+                mean_decision_entropy[agent_name] = (
+                    logit_entropy(decision_logits[..., i]).mean().item()
+                )
 
             if self.settings.wandb_run is not None:
                 # Compute the average episode length
                 round = tensordict_data.get(("next", "round"))
                 mean_episode_length = round[done].float().mean().item()
 
-                # Log the mean episode length, mean rewards and mean values
+                # Log the various statistics
                 to_log = dict(mean_episode_length=mean_episode_length)
                 for agent_name in self.params.agents:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                     to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
+                    to_log[
+                        f"{agent_name}.mean_decision_entropy"
+                    ] = mean_decision_entropy[agent_name]
                 self.settings.wandb_run.log(to_log, step=iteration)
 
                 # Log artifacts to W&B if it's time to do so
