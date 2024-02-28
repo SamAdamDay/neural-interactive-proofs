@@ -309,7 +309,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         )
         self.variant = variant
         self.stackelberg_sequence = stackelberg_sequence
-        self.agent_indices = range(sum(len(g) for g in stackelberg_sequence))
+        self.agent_indices = range(len(names))
         self.agent_groups = {
             i: stackelberg_sequence.index(g) for g in stackelberg_sequence for i in g
         }
@@ -577,59 +577,65 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         chi = {}
         total_derivatives = {}
 
-        for i in self.agent_indices:
-            xi.update(objective_loss_grads[i][i])
-            total_derivatives[i] = objective_loss_grads[i][i]
-            for k in total_derivatives[i].keys():
-                H_0_xi[k] = 0.0
-                chi[k] = 0.0
-
-            for j in self.all_followers[i]:
-                p = jacobian_terms(i, j)
-
-                # Compute (an approximation of) the true Stackelberg gradient using an
-                # inverse Hessian vector product
-                if self.variant == SpgVariant.SPG or self.variant == SpgVariant.PSPG:
-                    multiplier = ihvps[i][j]
-                # If using other algorithms we effectively assume that the inverse Hessian
-                # is the identity matrix
-                else:
-                    multiplier = objective_loss_grads[i][j]
-
-                chi_score_term = dot_td(multiplier, scores[j])
-                chi_pg_term = dot_td(multiplier, objective_loss_grads[j][j])
-
-                H_0_xi_pg_term = dot_td(scores[j], total_derivatives[j])
-                H_0_xi_score_term = dot_td(
-                    objective_loss_grads[i][j], total_derivatives[j]
-                )
-
+        for g in reversed(self.stackelberg_sequence):
+            for i in g:
+                xi.update(objective_loss_grads[i][i])
+                total_derivatives[i] = objective_loss_grads[i][i]
                 for k in total_derivatives[i].keys():
+                    H_0_xi[k] = 0.0
+                    chi[k] = 0.0
+
+                for j in self.all_followers[i]:
+                    p = jacobian_terms(i, j)
+
+                    # Compute (an approximation of) the true Stackelberg gradient using an
+                    # inverse Hessian vector product
                     if (
                         self.variant == SpgVariant.SPG
                         or self.variant == SpgVariant.PSPG
                     ):
-                        lr_coefficient = 1.0
-                        H_0_xi_term = 0.0
-                    # For LOLA and POLA we need to multiply the gradients by the
-                    # learning rate of the follower agent
+                        multiplier = ihvps[i][j]
+                    # If using other algorithms we effectively assume that the inverse Hessian
+                    # is the identity matrix
                     else:
-                        lr_coefficient = self.agent_lr_factors[j] * self.lr
+                        multiplier = objective_loss_grads[i][j]
+
+                    chi_score_term = dot_td(multiplier, scores[j])
+                    chi_pg_term = dot_td(multiplier, objective_loss_grads[j][j])
+
+                    H_0_xi_pg_term = dot_td(scores[j], total_derivatives[j])
+                    H_0_xi_score_term = dot_td(
+                        objective_loss_grads[i][j], total_derivatives[j]
+                    )
+
+                    for k in total_derivatives[i].keys():
                         if (
-                            self.additional_lola_term
-                            or self.variant == SpgVariant.SOS
-                            or self.variant == SpgVariant.PSOS
+                            self.variant == SpgVariant.SPG
+                            or self.variant == SpgVariant.PSPG
                         ):
-                            H_0_xi_term = (
-                                H_0_xi_pg_term * objective_loss_grads[i][i][k]
-                            ) + (H_0_xi_score_term * scores[i][k])
+                            lr_coefficient = 1.0
+                            H_0_xi_term = 0.0
+                        # For LOLA and POLA we need to multiply the gradients by the
+                        # learning rate of the follower agent
+                        else:
+                            lr_coefficient = self.agent_lr_factors[j] * self.lr
+                            if (
+                                self.additional_lola_term
+                                or self.variant == SpgVariant.SOS
+                                or self.variant == SpgVariant.PSOS
+                            ):
+                                H_0_xi_term = (
+                                    H_0_xi_pg_term * objective_loss_grads[i][i][k]
+                                ) + (H_0_xi_score_term * scores[i][k])
 
-                    chi_term = (chi_score_term * p[0][k]) + (chi_pg_term * p[1][k])
+                        chi_term = (chi_score_term * p[0][k]) + (chi_pg_term * p[1][k])
 
-                    chi[k] += lr_coefficient * chi_term
-                    H_0_xi[k] += lr_coefficient * H_0_xi_term
+                        chi[k] += lr_coefficient * chi_term
+                        H_0_xi[k] += lr_coefficient * H_0_xi_term
 
-                    total_derivatives[i][k] -= lr_coefficient * (chi_term + H_0_xi_term)
+                        total_derivatives[i][k] -= lr_coefficient * (
+                            chi_term + H_0_xi_term
+                        )
 
         if self.variant == SpgVariant.SOS or self.variant == SpgVariant.PSOS:
             update = compute_sos_update(
