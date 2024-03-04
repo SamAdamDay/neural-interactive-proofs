@@ -146,3 +146,4 @@ data/image_classification
 # Model cache
 model_cache/*/*
 !model_cache/solo_agents/svhn_*
+!model_cache/solo_agents/gi_*
