@@ -18,7 +18,8 @@ from pvg import (
     ActivationType,
     SpgVariant,
     IhvpVariant,
-    PvgProtocolParameters,
+    ProtocolParameters,
+    InteractionProtocolType,
     run_experiment,
     prepare_experiment,
 )
@@ -121,8 +122,9 @@ def experiment_fn(
             ihvp_rank=combo["ihvp_rank"],
             ihvp_rho=combo["ihvp_rho"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        pvg_protocol=ProtocolParameters(
             shared_reward=combo["shared_reward"],
+            protocol=InteractionProtocolType.PVG,
         ),
         pretrain_agents=combo["pretrain_agents"],
         min_message_rounds=combo["min_message_rounds"],

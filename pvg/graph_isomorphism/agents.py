@@ -260,7 +260,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Build up the GNN module
         self.gnn = self._build_gnn(
-            d_input=self.params.max_message_rounds,
+            d_input=self.params.protocol_params.protocol_params.max_message_rounds,
         )
 
         # Build the global pooling module, which computes the graph-level representation
@@ -817,7 +817,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         # The layers of the MLP
         updated_d_in = 2 * d_in
         if include_round:
-            updated_d_in += self.params.max_message_rounds + 1
+            updated_d_in += self.params.protocol_params.max_message_rounds + 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
         mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
@@ -851,7 +851,9 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             # Add the round number as an input to the MLP
             td_sequential_layers.append(
                 TensorDictModule(
-                    OneHot(num_classes=self.params.max_message_rounds + 1),
+                    OneHot(
+                        num_classes=self.params.protocol_params.max_message_rounds + 1
+                    ),
                     in_keys=("round"),
                     out_keys=("round_one_hot",),
                 )

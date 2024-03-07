@@ -9,7 +9,7 @@ from .parameters import (
     SpgParameters,
     ImageClassificationParameters,
     DatasetParameters,
-    PvgProtocolParameters,
+    ProtocolParameters,
     ScenarioType,
     TrainerType,
     ActivationType,

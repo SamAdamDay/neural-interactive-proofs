@@ -54,6 +54,7 @@ from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
 from enum import auto as enum_auto
 from textwrap import indent
 from itertools import product
+from torch import tensor, cat
 
 try:
     from enum import StrEnum
@@ -145,6 +146,7 @@ class InteractionProtocolType(StrEnum):
     ABSTRACT_DECISION_PROBLEM = enum_auto()  # TODO
     DEBATE = enum_auto()  # TODO
     MERLIN_ARTHUR = enum_auto()  # TODO
+    MARKET_MAKING = enum_auto()  # TODO
 
 
 class MinMessageRoundsSchedulerType(StrEnum):
@@ -173,18 +175,21 @@ class MinMessageRoundsSchedulerType(StrEnum):
     LINEAR_INCREASE_DECREASE = enum_auto()
 
 
+# The sequence given here indicates the order of play in the game
 DEFAULT_AGENT_NAMES = {
-    InteractionProtocolType.PVG: ("verifier", "prover"),
+    InteractionProtocolType.PVG: ("prover", "verifier"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
     InteractionProtocolType.DEBATE: ("prover1", "prover2", "verifier"),
-    InteractionProtocolType.MERLIN_ARTHUR: ("prover", "verifier"),
+    InteractionProtocolType.MERLIN_ARTHUR: ("prover1", "prover2", "verifier"),
+    InteractionProtocolType.MARKET_MAKING: ("prover", "verifier"),
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
     InteractionProtocolType.PVG: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
     InteractionProtocolType.DEBATE: (("verifier",), ("prover1", "prover2")),
-    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover",)),
+    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover1", "prover2")),
+    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover")),
 }
 
 
@@ -672,11 +677,17 @@ class DatasetParameters(SubParameters):
 
 
 @dataclass
-class PvgProtocolParameters(SubParameters):
-    """Additional parameters for the PVG protocol.
+class ProtocolParameters(SubParameters):
+    """Additional parameters for the interaction protocol.
 
     Parameters
     ----------
+    protocol : InteractionProtocolType
+        The interaction protocol between the agents.
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by one agent.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's guesses are not registered.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
@@ -692,13 +703,46 @@ class PvgProtocolParameters(SubParameters):
         as the verifier. This overrides `prover_reward`.
     """
 
-    prover_reward: float = 1.0
-    verifier_reward: float = 1.0
-    verifier_incorrect_penalty: float = -1.0
-    verifier_terminated_penalty: float = -1.0
-    verifier_no_guess_reward: float = 0.0
+    protocol: InteractionProtocolType = InteractionProtocolType.PVG
 
-    shared_reward: bool = False
+    if protocol == InteractionProtocolType.PVG:
+        max_message_rounds: int = 8
+        min_message_rounds: int = 0
+        prover_reward: float = 1.0
+        verifier_reward: float = 1.0
+        verifier_incorrect_penalty: float = -1.0
+        verifier_terminated_penalty: float = -1.0
+        verifier_no_guess_reward: float = 0.0
+        shared_reward: bool = False
+
+    elif (
+        protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
+        or protocol == InteractionProtocolType.MERLIN_ARTHUR
+    ):
+        max_message_rounds: int = 2
+        min_message_rounds: int = 2
+        prover_reward: float = 1.0
+        verifier_reward: float = 1.0
+        verifier_incorrect_penalty: float = -1.0
+        verifier_terminated_penalty: float = -1.0
+        verifier_no_guess_reward: float = 0.0
+        shared_reward: bool = False
+
+    def get_indices(self, round, agent_names):
+        default_names = DEFAULT_AGENT_NAMES[self.protocol]
+        if sorted(default_names) != sorted(agent_names):
+            raise ValueError(
+                f"Agent names must be {default_names} for the {self.protocol} protocol."
+            )  # TODO maybe can remove this after making sure the names are always in the right order?
+
+        agent_indices = tensor(
+            [agent_names.index(default_names[i]) - i for i in range(len(agent_names))]
+        )
+        r = len(round)
+        a = len(agent_indices)
+        tiled_indices = cat([agent_indices] * (r // a + 1))[:r]
+
+        return (r % a) + tiled_indices
 
 
 @dataclass
@@ -762,8 +806,6 @@ class Parameters(BaseParameters):
 
     seed: int = 6198
 
-    max_message_rounds: int = 8
-    min_message_rounds: int = 0
     min_message_rounds_scheduler: MinMessageRoundsSchedulerType = (
         MinMessageRoundsSchedulerType.CONSTANT
     )
@@ -784,7 +826,7 @@ class Parameters(BaseParameters):
 
     dataset_options: Optional[DatasetParameters | dict] = None
 
-    pvg_protocol: Optional[PvgProtocolParameters | dict] = None
+    protocol_params: Optional[ProtocolParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums
@@ -855,12 +897,15 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
                 self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
 
-        # Convert interaction protocol parameters to InteractionProtocolParameters
-        if self.interaction_protocol == InteractionProtocolType.PVG:
-            if self.pvg_protocol is None:
-                self.pvg_protocol = PvgProtocolParameters()
-            elif isinstance(self.pvg_protocol, dict):
-                self.pvg_protocol = PvgProtocolParameters(**self.pvg_protocol)
+        # Convert interaction protocol parameters to ProtocolParameters
+        if self.protocol_params is None:
+            self.protocol_params = ProtocolParameters(
+                protocol=self.interaction_protocol
+            )
+        elif isinstance(self.pvg_protocol, dict):
+            self.protocol_params = ProtocolParameters(
+                protocol=self.interaction_protocol, **self.protocol_params
+            )
 
         # Convert dataset options to DatasetParameters
         if self.dataset_options is None:
@@ -883,7 +928,7 @@ class Parameters(BaseParameters):
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-        protocol_params_class : type[InteractionProtocolParameters]
+        protocol_params_class : type[ProtocolParameters]
             The class of the interaction protocol parameters for the scenario.
         """
 

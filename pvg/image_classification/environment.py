@@ -95,7 +95,7 @@ class ImageClassificationEnvironment(Environment):
             self.latent_height,
             shape=(
                 self.num_envs,
-                self.params.max_message_rounds,
+                self.params.protocol_params.max_message_rounds,
                 self.latent_width,
                 self.latent_height,
             ),

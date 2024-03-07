@@ -12,7 +12,8 @@ from pvg.parameters import (
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     CommonPpoParameters,
-    PvgProtocolParameters,
+    ProtocolParameters,
+    InteractionProtocolType,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -52,11 +53,25 @@ def test_graph_isomorphism_environment_step():
         ppo=CommonPpoParameters(frames_per_batch=batch_size * max_message_rounds),
         max_message_rounds=max_message_rounds,
         min_message_rounds=1,
+        # agents=AgentsParameters(
+        #     prover=GraphIsomorphismAgentParameters(),
+        #     verifier=GraphIsomorphismAgentParameters(),
+        # ),
+        # pvg_protocol=ProtocolParameters(
+        #     protocol=InteractionProtocolType.PVG,
+        #     prover_reward=1,
+        #     verifier_reward=2,
+        #     verifier_terminated_penalty=-4,
+        #     verifier_no_guess_reward=8,
+        #     verifier_incorrect_penalty=-16,
+        # ),
         agents=AgentsParameters(
-            prover=GraphIsomorphismAgentParameters(),
+            prover1=GraphIsomorphismAgentParameters(),
+            prover2=GraphIsomorphismAgentParameters(),
             verifier=GraphIsomorphismAgentParameters(),
         ),
-        pvg_protocol=PvgProtocolParameters(
+        debate_protocol=ProtocolParameters(
+            protocol=InteractionProtocolType.DEBATE,
             prover_reward=1,
             verifier_reward=2,
             verifier_terminated_penalty=-4,

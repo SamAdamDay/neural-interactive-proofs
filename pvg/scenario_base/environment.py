@@ -20,7 +20,7 @@ from torchrl.envs import EnvBase
 from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import DataLoader, Dataset
-from pvg.parameters import Parameters, InteractionProtocolType
+from pvg.parameters import Parameters, InteractionProtocolType, DEFAULT_AGENT_NAMES
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
 
@@ -64,6 +64,12 @@ class Environment(EnvBase, ABC):
         self.train = train
 
         self.agent_names = list(params.agents.keys())
+        if self.agent_names != DEFAULT_AGENT_NAMES[params.interaction_protocol]:
+            raise ValueError(
+                f"Agent names {self.agent_names} do not match the default agent names "
+                f"for interaction protocol {params.interaction_protocol}: "
+                f"{DEFAULT_AGENT_NAMES[params.interaction_protocol]}."
+            )
 
         # Create a random number generator
         self.rng = torch.Generator()
@@ -73,7 +79,9 @@ class Environment(EnvBase, ABC):
         self.data_cycler: Optional[VariableDataCycler] = None
 
         # The number of environments is the number of episodes we can fit in a batch
-        self.num_envs = params.ppo.frames_per_batch // params.max_message_rounds
+        self.num_envs = (
+            params.ppo.frames_per_batch // params.protocol_params.max_message_rounds
+        )
         self.batch_size = (self.num_envs,)
 
         # Create environment specs
@@ -110,7 +118,7 @@ class Environment(EnvBase, ABC):
         """
         return CompositeSpec(
             round=DiscreteTensorSpec(
-                self.params.max_message_rounds,
+                self.params.protocol_params.max_message_rounds,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
@@ -296,13 +304,16 @@ class Environment(EnvBase, ABC):
         """
         if self.params.interaction_protocol == InteractionProtocolType.PVG:
             return self._step_pvg_protocol(env_td, next_td)
+        elif (
+            self.params.interaction_protocol
+            == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
+        ):
+            return self._step_pvg_protocol(env_td, next_td)
         else:
             raise NotImplementedError(
                 f"Interaction protocol {self.params.interaction_protocol} not "
                 "implemented."
             )
-
-    # TODO LH: new protocols go here
 
     def _step_pvg_protocol(
         self,
@@ -324,15 +335,20 @@ class Environment(EnvBase, ABC):
             The updated 'next' tensordict.
         """
 
-        protocol_params = self.params.pvg_protocol
+        protocol_params = self.params.protocol_params
 
         y: Int[Tensor, "batch 1"] = env_td["y"]
         round: Int[Tensor, "batch"] = env_td["round"]
         decision: Int[Tensor, "batch agent"] = env_td["agents", "decision"]
         done: Bool[Tensor, "batch"] = env_td["done"]
 
-        # Compute index of the agent whose turn it is.
-        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+        # Compute index of the agent whose turn it is (the prover goes first)
+        prover_agent_num = self.agent_names.index("prover")
+        agent_index: Int[Tensor, "batch"] = protocol_params.get_indices(
+            round, self.agent_names
+        )
+
+        (round + prover_agent_num) % len(self.agent_names)
 
         # If the verifier has made a guess, compute the reward and terminate the episode
         verifier_agent_num = self.agent_names.index("verifier")
@@ -340,7 +356,7 @@ class Environment(EnvBase, ABC):
             decision[:, verifier_agent_num] != 2
         )
         verifier_decision_made = verifier_decision_made & (
-            round >= self.params.min_message_rounds
+            round >= self.params.protocol_params.min_message_rounds
         )
         done = done | verifier_decision_made
         reward: dict[str, int] = dict()
@@ -361,9 +377,94 @@ class Environment(EnvBase, ABC):
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
-        done = done | (round >= self.params.max_message_rounds - 1)
+        done = done | (round >= self.params.protocol_params.max_message_rounds - 1)
         reward["verifier"][
-            (round >= self.params.max_message_rounds - 1) & ~verifier_decision_made
+            (round >= self.params.protocol_params.max_message_rounds - 1)
+            & ~verifier_decision_made
+        ] = protocol_params.verifier_terminated_penalty
+
+        # If the verifier has not made a guess and it's their turn, given them a small
+        # reward for continuing
+        reward["verifier"][
+            (agent_index == verifier_agent_num) & ~done
+        ] = protocol_params.verifier_no_guess_reward
+
+        # Stack the rewards for the two agents
+        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
+
+        # Put the done signal and reward into the next tensordict
+        next_td["done"] = done
+        next_td["agents"] = TensorDict(
+            dict(
+                reward=reward,
+            ),
+            batch_size=self.batch_size,
+        )
+        next_td["decision_restriction"] = torch.zeros_like(done, dtype=self._int_dtype)
+
+        return next_td
+
+    def _step_debate_protocol(
+        self,
+        env_td: TensorDictBase,
+        next_td: TensorDictBase,
+    ) -> TensorDictBase:
+        """Take a step in the PVG interaction protocol.
+
+        Parameters
+        ----------
+        env_td : TensorDictBase
+            The current observation and state.
+        next_td : TensorDictBase
+            The 'next' tensordict, to be updated with the done signal and reward.
+
+        Returns
+        -------
+        next_td : TensorDictBase
+            The updated 'next' tensordict.
+        """
+
+        protocol_params = self.params.protocol_params
+
+        y: Int[Tensor, "batch 1"] = env_td["y"]
+        round: Int[Tensor, "batch"] = env_td["round"]
+        decision: Int[Tensor, "batch agent"] = env_td["agents", "decision"]
+        done: Bool[Tensor, "batch"] = env_td["done"]
+
+        # Compute index of the agent whose turn it is
+        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+
+        # If the verifier has made a guess, compute the reward and terminate the episode
+        verifier_agent_num = self.agent_names.index("verifier")
+        verifier_decision_made = (agent_index == verifier_agent_num) & (
+            decision[:, verifier_agent_num] != 2
+        )
+        verifier_decision_made = verifier_decision_made & (
+            round >= self.params.protocol_params.min_message_rounds
+        )
+        done = done | verifier_decision_made
+        reward: dict[str, int] = dict()
+        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
+        ] = protocol_params.verifier_reward
+        reward["verifier"][
+            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
+        ] = protocol_params.verifier_incorrect_penalty
+        if protocol_params.shared_reward:
+            reward["prover"] = reward["verifier"]
+        else:
+            reward["prover"] = (
+                verifier_decision_made & (decision[:, verifier_agent_num] == 1)
+            ).float()
+            reward["prover"] = reward["prover"] * protocol_params.prover_reward
+
+        # If we reach the end of the episode and the verifier has not made a guess,
+        # terminate it with a negative reward for the verifier
+        done = done | (round >= self.params.protocol_params.max_message_rounds - 1)
+        reward["verifier"][
+            (round >= self.params.protocol_params.max_message_rounds - 1)
+            & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small

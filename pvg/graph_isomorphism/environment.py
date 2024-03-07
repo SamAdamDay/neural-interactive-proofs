@@ -232,12 +232,12 @@ class GraphIsomorphismEnvironment(Environment):
             device=self.device,
         )
         base_observation_spec["x"] = BinaryDiscreteTensorSpec(
-            self.params.max_message_rounds,
+            self.params.protocol_params.max_message_rounds,
             shape=(
                 self.num_envs,
                 2,
                 self.max_num_nodes,
-                self.params.max_message_rounds,
+                self.params.protocol_params.max_message_rounds,
             ),
             dtype=torch.float,
             device=self.device,

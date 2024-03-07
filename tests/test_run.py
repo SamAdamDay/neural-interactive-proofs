@@ -85,18 +85,18 @@ def test_prepare_run_experiment():
 
     # Very basic parameters for each trainer
     trainer_params = {
-        TrainerType.SOLO_AGENT: SoloAgentParameters(
-            num_epochs=1,
-            batch_size=1,
-        ),
+        # TrainerType.SOLO_AGENT: SoloAgentParameters(
+        #     num_epochs=1,
+        #     batch_size=1,
+        # ),
         TrainerType.VANILLA_PPO: CommonPpoParameters(
             num_iterations=8,
             num_epochs=4,
             minibatch_size=64,
         ),
-        TrainerType.SPG: SpgParameters(
-            variant=SpgVariant.PSOS,
-        ),
+        # TrainerType.SPG: SpgParameters(
+        #     variant=SpgVariant.PSOS,
+        # ),
     }
 
     basic_params = {

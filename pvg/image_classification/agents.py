@@ -237,7 +237,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             ),
             TensorDictModule(
                 Linear(
-                    self.params.max_message_rounds + self.dataset_num_channels,
+                    self.params.protocol_params.max_message_rounds
+                    + self.dataset_num_channels,
                     self.initial_num_channels,
                 ),
                 in_keys="latent_pixel_level_repr",
@@ -680,7 +681,9 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             # Add the round number as an input to the MLP
             td_sequential_layers.append(
                 TensorDictModule(
-                    OneHot(num_classes=self.params.max_message_rounds + 1),
+                    OneHot(
+                        num_classes=self.params.protocol_params.max_message_rounds + 1
+                    ),
                     in_keys=("round"),
                     out_keys=("round_one_hot",),
                 )
@@ -705,7 +708,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         # The layers of the MLP
         updated_d_in = d_in
         if include_round:
-            updated_d_in += self.params.max_message_rounds + 1
+            updated_d_in += self.params.protocol_params.max_message_rounds + 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
         mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
