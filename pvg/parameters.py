@@ -48,11 +48,10 @@ Create a parameters object using a dictionary for the ppo parameters
 ... )
 """
 
-from dataclasses import dataclass, asdict, fields
+from dataclasses import dataclass, fields
 from abc import ABC
 from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
 from enum import auto as enum_auto
-from textwrap import indent
 from itertools import product
 
 try:
@@ -235,6 +234,12 @@ class AgentParameters(SubParameters, ABC):
         The learning rate factor for the body part of the model compared with with whole
         agent. This allows updating the body at a different rate to the rest of the
         model.
+    use_manual_architecture : bool
+        Whether to use a manually defined architecture for the agent, which implements a
+        hand-specified (non-learned) algorithm designed to maximise reward. This
+        algorithm can be different depending on the environment. This is useful to test
+        if the other agents can learn to work with a fixed optimum agent. It usually
+        makes sense to set `agent_lr_factor` to 0 in this case.
     normalize_message_history : bool
         Whether to normalise the message history before passing it through the GNN
         encoder. Message histories are normalised to have zero mean and unit variance
@@ -264,6 +269,8 @@ class AgentParameters(SubParameters, ABC):
 
     agent_lr_factor: float = 1.0
     body_lr_factor: float = 1.0
+
+    use_manual_architecture: bool = False
 
     normalize_message_history: bool = True
 

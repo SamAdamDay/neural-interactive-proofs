@@ -88,11 +88,11 @@ def test_prepare_run_experiment():
     }
 
     # Very basic parameters for each trainer
-    trainer_params = {
-        TrainerType.SOLO_AGENT: SoloAgentParameters(
-            num_epochs=1,
-            batch_size=1,
-        ),
+    solo_agent_trainer_params = SoloAgentParameters(
+        num_epochs=1,
+        batch_size=1,
+    )
+    ppo_trainer_params = {
         TrainerType.VANILLA_PPO: CommonPpoParameters(
             num_iterations=8,
             num_epochs=4,
@@ -103,21 +103,47 @@ def test_prepare_run_experiment():
         ),
     }
 
-    basic_params = {
-        "scenario": list(agents_params_dict.items()),
-        "trainer": list(trainer_params.items()),
-        "is_random": [True, False],
-        "pretrain_agents": [True, False],
-    }
+    basic_params = [
+        {
+            "scenario": list(agents_params_dict.items()),
+            "trainer": list(ppo_trainer_params.items()),
+            "is_random": [True, False],
+            "pretrain_agents": [True, False],
+            "manual_architecture": [None],
+        },
+        {
+            "scenario": list(agents_params_dict.items()),
+            "trainer": [(TrainerType.SOLO_AGENT, solo_agent_trainer_params)],
+            "is_random": [False],
+            "pretrain_agents": [False],
+            "manual_architecture": [None],
+        },
+        {
+            "scenario": [
+                (
+                    ScenarioType.GRAPH_ISOMORPHISM,
+                    agents_params_dict[ScenarioType.GRAPH_ISOMORPHISM],
+                )
+            ],
+            "trainer": [
+                (TrainerType.VANILLA_PPO, ppo_trainer_params[TrainerType.VANILLA_PPO])
+            ],
+            "is_random": [False],
+            "pretrain_agents": [False],
+            "manual_architecture": ["prover", "verifier"],
+        },
+    ]
 
     for param_spec in ParameterGrid(basic_params):
         scenario_type, agents_param = param_spec["scenario"]
+        agents_param: AgentsParameters
         trainer_type, trainer_param = param_spec["trainer"]
         is_random = param_spec["is_random"]
         pretrain_agents = param_spec["pretrain_agents"]
+        manual_architecture = param_spec["manual_architecture"]
 
-        if trainer_type == TrainerType.SOLO_AGENT and (pretrain_agents or is_random):
-            continue
+        if manual_architecture is not None:
+            agents_param[manual_architecture].use_manual_architecture = True
 
         # Construct the parameters
         if is_random:
@@ -131,6 +157,7 @@ def test_prepare_run_experiment():
                 "trainer": trainer_type,
                 "dataset": "test",
                 "agents": agents_param,
+                "pretrain_agents": pretrain_agents,
                 str(trainer_type): trainer_param,
             }
         )
