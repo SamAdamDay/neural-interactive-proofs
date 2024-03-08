@@ -1,9 +1,14 @@
 """Utilities for useful mathematical operations."""
 
-from pvg.parameters import IhvpVariant
 from typing import Tuple
+
 import torch
 from torch import Tensor
+from torch.nn import functional as F
+
+from jaxtyping import Float
+
+from pvg.parameters import IhvpVariant
 
 
 def dot_td(td1, td2):
@@ -238,3 +243,22 @@ def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho)
         param.grad.zero_()
 
     return dict(zip(f_params.keys(), ihvp))
+
+
+def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
+    """
+    Compute the entropy of a set of logits.
+
+    Parameters
+    ----------
+    logits : Float[Tensor, "... logits"]
+        The logits.
+
+    Returns
+    -------
+    Float[Tensor, "..."]
+        The entropy of the logits.
+    """
+    probs = F.softmax(logits, dim=-1)
+    log_probs = F.log_softmax(logits, dim=-1)
+    return -torch.sum(probs * log_probs, dim=-1)

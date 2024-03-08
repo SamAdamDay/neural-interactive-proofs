@@ -2,6 +2,7 @@
 
 from typing import Callable, Optional, Iterable
 from abc import abstractmethod
+from math import prod
 
 import torch
 from torch import Tensor
@@ -489,6 +490,173 @@ class OneHot(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.nn.functional.one_hot(x, self.num_classes).float()
+
+
+class NormalizeOneHotMessageHistory(TensorDictModuleBase):
+    """Normalize the history of one-hot message exchanges.
+
+    Normalizes each component to have zero mean and unit variance, giving each possible
+    length of messages the same weight.
+
+    The input is assumed to have some number of batch dimensions followed some number of
+    structure dimensions, followed by the round dimension (these two are reversed when
+    `round_dim_last` is False). The 'structure' dimensions are those that specify the
+    structure of a data point, e.g. the height and width of an image. The input is
+    assumed to be one-hot encoded across all the structure dimensions for each round
+    where a message has been exchanged.
+
+    Shapes
+    ------
+    Takes as input a TensorDict with key:
+
+    - `x` with shape one of:
+        - Float["... structure_dim_1 ... structure_dim_k round"]
+        - Float["... round structure_dim_1 ... structure_dim_k"]
+
+    Parameters
+    ----------
+    max_message_rounds : int
+        The maximum length of the message history.
+    message_in_key : NestedKey, default="x"
+        The key containing the message history.
+    message_out_key : NestedKey, default="x_normalized"
+        The key to store the normalized message history.
+    num_structure_dims : int, default=1
+        The number of feature dimensions to normalize over (see above).
+    round_dim_last : bool, default=True
+        Whether the round dimension is the last dimension or whether it is located just
+        before the structure dimensions.
+    """
+
+    @property
+    def in_keys(self) -> Iterable[str]:
+        return (self.message_in_key,)
+
+    @property
+    def out_keys(self) -> Iterable[str]:
+        return (self.message_out_key,)
+
+    def __init__(
+        self,
+        max_message_rounds: int,
+        message_in_key: NestedKey = "x",
+        message_out_key: NestedKey = "x_normalized",
+        num_structure_dims: int = 1,
+        round_dim_last: bool = True,
+    ):
+        super().__init__()
+        self.max_message_rounds = max_message_rounds
+        self.message_in_key = message_in_key
+        self.message_out_key = message_out_key
+        self.num_structure_dims = num_structure_dims
+        self.round_dim_last = round_dim_last
+
+        self._cached_mean: Optional[Tensor] = None
+        self._cached_std: Optional[Tensor] = None
+        self._cached_structure_shape: Optional[torch.Size] = None
+
+    def _get_mean_and_std(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Get the mean and standard deviation for the structure shape of `x`.
+
+        These are computed based only on the shape of the structure dimensions, so they
+        can be cached and reused for tensors with the same structure shape.
+
+        Let `n` be the total size of the structure dimensions and `m` be the maximum
+        number of message rounds. Then the mean and standard deviation are computed as
+        follows:
+
+        ```latex
+            \text{mean} = \frac 1 {n m} (m - 1, m - 2, \ldots, 0) \\
+            \text{std} = \frac 1 {n m} \sqrt{ 
+                ((m - 1) (n m - m + 1), (m - 2) (n m - m + 2), \ldots, 0)
+            }
+        ```
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        mean : Tensor
+            The mean for message histories with the structure shape of `x`.
+        std : Tensor
+            The standard deviation for message histories with the structure shape of `x`.
+        """
+        # Get the shape of the structure dimensions
+        if self.round_dim_last:
+            structure_shape = x.shape[-(self.num_structure_dims + 1) : -1]
+        else:
+            structure_shape = x.shape[-self.num_structure_dims :]
+
+        # Check if the mean and standard deviation are already cached
+        if self._cached_mean is not None and self._cached_std is not None:
+            if structure_shape == self._cached_structure_shape:
+                return self._cached_mean, self._cached_std
+
+        self._cached_structure_shape = structure_shape
+        structure_size = prod(structure_shape)
+
+        # Compute the mean, assuming that each possible length of messages is equally
+        # likely.
+        self._cached_mean = torch.arange(
+            self.max_message_rounds - 1, -1, -1, dtype=x.dtype, device=x.device
+        )
+        self._cached_mean = self._cached_mean / (
+            structure_size * self.max_message_rounds
+        )
+
+        # Compute the standard deviation, assuming that each possible length of messages
+        # is equally likely.
+        self._cached_std = torch.arange(
+            self.max_message_rounds - 1, -1, -1, dtype=x.dtype, device=x.device
+        )
+        self._cached_std = self._cached_std * (
+            structure_size * self.max_message_rounds
+            - self.max_message_rounds
+            + 1
+            + torch.arange(
+                self.max_message_rounds,
+                dtype=x.dtype,
+                device=x.device,
+            )
+        )
+        self._cached_std = torch.sqrt(self._cached_std)
+        self._cached_std = self._cached_std / (structure_size * self.max_message_rounds)
+        self._cached_std[-1] = 1.0  # Avoid division by zero
+
+        # Add singleton dimensions to the mean and standard deviation to match the shape
+        # of the input tensor when the round dimension is not the last dimension
+        if not self.round_dim_last:
+            self._cached_mean = self._cached_mean.reshape(
+                (self.max_message_rounds,) + (1,) * self.num_structure_dims
+            )
+            self._cached_std = self._cached_std.reshape(
+                (self.max_message_rounds,) + (1,) * self.num_structure_dims
+            )
+
+        return self._cached_mean, self._cached_std
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        x = tensordict[self.message_in_key]
+
+        # Get the mean and standard deviation for the structure shape of `x`
+        mean, std = self._get_mean_and_std(x)
+
+        # Normalize the message history
+        x = (x - mean) / std
+
+        # Store the normalized message history in the output TensorDict
+        return tensordict.update({self.message_out_key: x})
+
+    def to(self, *args, **kwargs):
+        super().to(*args, **kwargs)
+        if self._cached_mean is not None:
+            self._cached_mean = self._cached_mean.to(*args, **kwargs)
+        if self._cached_std is not None:
+            self._cached_std = self._cached_std.to(*args, **kwargs)
+        return self
 
 
 class Print(nn.Module):

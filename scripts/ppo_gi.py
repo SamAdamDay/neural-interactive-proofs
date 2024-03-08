@@ -33,7 +33,7 @@ MULTIPROCESS = True
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
     dataset_name=["eru10000"],
-    num_iterations=[25000],
+    num_iterations=[10000],
     num_epochs=[4],
     minibatch_size=[256],
     gamma=[0.9],
@@ -58,6 +58,7 @@ param_grid = dict(
     ihvp_rho=[0.1],
     shared_reward=[False],
     normalize_advantage=[True],
+    normalize_message_history=[True],
     min_message_rounds=[0],
     seed=[8144, 820, 4173, 3992],
 )
@@ -88,6 +89,7 @@ def experiment_fn(
             activation_function=combo["activation_function"],
             agent_lr_factor=combo["prover_lr_factor"],
             num_transformer_layers=combo["num_transformer_layers"],
+            normalize_message_history=combo["normalize_message_history"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -99,6 +101,7 @@ def experiment_fn(
                 activation_function=combo["activation_function"],
                 agent_lr_factor=combo["verifier_lr_factor"],
                 num_transformer_layers=combo["num_transformer_layers"],
+                normalize_message_history=combo["normalize_message_history"],
             ),
             prover=prover_params,
         ),

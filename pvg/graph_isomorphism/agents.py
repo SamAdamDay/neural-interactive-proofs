@@ -68,6 +68,7 @@ from pvg.utils.torch_modules import (
     BatchNorm1dSimulateBatchDims,
     OneHot,
     TensorDictCat,
+    NormalizeOneHotMessageHistory,
     Print,
     TensorDictPrint,
 )
@@ -117,8 +118,7 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         agent_name: str,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, device)
-        self.agent_name = agent_name
+        super().__init__(params, agent_name, device)
 
         self._agent_params = params.agents[agent_name]
         for i, _agent_name in enumerate(params.agents):
@@ -258,6 +258,14 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     ):
         super().__init__(params, agent_name, device)
 
+        # Build the message history normalizer if necessary
+        if self._agent_params.normalize_message_history:
+            self.message_history_normalizer = NormalizeOneHotMessageHistory(
+                max_message_rounds=self.params.max_message_rounds,
+                message_out_key="gnn_repr",
+                num_structure_dims=2,
+            )
+
         # Build up the GNN module
         self.gnn = self._build_gnn(
             d_input=self.params.protocol_params.protocol_params.max_message_rounds,
@@ -296,7 +304,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         gnn_layers.append(
             TensorDictModule(
                 Linear(d_input, self._agent_params.d_gnn),
-                in_keys=("x",),
+                in_keys=("gnn_repr",),
                 out_keys=("gnn_repr",),
             )
         )
@@ -475,65 +483,43 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # The size of the node dimension
         max_num_nodes = data["x"].shape[-2]
 
-        # If the data is empty, return empty outputs
-        if data.batch_size[0] == 0:
-            return TensorDict(
-                dict(
-                    graph_level_repr=torch.empty(
-                        (*data.batch_size, 2, self._agent_params.d_transformer),
-                        device=self.device,
-                        dtype=torch.float32,
-                    ),
-                    node_level_repr=torch.empty(
-                        (
-                            *data.batch_size,
-                            2,
-                            max_num_nodes,
-                            self._agent_params.d_transformer,
-                        ),
-                        device=self.device,
-                        dtype=torch.float32,
-                    ),
-                ),
-                batch_size=data.batch_size,
-            )
+        # Normalize the message history if necessary
+        if self._agent_params.normalize_message_history:
+            data = self.message_history_normalizer(data)
+        else:
+            data = data.update(dict(gnn_repr=data["x"]))
 
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
         gnn_output = self.gnn(data)["gnn_repr"]
 
-        if hooks is not None and hooks.gnn_output is not None:
-            hooks.gnn_output(gnn_output)
+        self._run_recorder_hook(hooks, "gnn_output", gnn_output)
 
         if self._agent_params.gnn_output_digits is not None:
             gnn_output = torch.round(
                 gnn_output, decimals=self._agent_params.gnn_output_digits
             )
 
-        if hooks is not None and hooks.gnn_output_rounded is not None:
-            hooks.gnn_output_rounded(gnn_output)
+        self._run_recorder_hook(hooks, "gnn_output_rounded", gnn_output)
 
         # Obtain the graph-level representations by pooling
         # (batch, pair, d_gnn)
         pooled_gnn_output = self.global_pooling(gnn_output)
 
-        if hooks is not None and hooks.pooled_gnn_output is not None:
-            hooks.pooled_gnn_output(pooled_gnn_output)
+        self._run_recorder_hook(hooks, "pooled_gnn_output", pooled_gnn_output)
 
         # Flatten the two batch dimensions in the graph representation and mask
         gnn_output_flatter = rearrange(
             gnn_output, "... pair node feature -> ... (pair node) feature"
         )
 
-        if hooks is not None and hooks.gnn_output_flatter is not None:
-            hooks.gnn_output_flatter(gnn_output_flatter)
+        self._run_recorder_hook(hooks, "gnn_output_flatter", gnn_output_flatter)
 
         # Add the graph-level representations to the transformer input
         # (..., 2 + 2 * node, d_gnn + 3)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=-2)
 
-        if hooks is not None and hooks.transformer_input_initial is not None:
-            hooks.transformer_input_initial(transformer_input)
+        self._run_recorder_hook(hooks, "transformer_input_initial", transformer_input)
 
         # Add extra features to distinguish the pooled representations from the
         # node-level representations
@@ -546,8 +532,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         pooled_feature[..., 0, 0] = 1
         pooled_feature[..., 1, 1] = 1
 
-        if hooks is not None and hooks.pooled_feature is not None:
-            hooks.pooled_feature(pooled_feature)
+        self._run_recorder_hook(hooks, "pooled_feature", pooled_feature)
 
         # Add the most recent message as a new one-hot feature
         message_feature = F.one_hot(
@@ -558,23 +543,22 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
         message_feature = rearrange(message_feature, "... token -> ... token 1")
 
-        if hooks is not None and hooks.message_feature is not None:
-            hooks.message_feature(message_feature)
+        self._run_recorder_hook(hooks, "message_feature", message_feature)
 
         # Concatenate everything together
         transformer_input = torch.cat(
             (transformer_input, pooled_feature, message_feature), dim=-1
         )
 
-        if hooks is not None and hooks.transformer_input_pre_encoder is not None:
-            hooks.transformer_input_pre_encoder(transformer_input)
+        self._run_recorder_hook(
+            hooks, "transformer_input_pre_encoder", transformer_input
+        )
 
         # Run the transformer input through the encoder first
         # (..., 2 + 2 * node, d_transformer)
         transformer_input = self.gnn_transformer_encoder(transformer_input)
 
-        if hooks is not None and hooks.transformer_input is not None:
-            hooks.transformer_input(transformer_input)
+        self._run_recorder_hook(hooks, "transformer_input", transformer_input)
 
         if self.transformer is not None:
             # Run the transformer
@@ -587,8 +571,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         else:
             transformer_output_flatter = transformer_input
 
-        if hooks is not None and hooks.transformer_output_flatter is not None:
-            hooks.transformer_output_flatter(transformer_output_flatter)
+        self._run_recorder_hook(
+            hooks, "transformer_output_flatter", transformer_output_flatter
+        )
 
         # Extract the graph-level representations and rearrange the rest to have two
         # batch dims
@@ -599,19 +584,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             pair=2,
         )
 
-        if hooks is not None and hooks.graph_level_repr_pre_encoder is not None:
-            hooks.graph_level_repr_pre_encoder(graph_level_repr)
-        if hooks is not None and hooks.node_level_repr_pre_encoder is not None:
-            hooks.node_level_repr_pre_encoder(node_level_repr)
+        self._run_recorder_hook(hooks, "graph_level_repr_pre_encoder", graph_level_repr)
+        self._run_recorder_hook(hooks, "node_level_repr_pre_encoder", node_level_repr)
 
         # Run the node-level representations through the representation encoder
         graph_level_repr = self.representation_encoder(graph_level_repr)
         node_level_repr = self.representation_encoder(node_level_repr)
 
-        if hooks is not None and hooks.graph_level_repr is not None:
-            hooks.graph_level_repr(graph_level_repr)
-        if hooks is not None and hooks.node_level_repr is not None:
-            hooks.node_level_repr(node_level_repr)
+        self._run_recorder_hook(hooks, "graph_level_repr", graph_level_repr)
+        self._run_recorder_hook(hooks, "node_level_repr", node_level_repr)
 
         return TensorDict(
             dict(
@@ -624,6 +605,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
+        if self._agent_params.normalize_message_history:
+            self.message_history_normalizer.to(device)
         self.gnn.to(device)
         self.global_pooling.to(device)
         self.global_pooling[-1].to(device)
@@ -1480,11 +1463,11 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         # Stack the outputs
         node_level_repr = torch.stack(
             [body_outputs[name]["node_level_repr"] for name in self.params.agents],
-            dim=-3,
+            dim=-4,
         )
         graph_level_repr = torch.stack(
             [body_outputs[name]["graph_level_repr"] for name in self.params.agents],
-            dim=-2,
+            dim=-3,
         )
 
         return data.update(

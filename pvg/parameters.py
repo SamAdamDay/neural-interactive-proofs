@@ -240,6 +240,14 @@ class AgentParameters(SubParameters, ABC):
         The learning rate factor for the body part of the model compared with with whole
         agent. This allows updating the body at a different rate to the rest of the
         model.
+    normalize_message_history : bool
+        Whether to normalise the message history before passing it through the GNN
+        encoder. Message histories are normalised to have zero mean and unit variance
+        assuming that all episode lengths are equally frequent. (While this is probably
+        not a realistic assumption, it's the most reasonable one we can make without
+        knowing the true distribution of episode lengths. It's unlikely to make a big
+        difference to the normalisation, and it's probably better than not normalising
+        at all.)
     load_checkpoint_and_parameters : bool
         Whether to load the agent model checkpoint and parameters from W&B. In this
         case, all agent parameters are replaced by the parameters from the checkpoint.
@@ -261,6 +269,8 @@ class AgentParameters(SubParameters, ABC):
 
     agent_lr_factor: float = 1.0
     body_lr_factor: float = 1.0
+
+    normalize_message_history: bool = True
 
     load_checkpoint_and_parameters: bool = False
     checkpoint_entity: str = WANDB_ENTITY
@@ -379,7 +389,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_gnn_layers: int = 5
     d_gnn: int = 16
     d_gin_mlp: int = 64
-    gnn_output_digits: Optional[int] = 4
+    gnn_output_digits: Optional[int] = None
 
     num_heads: int = 4
     num_transformer_layers: int = 4

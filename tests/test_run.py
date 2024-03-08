@@ -30,21 +30,6 @@ def test_prepare_run_experiment():
     # Very basic agent parameters for each scenario
     agents_params_dict = {
         ScenarioType.GRAPH_ISOMORPHISM: AgentsParameters(
-            prover=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                d_gnn=1,
-                d_gin_mlp=1,
-                num_heads=2,
-                num_transformer_layers=1,
-                d_transformer=2,
-                d_transformer_mlp=1,
-                d_node_selector=1,
-                num_node_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-            ),
             verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 d_gnn=1,
@@ -59,18 +44,26 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
-        ),
-        ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
-            prover=ImageClassificationAgentParameters(
-                num_convs_per_group=1,
-                d_latent_pixel_selector=1,
-                num_latent_pixel_selector_layers=1,
+            prover=GraphIsomorphismAgentParameters(
+                num_gnn_layers=1,
+                d_gnn=1,
+                d_gin_mlp=1,
+                num_heads=2,
+                num_transformer_layers=1,
+                d_transformer=2,
+                d_transformer_mlp=1,
+                d_node_selector=1,
+                num_node_selector_layers=1,
                 d_decider=1,
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
             ),
+        ),
+        ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
             verifier=ImageClassificationAgentParameters(
                 num_convs_per_group=1,
                 d_latent_pixel_selector=1,
@@ -79,6 +72,17 @@ def test_prepare_run_experiment():
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                normalize_message_history=True,
+            ),
+            prover=ImageClassificationAgentParameters(
+                num_convs_per_group=1,
+                d_latent_pixel_selector=1,
+                num_latent_pixel_selector_layers=1,
+                d_decider=1,
+                num_decider_layers=1,
+                d_value=1,
+                num_value_layers=1,
+                normalize_message_history=True,
             ),
         ),
     }
@@ -118,8 +122,8 @@ def test_prepare_run_experiment():
         # Construct the parameters
         if is_random:
             agents_param = AgentsParameters(
-                prover={"is_random": True},
                 verifier=agents_param["verifier"],
+                prover={"is_random": True},
             )
         params = Parameters(
             **{

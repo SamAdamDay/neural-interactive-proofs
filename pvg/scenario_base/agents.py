@@ -33,13 +33,17 @@ class AgentHooks:
     """Holder for hooks to run at various points in the agent forward pass."""
 
     @classmethod
-    def create_recorder_hooks(cls, storage: dict | TensorDict) -> "AgentHooks":
+    def create_recorder_hooks(
+        cls, storage: dict | TensorDict, per_agent: bool = True
+    ) -> "AgentHooks":
         """Create hooks to record the agent's output.
 
         Parameters
         ----------
         storage : dict | TensorDict
             The dictionary to store the agent's output in.
+        per_agent : bool, default=True
+            Whether to store the output of each agent separately.
 
         Returns
         -------
@@ -47,8 +51,19 @@ class AgentHooks:
             The hooks to record the agent's output.
         """
 
-        def recorder_hook(name: str, storage: dict | TensorDict, output: Tensor):
-            storage[name] = output
+        def recorder_hook(
+            hook_name: str,
+            storage: dict | TensorDict,
+            output: Tensor,
+            *,
+            agent_name: Optional[str] = None,
+        ):
+            if agent_name is not None and per_agent:
+                if agent_name not in storage:
+                    storage[agent_name] = {}
+                storage[agent_name][hook_name] = output.clone()
+            else:
+                storage[hook_name] = output.clone()
 
         cls_args = {
             field.name: partial(recorder_hook, field.name, storage)
@@ -69,12 +84,24 @@ class AgentPart(TensorDictModuleBase, ABC):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    def __init__(self, params: Parameters, device: Optional[TorchDevice] = None):
+    def __init__(
+        self, params: Parameters, agent_name: str, device: Optional[TorchDevice] = None
+    ):
         super().__init__()
         self.params = params
+        self.agent_name = agent_name
         if device is None:
             device = "cpu"
         self.device = device
+
+    def _run_recorder_hook(
+        self,
+        hooks: Optional[AgentHooks],
+        hook_name: str,
+        output: Optional[Tensor],
+    ):
+        if hooks is not None and output is not None:
+            hooks.__getattribute__(hook_name)(output, agent_name=self.agent_name)
 
     @abstractmethod
     def to(device: TorchDevice):
@@ -89,8 +116,10 @@ class DummyAgentPartMixin(AgentPart, ABC):
     and so that tensordict can determine the device.
     """
 
-    def __init__(self, params: Parameters, device: TorchDevice | None = None):
-        super().__init__(params, device)
+    def __init__(
+        self, params: Parameters, agent_name: str, device: TorchDevice | None = None
+    ):
+        super().__init__(params, agent_name, device)
         self.dummy_parameter = TorchParameter(torch.tensor(0.0, device=self.device))
 
     def to(self, device: TorchDevice):
