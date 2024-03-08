@@ -843,11 +843,11 @@ class Parameters(BaseParameters):
 
         # Convert PPO parameters for specific variants to the appropriate class
         if self.trainer == TrainerType.VANILLA_PPO:
-            if self.spg is None:
-                self.spg = VanillaPpoParameters()
-            elif isinstance(self.spg, dict):
-                self.spg = VanillaPpoParameters(**self.spg)
-        if self.trainer == TrainerType.SPG:
+            if self.vanilla_ppo is None:
+                self.vanilla_ppo = VanillaPpoParameters()
+            elif isinstance(self.vanilla_ppo, dict):
+                self.vanilla_ppo = VanillaPpoParameters(**self.vanilla_ppo)
+        elif self.trainer == TrainerType.SPG:
             if self.spg is None:
                 self.spg = SpgParameters(
                     stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[
