@@ -125,7 +125,7 @@ class ImageClassificationEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
             self.latent_height * self.latent_width,
-            shape=(self.num_envs, 2),
+            shape=(self.num_envs, self.num_agents),  # TODO Ask Sam
             dtype=torch.long,
             device=self.device,
         )
@@ -164,7 +164,7 @@ class ImageClassificationEnvironment(Environment):
         batch_size = x.shape[0]
 
         # Compute index of the agent whose turn it is.
-        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+        agent_indices = self.params.protocol_params.get_indices(round)
 
         # Compute the latent pixel selected by the agents
         # (batch agent)
@@ -173,15 +173,18 @@ class ImageClassificationEnvironment(Environment):
 
         # Write the latent pixel selected by the agent whose turn it is as a (one-hot)
         # message
-        x[
-            torch.arange(batch_size),
-            round,
-            latent_pixel_selected_y[torch.arange(batch_size), agent_index],
-            latent_pixel_selected_x[torch.arange(batch_size), agent_index],
-        ] = 1
+        for agent_index in agent_indices:
+            x[
+                torch.arange(batch_size),
+                round,
+                latent_pixel_selected_y[torch.arange(batch_size), agent_index],
+                latent_pixel_selected_x[torch.arange(batch_size), agent_index],
+            ] = 1
 
         # Set the latent pixel selected by the agent whose turn it is as the message
-        message = latent_pixel_selected[torch.arange(batch_size), agent_index].long()
+        message = latent_pixel_selected[
+            torch.arange(batch_size), agent_index
+        ].long()  # TODO index
 
         # Add the message history and next message to the next tensordict
         next_td["x"] = x

@@ -53,31 +53,31 @@ def test_graph_isomorphism_environment_step():
         ppo=CommonPpoParameters(frames_per_batch=batch_size * max_message_rounds),
         max_message_rounds=max_message_rounds,
         min_message_rounds=1,
-        # agents=AgentsParameters(
-        #     prover=GraphIsomorphismAgentParameters(),
-        #     verifier=GraphIsomorphismAgentParameters(),
-        # ),
-        # pvg_protocol=ProtocolParameters(
-        #     protocol=InteractionProtocolType.PVG,
-        #     prover_reward=1,
-        #     verifier_reward=2,
-        #     verifier_terminated_penalty=-4,
-        #     verifier_no_guess_reward=8,
-        #     verifier_incorrect_penalty=-16,
-        # ),
         agents=AgentsParameters(
-            prover1=GraphIsomorphismAgentParameters(),
-            prover2=GraphIsomorphismAgentParameters(),
+            prover=GraphIsomorphismAgentParameters(),
             verifier=GraphIsomorphismAgentParameters(),
         ),
-        debate_protocol=ProtocolParameters(
-            protocol=InteractionProtocolType.DEBATE,
+        pvg_protocol=ProtocolParameters(
+            protocol=InteractionProtocolType.PVG,
             prover_reward=1,
             verifier_reward=2,
             verifier_terminated_penalty=-4,
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
         ),
+        # agents=AgentsParameters(
+        #     prover0=GraphIsomorphismAgentParameters(),
+        #     prover1=GraphIsomorphismAgentParameters(),
+        #     verifier=GraphIsomorphismAgentParameters(),
+        # ),
+        # debate_protocol=ProtocolParameters(
+        #     protocol=InteractionProtocolType.DEBATE,
+        #     prover_reward=1,
+        #     verifier_reward=2,
+        #     verifier_terminated_penalty=-4,
+        #     verifier_no_guess_reward=8,
+        #     verifier_incorrect_penalty=-16,
+        # ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
     dataset = GraphIsomorphismDataset(params, settings)
@@ -126,8 +126,12 @@ def test_graph_isomorphism_environment_step():
     expected_message = torch.zeros(batch_size, dtype=torch.int64)
     for i in range(batch_size):
         round = env_td["round"][i]
-        agent_index = round % 2
-        message = env_td["agents", "node_selected"][i, agent_index]
+        agent_index = (
+            round % 2
+        )  # TODO index , This assumes we are using the PVG protocol
+        message = env_td["agents", "node_selected"][
+            i, agent_index
+        ]  # TODO index , This assumes we are using the PVG protocol
         expected_message[i] = message
         graph_id = message // max_num_nodes
         expected_x[i, graph_id, message % max_num_nodes, round] = 1

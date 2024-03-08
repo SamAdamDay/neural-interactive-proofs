@@ -11,6 +11,7 @@ from pvg import (
     SpgVariant,  # TODO Ideally combine this with SpgParameters
     ScenarioType,
     TrainerType,
+    InteractionProtocolType,
     run_experiment,
     prepare_experiment,
 )
@@ -30,7 +31,7 @@ def test_prepare_run_experiment():
     # Very basic agent parameters for each scenario
     agents_params_dict = {
         ScenarioType.GRAPH_ISOMORPHISM: AgentsParameters(
-            verifier=GraphIsomorphismAgentParameters(
+            prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 d_gnn=1,
                 d_gin_mlp=1,
@@ -46,7 +47,7 @@ def test_prepare_run_experiment():
                 num_value_layers=1,
                 normalize_message_history=True,
             ),
-            prover=GraphIsomorphismAgentParameters(
+            verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 d_gnn=1,
                 d_gin_mlp=1,
@@ -64,7 +65,7 @@ def test_prepare_run_experiment():
             ),
         ),
         ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
-            verifier=ImageClassificationAgentParameters(
+            prover=ImageClassificationAgentParameters(
                 num_convs_per_group=1,
                 d_latent_pixel_selector=1,
                 num_latent_pixel_selector_layers=1,
@@ -74,7 +75,7 @@ def test_prepare_run_experiment():
                 num_value_layers=1,
                 normalize_message_history=True,
             ),
-            prover=ImageClassificationAgentParameters(
+            verifier=ImageClassificationAgentParameters(
                 num_convs_per_group=1,
                 d_latent_pixel_selector=1,
                 num_latent_pixel_selector_layers=1,
@@ -89,18 +90,19 @@ def test_prepare_run_experiment():
 
     # Very basic parameters for each trainer
     trainer_params = {
-        # TrainerType.SOLO_AGENT: SoloAgentParameters(
-        #     num_epochs=1,
-        #     batch_size=1,
-        # ),
+        TrainerType.SOLO_AGENT: SoloAgentParameters(
+            num_epochs=1,
+            batch_size=1,
+        ),
         TrainerType.VANILLA_PPO: CommonPpoParameters(
             num_iterations=8,
             num_epochs=4,
             minibatch_size=64,
         ),
-        # TrainerType.SPG: SpgParameters(
-        #     variant=SpgVariant.PSOS,
-        # ),
+        TrainerType.SPG: SpgParameters(
+            variant=SpgVariant.PSOS,
+            # stackelberg_sequence=(("verifier",), ("prover0", "prover1")) For testing DEBATE
+        ),
     }
 
     basic_params = {
@@ -122,8 +124,8 @@ def test_prepare_run_experiment():
         # Construct the parameters
         if is_random:
             agents_param = AgentsParameters(
-                verifier=agents_param["verifier"],
                 prover={"is_random": True},
+                verifier=agents_param["verifier"],
             )
         params = Parameters(
             **{
@@ -132,6 +134,7 @@ def test_prepare_run_experiment():
                 "dataset": "test",
                 "agents": agents_param,
                 str(trainer_type): trainer_param,
+                # "interaction_protocol": InteractionProtocolType.DEBATE For testing DEBATE
             }
         )
 

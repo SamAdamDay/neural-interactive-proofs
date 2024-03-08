@@ -169,7 +169,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         # Build the message history normalizer if necessary
         if self._agent_params.normalize_message_history:
             self.message_history_normalizer = NormalizeOneHotMessageHistory(
-                max_message_rounds=self.params.max_message_rounds,
+                max_message_rounds=self.params.protocol_params.max_message_rounds,
                 message_out_key="x_normalized",
                 num_structure_dims=2,
                 round_dim_last=False,

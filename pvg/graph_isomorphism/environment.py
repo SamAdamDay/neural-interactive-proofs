@@ -267,7 +267,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, 2),
+            shape=(self.num_envs, self.num_agents),  # TODO Ask Sam
             dtype=torch.long,
             device=self.device,
         )
@@ -302,7 +302,7 @@ class GraphIsomorphismEnvironment(Environment):
         node_selected: Int[Tensor, "batch agent"] = env_td["agents", "node_selected"]
 
         # Compute index of the agent whose turn it is.
-        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+        agent_indices = self.params.protocol_params.get_indices(round)
 
         # Determine which graph contains the selected node and which node it is there
         # (batch agent)
@@ -313,17 +313,18 @@ class GraphIsomorphismEnvironment(Environment):
         )
 
         # Write the node selected by the agent whose turn it is as a (one-hot) message
-        x[
-            torch.arange(x.shape[0]),
-            which_graph[torch.arange(which_graph.shape[0]), agent_index].int(),
-            graph_node[torch.arange(which_graph.shape[0]), agent_index],
-            round,
-        ] = 1
+        for agent_index in agent_indices:
+            x[
+                torch.arange(x.shape[0]),
+                which_graph[torch.arange(which_graph.shape[0]), agent_index].int(),
+                graph_node[torch.arange(which_graph.shape[0]), agent_index],
+                round,
+            ] = 1
 
         # Set the node selected by the agent whose turn it is as the message
         message = node_selected[
             torch.arange(node_selected.shape[0]), agent_index
-        ].long()
+        ].long()  # TODO index
 
         # Add the message history and next message to the next tensordict
         next_td["x"] = x

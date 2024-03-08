@@ -54,7 +54,7 @@ from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
 from enum import auto as enum_auto
 from textwrap import indent
 from itertools import product
-from torch import tensor, cat
+from torch import tensor, cat, randint
 
 try:
     from enum import StrEnum
@@ -143,9 +143,9 @@ class InteractionProtocolType(StrEnum):
     """
 
     PVG = enum_auto()
-    ABSTRACT_DECISION_PROBLEM = enum_auto()  # TODO
-    DEBATE = enum_auto()  # TODO
-    MERLIN_ARTHUR = enum_auto()  # TODO
+    ABSTRACT_DECISION_PROBLEM = enum_auto()
+    DEBATE = enum_auto()
+    MERLIN_ARTHUR = enum_auto()
     MARKET_MAKING = enum_auto()  # TODO
 
 
@@ -179,17 +179,17 @@ class MinMessageRoundsSchedulerType(StrEnum):
 DEFAULT_AGENT_NAMES = {
     InteractionProtocolType.PVG: ("prover", "verifier"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
-    InteractionProtocolType.DEBATE: ("prover1", "prover2", "verifier"),
-    InteractionProtocolType.MERLIN_ARTHUR: ("prover1", "prover2", "verifier"),
+    InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
+    InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("prover", "verifier"),
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
     InteractionProtocolType.PVG: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
-    InteractionProtocolType.DEBATE: (("verifier",), ("prover1", "prover2")),
-    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover1", "prover2")),
-    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover")),
+    InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
 }
 
 
@@ -695,7 +695,7 @@ class ProtocolParameters(SubParameters):
     protocol : InteractionProtocolType
         The interaction protocol between the agents.
     max_message_rounds : int
-        The maximum number of rounds of the game. Each round corresponds to one move by one agent.
+        The maximum number of rounds of the game. Each round corresponds to one move by one or more agents.
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, the verifier's guesses are not registered.
     prover_reward : float
@@ -715,7 +715,11 @@ class ProtocolParameters(SubParameters):
 
     protocol: InteractionProtocolType = InteractionProtocolType.PVG
 
-    if protocol == InteractionProtocolType.PVG:
+    # Allow 8 rounds for PVG and DEBATE
+    if (
+        protocol == InteractionProtocolType.PVG
+        or protocol == InteractionProtocolType.DEBATE
+    ):
         max_message_rounds: int = 8
         min_message_rounds: int = 0
         prover_reward: float = 1.0
@@ -725,6 +729,7 @@ class ProtocolParameters(SubParameters):
         verifier_no_guess_reward: float = 0.0
         shared_reward: bool = False
 
+    # Allow 2 rounds for ADP and MA
     elif (
         protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
         or protocol == InteractionProtocolType.MERLIN_ARTHUR
@@ -738,21 +743,43 @@ class ProtocolParameters(SubParameters):
         verifier_no_guess_reward: float = 0.0
         shared_reward: bool = False
 
-    def get_indices(self, round, agent_names):
-        default_names = DEFAULT_AGENT_NAMES[self.protocol]
-        if sorted(default_names) != sorted(agent_names):
-            raise ValueError(
-                f"Agent names must be {default_names} for the {self.protocol} protocol."
-            )  # TODO maybe can remove this after making sure the names are always in the right order?
+    else:
+        raise ValueError(f"Unknown protocol: {protocol}")
 
-        agent_indices = tensor(
-            [agent_names.index(default_names[i]) - i for i in range(len(agent_names))]
-        )
-        r = len(round)
-        a = len(agent_indices)
-        tiled_indices = cat([agent_indices] * (r // a + 1))[:r]
+    def get_indices(self, round):
+        """
+        Returns the indices of the agents involved in the interaction for a given round.
 
-        return (r % a) + tiled_indices
+        Parameters:
+        - round (tensor) : The current round of the interaction.
+
+        Returns:
+        - agent_indices (list): A list of indices representing the agents involved in the interaction.
+
+        Raises:
+        - None
+
+        """
+
+        if (
+            self.protocol == InteractionProtocolType.PVG
+            or self.protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
+        ):
+            # The prover goes first, and the two agents alternate
+            agent_indices = [round % 2]
+        elif self.protocol == InteractionProtocolType.MERLIN_ARTHUR:
+            # First get the indices that correspond to whether it is prover1 or verifier
+            agent_index = round % 2 + 1
+            # Then isolate the prover1 entries
+            prover_mask = agent_index == 1
+            # Then randomly decide whether it is prover0 or prover1 who gets to move
+            agent_index[prover_mask] = randint(2, (prover_mask.sum(),))
+            agent_indices = [agent_index]
+        elif self.protocol == InteractionProtocolType.DEBATE:
+            # The provers go first and move simultaneously
+            agent_indices = [round % 2 + 1, round % 2 * 2]
+
+        return agent_indices
 
 
 @dataclass
@@ -771,12 +798,6 @@ class Parameters(BaseParameters):
         The interaction protocol between the agents.
     seed : int
         The random seed.
-    max_message_rounds : int
-        The maximum number of rounds of the game. Each round corresponds to one move by
-        one agent.
-    min_message_rounds : int
-        The minimum number of rounds of messages. Before this point, verifier cannot
-        guess.
     min_message_rounds_scheduler : MinMessageRoundsScheduler
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
