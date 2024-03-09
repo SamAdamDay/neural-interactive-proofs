@@ -1694,13 +1694,6 @@ class GraphIsomorphismCombinedBody(CombinedBody):
             # Run the agent body
             body_outputs[agent_name] = self.bodies[agent_name](input_td, hooks=hooks)
 
-        print(
-            [
-                (name, body_outputs[name]["node_level_repr"].shape)
-                for name in self.params.agents
-            ]
-        )
-
         # Stack the outputs
         node_level_repr = torch.stack(
             [body_outputs[name]["node_level_repr"] for name in self.params.agents],
