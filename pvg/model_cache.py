@@ -151,6 +151,7 @@ def save_model_state_dicts(
     cuda_devices = [
         torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())
     ]
+    current_device = torch.cuda.current_device() if torch.cuda.is_available() else None
     metadata = dict(
         machine=platform.machine(),
         platform=platform.platform(),
@@ -161,7 +162,7 @@ def save_model_state_dicts(
         python_version=platform.python_version(),
         pytorch_version=torch.__version__,
         cuda_devices=cuda_devices,
-        current_cuda_device=torch.cuda.current_device(),
+        current_cuda_device=current_device,
         model_devices={name: str(model.device) for name, model in models.items()},
         params=params,
     )
