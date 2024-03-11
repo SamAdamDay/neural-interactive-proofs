@@ -54,7 +54,6 @@ from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
 from enum import auto as enum_auto
 from textwrap import indent
 from itertools import product
-from torch import tensor, cat, randint
 
 try:
     from enum import StrEnum
@@ -175,8 +174,8 @@ class MinMessageRoundsSchedulerType(StrEnum):
     LINEAR_INCREASE_DECREASE = enum_auto()
 
 
-# The sequence given here indicates the order of play in the game
-DEFAULT_AGENT_NAMES = {
+# The agent names in their default order for each protocol
+AGENT_NAMES = {
     InteractionProtocolType.PVG: ("prover", "verifier"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
@@ -692,12 +691,12 @@ class ProtocolParameters(SubParameters):
 
     Parameters
     ----------
-    protocol : InteractionProtocolType
-        The interaction protocol between the agents.
     max_message_rounds : int
-        The maximum number of rounds of the game. Each round corresponds to one move by one or more agents.
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
     min_message_rounds : int
-        The minimum number of rounds of messages. Before this point, the verifier's guesses are not registered.
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
@@ -713,73 +712,34 @@ class ProtocolParameters(SubParameters):
         as the verifier. This overrides `prover_reward`.
     """
 
-    protocol: InteractionProtocolType = InteractionProtocolType.PVG
+    max_message_rounds: int = 8
+    min_message_rounds: int = 0
+    prover_reward: float = 1.0
+    verifier_reward: float = 1.0
+    verifier_incorrect_penalty: float = -1.0
+    verifier_terminated_penalty: float = -1.0
+    verifier_no_guess_reward: float = 0.0
+    shared_reward: bool = False
 
-    # Allow 8 rounds for PVG and DEBATE
-    if (
-        protocol == InteractionProtocolType.PVG
-        or protocol == InteractionProtocolType.DEBATE
-    ):
-        max_message_rounds: int = 8
-        min_message_rounds: int = 0
-        prover_reward: float = 1.0
-        verifier_reward: float = 1.0
-        verifier_incorrect_penalty: float = -1.0
-        verifier_terminated_penalty: float = -1.0
-        verifier_no_guess_reward: float = 0.0
-        shared_reward: bool = False
 
-    # Allow 2 rounds for ADP and MA
-    elif (
-        protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
-        or protocol == InteractionProtocolType.MERLIN_ARTHUR
-    ):
-        max_message_rounds: int = 2
-        min_message_rounds: int = 2
-        prover_reward: float = 1.0
-        verifier_reward: float = 1.0
-        verifier_incorrect_penalty: float = -1.0
-        verifier_terminated_penalty: float = -1.0
-        verifier_no_guess_reward: float = 0.0
-        shared_reward: bool = False
+@dataclass
+class TwoRoundProtocolParameters(ProtocolParameters, ABC):
+    """Base class for parameters for interaction protocols which have two rounds."""
 
-    else:
-        raise ValueError(f"Unknown protocol: {protocol}")
+    # We don't want these to be changed, but it's convenient to have them as properties,
+    # so we set them as class variables
+    max_message_rounds: ClassVar[int] = 2
+    min_message_rounds: ClassVar[int] = 2
 
-    def get_indices(self, round):
-        """
-        Returns the indices of the agents involved in the interaction for a given round.
 
-        Parameters:
-        - round (tensor) : The current round of the interaction.
+@dataclass
+class AdpProtocolParameters(TwoRoundProtocolParameters):
+    """Additional parameters for the abstract decision problem interaction protocol."""
 
-        Returns:
-        - agent_indices (list): A list of indices representing the agents involved in the interaction.
 
-        Raises:
-        - None
-
-        """
-
-        if (
-            self.protocol == InteractionProtocolType.PVG
-            or self.protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
-        ):
-            # The prover goes first, and the two agents alternate
-            agent_indices = [round % 2]
-        elif self.protocol == InteractionProtocolType.MERLIN_ARTHUR:
-            # First get the indices that correspond to whether it is prover1 or verifier
-            agent_index = round % 2 + 1
-            # Then isolate the prover1 entries
-            prover_mask = agent_index == 1
-            # Then randomly decide whether it is prover0 or prover1 who gets to move
-            agent_index[prover_mask] = randint(2, (prover_mask.sum(),))
-            agent_indices = [agent_index]
-        elif self.protocol == InteractionProtocolType.DEBATE:
-            # The provers go first and move simultaneously
-            agent_indices = [round % 2 + 1, round % 2 * 2]
-
-        return agent_indices
+@dataclass
+class ArthurMerlinProtocolParameters(TwoRoundProtocolParameters):
+    """Additional parameters for the Arthur-Merlin interaction protocol."""
 
 
 @dataclass
@@ -794,7 +754,7 @@ class Parameters(BaseParameters):
         The RL trainer to use.
     dataset : str
         The dataset to use.
-    protocol : Protocol
+    interaction_protocol : Protocol
         The interaction protocol between the agents.
     seed : int
         The random seed.
@@ -926,17 +886,21 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
-                self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
 
         # Convert interaction protocol parameters to ProtocolParameters
+        if (
+            self.interaction_protocol
+            == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
+        ):
+            protocol_params_class = AdpProtocolParameters
+        elif self.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+            protocol_params_class = ArthurMerlinProtocolParameters
+        else:
+            protocol_params_class = ProtocolParameters
         if self.protocol_params is None:
-            self.protocol_params = ProtocolParameters(
-                protocol=self.interaction_protocol
-            )
-        elif isinstance(self.pvg_protocol, dict):
-            self.protocol_params = ProtocolParameters(
-                protocol=self.interaction_protocol, **self.protocol_params
-            )
+            self.protocol_params = protocol_params_class()
+        elif isinstance(self.protocol_params, dict):
+            self.protocol_params = protocol_params_class(**self.protocol_params)
 
         # Convert dataset options to DatasetParameters
         if self.dataset_options is None:
@@ -952,6 +916,7 @@ class Parameters(BaseParameters):
         """Process agent parameters passed to `Parameters`.
 
         Fills in missing agent parameters with the default parameters for the scenario.
+        Also validates the agent parameters.
 
         Parameters
         ----------
@@ -969,7 +934,7 @@ class Parameters(BaseParameters):
             self.agents = AgentsParameters(
                 [
                     (name, agent_params_class())
-                    for name in DEFAULT_AGENT_NAMES[self.interaction_protocol]
+                    for name in AGENT_NAMES[self.interaction_protocol]
                 ]
             )
 
@@ -1007,3 +972,12 @@ class Parameters(BaseParameters):
                 )
 
         self.agents = new_agents_params
+
+        # Make sure the agent names match the agent names expected by the protocol
+        agent_names = tuple(self.agents.keys())
+        if agent_names != AGENT_NAMES[self.interaction_protocol]:
+            raise ValueError(
+                f"Agent names {self.agent_names} do not match the agent names expected"
+                f"by interaction protocol {self.interaction_protocol}: "
+                f"{AGENT_NAMES[self.interaction_protocol]}."
+            )

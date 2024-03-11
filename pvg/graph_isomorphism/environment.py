@@ -302,7 +302,7 @@ class GraphIsomorphismEnvironment(Environment):
         node_selected: Int[Tensor, "batch agent"] = env_td["agents", "node_selected"]
 
         # Compute index of the agent whose turn it is.
-        agent_indices = self.params.protocol_params.get_indices(round)
+        agent_indices = self._get_agent_turn_indices(round)
 
         # Determine which graph contains the selected node and which node it is there
         # (batch agent)

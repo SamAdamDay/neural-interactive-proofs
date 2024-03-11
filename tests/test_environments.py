@@ -51,14 +51,13 @@ def test_graph_isomorphism_environment_step():
         TrainerType.VANILLA_PPO,
         "test",
         ppo=CommonPpoParameters(frames_per_batch=batch_size * max_message_rounds),
-        max_message_rounds=max_message_rounds,
-        min_message_rounds=1,
         agents=AgentsParameters(
             prover=GraphIsomorphismAgentParameters(),
             verifier=GraphIsomorphismAgentParameters(),
         ),
-        pvg_protocol=ProtocolParameters(
-            protocol=InteractionProtocolType.PVG,
+        protocol_params=ProtocolParameters(
+            max_message_rounds=max_message_rounds,
+            min_message_rounds=1,
             prover_reward=1,
             verifier_reward=2,
             verifier_terminated_penalty=-4,

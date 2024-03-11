@@ -164,7 +164,7 @@ class ImageClassificationEnvironment(Environment):
         batch_size = x.shape[0]
 
         # Compute index of the agent whose turn it is.
-        agent_indices = self.params.protocol_params.get_indices(round)
+        agent_indices = self._get_agent_turn_indices(round)
 
         # Compute the latent pixel selected by the agents
         # (batch agent)
