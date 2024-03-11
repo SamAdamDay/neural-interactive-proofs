@@ -176,7 +176,7 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
             timeline_node_y = []
             timeline_node_text = []
             timeline_node_colour = []
-            for round, message in enumerate(rollout["next"]["message"].flat):
+            for round, message in enumerate(rollout["message"].flat):
                 x = round * 0.125
                 y = -1.3 - 0.3 * (round % 2)
                 timeline_node_x.append(x)

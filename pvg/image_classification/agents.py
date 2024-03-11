@@ -56,7 +56,7 @@ from pvg.parameters import (
     RandomAgentParameters,
     ScenarioType,
 )
-from pvg.utils.torch_modules import (
+from pvg.utils.torch import (
     ACTIVATION_CLASSES,
     Squeeze,
     UpsampleSimulateBatchDims,
@@ -165,6 +165,12 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         device: Optional[TorchDevice] = None,
     ):
         super().__init__(params, agent_name, device)
+
+        if self._agent_params.use_manual_architecture:
+            raise NotImplementedError(
+                "Manual architecture is not implemented for the image classification "
+                "task."
+            )
 
         # Build the message history normalizer if necessary
         if self._agent_params.normalize_message_history:

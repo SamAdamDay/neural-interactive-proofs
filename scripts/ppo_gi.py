@@ -43,8 +43,10 @@ param_grid = dict(
     body_lr_factor=[0.1],
     prover_num_layers=[5],
     prover_lr_factor=[1.0],
+    prover_manual_architecture=[False],
     verifier_num_layers=[2],
     verifier_lr_factor=[1.0],
+    verifier_manual_architecture=[False],
     num_transformer_layers=[1],
     random_prover=[False],
     pretrain_agents=[True],
@@ -80,15 +82,24 @@ def experiment_fn(
         os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
+    if combo["prover_manual_architecture"]:
+        prover_lr_factor = 0.0
+    else:
+        prover_lr_factor = combo["prover_lr_factor"]
+    if combo["verifier_manual_architecture"]:
+        verifier_lr_factor = 0.0
+    else:
+        verifier_lr_factor = combo["verifier_lr_factor"]
     if combo["random_prover"]:
         prover_params = RandomAgentParameters()
     else:
         prover_params = GraphIsomorphismAgentParameters(
             num_gnn_layers=combo["prover_num_layers"],
             activation_function=combo["activation_function"],
-            agent_lr_factor=combo["prover_lr_factor"],
+            agent_lr_factor=prover_lr_factor,
             num_transformer_layers=combo["num_transformer_layers"],
             normalize_message_history=combo["normalize_message_history"],
+            use_manual_architecture=combo["prover_manual_architecture"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -98,9 +109,10 @@ def experiment_fn(
             verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=combo["verifier_num_layers"],
                 activation_function=combo["activation_function"],
-                agent_lr_factor=combo["verifier_lr_factor"],
+                agent_lr_factor=verifier_lr_factor,
                 num_transformer_layers=combo["num_transformer_layers"],
                 normalize_message_history=combo["normalize_message_history"],
+                use_manual_architecture=combo["verifier_manual_architecture"],
             ),
             prover=prover_params,
         ),

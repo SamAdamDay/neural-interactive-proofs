@@ -29,6 +29,7 @@ from pvg.model_cache import (
 from pvg.scenario_instance import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
 from pvg.utils.maths import logit_entropy
+from pvg.utils.torch import DummyOptimizer
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):
@@ -211,13 +212,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             else:
                 body_lr = agent_lr * self.params.ppo.body_lr_factor
 
-            # Set the learning rate for the body parameters
+            # Set the learning rate for the body parameters, or freeze them if the LR is
+            # 0
             body_params = [
                 param
                 for param_name, param in loss_module.named_parameters()
                 if param_name.startswith(f"actor_network_params.module_0_{agent_name}")
             ]
-            model_param_dict.append(dict(params=body_params, lr=body_lr))
+            if body_lr == 0:
+                for param in body_params:
+                    param.requires_grad = False
+            else:
+                model_param_dict.append(dict(params=body_params, lr=body_lr))
 
             # Set the learning rate for the non-body parameters
             def is_non_body_param(param_name: str):
@@ -231,14 +237,23 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     return True
                 return False
 
+            # Set the learning rate for the non-body parameters, or freeze them if the
+            # LR is 0
             non_body_params = [
                 param
                 for param_name, param in loss_module.named_parameters()
                 if is_non_body_param(param_name)
             ]
-            model_param_dict.append(dict(params=non_body_params, lr=agent_lr))
+            if agent_lr == 0:
+                for param in non_body_params:
+                    param.requires_grad = False
+            else:
+                model_param_dict.append(dict(params=non_body_params, lr=agent_lr))
 
-        return torch.optim.Adam(model_param_dict)
+        if len(model_param_dict) == 0:
+            return DummyOptimizer()
+        else:
+            return torch.optim.Adam(model_param_dict)
 
     def _run_rl_training_loop(
         self,
@@ -333,14 +348,19 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
                     # Compute the loss
                     loss_vals: TensorDict = loss_module(sub_data)
-                    loss_module.compute_grads(loss_vals)
 
-                    # Clip gradients and update parameters
-                    clip_grad_norm_(
-                        loss_module.parameters(), self.params.ppo.max_grad_norm
-                    )
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    # Only perform the optimization step if the loss values require
+                    # gradients. This can be false for example if all agents are frozen
+                    if loss_vals.requires_grad:
+                        # Compute the gradients
+                        loss_module.compute_grads(loss_vals)
+
+                        # Clip gradients and update parameters
+                        clip_grad_norm_(
+                            loss_module.parameters(), self.params.ppo.max_grad_norm
+                        )
+                        optimizer.step()
+                        optimizer.zero_grad()
 
                     # If we're in test mode, exit after one iteration
                     if self.settings.test_run:

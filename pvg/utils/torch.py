@@ -1,4 +1,4 @@
-"""Handy PyTorch modules."""
+"""Handy PyTorch classes, including modules."""
 
 from typing import Callable, Optional, Iterable
 from abc import abstractmethod
@@ -22,6 +22,19 @@ ACTIVATION_CLASSES = dict(
     tanh=nn.Tanh,
     sigmoid=nn.Sigmoid,
 )
+
+
+class DummyOptimizer(torch.optim.Optimizer):
+    """A dummy optimizer which does nothing."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def step(self, *args, **kwargs):
+        pass
+
+    def zero_grad(self, *args, **kwargs):
+        pass
 
 
 class SimulateBatchDimsMixin:
