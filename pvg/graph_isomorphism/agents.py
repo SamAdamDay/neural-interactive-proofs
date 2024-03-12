@@ -28,6 +28,7 @@ from torch.nn import (
 )
 from torch import Tensor
 import torch.nn.functional as F
+from torch.linalg import vector_norm
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -58,9 +59,10 @@ from pvg.parameters import (
     GraphIsomorphismAgentParameters,
     RandomAgentParameters,
     ScenarioType,
+    InteractionProtocolType,
 )
 from pvg.protocols import ProtocolHandler
-from pvg.utils.torch_modules import (
+from pvg.utils.torch import (
     ACTIVATION_CLASSES,
     PairedGaussianNoise,
     PairInvariantizer,
@@ -278,19 +280,34 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             d_input=self.protocol_handler.max_message_rounds,
         )
 
-        # Build the global pooling module, which computes the graph-level representation
-        # from the GNN output
-        self.global_pooling = self._build_global_pooling()
+        if self._agent_params.use_manual_architecture:
+            if params.interaction_protocol != InteractionProtocolType.PVG:
+                raise NotImplementedError(
+                    "Manual graph isomorphism agent architecture is only supported for "
+                    "the PVG interaction protocol."
+                )
 
-        # Build the encoder going from the GNN to the transformer
-        self.gnn_transformer_encoder = self._build_gnn_transformer_encoder()
+            # Build the encoder going from the gnn output to the representation space
+            self.representation_encoder = self._build_representation_encoder(
+                self._agent_params.d_gnn
+            )
 
-        # Build the transformer
-        self.transformer = self._build_transformer()
+        else:
+            # Build the global pooling module, which computes the graph-level
+            # representation from the GNN output
+            self.global_pooling = self._build_global_pooling()
 
-        # Build the encoder going from the transformer output to the representation
-        # space
-        self.representation_encoder = self._build_representation_encoder()
+            # Build the encoder going from the GNN to the transformer
+            self.gnn_transformer_encoder = self._build_gnn_transformer_encoder()
+
+            # Build the transformer
+            self.transformer = self._build_transformer()
+
+            # Build the encoder going from the transformer output to the representation
+            # space
+            self.representation_encoder = self._build_representation_encoder(
+                self._agent_params.d_transformer
+            )
 
     def _build_gnn(self, d_input: int) -> TensorDictSequential:
         """Builds the GNN module for an agent.
@@ -432,11 +449,16 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         return global_pooling
 
-    def _build_representation_encoder(self) -> Linear:
+    def _build_representation_encoder(self, d_input: int) -> Linear:
         """Builds the encoder layer which translates to the representation space.
 
         This is a simple linear layer ensures that the number of output features is
         `params.d_representation`.
+
+        Parameters
+        ----------
+        d_input : int
+            The number of input features.
 
         Returns
         -------
@@ -444,7 +466,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             The encoder module
         """
         return Linear(
-            self._agent_params.d_transformer,
+            d_input,
             self.params.d_representation,
             device=self.device,
         )
@@ -481,11 +503,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         out : TensorDict
             A tensor dict with keys:
 
-            - "graph_level_repr" (... 2 d_representation): The output graph-level
+            - "graph_level_repr" (... pair d_representation): The output graph-level
               representations.
-            - "node_level_repr" (... 2 max_nodes d_representation): The output
+            - "node_level_repr" (... pair max_nodes d_representation): The output
               node-level representations.
         """
+
+        # If we are using the manual architecture, skip everything else and run that
+        if self._agent_params.use_manual_architecture:
+            return self._run_manual_architecture(data, hooks)
+
+        batch_size = data.batch_size
 
         # The size of the node dimension
         max_num_nodes = data["x"].shape[-2]
@@ -625,7 +653,86 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 graph_level_repr=graph_level_repr,
                 node_level_repr=node_level_repr,
             ),
-            batch_size=graph_level_repr.shape[:-2],
+            batch_size=batch_size,
+        )
+
+    def _run_manual_architecture(
+        self,
+        data: TensorDictBase,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
+        """Run the body part of the manual architecture.
+
+        The verifier symmetrises the message history so that the information in round
+        `2i` is the same as the information in round `2i + 1`, while the prover ignores
+        the message history completely.
+
+        The message history is then run through a linear layer to make it the right
+        size, then run through a GNN to get the node-level representations. The
+        graph-level representations are then obtained by summing the node-level
+        representations.
+
+        Parameters
+        ----------
+        data : TensorDictBase
+            The data to run the GNN and transformer on. A TensorDictBase with keys:
+
+            - "x" (... pair node feature): The graph node features (message history)
+            - "adjacency" (... pair node node): The graph adjacency matrices
+            - "message" (...): The most recent message from the other agent
+            - "node_mask" (... pair node): Which nodes actually exist or a
+              GraphIsomorphism data object.
+            - "ignore_message" (...): Whether to ignore any values in "message". For
+              example, in the first round the there is no message, and the "message"
+              field is set to a dummy value.
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "graph_level_repr" (... pair d_representation): The output graph-level
+              representations.
+            - "node_level_repr" (... pair max_nodes d_representation): The output
+              node-level representations.
+        """
+
+        if self.agent_name == "verifier":
+            # Symmetrise the message history
+            rounded_rounds = (self.params.max_message_rounds // 2) * 2
+            gnn_repr = data["x"].clone()
+            gnn_repr[..., range(0, rounded_rounds, 2)] += data["x"][
+                ..., range(1, rounded_rounds, 2)
+            ]
+            gnn_repr[..., range(1, rounded_rounds, 2)] += data["x"][
+                ..., range(0, rounded_rounds, 2)
+            ]
+        else:
+            gnn_repr = torch.zeros_like(data["x"])
+
+        data["gnn_repr"] = gnn_repr
+
+        # Run the GNN on the graphs
+        # (batch, pair, max_nodes, d_gnn)
+        gnn_output = self.gnn(data)["gnn_repr"]
+
+        self._run_recorder_hook(hooks, "gnn_output", gnn_output)
+
+        # Run the GNN output through the representation encoder to get the node-level
+        # representations
+        node_level_repr = self.representation_encoder(gnn_output)
+
+        # Obtain the graph-level representations by pooling
+        graph_level_repr = node_level_repr.sum(dim=-2)
+
+        return TensorDict(
+            dict(
+                graph_level_repr=graph_level_repr,
+                node_level_repr=node_level_repr,
+            ),
+            batch_size=data.batch_size,
         )
 
     def to(self, device: Optional[TorchDevice] = None):
@@ -634,12 +741,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if self._agent_params.normalize_message_history:
             self.message_history_normalizer.to(device)
         self.gnn.to(device)
-        self.global_pooling.to(device)
-        self.global_pooling[-1].to(device)
-        self.gnn_transformer_encoder.to(device)
-        if self.transformer is not None:
-            self.transformer.to(device)
         self.representation_encoder.to(device)
+        if not self._agent_params.use_manual_architecture:
+            self.global_pooling.to(device)
+            self.global_pooling[-1].to(device)
+            self.gnn_transformer_encoder.to(device)
+            if self.transformer is not None:
+                self.transformer.to(device)
         return self
 
 
@@ -955,16 +1063,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     @property
     def in_keys(self):
         if self.decider is not None and self._agent_params.include_round_in_decider:
-            return ("graph_level_repr", "node_level_repr", "round")
+            return ("graph_level_repr", "node_level_repr", "message", "round")
         else:
-            return ("graph_level_repr", "node_level_repr")
-
-    @property
-    def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_decider:
-            return ("graph_level_repr", "node_level_repr", "round")
-        else:
-            return ("graph_level_repr", "node_level_repr")
+            return ("graph_level_repr", "node_level_repr", "message")
 
     @property
     def out_keys(self):
@@ -983,14 +1084,21 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     ):
         super().__init__(params, agent_name, protocol_handler, device=device)
 
-        # Build the node selector module
-        self.node_selector = self._build_node_selector()
-
-        # Build the decider module if necessary
-        if agent_name == "verifier":
-            self.decider = self._build_decider()
+        if self._agent_params.use_manual_architecture:
+            if params.interaction_protocol != InteractionProtocolType.PVG:
+                raise NotImplementedError(
+                    "Manual graph isomorphism agent architecture is only supported for "
+                    "the PVG interaction protocol."
+                )
         else:
-            self.decider = None
+            # Build the node selector module
+            self.node_selector = self._build_node_selector()
+
+            # Build the decider module if necessary
+            if agent_name == "verifier":
+                self.decider = self._build_decider()
+            else:
+                self.decider = None
 
     def _build_node_selector(self) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
@@ -1013,7 +1121,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         body_output: TensorDict,
         hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
-        """Runs the policy head on the given body output.
+        """Run the policy head on the given body output.
 
         Runs the node selector module and the decider module if present.
 
@@ -1026,6 +1134,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               representations.
             - "node_level_repr" (... 2 max_nodes d_representation): The output
               node-level representations.
+            - "message" (...): The most recent message from the other agent.
+            - "round" (optional) (...): The current round number.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -1044,45 +1154,172 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               present.
         """
 
+        if self._agent_params.use_manual_architecture:
+            return self._run_manual_architecture(body_output, hooks)
+
         out_dict = {}
 
-        if body_output.batch_size[0] == 0:
-            out_dict["node_selected_logits"] = torch.empty(
-                (*body_output.batch_size, 2 * body_output["node_level_repr"].shape[2]),
-                device=self.device,
-                dtype=torch.float32,
-            )
-        else:
-            out_dict["node_selected_logits"] = self.node_selector(body_output)[
-                "node_selected_logits"
-            ].squeeze(-1)
+        out_dict["node_selected_logits"] = self.node_selector(body_output)[
+            "node_selected_logits"
+        ].squeeze(-1)
 
-        if body_output.batch_size[0] == 0:
-            out_dict["decision_logits"] = torch.empty(
+        if self.decider is not None:
+            out_dict["decision_logits"] = self.decider(body_output)["decision_logits"]
+        else:
+            out_dict["decision_logits"] = torch.zeros(
                 (*body_output.batch_size, 3),
                 device=self.device,
                 dtype=torch.float32,
             )
-        else:
-            if self.decider is not None:
-                out_dict["decision_logits"] = self.decider(body_output)[
-                    "decision_logits"
-                ]
-            else:
-                out_dict["decision_logits"] = torch.zeros(
-                    (*body_output.batch_size, 3),
-                    device=self.device,
-                    dtype=torch.float32,
-                )
 
         return TensorDict(out_dict, batch_size=body_output.batch_size)
+
+    def _run_manual_architecture(
+        self,
+        body_output: TensorDict,
+        hooks: Optional[GraphIsomorphismAgentHooks] = None,
+    ) -> TensorDict:
+        """Run the manually specified algorithm for the agent and environment.
+
+        The verifier waits until the last round, selecting nodes at random. In the last
+        round it guesses that the graphs are isomorphic if the graph-level
+        representations are close enough, and that they are not isomorphic otherwise.
+        When the round number is not provided, it guesses with probability 0.5.
+
+        Without shared reward, the prover selects the node according to its
+        representation's similarity to the representation the node selected by the
+        verifier in the previous round.
+
+        With shared reward, the prover does this when its graph-level representations
+        are close (in which case it believes the graphs are isomorphic) and selects a
+        node whose representation is most dissimilar to the representation the node
+        selected by the verifier in the previous round when its graph-level
+        representations are far apart (in which case it believes the graphs are not
+        isomorphic).
+
+        Parameters
+        ----------
+        body_output : TensorDict
+            The output of the body module. A tensor dict with keys:
+
+            - "graph_level_repr" (... 2 d_representation): The output graph-level
+              representations.
+            - "node_level_repr" (... 2 max_nodes d_representation): The output
+              node-level representations.
+            - "message" (...): The most recent message from the other agent.
+            - "round" (optional) (...): The current round number.
+
+        hooks : GraphIsomorphismAgentHooks, optional
+            Hooks to run at various points in the agent forward pass.
+
+        Returns
+        -------
+        out : TensorDict
+            A tensor dict with keys:
+
+            - "node_selected_logits" (... 2*max_nodes): A logit for each node,
+              indicating the probability that this node should be sent as a message to
+              the verifier.
+            - "decision_logits" (... 3): A logit for each of the three options: guess
+              that the graphs are isomorphic,  guess that the graphs are not isomorphic,
+              or continue exchanging messages. Set to zeros when the decider is not
+              present.
+        """
+
+        graph_level_repr: Float[Tensor, "... 2 feature"] = body_output[
+            "graph_level_repr"
+        ]
+        node_level_repr: Float[Tensor, "... 2 node feature"] = body_output[
+            "node_level_repr"
+        ]
+        message: Float[Tensor, "..."] = body_output["message"]
+        batch_size = graph_level_repr.shape[:-2]
+        max_num_nodes = node_level_repr.shape[-2]
+        d_repr = graph_level_repr.shape[-1]
+
+        out_dict = {}
+
+        # The agents's best guess about whether the graphs are isomorphic
+        # (batch)
+        isomorphic_guess = (
+            torch.abs((graph_level_repr[..., 0, :] - graph_level_repr[..., 1, :])).mean(
+                dim=-1
+            )
+            < 1e-6
+        )
+
+        if self.agent_name == "verifier":
+            # Whether to make a guess in this round
+            if "round" in body_output.keys():
+                make_guess = body_output["round"] >= self.params.max_message_rounds - 2
+                # make_guess = body_output["round"] >= 4
+            else:
+                make_guess = torch.rand(*batch_size, device=self.device) < 0.5
+
+            # Turn the guesses into logits. The first two are the guesses, the last is
+            # to continue exchanging messages. We set the logits to -1e6 for the
+            # impossible options, so that the softmax will give a probability of 0.
+            decision_logits = torch.ones(*batch_size, 3, device=self.device) * -1e6
+            decision_logits[make_guess, 0] = torch.where(
+                ~isomorphic_guess[make_guess], 0, -1e6
+            )
+            decision_logits[make_guess, 1] = torch.where(
+                isomorphic_guess[make_guess], 0, -1e6
+            )
+            decision_logits[~make_guess, 2] = 0
+            out_dict["decision_logits"] = decision_logits
+
+            # The verifier selects nodes at random
+            out_dict["node_selected_logits"] = torch.zeros(
+                *batch_size,
+                2 * max_num_nodes,
+                device=self.device,
+                dtype=torch.float32,
+            )
+
+        elif self.agent_name == "prover":
+            # Compute the similarity between the node sent as a message and the other
+            # nodes
+            node_level_repr_flattened = rearrange(
+                node_level_repr, "... pair node feature -> ... (pair node) feature"
+            )
+            message_node_repr = torch.gather(
+                node_level_repr_flattened,
+                -2,
+                repeat(message, "... -> ... 1 representation", representation=d_repr),
+            )
+            node_distance = vector_norm(
+                message_node_repr - node_level_repr_flattened, dim=-1
+            )
+
+            # With shared reward, the prover selects the most dissimilar nodes when the
+            # graph-level representations are far apart. Otherwise, it selects the most
+            # similar nodes.
+            if self.params.pvg_protocol.shared_reward:
+                select_similar_mask = isomorphic_guess
+            else:
+                select_similar_mask = torch.ones(
+                    *batch_size, device=self.device, dtype=bool
+                )
+            out_dict["node_selected_logits"] = torch.where(
+                select_similar_mask[..., None],
+                -node_distance * 1e3,
+                node_distance * 1e3,
+            )
+
+            out_dict["decision_logits"] = torch.zeros(
+                *batch_size, 3, device=self.device, dtype=torch.float32
+            )
+
+        return TensorDict(out_dict, batch_size=batch_size)
 
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
-        self.node_selector.to(device)
-        if self.decider is not None:
-            self.decider.to(device)
+        if not self._agent_params.use_manual_architecture:
+            self.node_selector.to(device)
+            if self.decider is not None:
+                self.decider.to(device)
 
 
 @register_scenario_class(GI_SCENARIO, RandomAgentPolicyHead)
@@ -1621,6 +1858,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
                     graph_level_repr=head_output["agents", "graph_level_repr"][
                         ..., i, :, :
                     ],
+                    message=head_output["message"],
                     round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
