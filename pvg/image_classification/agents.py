@@ -50,6 +50,7 @@ from pvg.scenario_base import (
     CombinedValueHead,
 )
 from pvg.scenario_instance import register_scenario_class
+from pvg.protocols import ProtocolHandler
 from pvg.parameters import (
     Parameters,
     ImageClassificationAgentParameters,
@@ -86,6 +87,8 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -96,15 +99,14 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         self._agent_params = params.agents[agent_name]
-        for i, _agent_name in enumerate(params.agents):
-            if _agent_name == agent_name:
-                self.agent_index = i
-                break
+        self.agent_index = protocol_handler.agent_names.index(agent_name)
 
         # Get some parameters
         self.num_conv_groups = self.params.image_classification.num_conv_groups
@@ -136,8 +138,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Input:
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (...): The most recent message
-        - "ignore_message" (...): Whether to ignore the message
+        - "message" (... latent_height latent_width), optional: The most recent message
+        - "ignore_message" (...), optional: Whether to ignore the message
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -151,6 +153,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -162,14 +166,16 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         # Build the message history normalizer if necessary
         if self._agent_params.normalize_message_history:
             self.message_history_normalizer = NormalizeOneHotMessageHistory(
-                max_message_rounds=self.params.protocol_params.max_message_rounds,
+                max_message_rounds=self.protocol_handler.max_message_rounds,
                 message_out_key="x_normalized",
                 num_structure_dims=2,
                 round_dim_last=False,
@@ -193,11 +199,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         ------
         Input:
             - "x" : (... max_message_rounds latent_height latent_width)
-            - "message" : (... latent_height latent_width)
 
         Output:
             - "x_upsampled" : (... max_message_rounds height width)
-            - "message_image" : (... 1 2*latent_height 2*latent_width)
 
         Returns
         -------
@@ -246,7 +250,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             ),
             TensorDictModule(
                 Linear(
-                    self.params.protocol_params.max_message_rounds
+                    self.protocol_handler.max_message_rounds
                     + self.dataset_num_channels,
                     self.initial_num_channels,
                 ),
@@ -414,10 +418,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             - "x" (... max_message_rounds latent_height latent_width): The message
               history
             - "image" (... num_channels height width): The image
-            - "message" (...): The message most recent message
-            - "ignore_message" (...): Whether to ignore the message. For example, in the
-              first round the there is no message, and the "message" field is set to a
-              dummy value.
+            - "message" (... latent_height latent_width), optional: The message most
+              recent message
+            - "ignore_message" (...), optional: Whether to ignore the message. For
+              example, in the first round the there is no message, and the "message"
+              field is set to a dummy value.
 
         Returns
         -------
@@ -430,38 +435,26 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
               d_representation): The output latent-pixel-level representations.
         """
 
-        # Convert the message to a one-hot encoding of size (... 1 2*latent_height
-        # 2*latent_width)
-        message_image = torch.zeros(
-            *data.batch_size,
-            self.latent_height * self.latent_width,
-            device=self.device,
-            dtype=torch.float32,
-        )
-        message_image = torch.scatter(
-            input=message_image,
-            dim=-1,
-            index=data["message"].unsqueeze(-1),
-            value=1,
-        )
-        message_image = rearrange(
-            message_image,
-            "... (latent_height latent_width) -> ... 1 latent_height latent_width",
-            latent_height=self.latent_height,
-            latent_width=self.latent_width,
-        )
-        message_image = repeat(
-            message_image,
-            "... 1 latent_height latent_width "
-            "-> ... 1 (latent_height 2) (latent_width 2)",
-        )
+        if "message" in data.keys():
+            # Scale the message to size (... 1 2*latent_height 2*latent_width)
+            message_image = repeat(
+                data["message"],
+                "... latent_height latent_width "
+                "-> ... 1 (latent_height 2) (latent_width 2)",
+            )
 
-        # If the message is to be ignored, set it to zero
-        message_image = torch.where(
-            data["ignore_message"][..., None, None, None],
-            0,
-            message_image,
-        )
+            # If the message is to be ignored, set it to zero
+            message_image = torch.where(
+                data["ignore_message"][..., None, None, None],
+                0,
+                message_image,
+            )
+        else:
+            message_image = torch.zeros(
+                (*data.batch_size, 1, 2 * self.latent_height, 2 * self.latent_width),
+                device=self.device,
+                dtype=torch.float,
+            )
 
         # Add the message image to the data tensor dict
         data = data.update(dict(message_image=message_image))
@@ -511,8 +504,8 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
     Input:
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (...): The most recent message
-        - "ignore_message" (...): Whether to ignore the message
+        - "message" (... latent_height latent_width), optional: The most recent message
+        - "ignore_message" (...), optional: Whether to ignore the message
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -522,7 +515,7 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
 
     """
 
-    in_keys = ("x", "image", "message", "ignore_message")
+    in_keys = ("x", "image")
     out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     def forward(self, data: TensorDictBase) -> TensorDict:
@@ -696,9 +689,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             # Add the round number as an input to the MLP
             td_sequential_layers.append(
                 TensorDictModule(
-                    OneHot(
-                        num_classes=self.params.protocol_params.max_message_rounds + 1
-                    ),
+                    OneHot(num_classes=self.protocol_handler.max_message_rounds + 1),
                     in_keys=("round"),
                     out_keys=("round_one_hot",),
                 )
@@ -723,7 +714,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         # The layers of the MLP
         updated_d_in = d_in
         if include_round:
-            updated_d_in += self.params.protocol_params.max_message_rounds + 1
+            updated_d_in += self.protocol_handler.max_message_rounds + 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
         mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
@@ -812,6 +803,8 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -834,9 +827,11 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         # Build the latent pixel selector module
         self.latent_pixel_selector = self._build_latent_pixel_selector()
@@ -953,9 +948,11 @@ class ImageClassificationRandomAgentPolicyHead(
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         # Determine if we should output a decision too
         self.decider = agent_name == "verifier"
@@ -1024,6 +1021,8 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -1041,9 +1040,11 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         self.value_mlp = self._build_mlp()
 
@@ -1167,9 +1168,11 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         self,
         params: Parameters,
         agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
         device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
 
         self.decider = self._build_decider(d_out=2, include_round=False)
 
@@ -1211,7 +1214,7 @@ class ImageClassificationCombinedBody(CombinedBody):
         - "round" (...): The round number.
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (...): The most recent message.
+        - "message" (... latent_height latent_width), optional: The most recent message.
 
     Output:
         - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
@@ -1223,6 +1226,8 @@ class ImageClassificationCombinedBody(CombinedBody):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     bodies : dict[str, ImageClassificationAgentBody]
         The agent bodies to combine.
     """
@@ -1237,22 +1242,25 @@ class ImageClassificationCombinedBody(CombinedBody):
     def __init__(
         self,
         params: Parameters,
+        protocol_handler: ProtocolHandler,
         bodies: dict[str, ImageClassificationAgentBody],
     ) -> None:
-        super().__init__(params, bodies)
+        super().__init__(params, protocol_handler, bodies)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
         round: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
-        for agent_name in self.params.agents:
+        for agent_name in self._agent_names:
             # Build the input dict for the agent body
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
                     input_dict[key] = round == 0
                 else:
+                    if key == "message" and "message" not in data.keys():
+                        continue
                     input_dict[key] = data[key]
             input_td = TensorDict(
                 input_dict,
@@ -1266,12 +1274,12 @@ class ImageClassificationCombinedBody(CombinedBody):
         latent_pixel_level_repr = torch.stack(
             [
                 body_outputs[name]["latent_pixel_level_repr"]
-                for name in self.params.agents
+                for name in self._agent_names
             ],
             dim=-4,
         )
         image_level_repr = torch.stack(
-            [body_outputs[name]["image_level_repr"] for name in self.params.agents],
+            [body_outputs[name]["image_level_repr"] for name in self._agent_names],
             dim=-2,
         )
 
@@ -1312,6 +1320,8 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     policy_heads : dict[str, ImageClassificationAgentPolicyHead]
         The agent policy heads to combine.
     """
@@ -1330,9 +1340,10 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     def __init__(
         self,
         params: Parameters,
+        protocol_handler: ProtocolHandler,
         policy_heads: dict[str, ImageClassificationAgentPolicyHead],
     ):
-        super().__init__(params, policy_heads)
+        super().__init__(params, protocol_handler, policy_heads)
 
     def forward(self, head_output: TensorDictBase) -> TensorDict:
         """Run the agent policy heads and combine their outputs.
@@ -1350,7 +1361,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
 
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self.params.agents):
+        for i, agent_name in enumerate(self._agent_names):
             latent_pixel_level_repr = head_output["agents", "latent_pixel_level_repr"]
             image_level_repr = head_output["agents", "image_level_repr"]
             input_td = TensorDict(
@@ -1367,12 +1378,12 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         latent_pixel_selected_logits = torch.stack(
             [
                 policy_outputs[name]["latent_pixel_selected_logits"]
-                for name in self.params.agents
+                for name in self._agent_names
             ],
             dim=-2,
         )
         decision_logits = torch.stack(
-            [policy_outputs[name]["decision_logits"] for name in self.params.agents],
+            [policy_outputs[name]["decision_logits"] for name in self._agent_names],
             dim=-2,
         )
 
@@ -1414,6 +1425,8 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     value_heads : dict[str, ImageClassificationAgentValueHead]
         The agent value heads to combine.
     """
@@ -1424,9 +1437,10 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
     def __init__(
         self,
         params: Parameters,
+        protocol_handler: ProtocolHandler,
         value_heads: dict[str, ImageClassificationAgentValueHead],
     ):
-        super().__init__(params, value_heads)
+        super().__init__(params, protocol_handler, value_heads)
 
     def forward(self, head_output: TensorDictBase) -> TensorDict:
         """Run the agent value heads and combine their values.
@@ -1447,7 +1461,7 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 
         # Run the policy heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self.params.agents):
+        for i, agent_name in enumerate(self._agent_names):
             latent_pixel_level_repr = head_output["agents", "latent_pixel_level_repr"]
             image_level_repr = head_output["agents", "image_level_repr"]
             input_td = TensorDict(
@@ -1462,7 +1476,7 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 
         # Stack the outputs
         value = torch.stack(
-            [value_outputs[name]["value"] for name in self.params.agents], dim=-1
+            [value_outputs[name]["value"] for name in self._agent_names], dim=-1
         )
 
         return head_output.update(

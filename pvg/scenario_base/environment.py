@@ -20,6 +20,7 @@ from torchrl.envs import EnvBase
 from jaxtyping import Float, Int, Bool
 
 from pvg.scenario_base import DataLoader, Dataset
+from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters, InteractionProtocolType, AGENT_NAMES
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
@@ -43,24 +44,31 @@ class Environment(EnvBase, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
-    device : TorchDevice
-        The device on which to run the environment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     dataset : Dataset
         The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    train : bool, optional
+        Whether the environment is used for training or evaluation.
     """
 
-    _int_dtype: torch.dtype = (torch.int,)
+    _int_dtype: torch.dtype = torch.int
 
     def __init__(
         self,
         params: Parameters,
         settings: ExperimentSettings,
         dataset: Dataset,
+        protocol_handler: ProtocolHandler,
+        *,
         train: bool = True,
     ):
         super().__init__(device=settings.device)
         self.params = params
         self.settings = settings
+        self.protocol_handler = protocol_handler
         self.train = train
 
         self.agent_names = tuple(params.agents.keys())
@@ -77,7 +85,7 @@ class Environment(EnvBase, ABC):
 
         # The number of environments is the number of episodes we can fit in a batch
         self.num_envs = (
-            params.ppo.frames_per_batch // params.protocol_params.max_message_rounds
+            params.ppo.frames_per_batch // self.protocol_handler.max_message_rounds
         )
         self.batch_size = (self.num_envs,)
 
@@ -115,7 +123,7 @@ class Environment(EnvBase, ABC):
         """
         return CompositeSpec(
             round=DiscreteTensorSpec(
-                self.params.protocol_params.max_message_rounds,
+                self.protocol_handler.max_message_rounds,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
@@ -249,7 +257,12 @@ class Environment(EnvBase, ABC):
         next_td = self._compute_x_and_message(env_td, next_td)
 
         # Compute the done signal and reward
-        next_td = self._step_interaction_protocol(env_td, next_td)
+        done, reward = self.protocol_handler.step_interaction_protocol(env_td)
+        next_td.set("done", done)
+        next_td.set(("agents", "reward"), reward)
+        next_td.set(
+            "decision_restriction", torch.zeros_like(done, dtype=self._int_dtype)
+        )
 
         return next_td
 
@@ -276,175 +289,6 @@ class Environment(EnvBase, ABC):
         next_td : TensorDictBase
             The updated 'next' tensordict.
         """
-
-    def _get_agent_turn_indices(
-        self, round: Int[Tensor, "..."]
-    ) -> list[Int[Tensor, "..."]]:
-        """Get the indices of the agents whose turn it is.
-
-        Parameters
-        ----------
-        round : Int[Tensor, "..."]
-            The current round of the interaction.
-
-        Returns
-        -------
-        agent_indices : list[Int[Tensor, "..."]]
-            The indices of the agents whose turn it is.
-        """
-
-        protocol = self.params.interaction_protocol
-
-        if (
-            protocol == InteractionProtocolType.PVG
-            or protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
-        ):
-            # The two agents alternate
-            agent_indices = [round % 2]
-        elif protocol == InteractionProtocolType.MERLIN_ARTHUR:
-            # First get the indices that correspond to whether it is prover1 or verifier
-            agent_index = round % 2 + 1
-            # Then isolate the prover1 entries
-            prover_mask = agent_index == 1
-            # Then randomly decide whether it is prover0 or prover1 who gets to move
-            agent_index[prover_mask] = torch.randint(0, 1, prover_mask.shape())
-            agent_indices = [agent_index]
-        elif protocol == InteractionProtocolType.DEBATE:
-            # The provers go first and move simultaneously
-            agent_indices = [round % 2 + 1, round % 2 * 2]
-
-        return agent_indices
-
-    def _get_verifier_turn_mask(self, round: Int[Tensor, "..."]) -> Bool[Tensor, "..."]:
-        """Get the of the batch items where it is the verifier's turn.
-
-        Parameters
-        ----------
-        round : Int[Tensor, "..."]
-            The current round of the interaction.
-
-        Returns
-        -------
-        verifier_turn_mask : Bool[Tensor, "..."]
-            The mask of the batch items where it is the verifier's turn.
-        """
-
-        protocol = self.params.interaction_protocol
-
-        if (
-            protocol == InteractionProtocolType.PVG
-            or protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM
-        ):
-            return round % 2 == self.agent_names.index("verifier")
-        elif (
-            protocol == InteractionProtocolType.MERLIN_ARTHUR
-            or protocol == InteractionProtocolType.DEBATE
-        ):
-            return round % 2 == max(self.agent_names.index("verifier"), 1)
-
-    def _step_interaction_protocol(
-        self,
-        env_td: TensorDictBase,
-        next_td: TensorDictBase,
-    ) -> TensorDictBase:
-        """Take a step in the interaction protocol.
-
-        Computes the done signal, reward and next decision restriction.
-
-        Used in the `_step` method of the environment.
-
-        Parameters
-        ----------
-        env_td : TensorDictBase
-            The current observation and state.
-        next_td : TensorDictBase
-            The 'next' tensordict, to be updated with the done signal and reward.
-
-        Returns
-        -------
-        next_td : TensorDictBase
-            The updated 'next' tensordict.
-        """
-
-        protocol_params = self.params.protocol_params
-
-        y: Int[Tensor, "batch 1"] = env_td["y"]
-        round: Int[Tensor, "batch"] = env_td["round"]
-        decision: Int[Tensor, "batch agent"] = env_td["agents", "decision"]
-        done: Bool[Tensor, "batch"] = env_td["done"]
-
-        # Get the mask of the batch items where it is the verifier's turn
-        verifier_turn_mask = self._get_verifier_turn_mask(round)
-
-        # If the verifier has made a guess we terminate the episode
-        verifier_agent_num = self.agent_names.index("verifier")
-        verifier_decision_made = verifier_turn_mask & (
-            decision[:, verifier_agent_num] != 2
-        )
-        verifier_decision_made = verifier_decision_made & (
-            round >= self.params.protocol_params.min_message_rounds
-        )
-        done = done | verifier_decision_made
-
-        # Compute the reward for the verifier when they make a guess
-        reward: dict[str, int] = dict()
-        reward["verifier"] = torch.zeros_like(done, dtype=torch.float)
-        reward["verifier"][
-            verifier_decision_made & (decision[:, verifier_agent_num] == y.squeeze())
-        ] = protocol_params.verifier_reward
-        reward["verifier"][
-            verifier_decision_made & (decision[:, verifier_agent_num] != y.squeeze())
-        ] = protocol_params.verifier_incorrect_penalty
-
-        # Compute the reward for the provers
-        if protocol_params.shared_reward:
-            for prover in self.provers:
-                reward[prover] = reward["verifier"]
-        else:
-            if len(self.provers) == 1:
-                reward["prover"] = (
-                    verifier_decision_made & (decision[:, verifier_agent_num] == 1)
-                ).float()
-            # Assume that prover0 is rewarded for negative answers and prover1 for
-            # positive answers
-            elif len(self.provers) == 2:
-                reward["prover0"] = (
-                    verifier_decision_made & (decision[:, verifier_agent_num] == 0)
-                ).float()
-                reward["prover1"] = (
-                    verifier_decision_made & (decision[:, verifier_agent_num] == 1)
-                ).float()
-            for prover in self.provers:
-                reward[prover] = reward[prover] * protocol_params.prover_reward
-
-        # If we reach the end of the episode and the verifier has not made a guess,
-        # terminate it with a negative reward for the verifier
-        done = done | (round >= self.params.protocol_params.max_message_rounds - 1)
-        reward["verifier"][
-            (round >= self.params.protocol_params.max_message_rounds - 1)
-            & ~verifier_decision_made
-        ] = protocol_params.verifier_terminated_penalty
-
-        # If the verifier has not made a guess and it's their turn, given them a small
-        # reward for continuing
-        reward["verifier"][
-            verifier_turn_mask & ~done
-        ] = protocol_params.verifier_no_guess_reward
-
-        # Stack the rewards for the agents
-        reward = torch.stack([reward[name] for name in self.agent_names], dim=-1)
-
-        # Put the done signal and reward into the next tensordict
-        next_td["done"] = done
-        next_td["agents"] = TensorDict(
-            dict(
-                reward=reward,
-            ),
-            batch_size=self.batch_size,
-        )
-        next_td["decision_restriction"] = torch.zeros_like(done, dtype=self._int_dtype)
-
-        return next_td
 
     def _reset(self, env_td: Optional[TensorDictBase] = None) -> TensorDictBase:
         """(Partially) reset the environment.

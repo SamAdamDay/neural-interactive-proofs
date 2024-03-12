@@ -26,6 +26,10 @@ class GraphIsomorphismDataset(Dataset):
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    train : bool
+        Whether to load the training or test set.
     """
 
     adjacency_dtype = torch.int32
@@ -45,7 +49,7 @@ class GraphIsomorphismDataset(Dataset):
         return os.path.join(
             GI_DATA_DIR,
             self.params.dataset,
-            f"processed_{self.params.protocol_params.max_message_rounds}",
+            f"processed_{self.protocol_handler.max_message_rounds}",
             sub_dir,
         )
 
@@ -102,7 +106,7 @@ class GraphIsomorphismDataset(Dataset):
             x = torch.zeros(
                 num_graph_pairs,
                 max_num_nodes,
-                self.params.protocol_params.max_message_rounds,
+                self.protocol_handler.max_message_rounds,
                 dtype=self.x_dtype,
             )
 

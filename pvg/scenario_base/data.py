@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from tensordict import TensorDict
 from tensordict.utils import _td_fields
 
+from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 
@@ -40,6 +41,8 @@ class Dataset(ABC):
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     train : bool
         Whether to load the training or test set.
     """
@@ -47,10 +50,15 @@ class Dataset(ABC):
     _tensor_dict: TensorDict
 
     def __init__(
-        self, params: Parameters, settings: ExperimentSettings, train: bool = True
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        train: bool = True,
     ):
         self.params = params
         self.settings = settings
+        self.protocol_handler = protocol_handler
         self.train = train
 
         # Download the raw data if this is implemented

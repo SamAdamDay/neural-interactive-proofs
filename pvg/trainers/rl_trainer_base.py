@@ -362,7 +362,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             mean_rewards = {}
             mean_values = {}
             mean_decision_entropy = {}
-            for i, agent_name in enumerate(self.params.agents):
+            for i, agent_name in enumerate(self._agent_names):
                 mean_rewards[agent_name] = reward[..., i][done].mean().item()
                 mean_values[agent_name] = value[..., i].mean().item()
                 mean_decision_entropy[agent_name] = (
@@ -376,7 +376,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
                 # Log the various statistics
                 to_log = dict(mean_episode_length=mean_episode_length)
-                for agent_name in self.params.agents:
+                for agent_name in self._agent_names:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                     to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
                     to_log[
@@ -404,7 +404,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Run the test loop
         with torch.no_grad():
-            mean_rewards = {agent_name: 0 for agent_name in self.params.agents}
+            mean_rewards = {agent_name: 0 for agent_name in self._agent_names}
             mean_episode_length = 0
             for iteration, tensordict_data in enumerate(test_collector):
                 # Expand the done to match the reward shape
@@ -422,7 +422,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 # Compute the mean rewards for the done episodes
                 done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
                 reward = tensordict_data.get(("next", "agents", "reward"))
-                for i, agent_name in enumerate(self.params.agents):
+                for i, agent_name in enumerate(self._agent_names):
                     mean_rewards[agent_name] += reward[..., i][done].mean().item()
 
                 # Compute the average episode length
@@ -437,14 +437,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 pbar.update(1)
 
             # Compute the mean of the statistics
-            for agent_name in self.params.agents:
+            for agent_name in self._agent_names:
                 mean_rewards[agent_name] /= self.params.ppo.num_test_iterations
             mean_episode_length /= self.params.ppo.num_test_iterations
 
             if self.settings.wandb_run is not None:
                 # Log the mean episode length and mean rewards
                 to_log = dict(test_mean_episode_length=mean_episode_length)
-                for agent_name in self.params.agents:
+                for agent_name in self._agent_names:
                     to_log[f"{agent_name}.test_mean_reward"] = mean_rewards[agent_name]
                 self.settings.wandb_run.log(to_log)
 

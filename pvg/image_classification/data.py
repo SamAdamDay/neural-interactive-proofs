@@ -238,7 +238,7 @@ class ImageClassificationDataset(Dataset):
         # Create the pixel features, which are all zeros
         x = torch.zeros(
             images.shape[0],
-            self.params.protocol_params.max_message_rounds,
+            self.protocol_handler.max_message_rounds,
             *images.shape[-2:],
             dtype=self.x_dtype,
         )
@@ -268,7 +268,7 @@ class ImageClassificationDataset(Dataset):
         return os.path.join(
             IC_DATA_DIR,
             self.params.dataset,
-            f"processed_{self.params.protocol_params.max_message_rounds}_{suffix}",
+            f"processed_{self.protocol_handler.max_message_rounds}_{suffix}",
             sub_dir,
         )
 

@@ -25,6 +25,7 @@ from einops import repeat
 from jaxtyping import Float, Int
 
 from pvg.parameters import Parameters, TrainerType, ScenarioType
+from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
 
 
@@ -85,11 +86,17 @@ class AgentPart(TensorDictModuleBase, ABC):
     """
 
     def __init__(
-        self, params: Parameters, agent_name: str, device: Optional[TorchDevice] = None
+        self,
+        params: Parameters,
+        agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
+        device: Optional[TorchDevice] = None,
     ):
         super().__init__()
         self.params = params
         self.agent_name = agent_name
+        self.protocol_handler = protocol_handler
         if device is None:
             device = "cpu"
         self.device = device
@@ -117,9 +124,14 @@ class DummyAgentPartMixin(AgentPart, ABC):
     """
 
     def __init__(
-        self, params: Parameters, agent_name: str, device: TorchDevice | None = None
+        self,
+        params: Parameters,
+        agent_name: str,
+        protocol_handler: ProtocolHandler,
+        *,
+        device: TorchDevice | None = None,
     ):
-        super().__init__(params, agent_name, device)
+        super().__init__(params, agent_name, protocol_handler, device=device)
         self.dummy_parameter = TorchParameter(torch.tensor(0.0, device=self.device))
 
     def to(self, device: TorchDevice):
@@ -164,7 +176,40 @@ class SoloAgentHead(AgentHead, ABC):
 
 
 class CombinedAgentPart(TensorDictModuleBase, ABC):
-    """Base class for modules which combine agent parts together."""
+    """Base class for modules which combine agent parts together.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    parts : dict[str, AgentPart]
+        The agent parts to combine.
+    """
+
+    def __init__(
+        self,
+        params: Parameters,
+        protocol_handler: ProtocolHandler,
+        parts: dict[str, AgentPart],
+    ):
+        super().__init__()
+        self.params = params
+        self.protocol_handler = protocol_handler
+
+        self._agent_names = protocol_handler.agent_names
+
+        if set(parts.keys()) != set(self._agent_names):
+            raise ValueError(
+                f"The agent names in {type(self).__name__} must match the agent names "
+                f"in the protocol handler. Expected {self._agent_names}, got "
+                f"{parts.keys()}."
+            )
+
+        # Add the parts as submodules, so that PyTorch knows about them
+        for agent_name in self._agent_names:
+            self.add_module(agent_name, parts[agent_name])
 
 
 class CombinedBody(CombinedAgentPart, ABC):
@@ -174,18 +219,20 @@ class CombinedBody(CombinedAgentPart, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     bodies : dict[str, AgentBody]
         The agent bodies to combine.
     """
 
-    def __init__(self, params: Parameters, bodies: dict[str, AgentBody]):
-        super().__init__()
-        self.params = params
+    def __init__(
+        self,
+        params: Parameters,
+        protocol_handler: ProtocolHandler,
+        bodies: dict[str, AgentBody],
+    ):
+        super().__init__(params, protocol_handler, bodies)
         self.bodies = bodies
-
-        # Add the bodies as submodules, so that PyTorch knows about them
-        for agent_name, body in bodies.items():
-            self.add_module(agent_name, body)
 
     @abstractmethod
     def forward(self, data: TensorDictBase) -> TensorDict:
@@ -211,18 +258,20 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     policy_heads : dict[str, AgentPolicyHead]
         The agent policy heads to combine.
     """
 
-    def __init__(self, params: Parameters, policy_heads: dict[str, AgentPolicyHead]):
-        super().__init__()
-        self.params = params
+    def __init__(
+        self,
+        params: Parameters,
+        protocol_handler: ProtocolHandler,
+        policy_heads: dict[str, AgentPolicyHead],
+    ):
+        super().__init__(params, protocol_handler, policy_heads)
         self.policy_heads = policy_heads
-
-        # Add the policy heads as submodules, so that PyTorch knows about them
-        for agent_name, policy_head in policy_heads.items():
-            self.add_module(agent_name, policy_head)
 
     @abstractmethod
     def forward(self, data: TensorDictBase) -> TensorDict:
@@ -266,7 +315,7 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
             -1e9.
         """
 
-        num_agents = len(self.params.agents)
+        num_agents = len(self._agent_names)
 
         no_guess_mask = decision_restriction == 1
         no_guess_mask = repeat(no_guess_mask, f"... -> ... {num_agents} 3").clone()
@@ -290,18 +339,20 @@ class CombinedValueHead(CombinedAgentPart, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     value_heads : dict[str, AgentValueHead]
         The agent value heads to combine.
     """
 
-    def __init__(self, params: Parameters, value_heads: dict[str, AgentValueHead]):
-        super().__init__()
-        self.params = params
+    def __init__(
+        self,
+        params: Parameters,
+        protocol_handler: ProtocolHandler,
+        value_heads: dict[str, AgentValueHead],
+    ):
+        super().__init__(params, protocol_handler, value_heads)
         self.value_heads = value_heads
-
-        # Add the value heads as submodules, so that PyTorch knows about them
-        for agent_name, value_head in value_heads.items():
-            self.add_module(agent_name, value_head)
 
     @abstractmethod
     def forward(self, data: TensorDictBase) -> TensorDict:

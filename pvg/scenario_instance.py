@@ -37,6 +37,7 @@ from pvg.scenario_base.agents import (
     Agent,
 )
 from pvg.scenario_base.environment import Environment
+from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 
 
@@ -76,6 +77,8 @@ class ScenarioInstance:
         The train dataset for the experiment.
     test_dataset : Dataset
         The test dataset for the experiment.
+    protocol_handler : ProtocolHandler
+        The interaction protocol handler for the experiment.
     agents : dict[str, Agent]
         The agents for the experiment. Each 'agent' is a dictionary containing all of
         the agent parts.
@@ -94,6 +97,7 @@ class ScenarioInstance:
     train_dataset: Dataset
     test_dataset: Dataset
     agents: dict[str, Agent]
+    protocol_handler: ProtocolHandler
     train_environment: Optional[Environment] = None
     test_environment: Optional[Environment] = None
     combined_body: Optional[CombinedBody] = None
@@ -123,9 +127,16 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     if settings.silence_wandb:
         os.environ["WANDB_SILENT"] = "true"
 
+    # Create the protocol handler
+    protocol_handler = build_protocol_handler(params)
+
     # Create the datasets
-    train_dataset = scenario_classes[Dataset](params, settings, train=True)
-    test_dataset = scenario_classes[Dataset](params, settings, train=False)
+    train_dataset = scenario_classes[Dataset](
+        params, settings, protocol_handler, train=True
+    )
+    test_dataset = scenario_classes[Dataset](
+        params, settings, protocol_handler, train=False
+    )
 
     # Create the agents
     agents: dict[str, Agent] = {}
@@ -154,12 +165,14 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         if agent_params.is_random:
             agent_dict["body"] = scenario_classes[DummyAgentBody](
                 params=params,
+                protocol_handler=protocol_handler,
                 device=device,
                 agent_name=agent_name,
             )
         else:
             agent_dict["body"] = scenario_classes[AgentBody](
                 params=params,
+                protocol_handler=protocol_handler,
                 device=device,
                 agent_name=agent_name,
             )
@@ -171,22 +184,26 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
             if agent_params.is_random:
                 agent_dict["policy_head"] = scenario_classes[RandomAgentPolicyHead](
                     params=params,
+                    protocol_handler=protocol_handler,
                     device=device,
                     agent_name=agent_name,
                 )
                 agent_dict["value_head"] = scenario_classes[ConstantAgentValueHead](
                     params=params,
+                    protocol_handler=protocol_handler,
                     device=device,
                     agent_name=agent_name,
                 )
             else:
                 agent_dict["policy_head"] = scenario_classes[AgentPolicyHead](
                     params=params,
+                    protocol_handler=protocol_handler,
                     device=device,
                     agent_name=agent_name,
                 )
                 agent_dict["value_head"] = scenario_classes[AgentValueHead](
                     params=params,
+                    protocol_handler=protocol_handler,
                     device=device,
                     agent_name=agent_name,
                 )
@@ -197,6 +214,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                 raise ValueError("Cannot use random agents with solo agent trainer.")
             agent_dict["solo_head"] = scenario_classes[SoloAgentHead](
                 params=params,
+                protocol_handler=protocol_handler,
                 device=device,
                 agent_name=agent_name,
             )
@@ -236,23 +254,34 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     if params.trainer == TrainerType.VANILLA_PPO or params.trainer == TrainerType.SPG:
         # Create the environments
         train_environment = scenario_classes[Environment](
-            params, settings, train_dataset, train=True
+            params=params,
+            settings=settings,
+            dataset=train_dataset,
+            protocol_handler=protocol_handler,
+            train=True,
         )
         test_environment = scenario_classes[Environment](
-            params, settings, test_dataset, train=False
+            params=params,
+            settings=settings,
+            dataset=train_dataset,
+            protocol_handler=protocol_handler,
+            train=False,
         )
 
         # Create the combined agents
         combined_body = scenario_classes[CombinedBody](
             params,
+            protocol_handler,
             {name: agents[name].body for name in params.agents},
         )
         combined_policy_head = scenario_classes[CombinedPolicyHead](
             params,
+            protocol_handler,
             {name: agents[name].policy_head for name in params.agents},
         )
         combined_value_head = scenario_classes[CombinedValueHead](
             params,
+            protocol_handler,
             {name: agents[name].value_head for name in params.agents},
         )
 
@@ -260,6 +289,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         train_dataset=train_dataset,
         test_dataset=test_dataset,
         agents=agents,
+        protocol_handler=protocol_handler,
         train_environment=train_environment,
         test_environment=test_environment,
         combined_body=combined_body,

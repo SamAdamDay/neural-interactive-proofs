@@ -4,6 +4,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -29,9 +30,15 @@ class ImageClassificationEnvironment(Environment):
     Parameters
     ----------
     params : Parameters
-        The parameters of the environment.
-    device : torch.device, optional
-        The device on which the environment should be stored.
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    dataset : Dataset
+        The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    train : bool, optional
+        Whether the environment is used for training or evaluation.
     """
 
     _int_dtype: torch.dtype = torch.int32
@@ -85,27 +92,31 @@ class ImageClassificationEnvironment(Environment):
             shape=(
                 self.num_envs,
                 self.dataset_num_channels,
-                self.image_width,
                 self.image_height,
+                self.image_width,
             ),
             dtype=torch.float,
             device=self.device,
         )
-        base_observation_spec["x"] = BinaryDiscreteTensorSpec(
+        base_observation_spec["x"] = DiscreteTensorSpec(
             self.latent_height,
             shape=(
                 self.num_envs,
-                self.params.protocol_params.max_message_rounds,
-                self.latent_width,
+                self.protocol_handler.max_message_rounds,
                 self.latent_height,
+                self.latent_width,
             ),
             dtype=torch.float,
             device=self.device,
         )
         base_observation_spec["message"] = DiscreteTensorSpec(
-            self.latent_height * self.latent_width,
-            shape=(self.num_envs,),
-            dtype=torch.long,
+            self.latent_width,
+            shape=(
+                self.num_envs,
+                self.latent_height,
+                self.latent_width,
+            ),
+            dtype=torch.float,
             device=self.device,
         )
         return base_observation_spec
@@ -155,36 +166,33 @@ class ImageClassificationEnvironment(Environment):
         """
 
         # Extract the tensors from the dict
-        x: Float[Tensor, "batch round latent_height latent_width"] = env_td["x"]
-        round: Int[Tensor, "batch"] = env_td["round"]
-        latent_pixel_selected: Int[Tensor, "batch agent"] = env_td[
+        x: Float[Tensor, "... round latent_height latent_width"] = env_td["x"]
+        round: Int[Tensor, "..."] = env_td["round"]
+        latent_pixel_selected: Int[Tensor, "... agent"] = env_td[
             "agents", "latent_pixel_selected"
         ]
 
-        batch_size = x.shape[0]
-
         # Compute index of the agent whose turn it is.
-        agent_indices = self._get_agent_turn_indices(round)
+        # (... agent)
+        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
 
-        # Compute the latent pixel selected by the agents
-        # (batch agent)
-        latent_pixel_selected_x = latent_pixel_selected // self.latent_height
-        latent_pixel_selected_y = latent_pixel_selected % self.latent_height
+        # Sum up the messages from the agents whose turn it is. If two agents select the
+        # same latent pixel, the message will be 2.
+        # (... latent_height latent_width)
+        message = F.one_hot(
+            latent_pixel_selected, self.latent_height * self.latent_width
+        ).float()
+        message = torch.where(
+            active_agents_mask[..., None], message, torch.zeros_like(message)
+        )
+        message = message.sum(dim=-2)
+        message = message.view(
+            *message.shape[:-1], self.latent_height, self.latent_width
+        )
 
-        # Write the latent pixel selected by the agent whose turn it is as a (one-hot)
-        # message
-        for agent_index in agent_indices:
-            x[
-                torch.arange(batch_size),
-                round,
-                latent_pixel_selected_y[torch.arange(batch_size), agent_index],
-                latent_pixel_selected_x[torch.arange(batch_size), agent_index],
-            ] = 1
-
-        # Set the latent pixel selected by the agent whose turn it is as the message
-        message = latent_pixel_selected[
-            torch.arange(batch_size), agent_index
-        ].long()  # TODO index
+        # Insert the message into the message history at the current round
+        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+        x.masked_scatter_(round_mask[..., :, None, None], message)
 
         # Add the message history and next message to the next tensordict
         next_td["x"] = x

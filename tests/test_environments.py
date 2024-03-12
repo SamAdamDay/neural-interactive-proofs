@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch.testing import assert_close
 
 from tensordict import TensorDict
@@ -12,8 +13,8 @@ from pvg.parameters import (
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     CommonPpoParameters,
-    ProtocolParameters,
-    InteractionProtocolType,
+    CommonProtocolParameters,
+    PvgProtocolParameters,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -21,6 +22,7 @@ from pvg.image_classification import (
     ImageClassificationEnvironment,
     ImageClassificationDataset,
 )
+from pvg.protocols import build_protocol_handler
 
 
 def test_environment_specs():
@@ -33,9 +35,10 @@ def test_environment_specs():
         scenario_types, dataset_classes, environment_classes
     ):
         params = Parameters(scenario_type, TrainerType.VANILLA_PPO, "test")
+        protocol_handler = build_protocol_handler(params)
         settings = ExperimentSettings(device="cpu", test_run=True)
-        dataset = dataset_class(params, settings)
-        env = environment_class(params, settings, dataset)
+        dataset = dataset_class(params, settings, protocol_handler)
+        env = environment_class(params, settings, dataset, protocol_handler)
         check_env_specs(env)
 
 
@@ -55,14 +58,17 @@ def test_graph_isomorphism_environment_step():
             prover=GraphIsomorphismAgentParameters(),
             verifier=GraphIsomorphismAgentParameters(),
         ),
-        protocol_params=ProtocolParameters(
-            max_message_rounds=max_message_rounds,
-            min_message_rounds=1,
+        protocol_common=CommonProtocolParameters(
             prover_reward=1,
             verifier_reward=2,
             verifier_terminated_penalty=-4,
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
+        ),
+        pvg_protocol=PvgProtocolParameters(
+            max_message_rounds=max_message_rounds,
+            min_message_rounds=1,
+            verifier_first=False,
         ),
         # agents=AgentsParameters(
         #     prover0=GraphIsomorphismAgentParameters(),
@@ -79,8 +85,9 @@ def test_graph_isomorphism_environment_step():
         # ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    dataset = GraphIsomorphismDataset(params, settings)
-    env = GraphIsomorphismEnvironment(params, settings, dataset)
+    protocol_handler = build_protocol_handler(params)
+    dataset = GraphIsomorphismDataset(params, settings, protocol_handler)
+    env = GraphIsomorphismEnvironment(params, settings, dataset, protocol_handler)
 
     max_num_nodes = env.max_num_nodes
 
@@ -96,7 +103,7 @@ def test_graph_isomorphism_environment_step():
             ),
             node_mask=torch.ones(batch_size, max_num_nodes, dtype=torch.bool),
             round=torch.remainder(
-                torch.arange(batch_size, dtype=torch.int32), max_message_rounds
+                torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
             x=torch.zeros(
                 batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
@@ -105,8 +112,8 @@ def test_graph_isomorphism_environment_step():
             agents=dict(
                 node_selected=torch.tensor(
                     [
-                        [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3],
-                        [7, 6, 5, 4, 3, 2, 1, 0, 3, 2, 1, 0],
+                        [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12],
+                        [7, 6, 5, 4, 3, 2, 1, 0, 8, 15, 14, 13],
                     ]
                 ).transpose(0, 1),
                 decision=torch.tensor(
@@ -122,16 +129,12 @@ def test_graph_isomorphism_environment_step():
     expected_x = torch.zeros(
         batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
     )
-    expected_message = torch.zeros(batch_size, dtype=torch.int64)
+    expected_message = torch.zeros(batch_size, 2, 8, dtype=torch.float32)
     for i in range(batch_size):
         round = env_td["round"][i]
-        agent_index = (
-            round % 2
-        )  # TODO index , This assumes we are using the PVG protocol
-        message = env_td["agents", "node_selected"][
-            i, agent_index
-        ]  # TODO index , This assumes we are using the PVG protocol
-        expected_message[i] = message
+        agent_index = round % 2
+        message = env_td["agents", "node_selected"][i, agent_index]
+        expected_message[i] = F.one_hot(message, 2 * max_num_nodes).view(2, 8)
         graph_id = message // max_num_nodes
         expected_x[i, graph_id, message % max_num_nodes, round] = 1
     expected_next = TensorDict(
