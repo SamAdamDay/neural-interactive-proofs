@@ -701,7 +701,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         if self.agent_name == "verifier":
             # Symmetrise the message history
-            rounded_rounds = (self.params.max_message_rounds // 2) * 2
+            rounded_rounds = (self.protocol_handler.max_message_rounds // 2) * 2
             gnn_repr = data["x"].clone()
             gnn_repr[..., range(0, rounded_rounds, 2)] += data["x"][
                 ..., range(1, rounded_rounds, 2)
@@ -1206,7 +1206,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               representations.
             - "node_level_repr" (... 2 max_nodes d_representation): The output
               node-level representations.
-            - "message" (...): The most recent message from the other agent.
+            - "message" (... 2 max_nodes): The most recent message from the other agent.
             - "round" (optional) (...): The current round number.
 
         hooks : GraphIsomorphismAgentHooks, optional
@@ -1251,8 +1251,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         if self.agent_name == "verifier":
             # Whether to make a guess in this round
             if "round" in body_output.keys():
-                make_guess = body_output["round"] >= self.params.max_message_rounds - 2
-                # make_guess = body_output["round"] >= 4
+                make_guess = (
+                    body_output["round"] >= self.protocol_handler.max_message_rounds - 2
+                )
             else:
                 make_guess = torch.rand(*batch_size, device=self.device) < 0.5
 
@@ -1278,6 +1279,13 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             )
 
         elif self.agent_name == "prover":
+            message_flattened = rearrange(message, "... pair node -> ... (pair node)")
+
+            # Get the index of the node selected by the verifier in the previous round.
+            # This only works when there is only one message.
+            # (...)
+            message_index = torch.argmax(message_flattened, dim=-1)
+
             # Compute the similarity between the node sent as a message and the other
             # nodes
             node_level_repr_flattened = rearrange(
@@ -1286,7 +1294,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             message_node_repr = torch.gather(
                 node_level_repr_flattened,
                 -2,
-                repeat(message, "... -> ... 1 representation", representation=d_repr),
+                repeat(
+                    message_index, "... -> ... 1 representation", representation=d_repr
+                ),
             )
             node_distance = vector_norm(
                 message_node_repr - node_level_repr_flattened, dim=-1
@@ -1295,7 +1305,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             # With shared reward, the prover selects the most dissimilar nodes when the
             # graph-level representations are far apart. Otherwise, it selects the most
             # similar nodes.
-            if self.params.pvg_protocol.shared_reward:
+            if self.params.protocol_common.shared_reward:
                 select_similar_mask = isomorphic_guess
             else:
                 select_similar_mask = torch.ones(
