@@ -6,6 +6,7 @@ from .parameters import (
     ImageClassificationAgentParameters,
     SoloAgentParameters,
     CommonPpoParameters,
+    VanillaPpoParameters,
     SpgParameters,
     ImageClassificationParameters,
     DatasetParameters,

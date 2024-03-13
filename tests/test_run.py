@@ -15,6 +15,7 @@ from pvg import (
     run_experiment,
     prepare_experiment,
 )
+from pvg.parameters import AGENT_NAMES
 from pvg.utils.output import DummyTqdm
 
 
@@ -29,147 +30,141 @@ def test_prepare_run_experiment():
     """
 
     # Very basic agent parameters for each scenario
-    agents_params_dict = {
-        ScenarioType.GRAPH_ISOMORPHISM: AgentsParameters(
-            prover=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                d_gnn=1,
-                d_gin_mlp=1,
-                num_heads=2,
-                num_transformer_layers=1,
-                d_transformer=2,
-                d_transformer_mlp=1,
-                d_node_selector=1,
-                num_node_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                normalize_message_history=True,
-            ),
-            verifier=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                d_gnn=1,
-                d_gin_mlp=1,
-                num_heads=2,
-                num_transformer_layers=1,
-                d_transformer=2,
-                d_transformer_mlp=1,
-                d_node_selector=1,
-                num_node_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                normalize_message_history=True,
-            ),
+    agent_params_dict = {
+        ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismAgentParameters(
+            num_gnn_layers=1,
+            d_gnn=1,
+            d_gin_mlp=1,
+            num_heads=2,
+            num_transformer_layers=1,
+            d_transformer=2,
+            d_transformer_mlp=1,
+            d_node_selector=1,
+            num_node_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+            normalize_message_history=True,
         ),
-        ScenarioType.IMAGE_CLASSIFICATION: AgentsParameters(
-            prover=ImageClassificationAgentParameters(
-                num_convs_per_group=1,
-                d_latent_pixel_selector=1,
-                num_latent_pixel_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                normalize_message_history=True,
-            ),
-            verifier=ImageClassificationAgentParameters(
-                num_convs_per_group=1,
-                d_latent_pixel_selector=1,
-                num_latent_pixel_selector_layers=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                normalize_message_history=True,
-            ),
+        ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationAgentParameters(
+            num_convs_per_group=1,
+            d_latent_pixel_selector=1,
+            num_latent_pixel_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+            normalize_message_history=True,
         ),
     }
 
     # Very basic parameters for each trainer
-    solo_agent_trainer_params = SoloAgentParameters(
+    common_ppo_params = CommonPpoParameters(
+        num_iterations=2,
         num_epochs=1,
-        batch_size=1,
+        minibatch_size=1,
+        frames_per_batch=8,
     )
-    ppo_trainer_params = {
-        TrainerType.VANILLA_PPO: CommonPpoParameters(
-            num_iterations=8,
-            num_epochs=4,
-            minibatch_size=64,
+    trainer_params = {
+        TrainerType.SOLO_AGENT: SoloAgentParameters(
+            num_epochs=1,
+            batch_size=1,
         ),
+        TrainerType.VANILLA_PPO: None,
         TrainerType.SPG: SpgParameters(
             variant=SpgVariant.PSOS,
-            # stackelberg_sequence=(("verifier",), ("prover0", "prover1")) For testing DEBATE
         ),
     }
 
-    basic_params = [
+    param_specs = [
+        # Test combinations of scenario, random provers, and pretraining
         {
-            "scenario": list(agents_params_dict.items()),
-            "trainer": list(ppo_trainer_params.items()),
+            "scenario": [
+                ScenarioType.GRAPH_ISOMORPHISM,
+                ScenarioType.IMAGE_CLASSIFICATION,
+            ],
+            "trainer": [TrainerType.VANILLA_PPO],
+            "protocol": [InteractionProtocolType.PVG],
             "is_random": [True, False],
             "pretrain_agents": [True, False],
             "manual_architecture": [None],
         },
+        # Test the other trainers
         {
-            "scenario": list(agents_params_dict.items()),
-            "trainer": [(TrainerType.SOLO_AGENT, solo_agent_trainer_params)],
+            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
+            "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT],
+            "protocol": [InteractionProtocolType.PVG],
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [None],
         },
+        # Test the other protocols
         {
-            "scenario": [
-                (
-                    ScenarioType.GRAPH_ISOMORPHISM,
-                    agents_params_dict[ScenarioType.GRAPH_ISOMORPHISM],
-                )
+            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
+            "trainer": [TrainerType.VANILLA_PPO],
+            "protocol": [
+                InteractionProtocolType.DEBATE,
+                InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+                InteractionProtocolType.MERLIN_ARTHUR,
             ],
-            "trainer": [
-                (TrainerType.VANILLA_PPO, ppo_trainer_params[TrainerType.VANILLA_PPO])
-            ],
+            "is_random": [True],
+            "pretrain_agents": [False],
+            "manual_architecture": [None],
+        },
+        # Test manual architectures
+        {
+            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
+            "trainer": [TrainerType.VANILLA_PPO],
+            "protocol": [InteractionProtocolType.PVG],
             "is_random": [False],
             "pretrain_agents": [False],
-            "manual_architecture": ["prover", "verifier"],
+            "manual_architecture": [("prover",), ("verifier",), ("prover", "verifier")],
         },
     ]
 
-    for param_spec in ParameterGrid(basic_params):
-        scenario_type, agents_param = param_spec["scenario"]
-        agents_param: AgentsParameters
-        trainer_type, trainer_param = param_spec["trainer"]
+    for param_spec in ParameterGrid(param_specs):
+        scenario_type = param_spec["scenario"]
+        trainer_type = param_spec["trainer"]
+        protocol_type = param_spec["protocol"]
         is_random = param_spec["is_random"]
         pretrain_agents = param_spec["pretrain_agents"]
         manual_architecture = param_spec["manual_architecture"]
 
+        # Construct the agent parameters
+        agents_param = {}
+        for agent_name in AGENT_NAMES[protocol_type]:
+            if is_random and agent_name != "verifier":
+                agents_param[agent_name] = {"is_random": True}
+            else:
+                agents_param[agent_name] = agent_params_dict[scenario_type]
         if manual_architecture is not None:
-            agents_param[manual_architecture].use_manual_architecture = True
+            for agent_name in manual_architecture:
+                agents_param[agent_name].use_manual_architecture = True
+
+        # Construct the trainer parameters
+        trainer_param = trainer_params[trainer_type]
 
         # Construct the parameters
-        if is_random:
-            agents_param = AgentsParameters(
-                prover={"is_random": True},
-                verifier=agents_param["verifier"],
-            )
         params = Parameters(
             **{
                 "scenario": scenario_type,
                 "trainer": trainer_type,
                 "dataset": "test",
+                "interaction_protocol": protocol_type,
                 "agents": agents_param,
                 "pretrain_agents": pretrain_agents,
+                "ppo": common_ppo_params,
                 str(trainer_type): trainer_param,
-                # "interaction_protocol": InteractionProtocolType.DEBATE For testing DEBATE
+                "d_representation": 1,
             }
         )
 
         # Prepare the experiment
-        prepare_experiment(params=params, test_run=True)
+        prepare_experiment(params=params, test_run=True, ignore_cache=True)
 
         # Run the experiment in test mode
-        run_experiment(params, tqdm_func=DummyTqdm, test_run=True)
+        run_experiment(params, tqdm_func=DummyTqdm, test_run=True, ignore_cache=True)
 
 
 test_prepare_run_experiment()

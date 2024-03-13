@@ -411,7 +411,7 @@ class MerlinArthurProtocol(TwoProverProtocol):
         active_agents : Bool[Tensor, "... 2"]
             A boolean mask indicating which agents are active in the given round.
         """
-        prover1_first = torch.randint_like(round, 2)
+        prover1_first = torch.randint_like(round, 2).bool()
         return torch.stack(
             [
                 (round % 2 == 0) & prover1_first,

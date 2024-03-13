@@ -515,9 +515,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         batch_size = data.batch_size
 
-        # The size of the node dimension
-        max_num_nodes = data["x"].shape[-2]
-
         # Normalize the message history if necessary
         if self._agent_params.normalize_message_history:
             data = self.message_history_normalizer(data)

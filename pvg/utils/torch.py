@@ -714,8 +714,10 @@ class TensorDictPrint(TensorDictModuleBase):
     def __init__(
         self,
         keys: NestedKey | Iterable[NestedKey],
+        name: Optional[str] = None,
     ):
         super().__init__()
+        self.name = name
         if isinstance(keys, str) or (
             isinstance(keys, tuple) and isinstance(keys[0], str)
         ):
@@ -724,5 +726,9 @@ class TensorDictPrint(TensorDictModuleBase):
         self.out_keys = keys
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        print(tensordict)
+        if self.name is not None:
+            print(f"{type(self).__name__} {self.name!r}:")
+        for key in self.in_keys:
+            print(f"{key} ({tensordict[key].shape}):")
+            print(tensordict[key].isnan().float().mean())
         return tensordict

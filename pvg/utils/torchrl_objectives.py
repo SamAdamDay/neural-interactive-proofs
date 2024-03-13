@@ -239,7 +239,7 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
-        if self.normalize_advantage and advantage.numel() > 1:
+        if self.normalize_advantage and advantage.shape[0] > 1:
             loc = advantage.mean(dim=0)
             scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
@@ -403,7 +403,7 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         # Normalise advantages per agent
-        if self.normalize_advantage and advantage.numel() > 1:
+        if self.normalize_advantage and advantage.shape[0] > 1:
             loc = advantage.mean(dim=0)
             scale = advantage.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
