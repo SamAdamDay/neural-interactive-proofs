@@ -278,7 +278,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, self.num_agents),  # TODO Ask Sam
+            shape=(self.num_envs, self.num_agents),
             dtype=torch.long,
             device=self.device,
         )

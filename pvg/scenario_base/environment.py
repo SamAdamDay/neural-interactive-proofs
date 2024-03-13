@@ -71,10 +71,7 @@ class Environment(EnvBase, ABC):
         self.protocol_handler = protocol_handler
         self.train = train
 
-        self.agent_names = tuple(params.agents.keys())
-        self.provers = [name for name in self.agent_names if "prover" in name]
-        self.verifiers = [name for name in self.agent_names if "verifier" in name]
-        self.num_agents = len(self.agent_names)
+        self.num_agents = len(protocol_handler.agent_names)
 
         # Create a random number generator
         self.rng = torch.Generator()
@@ -153,7 +150,7 @@ class Environment(EnvBase, ABC):
             agents=CompositeSpec(
                 decision=DiscreteTensorSpec(
                     3,
-                    shape=(self.num_envs, self.num_agents),  # TODO Ask Sam about this
+                    shape=(self.num_envs, self.num_agents),
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
