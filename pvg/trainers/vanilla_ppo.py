@@ -11,7 +11,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
-from pvg.utils.torchrl_objectives import ClipPPOLossImproved
+from pvg.rl_objectives import ClipPPOLossImproved
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType

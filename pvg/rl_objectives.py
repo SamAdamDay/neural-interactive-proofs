@@ -1,10 +1,14 @@
-"""Extensions of TorchRL objectives to overcome limitations of the library."""
+"""Implementations of RL objectives, extending those of TorchRL"""
 
 from dataclasses import dataclass, make_dataclass, field, fields
 from typing import Iterable, NamedTuple
 import contextlib
+from abc import ABC, abstractmethod
 
 import torch
+from torch import Tensor
+
+from torchrl.objectives import PPOLoss, ClipPPOLoss, LossModule
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn.distributions import CompositeDistribution
@@ -12,11 +16,24 @@ from tensordict.utils import NestedKey
 
 from pvg.parameters import SpgVariant
 from pvg.utils.maths import dot_td, ihvp, compute_sos_update
+from pvg.utils.torch import flatten_batch_dims
 
-from torchrl.objectives import PPOLoss, ClipPPOLoss
+
+class Objective(LossModule, ABC):
+    """Base class for all RL objectives."""
+
+    @abstractmethod
+    def backward(self, loss_vals: TensorDictBase):
+        """Perform the backward pass for the loss.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
 
 
-class PPOLossMultipleActions(PPOLoss):
+class PPOLossMultipleActions(Objective, PPOLoss):
     """Parent PPO loss class which allows multiple actions keys
 
     The implementation is a bit of a hack. We change the _AcceptedKeys class dynamically
@@ -206,8 +223,8 @@ class PPOLossMultipleActions(PPOLoss):
 
         return log_prob, log_weight, dist
 
-    def compute_grads(self, loss_vals: TensorDictBase):
-        """Compute the gradients of the loss.
+    def backward(self, loss_vals: TensorDictBase):
+        """Perform the backward pass for the loss.
 
         Parameters
         ----------
@@ -228,24 +245,90 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
     See `torchrl.objectives.ClipPPOLoss` for more details
     """
 
-    # We modify the loss function to normalise per agent
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone(False)
+    def _get_advantage(self, tensordict: TensorDictBase) -> torch.Tensor:
+        """Get the advantage for a tensordict, normalising it if required.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        torch.Tensor
+            The normalised advantage.
+        """
+
+        num_batch_dims = len(tensordict.batch_size)
+
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_critic_network_params_detached,
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
-        if self.normalize_advantage and advantage.shape[0] > 1:
-            loc = advantage.mean(dim=0)
-            scale = advantage.std(dim=0).clamp_min(1e-6)
+
+        # Normalise advantages per agent
+        advantage_flat = flatten_batch_dims(advantage, num_batch_dims)
+        if self.normalize_advantage and advantage_flat.shape[0] > 1:
+            loc = advantage_flat.mean(dim=0)
+            scale = advantage_flat.std(dim=0).clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        _, log_weight, dist = self._log_weight(tensordict)
-        # ESS for logging
+        return advantage
+
+    def _set_entropy_and_critic_losses(
+        self,
+        tensordict: TensorDictBase,
+        td_out: TensorDictBase,
+        dist: torch.distributions.Distribution,
+    ):
+        """Set the entropy and critic losses in the output TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+        td_out : TensorDictBase
+            The output TensorDict, which will be modified in place.
+        dist : torch.distributions.Distribution
+            The distribution used to compute the log weight.
+        """
+
+        num_batch_dims = len(tensordict.batch_size)
+
+        if self.entropy_bonus:
+            entropy = self.get_entropy_bonus(dist)
+            entropy_flat = flatten_batch_dims(entropy, num_batch_dims)
+            td_out.set(
+                "entropy",
+                entropy_flat.mean(dim=0).sum().detach(),
+            )  # for logging
+            td_out.set(
+                "loss_entropy", -self.entropy_coef * entropy_flat.mean(dim=0).sum()
+            )
+        if self.critic_coef:
+            loss_critic = self.loss_critic(tensordict)
+            td_out.set(
+                "loss_critic",
+                flatten_batch_dims(loss_critic, num_batch_dims).mean(dim=0).sum(),
+            )
+
+    def _set_ess(self, num_batch_dims: int, td_out: TensorDictBase, log_weight: Tensor):
+        """Set the ESS in the output TensorDict, for logging
+
+        Parameters
+        ----------
+        num_batch_dims : int
+            The number of batch dimensions.
+        td_out : TensorDictBase
+            The output TensorDict, which will be modified in place.
+        log_weight : Tensor
+            The log weights.
+        """
+
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same
             # source. Here we sample according to different, unrelated trajectories,
@@ -255,6 +338,22 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
+        td_out.set(
+            "ESS", flatten_batch_dims(ess, num_batch_dims).mean(dim=0).sum() / batch
+        )
+
+    # We modify the loss function to normalise per agent
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict = tensordict.clone(False)
+
+        num_batch_dims = len(tensordict.batch_size)
+
+        # Compute the advantage
+        advantage = self._get_advantage(tensordict)
+
+        # Compute the log weights
+        _, log_weight, dist = self._log_weight(tensordict)
+
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
@@ -262,26 +361,27 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
 
-        td_out = TensorDict({"loss_objective": -gain.mean(dim=0).sum()}, [])
+        td_out = TensorDict(
+            {
+                "loss_objective": -flatten_batch_dims(gain, num_batch_dims)
+                .mean(dim=0)
+                .sum()
+            },
+            [],
+        )
 
-        if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean(dim=0).sum().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean(dim=0).sum())
-        if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", loss_critic.mean(dim=0).sum())
-        td_out.set("ESS", ess.mean(dim=0).sum() / batch)
+        self._set_entropy_and_critic_losses(tensordict, td_out, dist)
+        self._set_ess(num_batch_dims, td_out, log_weight)
 
         return td_out
 
 
-class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
+class SpgLoss(ClipPPOLossImproved):
     """Loss for Stackelberg Policy Gradient and several variants, including LOLA and
     POLA.
 
     We return losses per agent, as well as the sum of the log probabilities, in order to
-    then compute the scores later on in the compute_grads function.
+    then compute the scores later on in the backward function.
     """
 
     def __init__(
@@ -394,30 +494,13 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
     # Define the (variants of the) SPG loss @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
-        if advantage is None:
-            self.value_estimator(
-                tensordict,
-                params=self._cached_critic_params_detached,
-                target_params=self.target_critic_params,
-            )
-            advantage = tensordict.get(self.tensor_keys.advantage)
-        # Normalise advantages per agent
-        if self.normalize_advantage and advantage.shape[0] > 1:
-            loc = advantage.mean(dim=0)
-            scale = advantage.std(dim=0).clamp_min(1e-6)
-            advantage = (advantage - loc) / scale
+
+        num_batch_dims = len(tensordict.batch_size)
+        print(num_batch_dims)
+
+        advantage = self._get_advantage(tensordict)
 
         log_prob, log_weight, dist = self._log_weight(tensordict)
-        # ESS for logging
-        with torch.no_grad():
-            # In theory, ESS should be computed on particles sampled from the same
-            # source. Here we sample according to different, unrelated trajectories,
-            # which is not standard. Still it can give a idea of the dispersion of the
-            # weights.
-            lw = log_weight.squeeze()
-            ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
-            batch = log_weight.shape[0]
 
         # Use vanilla A2C losses for SPG and LOLA and SOS
         if (
@@ -428,11 +511,14 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             probs = log_prob.exp()
             gains = {}
             for i in self.agent_indices:
-                gains[i] = (probs * advantage[:, i].unsqueeze(dim=1)).mean(dim=0)
+                gains[i] = flatten_batch_dims(
+                    (probs * advantage[..., i].unsqueeze(dim=-1)), num_batch_dims
+                ).mean(dim=0)
 
-            log_prob_sum = (
-                log_prob.sum()
-            )  # TODO we don't take a mean across samples (because the score multiplicands have already been averaged across samples), which I believe is correct in theory, but might need changed in practice
+            log_prob_sum = log_prob.sum()
+            # TODO we don't take a mean across samples (because the score multiplicands
+            # have already been averaged across samples), which I believe is correct in
+            # theory, but might need changed in practice
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
         elif (
@@ -442,17 +528,19 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
         ):
             gains = {}
             for i in self.agent_indices:
-                gain1 = log_weight.exp() * advantage[:, i].unsqueeze(dim=1)
+                gain1 = log_weight.exp() * advantage[..., i].unsqueeze(dim=-1)
                 log_weight_clip = log_weight.clamp(*self._clip_bounds)
-                gain2 = log_weight_clip.exp() * advantage[:, i].unsqueeze(dim=1)
-                gains[i] = torch.stack([gain1, gain2], -1).min(dim=-1)[0].mean(dim=0)
+                gain2 = log_weight_clip.exp() * advantage[..., i].unsqueeze(dim=-1)
+                gains[i] = flatten_batch_dims(
+                    torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
+                ).mean(dim=0)
 
-            log_prob_sum = (
-                log_weight.sum()
-            )  # TODO maybe this should be log_prob.sum(), also note that we don't take a mean across samples because the score multiplicands have already been averaged across samples
+            log_prob_sum = log_weight.sum()
+            # TODO maybe this should be log_prob.sum(), also note that we don't take a
+            # mean across samples because the score multiplicands have already been
+            # averaged across samples
 
         # Return losses per agent and set of followers
-
         td_out = TensorDict(
             {
                 **{"sum_log_probs": log_prob_sum},
@@ -464,18 +552,12 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
             [],
         )
 
-        if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean(dim=0).sum().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean(dim=0).sum())
-        if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", loss_critic.mean(dim=0).sum())
-        td_out.set("ESS", ess.mean(dim=0).sum() / batch)
+        self._set_entropy_and_critic_losses(tensordict, td_out, dist)
+        self._set_ess(num_batch_dims, td_out, log_weight)
 
         return td_out
 
-    def compute_grads(self, loss_vals: TensorDictBase):
+    def backward(self, loss_vals: TensorDictBase):
         """Compute and assign the gradients of the loss for each agent.
 
         Parameters

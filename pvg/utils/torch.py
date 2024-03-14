@@ -1,4 +1,4 @@
-"""Handy PyTorch classes, including modules."""
+"""Handy PyTorch classes and utilities, including modules."""
 
 from typing import Callable, Optional, Iterable
 from abc import abstractmethod
@@ -22,6 +22,24 @@ ACTIVATION_CLASSES = dict(
     tanh=nn.Tanh,
     sigmoid=nn.Sigmoid,
 )
+
+
+def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
+    """Returns a new view of a tensor with the batch dimensions flattened.
+
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    num_batch_dims : int
+        The number of batch dimensions to flatten.
+
+    Returns
+    -------
+    Tensor
+        The input tensor with the batch dimensions flattened.
+    """
+    return x.flatten(0, num_batch_dims - 1)
 
 
 class DummyOptimizer(torch.optim.Optimizer):
