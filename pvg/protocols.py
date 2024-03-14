@@ -311,7 +311,7 @@ class AdpProtocol(PvgProtocol):
         The parameters of the experiment.
     """
 
-    agent_names = ["verifier", "prover"]
+    agent_names = ["prover", "verifier"]
     max_message_rounds = 2
     min_message_rounds = 2
 
@@ -399,7 +399,7 @@ class MerlinArthurProtocol(TwoProverProtocol):
     ) -> Bool[Tensor, "... 3"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
-        A random one of the two agents goes first, and the verifier goes second.
+        A random one of the two provers goes first, and the verifier goes second.
 
         Parameters
         ----------
