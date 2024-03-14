@@ -50,7 +50,7 @@ Create a parameters object using a dictionary for the ppo parameters
 
 from dataclasses import dataclass, fields
 from abc import ABC
-from typing import Optional, ClassVar, OrderedDict, Iterable, NamedTuple
+from typing import Optional, ClassVar, Iterable, NamedTuple
 from enum import auto as enum_auto
 from itertools import product
 
@@ -141,9 +141,10 @@ class InteractionProtocolType(StrEnum):
     """
 
     PVG = enum_auto()
-    ABSTRACT_DECISION_PROBLEM = enum_auto()  # TODO
-    DEBATE = enum_auto()  # TODO
-    MERLIN_ARTHUR = enum_auto()  # TODO
+    ABSTRACT_DECISION_PROBLEM = enum_auto()
+    DEBATE = enum_auto()
+    MERLIN_ARTHUR = enum_auto()
+    MARKET_MAKING = enum_auto()  # TODO
 
 
 class MinMessageRoundsSchedulerType(StrEnum):
@@ -172,18 +173,21 @@ class MinMessageRoundsSchedulerType(StrEnum):
     LINEAR_INCREASE_DECREASE = enum_auto()
 
 
-DEFAULT_AGENT_NAMES = {
+# The agent names required for each protocol
+AGENT_NAMES = {
     InteractionProtocolType.PVG: ("verifier", "prover"),
-    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("prover", "verifier"),
-    InteractionProtocolType.DEBATE: ("prover1", "prover2", "verifier"),
-    InteractionProtocolType.MERLIN_ARTHUR: ("prover", "verifier"),
+    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
+    InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
+    InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
+    InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
     InteractionProtocolType.PVG: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
-    InteractionProtocolType.DEBATE: (("verifier",), ("prover1", "prover2")),
-    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover",)),
+    InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
 }
 
 
@@ -470,12 +474,10 @@ class ImageClassificationAgentParameters(AgentParameters):
     include_round_in_value: bool = True
 
 
-class AgentsParameters(OrderedDict[str, AgentParameters]):
+class AgentsParameters(dict[str, AgentParameters]):
     """Parameters which specify the agents in the experiment.
 
-    A subclass of `OrderedDict`. Parameters should be specified as an iterable of
-    `(name, parameters)` pairs, where `name` is a string, and `parameters` is a
-    `AgentParameters` object.
+    A subclass of `dict` which contains the parameters for each agent in the experiment.
 
     The keys are the names of the agents, and the values are the parameters for each
     agent.
@@ -483,22 +485,8 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
     Agent names must not be substrings of each other.
     """
 
-    def __init__(self, other=(), /, **kwds):
-        super().__init__(other, **kwds)
-
-        # Check that the agent names are not substrings of each other
-        for name_1, name_2 in product(self.keys(), repeat=2):
-            if name_1 != name_2 and name_1 in name_2:
-                raise ValueError(
-                    f"Agent names must not be substrings of each other, but {name_1}"
-                    f" is a substring of {name_2}."
-                )
-
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
-
-        Adds a special key `_agent_order` which is a list of the agent names in the
-        order they appear in the dictionary.
 
         Turns sub-parameters into dictionaries.
 
@@ -510,7 +498,6 @@ class AgentsParameters(OrderedDict[str, AgentParameters]):
         params_dict = {}
         for param_name, param in self.items():
             params_dict[param_name] = param.to_dict()
-        params_dict["_agent_order"] = list(self.keys())
         return params_dict
 
 
@@ -689,8 +676,8 @@ class DatasetParameters(SubParameters):
 
 
 @dataclass
-class PvgProtocolParameters(SubParameters):
-    """Additional parameters for the PVG protocol.
+class CommonProtocolParameters(SubParameters):
+    """Common additional parameters for the interaction protocol.
 
     Parameters
     ----------
@@ -714,8 +701,80 @@ class PvgProtocolParameters(SubParameters):
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
-
     shared_reward: bool = False
+
+
+@dataclass
+class LongProtocolParameters(SubParameters, ABC):
+    """Additional parameters for interaction protocols with multiple rounds.
+
+    Parameters
+    ----------
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    max_message_rounds: int = 8
+    min_message_rounds: int = 0
+    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = (
+        MinMessageRoundsSchedulerType.CONSTANT
+    )
+
+    def __post_init__(self):
+        # Convert the scheduler to an enum type
+        if not isinstance(
+            self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
+        ):
+            self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
+                self.min_message_rounds_scheduler
+            ]
+
+
+@dataclass
+class PvgProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the PVG interaction protocol.
+
+    Parameters
+    ----------
+    verifier_first : bool
+        Whether the verifier goes first in the PVG protocol.
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    verifier_first: bool = True
+
+
+@dataclass
+class DebateProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the debate interaction protocol.
+
+    Parameters
+    ----------
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
 
 
 @dataclass
@@ -730,19 +789,10 @@ class Parameters(BaseParameters):
         The RL trainer to use.
     dataset : str
         The dataset to use.
-    protocol : Protocol
+    interaction_protocol : Protocol
         The interaction protocol between the agents.
     seed : int
         The random seed.
-    max_message_rounds : int
-        The maximum number of rounds of the game. Each round corresponds to one move by
-        one agent.
-    min_message_rounds : int
-        The minimum number of rounds of messages. Before this point, verifier cannot
-        guess.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
@@ -752,7 +802,7 @@ class Parameters(BaseParameters):
         The dimension of each agent's body representation output.
     batch_size : int
         The number of simultaneous environments to run in parallel.
-    agents : AgentsParameters | OrderedDict[str, AgentParameters], optional
+    agents : AgentsParameters | dict[str, AgentParameters], optional
         Additional parameters for the agents. The keys are the names of the agents, and
         the values are the parameters for each agent. If not provided, the default
         parameters are used for each agent for a given scenario.
@@ -779,18 +829,13 @@ class Parameters(BaseParameters):
 
     seed: int = 6198
 
-    max_message_rounds: int = 8
-    min_message_rounds: int = 0
-    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = (
-        MinMessageRoundsSchedulerType.CONSTANT
-    )
     pretrain_agents: bool = False
 
     test_size: float = 0.2
 
     d_representation: int = 16
 
-    agents: Optional[AgentsParameters | OrderedDict[str, AgentParameters]] = None
+    agents: Optional[AgentsParameters | dict[str, AgentParameters]] = None
 
     ppo: Optional[CommonPpoParameters | dict] = None
     vanilla_ppo: Optional[VanillaPpoParameters | dict] = None
@@ -801,7 +846,9 @@ class Parameters(BaseParameters):
 
     dataset_options: Optional[DatasetParameters | dict] = None
 
+    protocol_common: Optional[CommonProtocolParameters | dict] = None
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
+    debate_protocol: Optional[DebateProtocolParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums
@@ -812,12 +859,6 @@ class Parameters(BaseParameters):
         if not isinstance(self.interaction_protocol, InteractionProtocolType):
             self.interaction_protocol = InteractionProtocolType[
                 self.interaction_protocol
-            ]
-        if not isinstance(
-            self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
-        ):
-            self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
-                self.min_message_rounds_scheduler
             ]
 
         # Convert graph isomorphism agent parameters to the appropriate class
@@ -870,14 +911,24 @@ class Parameters(BaseParameters):
                 self.solo_agent = SoloAgentParameters()
             elif isinstance(self.solo_agent, dict):
                 self.solo_agent = SoloAgentParameters(**self.solo_agent)
-                self.solo_agent = SoloAgentParameters.from_dict(self.solo_agent)
 
-        # Convert interaction protocol parameters to InteractionProtocolParameters
+        # Add common interaction protocol parameters if they are not provided
+        if self.protocol_common is None:
+            self.protocol_common = CommonProtocolParameters()
+        elif isinstance(self.protocol_common, dict):
+            self.protocol_common = CommonProtocolParameters(**self.protocol_common)
+
+        # Convert PVG and debate protocol parameters to the appropriate class
         if self.interaction_protocol == InteractionProtocolType.PVG:
             if self.pvg_protocol is None:
                 self.pvg_protocol = PvgProtocolParameters()
             elif isinstance(self.pvg_protocol, dict):
                 self.pvg_protocol = PvgProtocolParameters(**self.pvg_protocol)
+        elif self.interaction_protocol == InteractionProtocolType.DEBATE:
+            if self.debate_protocol is None:
+                self.debate_protocol = DebateProtocolParameters()
+            elif isinstance(self.debate_protocol, dict):
+                self.debate_protocol = DebateProtocolParameters(**self.debate_protocol)
 
         # Convert dataset options to DatasetParameters
         if self.dataset_options is None:
@@ -893,6 +944,7 @@ class Parameters(BaseParameters):
         """Process agent parameters passed to `Parameters`.
 
         Fills in missing agent parameters with the default parameters for the scenario.
+        Also validates the agent parameters.
 
         Parameters
         ----------
@@ -900,7 +952,7 @@ class Parameters(BaseParameters):
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-        protocol_params_class : type[InteractionProtocolParameters]
+        protocol_params_class : type[ProtocolParameters]
             The class of the interaction protocol parameters for the scenario.
         """
 
@@ -908,15 +960,15 @@ class Parameters(BaseParameters):
         # protocol and scenario
         if self.agents is None:
             self.agents = AgentsParameters(
-                [
-                    (name, agent_params_class())
-                    for name in DEFAULT_AGENT_NAMES[self.interaction_protocol]
-                ]
+                **{
+                    name: agent_params_class()
+                    for name in AGENT_NAMES[self.interaction_protocol]
+                }
             )
 
-        if not isinstance(self.agents, OrderedDict):
+        if not isinstance(self.agents, dict):
             raise ValueError(
-                f"Agent parameters must be a (subclass of) OrderedDict, not"
+                f"Agent parameters must be a (subclass of) dict, not"
                 f" {type(self.agents)}."
             )
 
@@ -934,9 +986,7 @@ class Parameters(BaseParameters):
                         **agent_params
                     )
                 else:
-                    new_agents_params[agent_name] = GraphIsomorphismAgentParameters(
-                        **agent_params
-                    )
+                    new_agents_params[agent_name] = agent_params_class(**agent_params)
 
             elif isinstance(agent_params, (agent_params_class, RandomAgentParameters)):
                 new_agents_params[agent_name] = agent_params
@@ -948,3 +998,12 @@ class Parameters(BaseParameters):
                 )
 
         self.agents = new_agents_params
+
+        # Make sure the agent names match the agent names expected by the protocol
+        agent_names = tuple(self.agents.keys())
+        if set(agent_names) != set(AGENT_NAMES[self.interaction_protocol]):
+            raise ValueError(
+                f"Agent names {agent_names} do not match the agent names expected"
+                f"by interaction protocol {self.interaction_protocol}: "
+                f"{AGENT_NAMES[self.interaction_protocol]}."
+            )

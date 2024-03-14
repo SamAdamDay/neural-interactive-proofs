@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 from pvg.parameters import Parameters, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
+from pvg.protocols import ProtocolHandler
 
 
 class RunPreparer(ABC):
@@ -29,9 +30,15 @@ class RunPreparer(ABC):
         The settings for the experiment.
     """
 
-    def __init__(self, params: Parameters, settings: ExperimentSettings):
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+    ):
         self.params = params
         self.settings = settings
+        self.protocol_handler = protocol_handler
 
     @abstractmethod
     def prepare_run(self):
@@ -58,7 +65,9 @@ def register_run_preparer(scenario: ScenarioType):
     return decorator
 
 
-def build_run_preparer(params: Parameters, settings: ExperimentSettings) -> RunPreparer:
+def build_run_preparer(
+    params: Parameters, settings: ExperimentSettings, protocol_handler: ProtocolHandler
+) -> RunPreparer:
     """Build a subclass of RunPreparer based on the parameters.
 
     Parameters
@@ -73,4 +82,4 @@ def build_run_preparer(params: Parameters, settings: ExperimentSettings) -> RunP
     RunPreparer
         The prepared run.
     """
-    return RUN_PREPARER_REGISTRY[params.scenario](params, settings)
+    return RUN_PREPARER_REGISTRY[params.scenario](params, settings, protocol_handler)

@@ -30,6 +30,8 @@ class Trainer(ABC):
         self.scenario_instance = scenario_instance
         self.settings = settings
 
+        self._agent_names = self.scenario_instance.protocol_handler.agent_names
+
         self.device = self.settings.device
 
     @abstractmethod

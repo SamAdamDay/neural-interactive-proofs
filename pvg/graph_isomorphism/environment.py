@@ -4,6 +4,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -184,9 +185,15 @@ class GraphIsomorphismEnvironment(Environment):
     Parameters
     ----------
     params : Parameters
-        The parameters of the environment.
-    device : torch.device, optional
-        The device on which the environment should be stored.
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    dataset : Dataset
+        The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    train : bool, optional
+        Whether the environment is used for training or evaluation.
     """
 
     _int_dtype: torch.dtype = torch.int32
@@ -231,21 +238,25 @@ class GraphIsomorphismEnvironment(Environment):
             dtype=torch.bool,
             device=self.device,
         )
-        base_observation_spec["x"] = BinaryDiscreteTensorSpec(
-            self.params.max_message_rounds,
+        base_observation_spec["x"] = DiscreteTensorSpec(
+            self.protocol_handler.max_message_rounds,
             shape=(
                 self.num_envs,
                 2,
                 self.max_num_nodes,
-                self.params.max_message_rounds,
+                self.protocol_handler.max_message_rounds,
             ),
             dtype=torch.float,
             device=self.device,
         )
         base_observation_spec["message"] = DiscreteTensorSpec(
-            2 * self.max_num_nodes,
-            shape=(self.num_envs,),
-            dtype=torch.long,
+            self.max_num_nodes,
+            shape=(
+                self.num_envs,
+                2,
+                self.max_num_nodes,
+            ),
+            dtype=torch.float,
             device=self.device,
         )
         return base_observation_spec
@@ -267,7 +278,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, 2),
+            shape=(self.num_envs, self.num_agents),
             dtype=torch.long,
             device=self.device,
         )
@@ -297,33 +308,27 @@ class GraphIsomorphismEnvironment(Environment):
         """
 
         # Extract the tensors from the dict
-        x: Float[Tensor, "batch graph node message_round"] = env_td["x"]
-        round: Int[Tensor, "batch"] = env_td["round"]
-        node_selected: Int[Tensor, "batch agent"] = env_td["agents", "node_selected"]
+        x: Float[Tensor, "... graph node message_round"] = env_td["x"]
+        round: Int[Tensor, "..."] = env_td["round"]
+        node_selected: Int[Tensor, "... agent"] = env_td["agents", "node_selected"]
 
         # Compute index of the agent whose turn it is.
-        agent_index: Int[Tensor, "batch"] = round % len(self.agent_names)
+        # (... agent)
+        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
 
-        # Determine which graph contains the selected node and which node it is there
-        # (batch agent)
-        which_graph = node_selected >= self.max_num_nodes
-        # (batch agent)
-        graph_node = torch.where(
-            which_graph, node_selected - self.max_num_nodes, node_selected
+        # Sum up the messages from the agents whose turn it is. If two agents select the
+        # same node, the message will be 2.
+        # (... 2 max_num_nodes)
+        message = F.one_hot(node_selected, 2 * self.max_num_nodes).float()
+        message = torch.where(
+            active_agents_mask[..., None], message, torch.zeros_like(message)
         )
+        message = message.sum(dim=-2)
+        message = message.view(*message.shape[:-1], 2, self.max_num_nodes)
 
-        # Write the node selected by the agent whose turn it is as a (one-hot) message
-        x[
-            torch.arange(x.shape[0]),
-            which_graph[torch.arange(which_graph.shape[0]), agent_index].int(),
-            graph_node[torch.arange(which_graph.shape[0]), agent_index],
-            round,
-        ] = 1
-
-        # Set the node selected by the agent whose turn it is as the message
-        message = node_selected[
-            torch.arange(node_selected.shape[0]), agent_index
-        ].long()
+        # Insert the message into the message history at the current round
+        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+        x.masked_scatter_(round_mask[..., None, None, :], message)
 
         # Add the message history and next message to the next tensordict
         next_td["x"] = x

@@ -19,6 +19,7 @@ from pvg import (
     TrainerType,
     ActivationType,
     BinarificationMethodType,
+    CommonProtocolParameters,
     PvgProtocolParameters,
     SpgVariant,
     IhvpVariant,
@@ -30,30 +31,30 @@ from pvg.utils.experiments import (
     SequentialHyperparameterExperiment,
 )
 
-MULTIPROCESS = True
+MULTIPROCESS = False
 
 param_grid = dict(
-    trainer=[TrainerType.SPG],
+    trainer=[TrainerType.VANILLA_PPO],
     dataset_name=["svhn"],
     num_iterations=[1000],
-    num_epochs=[4],
-    minibatch_size=[256],
+    num_epochs=[1],
+    minibatch_size=[2],
     gamma=[0.9],
     lmbda=[0.95],
     clip_epsilon=[0.2],
     entropy_eps=[0.001],
     lr=[0.003],
     body_lr_factor=[1.0],
-    prover_convs_per_group=[4],
-    prover_num_decider_layers=[3],
+    prover_convs_per_group=[1],
+    prover_num_decider_layers=[1],
     prover_lr_factor=[1.0],
     verifier_convs_per_group=[1],
-    verifier_num_decider_layers=[2],
+    verifier_num_decider_layers=[1],
     verifier_lr_factor=[0.1],
     num_conv_groups=[1],
-    initial_num_channels=[16],
+    initial_num_channels=[1],
     random_prover=[False],
-    pretrain_agents=[True],
+    pretrain_agents=[False],
     binarification_method=[BinarificationMethodType.MERGE],
     binarification_seed=[None],
     selected_classes=[None],
@@ -147,11 +148,13 @@ def experiment_fn(
             ihvp_rank=combo["ihvp_rank"],
             ihvp_rho=combo["ihvp_rho"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
         ),
+        pvg_protocol=PvgProtocolParameters(
+            min_message_rounds=combo["min_message_rounds"],
+        ),
         pretrain_agents=combo["pretrain_agents"],
-        min_message_rounds=combo["min_message_rounds"],
         seed=combo["seed"],
     )
 

@@ -62,11 +62,11 @@ class SoloAgentTrainer(Trainer):
 
         # Select the non-random agents
         agents_params = AgentsParameters(
-            [
-                (name, params)
+            **{
+                name: params
                 for name, params in self.params.agents.items()
                 if not params.is_random
-            ]
+            }
         )
         agents = {
             name: agent
@@ -122,15 +122,6 @@ class SoloAgentTrainer(Trainer):
                 data: TensorDict
                 data = data.to(self.settings.device)
 
-                # Set the message to zero and ignore it. Needed because the solo agent
-                # expects a message
-                data["message"] = torch.zeros(
-                    data.batch_size, dtype=torch.long, device=self.settings.device
-                )
-                data["ignore_message"] = torch.ones(
-                    data.batch_size, device=self.settings.device, dtype=torch.bool
-                )
-
                 # Train the agents on the batch
                 for agent_name in agents_params:
                     agents[agent_name].body.train()
@@ -184,15 +175,6 @@ class SoloAgentTrainer(Trainer):
         logger.info("Testing...")
         for data in test_loader:
             data = data.to(self.settings.device)
-
-            # Set the message to zero and ignore it. Needed because the solo agent
-            # expects a message
-            data["message"] = torch.zeros(
-                data.batch_size, dtype=torch.long, device=self.settings.device
-            )
-            data["ignore_message"] = torch.ones(
-                data.batch_size, device=self.settings.device, dtype=torch.bool
-            )
 
             for agent_name in agents_params:
                 agents[agent_name].body.eval()

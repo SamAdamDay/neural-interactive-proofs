@@ -28,10 +28,16 @@ class ImageClassificationRunPreparer(RunPreparer):
         Downloads and processes the data for the run, then deletes the dataset object.
         """
         train_dataset = ImageClassificationDataset(
-            params=self.params, settings=self.settings, train=True
+            params=self.params,
+            settings=self.settings,
+            protocol_handler=self.protocol_handler,
+            train=True,
         )
         test_dataset = ImageClassificationDataset(
-            params=self.params, settings=self.settings, train=False
+            params=self.params,
+            settings=self.settings,
+            protocol_handler=self.protocol_handler,
+            train=False,
         )
         del train_dataset
         del test_dataset

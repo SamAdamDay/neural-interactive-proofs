@@ -113,16 +113,6 @@ class ModelTimeable(Timeable, ABC):
             for data in dataloader:
                 data: TensorDict
                 data = data.to(self.device)
-
-                # Set the message to zero and ignore it. Needed because the solo agent
-                # expects a message
-                data["message"] = torch.zeros(
-                    data.batch_size, dtype=torch.long, device=self.settings.device
-                )
-                data["ignore_message"] = torch.ones(
-                    data.batch_size, device=self.settings.device, dtype=torch.bool
-                )
-
                 self.model(data)
 
 

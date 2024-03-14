@@ -6,6 +6,7 @@ from pvg import (
     Parameters,
     ScenarioType,
     TrainerType,
+    InteractionProtocolType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
 )
@@ -42,10 +43,11 @@ def test_graph_isomorphism_combined_agents():
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="eru10000",
+        interaction_protocol=InteractionProtocolType.MERLIN_ARTHUR,
         agents=AgentsParameters(
-            agent1=agent_params,
-            agent2=agent_params,
-            agent3=agent_params,
+            prover0=agent_params,
+            prover1=agent_params,
+            verifier=agent_params,
         ),
     )
 
@@ -68,8 +70,7 @@ def test_graph_isomorphism_combined_agents():
 
     # Make sure the combined actor can process a batch
     batch = next(iter(dataloader))
-    batch["message"] = torch.zeros_like(batch["y"])
-    batch["ignore_message"] = torch.ones_like(batch["y"], dtype=torch.bool)
     batch["round"] = torch.zeros(batch.batch_size, dtype=torch.int64)
     batch["decision_restriction"] = torch.zeros(batch.batch_size, dtype=torch.int64)
+    batch["message"] = torch.zeros(batch["x"].shape[:-1], dtype=torch.float32)
     combined_actor(batch)

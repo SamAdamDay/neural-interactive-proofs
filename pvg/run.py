@@ -21,6 +21,7 @@ from pvg.scenario_instance import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
+from pvg.protocols import build_protocol_handler
 import pvg.graph_isomorphism
 import pvg.image_classification
 
@@ -154,6 +155,8 @@ def prepare_experiment(
         the experiment runs without errors.
     """
 
+    protocol_handler = build_protocol_handler(params)
+
     settings = ExperimentSettings(
         device="cpu",
         wandb_run=None,
@@ -163,5 +166,5 @@ def prepare_experiment(
         test_run=test_run,
     )
 
-    run_preparer = build_run_preparer(params, settings)
+    run_preparer = build_run_preparer(params, settings, protocol_handler)
     run_preparer.prepare_run()
