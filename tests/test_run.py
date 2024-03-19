@@ -72,9 +72,7 @@ def test_prepare_run_experiment():
             batch_size=1,
         ),
         TrainerType.VANILLA_PPO: None,
-        TrainerType.SPG: SpgParameters(
-            variant=SpgVariant.PSOS,
-        ),
+        TrainerType.SPG: SpgParameters(),
     }
 
     param_specs = [
@@ -86,15 +84,34 @@ def test_prepare_run_experiment():
             ],
             "trainer": [TrainerType.VANILLA_PPO],
             "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [SpgVariant.SPG],
             "is_random": [True, False],
             "pretrain_agents": [True, False],
             "manual_architecture": [None],
         },
-        # Test the other trainers
+        # Test the other solo agent trainer
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT],
             "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [SpgVariant.SPG],
+            "is_random": [False],
+            "pretrain_agents": [False],
+            "manual_architecture": [None],
+        },
+        # Test the SPG trainer with different variants
+        {
+            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
+            "trainer": [TrainerType.SPG],
+            "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [
+                SpgVariant.SPG,
+                SpgVariant.PSPG,
+                SpgVariant.LOLA,
+                SpgVariant.POLA,
+                SpgVariant.PSOS,
+                SpgVariant.SOS,
+            ],
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [None],
@@ -108,6 +125,7 @@ def test_prepare_run_experiment():
                 InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
                 InteractionProtocolType.MERLIN_ARTHUR,
             ],
+            "spg_variant": [SpgVariant.SPG],
             "is_random": [True],
             "pretrain_agents": [False],
             "manual_architecture": [None],
@@ -117,6 +135,7 @@ def test_prepare_run_experiment():
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.VANILLA_PPO],
             "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [SpgVariant.SPG],
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [("prover",), ("verifier",), ("prover", "verifier")],
@@ -144,6 +163,8 @@ def test_prepare_run_experiment():
 
         # Construct the trainer parameters
         trainer_param = trainer_params[trainer_type]
+        if trainer_type == TrainerType.SPG:
+            trainer_param.variant = param_spec["spg_variant"]
 
         # Construct the parameters
         params = Parameters(
