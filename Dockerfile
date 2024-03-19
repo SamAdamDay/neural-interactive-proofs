@@ -38,6 +38,9 @@ RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my
 # Add /root/.local/bin to the path
 ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+# Copy the scripts to the /usr/local/bin directory
+COPY docker/bin/* /usr/local/bin/
+
 # Move to the repo directory
 WORKDIR /root/pvg-experiments
 
