@@ -202,6 +202,12 @@ class HyperparameterExperiment(ABC):
             action="store_true",
             help="Ignore the dataset and model cache and rebuild from scratch.",
         )
+        self.parser.add_argument(
+            "--no-pretrain",
+            dest="no_pretrain",
+            action="store_true",
+            help="Don't pretrain the agents, regardless of the hyperparameters",
+        )
 
         # Create a logging formatter
         self.logging_formatter = MultiLineFormatter(
