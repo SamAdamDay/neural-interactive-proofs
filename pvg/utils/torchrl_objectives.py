@@ -642,7 +642,9 @@ class SpgLoss(PPOLossMultipleActions, ClipPPOLoss):
                 xi, H_0_xi, chi, self.sos_params.a, self.sos_params.b
             )
         else:
-            update = {k: td[k] for td in total_derivatives for k in td}
+            update = {}
+            for td in total_derivatives:
+                update.update(total_derivatives[td])
 
         for param_name, param in self.named_parameters():
             if param_name[:5] == "actor":
