@@ -257,6 +257,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     in_keys = ("x", "adjacency", "message", "node_mask", "ignore_message")
     out_keys = ("graph_level_repr", "node_level_repr")
 
+    @property
+    def d_gnn_out(self) -> int:
+        """The dimensionality of the GNN output after the channel and feature dims"""
+        if (
+            self._agent_params.use_dual_gnn
+            and not self._agent_params.use_manual_architecture
+        ):
+            return 2 * self._agent_params.d_gnn
+        else:
+            return self._agent_params.d_gnn
+
     def __init__(
         self,
         params: Parameters,
@@ -312,6 +323,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def _build_gnn(self, d_input: int) -> TensorDictSequential:
         """Builds the GNN module for an agent.
 
+        Shapes
+        ------
+        Input:
+            - "gnn_repr" (... channel pair node feature): The input graph node features
+            - "adjacency" (... channel pair node node): The graph adjacency matrices
+
+        Output:
+            - "gnn_repr" (... channel pair node feature): The output graph node features
+
         Parameters
         ----------
         d_input : int
@@ -355,6 +375,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                     ),
                     feature_in_key="gnn_repr",
                     feature_out_key="gnn_repr",
+                    adjacency_key="adjacency_channel",
+                    node_mask_key="node_mask_channel",
                     vmap_compatible=True,
                 )
             )
@@ -381,7 +403,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         """
         return Linear(
-            self._agent_params.d_gnn + 3,
+            self.d_gnn_out + 3,
             self._agent_params.d_transformer,
             device=self.device,
         )
@@ -418,6 +440,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         The module consists of a global sum pooling layer, an optional batch norm layer,
         a paired Gaussian noise layer and an optional pair invariant pooling layer.
 
+        Shapes
+        ------
+        Input:
+            - "gnn_repr" (... pair node feature*channels): The input graph node features
+
+        Output:
+            - "pooled_gnn_output" (... pair feature*channels): The output graph-level
+              representation
+
         Returns
         -------
         global_pooling : torch.nn.Sequential
@@ -426,15 +457,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         layers = [
             Reduce(
-                "... pair max_nodes d_gnn -> ... pair d_gnn",
+                "... pair max_nodes d_gnn_out -> ... pair d_gnn_out",
                 "sum",
             ),
         ]
 
         if self._agent_params.use_batch_norm:
-            layers.append(
-                BatchNorm1dSimulateBatchDims(num_features=self._agent_params.d_gnn)
-            )
+            layers.append(BatchNorm1dSimulateBatchDims(num_features=self.d_gnn_out))
 
         layers.append(
             PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),
@@ -521,8 +550,34 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         else:
             data = data.update(dict(gnn_repr=data["x"]))
 
+        # Add the channel dimension, with a vector of zeros when we're using a dual GNN
+        gnn_repr = data["gnn_repr"]
+        if self._agent_params.use_dual_gnn:
+            gnn_repr = torch.stack(
+                (gnn_repr, torch.zeros_like(gnn_repr)),
+                dim=-4,
+            )
+        else:
+            gnn_repr = rearrange(
+                gnn_repr,
+                "... pair node feature -> ... 1 pair node feature",
+            )
+        data = data.update(
+            dict(
+                gnn_repr=gnn_repr,
+                adjacency_channel=rearrange(
+                    data["adjacency"],
+                    "... pair node1 node2 -> ... 1 pair node1 node2",
+                ),
+                node_mask_channel=rearrange(
+                    data["node_mask"],
+                    "... pair node -> ... 1 pair node",
+                ),
+            )
+        )
+
         # Run the GNN on the graphs
-        # (batch, pair, max_nodes, d_gnn)
+        # (batch, channel, pair, max_nodes, d_gnn)
         gnn_output = self.gnn(data)["gnn_repr"]
 
         self._run_recorder_hook(hooks, "gnn_output", gnn_output)
@@ -534,13 +589,20 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         self._run_recorder_hook(hooks, "gnn_output_rounded", gnn_output)
 
+        # Combine the channel and feature dimensions
+        gnn_output = rearrange(
+            gnn_output,
+            "... channel pair node feature -> ... pair node (feature channel)",
+        )
+
         # Obtain the graph-level representations by pooling
-        # (batch, pair, d_gnn)
+        # (batch, pair, channel * d_gnn)
         pooled_gnn_output = self.global_pooling(gnn_output)
 
         self._run_recorder_hook(hooks, "pooled_gnn_output", pooled_gnn_output)
 
-        # Flatten the two batch dimensions in the graph representation and mask
+        # Merge the pair and node dimensions
+        # (batch, pair * node, channel * d_gnn)
         gnn_output_flatter = rearrange(
             gnn_output, "... pair node feature -> ... (pair node) feature"
         )
@@ -548,7 +610,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self._run_recorder_hook(hooks, "gnn_output_flatter", gnn_output_flatter)
 
         # Add the graph-level representations to the transformer input
-        # (..., 2 + 2 * node, d_gnn + 3)
+        # (..., 2 + 2 * node, channel * d_gnn)
         transformer_input = torch.cat((pooled_gnn_output, gnn_output_flatter), dim=-2)
 
         self._run_recorder_hook(hooks, "transformer_input_initial", transformer_input)
@@ -597,6 +659,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self._run_recorder_hook(hooks, "message_feature", message_feature)
 
         # Concatenate everything together
+        # (..., 2 + 2 * node, channel * d_gnn + 3)
         transformer_input = torch.cat(
             (transformer_input, pooled_feature, message_feature), dim=-1
         )
@@ -709,13 +772,31 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         else:
             gnn_repr = torch.zeros_like(data["x"])
 
-        data["gnn_repr"] = gnn_repr
+        data = data.update(
+            dict(
+                gnn_repr=rearrange(
+                    gnn_repr,
+                    "... pair node feature -> ... 1 pair node feature",
+                ),
+                adjacency_channel=rearrange(
+                    data["adjacency"],
+                    "... pair node1 node2 -> ... 1 pair node1 node2",
+                ),
+                node_mask_channel=rearrange(
+                    data["node_mask"],
+                    "... pair node -> ... 1 pair node",
+                ),
+            )
+        )
 
         # Run the GNN on the graphs
         # (batch, pair, max_nodes, d_gnn)
         gnn_output = self.gnn(data)["gnn_repr"]
 
         self._run_recorder_hook(hooks, "gnn_output", gnn_output)
+
+        # Remove the channel dimension
+        gnn_output = gnn_output.squeeze(-4)
 
         # Run the GNN output through the representation encoder to get the node-level
         # representations

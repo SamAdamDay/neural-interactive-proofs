@@ -291,6 +291,10 @@ class GIN(TensorDictModuleBase):
         The key of the input features in the input TensorDict.
     feature_out_key : NestedKey, default="x"
         The key of the output features in the output TensorDict.
+    adjacency_key : NestedKey, default="adjacency"
+        The key of the adjacency matrix in the input TensorDict.
+    node_mask_key : NestedKey, default="node_mask"
+        The key of the node mask in the input TensorDict.
     vmap_compatible : bool, default=False
         Whether the module is compatible with `vmap` or not. If `True`, the node mask
         is only applied after the MLP, which is less efficient but allows for the use
@@ -307,11 +311,11 @@ class GIN(TensorDictModuleBase):
 
     @property
     def in_keys(self) -> Iterable[str]:
-        return (self.feature_in_key, "adjacency", "node_mask")
+        return (self.feature_in_key, self.adjacency_key, self.node_mask_key)
 
     @property
     def out_keys(self) -> Iterable[str]:
-        return (self.feature_out_key, "adjacency", "node_mask")
+        return (self.feature_out_key, self.adjacency_key, self.node_mask_key)
 
     def __init__(
         self,
@@ -320,6 +324,8 @@ class GIN(TensorDictModuleBase):
         train_eps: bool = False,
         feature_in_key: NestedKey = "x",
         feature_out_key: NestedKey = "x",
+        adjacency_key: NestedKey = "adjacency",
+        node_mask_key: NestedKey = "node_mask",
         vmap_compatible: bool = False,
     ):
         super().__init__()
@@ -327,6 +333,8 @@ class GIN(TensorDictModuleBase):
         self.initial_eps = eps
         self.feature_in_key = feature_in_key
         self.feature_out_key = feature_out_key
+        self.adjacency_key = adjacency_key
+        self.node_mask_key = node_mask_key
         self.vmap_compatible = vmap_compatible
         if train_eps:
             self.eps = torch.nn.Parameter(torch.Tensor([eps]))
@@ -343,9 +351,11 @@ class GIN(TensorDictModuleBase):
     ) -> torch.Tensor:
         # Extract the features, adjacency matrix and node mask from the input
         x: Float[Tensor, "... max_nodes feature"] = tensordict[self.feature_in_key]
-        adjacency: Float[Tensor, "... max_nodes max_nodes"] = tensordict["adjacency"]
-        if "node_mask" in tensordict.keys():
-            node_mask: Bool[Tensor, "... max_nodes"] = tensordict["node_mask"]
+        adjacency: Float[Tensor, "... max_nodes max_nodes"] = tensordict[
+            self.adjacency_key
+        ]
+        if self.node_mask_key in tensordict.keys():
+            node_mask: Bool[Tensor, "... max_nodes"] = tensordict[self.node_mask_key]
         else:
             node_mask = torch.ones(x.shape[:-1], dtype=torch.bool, device=x.device)
 
