@@ -42,6 +42,7 @@ param_grid = dict(
     entropy_eps=[0.001],
     lr=[0.003],
     body_lr_factor=[0.1],
+    use_dual_gnn=[True],
     prover_num_layers=[5],
     prover_lr_factor=[1.0],
     prover_manual_architecture=[False],
@@ -62,6 +63,7 @@ param_grid = dict(
     normalize_advantage=[True],
     normalize_message_history=[True],
     min_message_rounds=[0],
+    max_message_rounds=[8],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -101,6 +103,7 @@ def experiment_fn(
             num_transformer_layers=combo["num_transformer_layers"],
             normalize_message_history=combo["normalize_message_history"],
             use_manual_architecture=combo["prover_manual_architecture"],
+            use_dual_gnn=combo["use_dual_gnn"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -114,6 +117,7 @@ def experiment_fn(
                 num_transformer_layers=combo["num_transformer_layers"],
                 normalize_message_history=combo["normalize_message_history"],
                 use_manual_architecture=combo["verifier_manual_architecture"],
+                use_dual_gnn=combo["use_dual_gnn"],
             ),
             prover=prover_params,
         ),
@@ -142,6 +146,7 @@ def experiment_fn(
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
+            max_message_rounds=combo["max_message_rounds"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],

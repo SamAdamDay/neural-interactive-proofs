@@ -73,6 +73,7 @@ param_grid = dict(
     normalize_advantage=[True],
     normalize_message_history=[True],
     min_message_rounds=[0],
+    max_message_rounds=[8],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -153,6 +154,7 @@ def experiment_fn(
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
+            max_message_rounds=combo["max_message_rounds"],
         ),
         pretrain_agents=combo["pretrain_agents"],
         seed=combo["seed"],

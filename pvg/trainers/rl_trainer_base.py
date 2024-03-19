@@ -55,6 +55,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         "solo_agent",
         "image_classification",
         "dataset_options",
+        "pvg_protocol",
+        "debate_protocol",
     ]
 
     def __init__(
