@@ -12,7 +12,6 @@ from torch.optim import Optimizer
 from tensordict import TensorDict
 
 from torchrl.collectors import DataCollectorBase
-from torchrl.objectives import LossModule
 from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 
@@ -28,6 +27,7 @@ from pvg.model_cache import (
 )
 from pvg.scenario_instance import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
+from pvg.rl_objectives import Objective
 from pvg.utils.maths import logit_entropy
 from pvg.utils.torch import DummyOptimizer
 
@@ -173,24 +173,24 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         pass
 
     @abstractmethod
-    def _get_loss_module_and_gae(self) -> tuple[LossModule, GAE]:
+    def _get_loss_module_and_gae(self) -> tuple[Objective, GAE]:
         """Construct the loss module and the generalized advantage estimator
 
         Returns
         -------
-        loss_module : LossModule
+        loss_module : Objective
             The loss module.
         gae : GAE
             The generalized advantage estimator.
         """
         pass
 
-    def _get_optimizer(self, loss_module: LossModule) -> torch.optim.Adam:
+    def _get_optimizer(self, loss_module: Objective) -> torch.optim.Adam:
         """Construct the optimizer for the loss module
 
         Parameters
         ----------
-        loss_module : LossModule
+        loss_module : Objective
             The loss module.
 
         Returns
@@ -264,7 +264,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         train_collector: DataCollectorBase,
         test_collector: DataCollectorBase,
         replay_buffer: ReplayBuffer,
-        loss_module: LossModule,
+        loss_module: Objective,
         gae: GAE,
         optimizer: Optimizer,
     ):
@@ -282,7 +282,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             The data collector to use for collecting data from the test environment.
         replay_buffer : ReplayBuffer
             The replay buffer to use for storing the collected data.
-        loss_module : LossModule
+        loss_module : Objective
             The loss module.
         gae : GAE
             The generalized advantage estimator.
@@ -364,7 +364,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     # gradients. This can be false for example if all agents are frozen
                     if loss_vals.requires_grad:
                         # Compute the gradients
-                        loss_module.compute_grads(loss_vals)
+                        loss_module.backward(loss_vals)
 
                         # Clip gradients and update parameters
                         clip_grad_norm_(
