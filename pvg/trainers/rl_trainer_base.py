@@ -339,6 +339,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             data_view = tensordict_data.reshape(-1)
             replay_buffer.extend(data_view)
 
+            loss_outputs = {}
+
+            total_steps = 0
             for _ in range(self.params.ppo.num_epochs):
                 for _ in range(
                     self.params.ppo.frames_per_batch // self.params.ppo.minibatch_size
@@ -348,6 +351,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
                     # Compute the loss
                     loss_vals: TensorDict = loss_module(sub_data)
+
+                    # Log the loss values
+                    for key, val in loss_vals.items():
+                        if key not in loss_outputs:
+                            loss_outputs[key] = 0
+                        loss_outputs[key] += val.mean().item()
 
                     # Only perform the optimization step if the loss values require
                     # gradients. This can be false for example if all agents are frozen
@@ -362,6 +371,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                         optimizer.step()
                         optimizer.zero_grad()
 
+                    total_steps += 1
+
                     # If we're in test mode, exit after one iteration
                     if self.settings.test_run:
                         break
@@ -373,6 +384,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Update the policy weights if the policy of the data collector and the
             # trained policy live on different devices.
             train_collector.update_policy_weights_()
+
+            # Take an average of the loss values
+            for key in loss_outputs:
+                loss_outputs[key] /= total_steps
 
             # Compute various statistics for the sampled episodes for logging
             done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
@@ -402,6 +417,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     to_log[
                         f"{agent_name}.mean_decision_entropy"
                     ] = mean_decision_entropy[agent_name]
+                for key, val in loss_outputs.items():
+                    to_log[key] = val
                 self.settings.wandb_run.log(to_log, step=iteration)
 
                 # Log artifacts to W&B if it's time to do so

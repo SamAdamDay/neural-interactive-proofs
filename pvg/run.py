@@ -36,6 +36,7 @@ def run_experiment(
     wandb_project: str = WANDB_PROJECT,
     wandb_entity: str = WANDB_ENTITY,
     run_id: Optional[str] = None,
+    allow_auto_generated_run_id: bool = False,
     wandb_tags: list = [],
     num_dataset_threads: int = 8,
     test_run: bool = False,
@@ -64,7 +65,10 @@ def run_experiment(
     wandb_entity : str, default=WANDB_ENTITY
         The name of the W&B entity to log to.
     run_id : str, optional
-        The ID of the run. Required if use_wandb is True.
+        The ID of the run. Required if use_wandb is True and allow_auto_generated_run_id
+        is False.
+    allow_auto_generated_run_id : bool, default=False
+        If True, the run ID can be auto-generated if not specified.
     wandb_tags : list[str], default=[]
         The tags to add to the W&B run.
     num_dataset_threads : int, default=8
@@ -77,8 +81,11 @@ def run_experiment(
 
     # Set up Weights & Biases.
     if use_wandb:
-        if run_id is None:
-            raise ValueError("run_id must be specified if use_wandb is True.")
+        if run_id is None and not allow_auto_generated_run_id:
+            raise ValueError(
+                "run_id must be specified if use_wandb is True and "
+                "allow_auto_generated_run_id is False."
+            )
         wandb_run = wandb.init(
             project=wandb_project,
             entity=wandb_entity,
