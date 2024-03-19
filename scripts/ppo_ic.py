@@ -94,6 +94,13 @@ def experiment_fn(
     if logger.level > logging.DEBUG:
         os.environ["WANDB_SILENT"] = "true"
 
+    # Set the pretrain_agents flag. This can be forced to False with the --no-pretrain
+    # flag.
+    if cmd_args.no_pretrain:
+        pretrain_agents = False
+    else:
+        pretrain_agents = combo["pretrain_agents"]
+
     # Create the parameters object
     if combo["random_prover"]:
         prover_params = RandomAgentParameters()
@@ -156,7 +163,7 @@ def experiment_fn(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),
-        pretrain_agents=combo["pretrain_agents"],
+        pretrain_agents=pretrain_agents,
         seed=combo["seed"],
     )
 
