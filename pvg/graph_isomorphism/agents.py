@@ -16,7 +16,7 @@ The structure of all agent bodies is the same:
 """
 
 from abc import ABC
-from typing import Optional, Any, Iterable
+from typing import Optional, Any, Iterable, ClassVar
 from dataclasses import dataclass
 import re
 
@@ -2112,8 +2112,9 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 
 
 @register_scenario_class(GI_SCENARIO, Agent)
+@dataclass
 class GraphIsomorphismAgent(Agent):
-    _agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters
+    _agent_params: ClassVar[GraphIsomorphismAgentParameters | RandomAgentParameters]
 
     def get_param_dicts(
         self,
