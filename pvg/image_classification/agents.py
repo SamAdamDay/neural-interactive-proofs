@@ -22,6 +22,7 @@ The structure of all agent bodies is the same:
 
 from abc import ABC
 from typing import Optional
+from dataclasses import dataclass
 
 import torch
 from torch.nn import Sequential, Linear
@@ -1497,5 +1498,6 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 
 
 @register_scenario_class(IC_SCENARIO, Agent)
+@dataclass
 class ImageClassificationAgent(Agent):
     pass

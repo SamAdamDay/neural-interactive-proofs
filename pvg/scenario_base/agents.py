@@ -10,7 +10,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any, Iterable, Callable
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, InitVar
 from functools import partial
 import re
 
@@ -371,6 +371,7 @@ class CombinedValueHead(CombinedAgentPart, ABC):
         """
 
 
+@dataclass
 class Agent:
     """A class which holds all the parts of an agent for an experiment.
 
@@ -390,29 +391,28 @@ class Agent:
         The solo head of the agent.
     """
 
-    def __init__(
+    params: InitVar[Parameters]
+    agent_name: InitVar[str]
+    body: AgentBody
+    policy_head: Optional[AgentPolicyHead] = None
+    value_head: Optional[AgentValueHead] = None
+    solo_head: Optional[SoloAgentHead] = None
+
+    def __post_init__(
         self,
         params: Parameters,
         agent_name: str,
-        body: AgentBody,
-        policy_head: Optional[AgentPolicyHead] = None,
-        value_head: Optional[AgentValueHead] = None,
-        solo_head: Optional[SoloAgentHead] = None,
     ):
-        if policy_head is None and solo_head is None:
+        if self.policy_head is None and self.solo_head is None:
             raise ValueError(
                 "An agent must have either a policy head or a solo head, or both."
             )
 
-        if policy_head is not None and value_head is None:
+        if self.policy_head is not None and self.value_head is None:
             raise ValueError("An agent with a policy head must have a value head")
 
         self.params = params
         self.agent_name = agent_name
-        self.body = body
-        self.policy_head = policy_head
-        self.value_head = value_head
-        self.solo_head = solo_head
 
         self._agent_params = params.agents[agent_name]
 
