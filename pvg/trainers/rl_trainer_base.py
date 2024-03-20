@@ -199,63 +199,21 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             The optimizer.
         """
 
-        # Set the learning rate of the agent bodies to be a factor of the learning rate
-        # of the loss module
-        model_param_dict = []
-        for agent_name, agent_params in self.params.agents.items():
-            # The learning rate of the whole agent
-            agent_lr = agent_params.agent_lr_factor * self.params.ppo.lr
+        # Get the learning rates and parameters for each of the agents
+        model_param_dicts = []
+        for agent in self.scenario_instance.agents.values():
+            model_param_dicts.extend(
+                agent.get_param_dicts(
+                    base_lr=self.params.ppo.lr,
+                    named_parameters=loss_module.named_parameters(),
+                    body_lr_factor_override=self.params.ppo.body_lr_factor,
+                )
+            )
 
-            # Determine the learning rate of the body. If the LR factor is set in the
-            # PPO parameters, use that. Otherwise, use the LR factor from the agent
-            # parameters.
-            if self.params.ppo.body_lr_factor is None:
-                body_lr = agent_lr * agent_params.body_lr_factor
-            else:
-                body_lr = agent_lr * self.params.ppo.body_lr_factor
-
-            # Set the learning rate for the body parameters, or freeze them if the LR is
-            # 0
-            body_params = [
-                param
-                for param_name, param in loss_module.named_parameters()
-                if param_name.startswith(f"actor_network_params.module_0_{agent_name}")
-            ]
-            if body_lr == 0:
-                for param in body_params:
-                    param.requires_grad = False
-            else:
-                model_param_dict.append(dict(params=body_params, lr=body_lr))
-
-            # Set the learning rate for the non-body parameters
-            def is_non_body_param(param_name: str):
-                if re.match(
-                    f"actor_network_params.module_[1-9]_{agent_name}", param_name
-                ):
-                    return True
-                if re.match(
-                    f"critic_network_params.module_[0-9]_{agent_name}", param_name
-                ):
-                    return True
-                return False
-
-            # Set the learning rate for the non-body parameters, or freeze them if the
-            # LR is 0
-            non_body_params = [
-                param
-                for param_name, param in loss_module.named_parameters()
-                if is_non_body_param(param_name)
-            ]
-            if agent_lr == 0:
-                for param in non_body_params:
-                    param.requires_grad = False
-            else:
-                model_param_dict.append(dict(params=non_body_params, lr=agent_lr))
-
-        if len(model_param_dict) == 0:
+        if len(model_param_dicts) == 0:
             return DummyOptimizer()
         else:
-            return torch.optim.Adam(model_param_dict)
+            return torch.optim.Adam(model_param_dicts)
 
     def _run_rl_training_loop(
         self,

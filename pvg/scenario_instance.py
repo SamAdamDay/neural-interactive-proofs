@@ -219,7 +219,9 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                 agent_name=agent_name,
             )
 
-        agents[agent_name] = Agent(**agent_dict)
+        agents[agent_name] = scenario_classes[Agent](
+            params=params, agent_name=agent_name, **agent_dict
+        )
 
         # Load the agent checkpoint if requested
         if agent_params.load_checkpoint_and_parameters:

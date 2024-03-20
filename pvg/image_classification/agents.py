@@ -48,6 +48,7 @@ from pvg.scenario_base import (
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
+    Agent,
 )
 from pvg.scenario_instance import register_scenario_class
 from pvg.protocols import ProtocolHandler
@@ -1493,3 +1494,8 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
                 )
             ),
         )
+
+
+@register_scenario_class(IC_SCENARIO, Agent)
+class ImageClassificationAgent(Agent):
+    pass
