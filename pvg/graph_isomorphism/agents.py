@@ -16,8 +16,9 @@ The structure of all agent bodies is the same:
 """
 
 from abc import ABC
-from typing import Optional
+from typing import Optional, Any, Iterable
 from dataclasses import dataclass
+import re
 
 import torch
 from torch.nn import (
@@ -29,6 +30,7 @@ from torch.nn import (
 from torch import Tensor
 import torch.nn.functional as F
 from torch.linalg import vector_norm
+from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -52,6 +54,7 @@ from pvg.scenario_base import (
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,
+    Agent,
 )
 from pvg.scenario_instance import register_scenario_class
 from pvg.parameters import (
@@ -2106,3 +2109,132 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
                 )
             ),
         )
+
+
+@register_scenario_class(GI_SCENARIO, Agent)
+class GraphIsomorphismAgent(Agent):
+    _agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters
+
+    def get_param_dicts(
+        self,
+        base_lr: float,
+        named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
+        body_lr_factor_override: Optional[float] = None,
+        body_param_regex_prefixes: Iterable[str] = ("actor_network_params.module_0_",),
+        non_body_param_regex_prefixes: Iterable[str] = (
+            "actor_network_params.module_[1-9]_",
+            "critic_network_params.module_[0-9]_",
+        ),
+    ) -> Iterable[dict[str, Any]]:
+        """Get the Torch parameters of the agent, and their learning rates.
+
+        Parameters
+        ----------
+        base_lr : float
+            The base learning rate for the trainer.
+        named_parameters : Iterable[tuple[str, TorchParameter]], optional
+            The named parameters of the loss module, usually obtained by
+            `loss_module.named_parameters()`. If not given, the parameters of all the
+            agent parts are used.
+        body_lr_factor_override : float, optional
+            The learning rate factor for the body, which overrides the one set in the
+            agent params.
+        body_param_regex_prefixes : Iterable[str], optional
+            The regular expression prefixes for the names of the body parameters. If not
+            given, the default ones are used.
+        non_body_param_regex_prefixes : Iterable[str], optional
+            The regular expression prefixes for the names of the non-body parameters. If
+            not given, the default ones are used.
+
+        Returns
+        -------
+        param_dict : Iterable[dict[str, Any]]
+            The Torch parameters of the agent, and their learning rates. This is an
+            iterable of dictionaries with the keys `params` and `lr`.
+        """
+
+        # The learning rate of the whole agent
+        agent_lr = self._agent_params.agent_lr_factor * base_lr
+
+        # Determine the learning rate of the body.
+        if body_lr_factor_override is None:
+            body_lr = agent_lr * self._agent_params.body_lr_factor
+        else:
+            body_lr = agent_lr * body_lr_factor_override
+
+        # Determine the learning rate for the GNN encoder
+        if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
+            gnn_lr = body_lr * self._agent_params.gnn_lr_factor
+        else:
+            gnn_lr = 0
+
+        model_param_dict = []
+
+        # If named_parameters is not given, use the parameters of all the agent parts
+        if named_parameters is None:
+            body_named_parameters = self.body.named_parameters()
+            self._append_filtered_params(
+                model_param_dict,
+                body_named_parameters,
+                lambda x: x.startswith("gnn"),
+                gnn_lr,
+            )
+            self._append_filtered_params(
+                model_param_dict,
+                body_named_parameters,
+                lambda x: not x.startswith("gnn"),
+                body_lr,
+            )
+            if self.policy_head is not None:
+                model_param_dict.append(
+                    dict(params=self.policy_head.parameters(), lr=agent_lr)
+                )
+            if self.value_head is not None:
+                model_param_dict.append(
+                    dict(params=self.value_head.parameters(), lr=agent_lr)
+                )
+            if self.solo_head is not None:
+                model_param_dict.append(
+                    dict(params=self.solo_head.parameters(), lr=agent_lr)
+                )
+            return model_param_dict
+
+        # Convert the named parameters to a list, so that we can iterate over it
+        # multiple times
+        named_parameters = list(named_parameters)
+
+        def is_gnn_param(param_name: str):
+            return any(
+                re.match(f"{prefix}{self.agent_name}_gnn", param_name)
+                for prefix in body_param_regex_prefixes
+            )
+
+        def is_body_param(param_name: str):
+            return any(
+                re.match(f"{prefix}{self.agent_name}", param_name)
+                for prefix in body_param_regex_prefixes
+            ) and not is_gnn_param(param_name)
+
+        # Set the learning rate for the GNN parameters
+        self._append_filtered_params(
+            model_param_dict, named_parameters, is_gnn_param, gnn_lr
+        )
+
+        # Set the learning rate for the body parameters other than the GNN parameters
+        self._append_filtered_params(
+            model_param_dict, named_parameters, is_body_param, body_lr
+        )
+
+        # Set the learning rate for the non-body parameters
+        def is_non_body_param(param_name: str):
+            return any(
+                re.match(f"{prefix}{self.agent_name}", param_name)
+                for prefix in non_body_param_regex_prefixes
+            )
+
+        # Set the learning rate for the non-body parameters
+        self._append_filtered_params(
+            model_param_dict, named_parameters, is_non_body_param, agent_lr
+        )
+
+        return model_param_dict

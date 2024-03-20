@@ -2,6 +2,7 @@
 
 This is useful for ensuring that the agents are able to learn the task in isolation.
 """
+
 import logging
 
 import numpy as np
@@ -77,21 +78,11 @@ class SoloAgentTrainer(Trainer):
         # Create the optimizers, specifying the learning rates for the different parts of
         # the agent
         optimizers: dict[str, Optimizer] = {}
-        for agent_name, agent_params in agents_params.items():
-            if self.params.solo_agent.body_lr_factor is None:
-                body_lr_factor = agent_params.body_lr_factor
-            else:
-                body_lr_factor = self.params.solo_agent.body_lr_factor
-            model_param_dict = [
-                {
-                    "params": agents[agent_name].body.parameters(),
-                    "lr": self.params.solo_agent.learning_rate * body_lr_factor,
-                },
-                {
-                    "params": agents[agent_name].solo_head.parameters(),
-                    "lr": self.params.solo_agent.learning_rate,
-                },
-            ]
+        for agent_name, agent in agents.items():
+            model_param_dict = agent.get_param_dicts(
+                base_lr=self.params.solo_agent.learning_rate,
+                body_lr_factor_override=self.params.solo_agent.body_lr_factor,
+            )
             optimizers[agent_name] = Adam(model_param_dict)
 
         # Create the data loaders

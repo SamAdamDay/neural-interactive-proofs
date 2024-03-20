@@ -41,7 +41,8 @@ param_grid = dict(
     clip_epsilon=[0.2],
     entropy_eps=[0.001],
     lr=[0.003],
-    body_lr_factor=[0.1],
+    body_lr_factor=[1.0],
+    gnn_lr_factor=[0.1],
     use_dual_gnn=[True],
     prover_num_layers=[5],
     prover_lr_factor=[1.0],
@@ -111,6 +112,7 @@ def experiment_fn(
             normalize_message_history=combo["normalize_message_history"],
             use_manual_architecture=combo["prover_manual_architecture"],
             use_dual_gnn=combo["use_dual_gnn"],
+            gnn_lr_factor=combo["gnn_lr_factor"],
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -125,6 +127,7 @@ def experiment_fn(
                 normalize_message_history=combo["normalize_message_history"],
                 use_manual_architecture=combo["verifier_manual_architecture"],
                 use_dual_gnn=combo["use_dual_gnn"],
+                gnn_lr_factor=combo["gnn_lr_factor"],
             ),
             prover=prover_params,
         ),

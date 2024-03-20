@@ -39,13 +39,13 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
         ),
@@ -53,13 +53,13 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, **basic_agent_params
+                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
         ),
@@ -67,13 +67,13 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0),
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, **basic_agent_params
+                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
         ),
@@ -84,10 +84,66 @@ def test_gi_ppo_train_optimizer_groups():
             ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.01),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, **basic_agent_params
+                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, gnn_lr_factor=0.1, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.1),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
                 ),
             ),
         ),
@@ -96,10 +152,62 @@ def test_gi_ppo_train_optimizer_groups():
     # Define the expected learning rates for the prover body, the verifier body, and the
     # rest of the parameters
     expected_lrs = [
-        dict(prover=3.0, verifier=3.0, rest=3.0),
-        dict(prover=0.3, verifier=3.0, rest=3.0),
-        dict(prover=3.0, verifier=0.3, rest=3.0),
-        dict(prover=0.03, verifier=0.03, rest=3.0),
+        dict(
+            prover_gnn=3.0,
+            prover_body=3.0,
+            verifier_gnn=3.0,
+            verifier_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=0.3,
+            prover_body=0.3,
+            verifier_gnn=3.0,
+            verifier_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=3.0,
+            prover_body=3.0,
+            verifier_gnn=0.3,
+            verifier_body=0.3,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=0.03,
+            prover_body=0.03,
+            verifier_gnn=0.03,
+            verifier_body=0.03,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=0.3,
+            prover_body=3.0,
+            verifier_gnn=3.0,
+            verifier_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=0.03,
+            prover_body=0.3,
+            verifier_gnn=3.0,
+            verifier_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=0.03,
+            prover_body=0.3,
+            verifier_gnn=0.3,
+            verifier_body=0.3,
+            rest=3.0,
+        ),
+        dict(
+            prover_gnn=3.0,
+            prover_body=3.0,
+            verifier_gnn=0.3,
+            verifier_body=3.0,
+            rest=3.0,
+        ),
     ]
 
     for i, params in enumerate(params_list):
@@ -129,9 +237,13 @@ def test_gi_ppo_train_optimizer_groups():
             assert optimizer_has_param
 
             # Check that the learning rate is correct
-            if param_name.startswith("actor_network_params.module_0_prover"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["prover"])
+            if param_name.startswith("actor_network_params.module_0_prover_gnn"):
+                assert optimizer_lr == pytest.approx(expected_lrs[i]["prover_gnn"])
+            elif param_name.startswith("actor_network_params.module_0_verifier_gnn"):
+                assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier_gnn"])
+            elif param_name.startswith("actor_network_params.module_0_prover"):
+                assert optimizer_lr == pytest.approx(expected_lrs[i]["prover_body"])
             elif param_name.startswith("actor_network_params.module_0_verifier"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier"])
+                assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier_body"])
             else:
                 assert optimizer_lr == pytest.approx(expected_lrs[i]["rest"])

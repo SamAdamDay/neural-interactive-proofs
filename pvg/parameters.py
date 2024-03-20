@@ -389,8 +389,13 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
     body_lr_factor : float
-        The learning rate factor for the body part of the model. This allows updating
-        the body at a different rate to the rest of the model.
+        The learning rate factor for the body part of the model. The final LR for the
+        body is obtained by multiplying this factor by the agent LR factor and the base
+        LR. This allows updating the body at a different rate to the rest of the model.
+    gnn_lr_factor : float
+        The learning rate factor for the GNN part of the model. The final LR for the GNN
+        is obtained by multiplying this factor by the body LR. This allows updating the
+        GNN at a different rate to the rest of the model.
     """
 
     activation_function: ActivationType = ActivationType.TANH
@@ -422,7 +427,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
 
-    body_lr_factor: float = 0.1
+    body_lr_factor: float = 1.0
+    gnn_lr_factor: float = 0.1
 
 
 @dataclass
