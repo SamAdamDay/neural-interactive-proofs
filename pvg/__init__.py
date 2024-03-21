@@ -15,6 +15,7 @@ from .parameters import (
     DebateProtocolParameters,
     ScenarioType,
     TrainerType,
+    PpoLossType,
     ActivationType,
     BinarificationMethodType,
     SpgVariant,
