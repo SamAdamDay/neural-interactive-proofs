@@ -2,14 +2,14 @@ from sklearn.model_selection import ParameterGrid
 
 from pvg import (
     Parameters,
-    AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     SoloAgentParameters,
     CommonPpoParameters,
     SpgParameters,
-    SpgVariant,  # TODO Ideally combine this with SpgParameters
+    SpgVariant,
     ScenarioType,
+    PpoLossType,
     TrainerType,
     InteractionProtocolType,
     run_experiment,
@@ -83,16 +83,29 @@ def test_prepare_run_experiment():
                 ScenarioType.IMAGE_CLASSIFICATION,
             ],
             "trainer": [TrainerType.VANILLA_PPO],
+            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [SpgVariant.SPG],
             "is_random": [True, False],
             "pretrain_agents": [True, False],
             "manual_architecture": [None],
         },
+        # Test the KL penalty loss
+        {
+            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
+            "trainer": [TrainerType.VANILLA_PPO],
+            "ppo_loss": [PpoLossType.KL_PENALTY],
+            "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [SpgVariant.SPG],
+            "is_random": [False],
+            "pretrain_agents": [False],
+            "manual_architecture": [None],
+        },
         # Test the other solo agent trainer
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT],
+            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [SpgVariant.SPG],
             "is_random": [False],
@@ -103,6 +116,7 @@ def test_prepare_run_experiment():
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.SPG],
+            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [
                 SpgVariant.SPG,
@@ -120,6 +134,7 @@ def test_prepare_run_experiment():
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.VANILLA_PPO],
+            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [
                 InteractionProtocolType.DEBATE,
                 InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
@@ -134,6 +149,7 @@ def test_prepare_run_experiment():
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.VANILLA_PPO],
+            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [SpgVariant.SPG],
             "is_random": [False],
@@ -145,10 +161,14 @@ def test_prepare_run_experiment():
     for param_spec in ParameterGrid(param_specs):
         scenario_type = param_spec["scenario"]
         trainer_type = param_spec["trainer"]
+        ppo_loss_type = param_spec["ppo_loss"]
         protocol_type = param_spec["protocol"]
         is_random = param_spec["is_random"]
         pretrain_agents = param_spec["pretrain_agents"]
         manual_architecture = param_spec["manual_architecture"]
+
+        # Construct the PPO parameters
+        common_ppo_params.loss_type = ppo_loss_type
 
         # Construct the agent parameters
         agents_param = {}

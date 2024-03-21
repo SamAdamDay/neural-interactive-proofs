@@ -14,6 +14,7 @@ from pvg import (
     TrainerType,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    PpoLossType,
     run_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
@@ -51,8 +52,9 @@ def run(cmd_args: Namespace):
         ppo=CommonPpoParameters(
             num_iterations=100,
             num_epochs=1,
-            minibatch_size=1,
-            frames_per_batch=8,
+            minibatch_size=2,
+            frames_per_batch=16,
+            loss_type=PpoLossType.CLIP,
         ),
         protocol_common=CommonProtocolParameters(
             shared_reward=False,

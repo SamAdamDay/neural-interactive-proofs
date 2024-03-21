@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import torch
 from torch import Tensor
 
-from torchrl.objectives import PPOLoss, ClipPPOLoss, LossModule
+from torchrl.objectives import PPOLoss, ClipPPOLoss, KLPENPPOLoss, LossModule
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn.distributions import CompositeDistribution
@@ -33,8 +33,8 @@ class Objective(LossModule, ABC):
         """
 
 
-class PPOLossMultipleActions(Objective, PPOLoss):
-    """Parent PPO loss class which allows multiple actions keys
+class PPOLossImproved(Objective, PPOLoss, ABC):
+    """Base PPO loss class which allows multiple actions keys and normalises advantages
 
     The implementation is a bit of a hack. We change the _AcceptedKeys class dynamically
     to allow for multiple action keys.
@@ -223,28 +223,6 @@ class PPOLossMultipleActions(Objective, PPOLoss):
 
         return log_prob, log_weight, dist
 
-    def backward(self, loss_vals: TensorDictBase):
-        """Perform the backward pass for the loss.
-
-        Parameters
-        ----------
-        loss_vals : TensorDictBase
-            The loss values.
-        """
-        loss_value = (
-            loss_vals["loss_objective"]
-            + loss_vals["loss_critic"]
-            + loss_vals["loss_entropy"]
-        )
-        loss_value.backward()
-
-
-class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
-    """Clipped PPO loss which allows multiple actions keys and normalises advantages
-
-    See `torchrl.objectives.ClipPPOLoss` for more details
-    """
-
     def _get_advantage(self, tensordict: TensorDictBase) -> torch.Tensor:
         """Get the advantage for a tensordict, normalising it if required.
 
@@ -316,6 +294,28 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
                 flatten_batch_dims(loss_critic, num_batch_dims).mean(dim=0).sum(),
             )
 
+    def backward(self, loss_vals: TensorDictBase):
+        """Perform the backward pass for the loss.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
+        loss_value = (
+            loss_vals["loss_objective"]
+            + loss_vals["loss_critic"]
+            + loss_vals["loss_entropy"]
+        )
+        loss_value.backward()
+
+
+class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
+    """Clipped PPO loss which allows multiple actions keys and normalises advantages
+
+    See `torchrl.objectives.ClipPPOLoss` for more details
+    """
+
     def _set_ess(self, num_batch_dims: int, td_out: TensorDictBase, log_weight: Tensor):
         """Set the ESS in the output TensorDict, for logging
 
@@ -372,6 +372,65 @@ class ClipPPOLossImproved(PPOLossMultipleActions, ClipPPOLoss):
 
         self._set_entropy_and_critic_losses(tensordict, td_out, dist)
         self._set_ess(num_batch_dims, td_out, log_weight)
+
+        return td_out
+
+
+class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
+    """KL penalty PPO loss which allows multiple actions keys and normalises advantages
+
+    See `torchrl.objectives.KLPENPPOLoss` for more details
+    """
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+        tensordict = tensordict.clone(False)
+
+        # Compute the advantage
+        advantage = self._get_advantage(tensordict)
+
+        # Compute the log weights
+        _, log_weight, dist = self._log_weight(tensordict)
+        neg_loss = log_weight.exp() * advantage
+
+        previous_dist = self.actor_network.build_dist_from_params(tensordict)
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
+            current_dist = self.actor_network.get_dist(tensordict)
+        try:
+            kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
+        except NotImplementedError:
+            x = previous_dist.sample((self.samples_mc_kl,))
+            previous_log_prob = previous_dist.log_prob(x)
+            current_log_prob = current_dist.log_prob(x)
+            if isinstance(previous_log_prob, TensorDictBase):
+                previous_log_prob = previous_log_prob.flatten_keys()
+                current_log_prob = current_log_prob.flatten_keys()
+                keys = list(previous_log_prob.keys())
+                previous_log_prob = torch.cat(
+                    [previous_log_prob[key] for key in keys], dim=0
+                )
+                current_log_prob = torch.cat(
+                    [current_log_prob[key] for key in keys], dim=0
+                )
+            kl = (previous_log_prob - current_log_prob).mean(0)
+
+        neg_loss = neg_loss - self.beta * kl
+        if kl.mean() > self.dtarg * 1.5:
+            self.beta.data *= self.increment
+        elif kl.mean() < self.dtarg / 1.5:
+            self.beta.data *= self.decrement
+        td_out = TensorDict(
+            {
+                "loss_objective": -neg_loss.mean(),
+                "kl": kl.detach().mean(),
+            },
+            [],
+        )
+
+        self._set_entropy_and_critic_losses(tensordict, td_out, dist)
 
         return td_out
 

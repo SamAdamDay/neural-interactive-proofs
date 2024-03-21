@@ -94,6 +94,13 @@ class TrainerType(StrEnum):
     SPG = enum_auto()
 
 
+class PpoLossType(StrEnum):
+    """Enum for the PPO loss function to use."""
+
+    CLIP = enum_auto()
+    KL_PENALTY = enum_auto()
+
+
 class BinarificationMethodType(StrEnum):
     """Enum for ways of turning a multi-class classification task into a binary one.
 
@@ -531,16 +538,28 @@ class CommonPpoParameters(SubParameters):
         The learning rate.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
-    gamma : float
-        The discount factor.
-    lmbda : float
-        The GAE lambda parameter.
+    loss_type : PpoLossType
+        The type of PPO loss function to use. See `PpoLossType` for options.
     clip_epsilon : float
-        The PPO clip range.
+        The PPO clip range when using the clipped PPO loss.
+    kl_target : float
+        The target KL divergence when using the KL penalty PPO loss.
+    kl_beta : float
+        The coefficient of the KL penalty term in the PPO loss.
+    kl_decrement : float
+        The decrement factor for the KL penalty term in the PPO loss.
+    kl_increment : float
+        The increment factor for the KL penalty term in the PPO loss.
+    critic_coef : float
+        The coefficient of the critic term in the PPO loss.
     entropy_eps : float
         The coefficient of the entropy term in the PPO loss.
     normalize_advantage : bool
         Whether to normalise the advantages in the PPO loss.
+    gamma : float
+        The discount factor.
+    lmbda : float
+        The GAE lambda parameter.
     body_lr_factor : float, optional
         The learning rate factor for the body part of the model. If set this overrides
         the `body_lr_factor` parameter of each agent.
@@ -556,14 +575,22 @@ class CommonPpoParameters(SubParameters):
     num_epochs: int = 4
     minibatch_size: int = 64
     lr: float = 0.003
-    max_grad_norm = 1.0
+    max_grad_norm: float = 1.0
+
+    # Loss function
+    loss_type: PpoLossType = PpoLossType.CLIP
+    clip_epsilon: float = 0.2
+    kl_target: float = 0.01
+    kl_beta: float = 1.0
+    kl_decrement: float = 0.5
+    kl_increment: float = 2.0
+    critic_coef: float = 1.0
+    entropy_eps: float = 0.001
+    normalize_advantage: bool = True
 
     # PPO
     gamma: float = 0.9
     lmbda: float = 0.95
-    clip_epsilon: float = 0.2
-    entropy_eps: float = 0.001
-    normalize_advantage: bool = True
 
     # Agents
     body_lr_factor: Optional[float] = None

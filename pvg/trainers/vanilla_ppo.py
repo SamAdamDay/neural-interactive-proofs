@@ -11,10 +11,10 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.objectives import ValueEstimators
 
-from pvg.rl_objectives import ClipPPOLossImproved
+from pvg.rl_objectives import ClipPPOLossImproved, KLPENPPOLossImproved
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.trainers.registry import register_trainer
-from pvg.parameters import TrainerType
+from pvg.parameters import TrainerType, PpoLossType
 from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
@@ -128,13 +128,27 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
         """
 
         # Construct the loss module
-        loss_module = ClipPPOLossImproved(
-            actor=self._policy_operator,
-            critic=self._value_operator,
-            clip_epsilon=self.params.ppo.clip_epsilon,
-            entropy_coef=self.params.ppo.entropy_eps,
-            normalize_advantage=self.params.ppo.normalize_advantage,
-        )
+        if self.params.ppo.loss_type == PpoLossType.CLIP:
+            loss_module = ClipPPOLossImproved(
+                actor=self._policy_operator,
+                critic=self._value_operator,
+                clip_epsilon=self.params.ppo.clip_epsilon,
+                entropy_coef=self.params.ppo.entropy_eps,
+                critic_coef=self.params.ppo.critic_coef,
+                normalize_advantage=self.params.ppo.normalize_advantage,
+            )
+        elif self.params.ppo.loss_type == PpoLossType.KL_PENALTY:
+            loss_module = KLPENPPOLossImproved(
+                actor=self._policy_operator,
+                critic=self._value_operator,
+                dtarg=self.params.ppo.kl_target,
+                beta=self.params.ppo.kl_beta,
+                decrement=self.params.ppo.kl_decrement,
+                increment=self.params.ppo.kl_increment,
+                entropy_coef=self.params.ppo.entropy_eps,
+                critic_coef=self.params.ppo.critic_coef,
+                normalize_advantage=self.params.ppo.normalize_advantage,
+            )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
             action=self.train_environment.action_keys,
