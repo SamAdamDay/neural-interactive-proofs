@@ -368,6 +368,20 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 mean_decision_entropy[agent_name] = (
                     logit_entropy(decision_logits[..., i]).mean().item()
                 )
+            mean_accuracy = (
+                (
+                    (
+                        tensordict_data["agents"]["decision"][
+                            ..., self._agent_names.index("verifier")
+                        ]
+                        * tensordict_data["next"]["done"]
+                    ).view(tensordict_data["y"].shape)
+                    == tensordict_data["y"]
+                )
+                .float()
+                .mean()
+                .item()
+            )
 
             if self.settings.wandb_run is not None:
                 # Compute the average episode length
@@ -382,6 +396,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     to_log[
                         f"{agent_name}.mean_decision_entropy"
                     ] = mean_decision_entropy[agent_name]
+                to_log["mean_accuracy"] = mean_accuracy
                 for key, val in loss_outputs.items():
                     to_log[key] = val
                 self.settings.wandb_run.log(to_log, step=iteration)
