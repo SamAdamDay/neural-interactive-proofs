@@ -266,6 +266,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         for iteration, tensordict_data in enumerate(train_collector):
             # Expand the done and terminated to match the reward shape (this is expected
             # by the value estimator)
+
+            # Janky fix for now TODO
+            tensordict_data["terminated"] = tensordict_data["done"]
+            tensordict_data["next"]["terminated"] = tensordict_data["next"]["done"]
+
             tensordict_data.set(
                 ("next", "agents", "done"),
                 tensordict_data.get(("next", "done"))
@@ -363,6 +368,20 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 mean_decision_entropy[agent_name] = (
                     logit_entropy(decision_logits[..., i]).mean().item()
                 )
+            mean_accuracy = (
+                (
+                    (
+                        tensordict_data["agents"]["decision"][
+                            ..., self._agent_names.index("verifier")
+                        ]
+                        * tensordict_data["next"]["done"]
+                    ).view(tensordict_data["y"].shape)
+                    == tensordict_data["y"]
+                )
+                .float()
+                .mean()
+                .item()
+            )
 
             if self.settings.wandb_run is not None:
                 # Compute the average episode length
@@ -377,6 +396,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     to_log[
                         f"{agent_name}.mean_decision_entropy"
                     ] = mean_decision_entropy[agent_name]
+                to_log["mean_accuracy"] = mean_accuracy
                 for key, val in loss_outputs.items():
                     to_log[key] = val
                 self.settings.wandb_run.log(to_log, step=iteration)
@@ -403,6 +423,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         with torch.no_grad():
             mean_rewards = {agent_name: 0 for agent_name in self._agent_names}
             mean_episode_length = 0
+            mean_accuracy = 0
             for iteration, tensordict_data in enumerate(test_collector):
                 # Expand the done to match the reward shape
                 tensordict_data.set(
@@ -422,6 +443,22 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 for i, agent_name in enumerate(self._agent_names):
                     mean_rewards[agent_name] += reward[..., i][done].mean().item()
 
+                # Compute the mean accuracy for the done episodes
+                mean_accuracy += (
+                    (
+                        (
+                            tensordict_data["agents"]["decision"][
+                                ..., self._agent_names.index("verifier")
+                            ]
+                            * tensordict_data["next"]["done"]
+                        ).view(tensordict_data["y"].shape)
+                        == tensordict_data["y"]
+                    )
+                    .float()
+                    .mean()
+                    .item()
+                )
+
                 # Compute the average episode length
                 round = tensordict_data.get(("next", "round"))
                 mean_episode_length += round[done].float().mean().item()
@@ -437,12 +474,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             for agent_name in self._agent_names:
                 mean_rewards[agent_name] /= self.params.ppo.num_test_iterations
             mean_episode_length /= self.params.ppo.num_test_iterations
+            mean_accuracy /= self.params.ppo.num_test_iterations
 
             if self.settings.wandb_run is not None:
                 # Log the mean episode length and mean rewards
                 to_log = dict(test_mean_episode_length=mean_episode_length)
                 for agent_name in self._agent_names:
                     to_log[f"{agent_name}.test_mean_reward"] = mean_rewards[agent_name]
+                to_log["test_mean_accuracy"] = mean_accuracy
                 self.settings.wandb_run.log(to_log)
 
         # Close the progress bar
