@@ -388,9 +388,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 for agent_name in self._agent_names:
                     to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
                     to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
-                    to_log[f"{agent_name}.mean_decision_entropy"] = (
-                        mean_decision_entropy[agent_name]
-                    )
+                    to_log[
+                        f"{agent_name}.mean_decision_entropy"
+                    ] = mean_decision_entropy[agent_name]
                 to_log["mean_accuracy"] = mean_accuracy
                 for key, val in loss_outputs.items():
                     to_log[key] = val
