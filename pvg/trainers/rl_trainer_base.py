@@ -368,16 +368,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 mean_decision_entropy[agent_name] = (
                     logit_entropy(decision_logits[..., i]).mean().item()
                 )
+            verifier_decision = tensordict_data.get(("agents", "decision"))[
+                ..., self._agent_names.index("verifier")
+            ]
             mean_accuracy = (
-                (
-                    (
-                        tensordict_data["agents"]["decision"][
-                            ..., self._agent_names.index("verifier")
-                        ]
-                        * tensordict_data["next"]["done"]
-                    ).view(tensordict_data["y"].shape)
-                    == tensordict_data["y"]
-                )
+                (verifier_decision[done] == tensordict_data["y"][done])
                 .float()
                 .mean()
                 .item()
