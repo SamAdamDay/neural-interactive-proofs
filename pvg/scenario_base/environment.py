@@ -218,6 +218,12 @@ class Environment(EnvBase, ABC):
                 dtype=torch.bool,
                 device=self.device,
             ),
+            terminated=BinaryDiscreteTensorSpec(
+                self.num_envs,
+                shape=(self.num_envs,),
+                dtype=torch.bool,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -256,6 +262,7 @@ class Environment(EnvBase, ABC):
         # Compute the done signal and reward
         done, reward = self.protocol_handler.step_interaction_protocol(env_td)
         next_td.set("done", done)
+        next_td.set("terminated", done)
         next_td.set(("agents", "reward"), reward)
         next_td.set(
             "decision_restriction", torch.zeros_like(done, dtype=self._int_dtype)

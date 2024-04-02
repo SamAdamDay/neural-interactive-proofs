@@ -266,11 +266,6 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         for iteration, tensordict_data in enumerate(train_collector):
             # Expand the done and terminated to match the reward shape (this is expected
             # by the value estimator)
-
-            # Janky fix for now TODO
-            tensordict_data["terminated"] = tensordict_data["done"]
-            tensordict_data["next"]["terminated"] = tensordict_data["next"]["done"]
-
             tensordict_data.set(
                 ("next", "agents", "done"),
                 tensordict_data.get(("next", "done"))

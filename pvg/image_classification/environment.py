@@ -229,6 +229,7 @@ class ImageClassificationEnvironment(Environment):
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0
         env_td["done"][mask] = False
+        env_td["terminated"][mask] = False
         env_td["decision_restriction"][mask] = 0
 
         return env_td
