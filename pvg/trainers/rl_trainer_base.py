@@ -434,16 +434,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     mean_rewards[agent_name] += reward[..., i][done].mean().item()
 
                 # Compute the mean accuracy for the done episodes
-                mean_accuracy += (
-                    (
-                        (
-                            tensordict_data["agents"]["decision"][
-                                ..., self._agent_names.index("verifier")
-                            ]
-                            * tensordict_data["next"]["done"]
-                        ).view(tensordict_data["y"].shape)
-                        == tensordict_data["y"]
-                    )
+                verifier_decision = tensordict_data.get(("agents", "decision"))[
+                    ..., self._agent_names.index("verifier")
+                ]
+                mean_accuracy = (
+                    (verifier_decision[done] == tensordict_data["y"][done])
                     .float()
                     .mean()
                     .item()
