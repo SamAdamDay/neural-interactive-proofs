@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 import os
 import pickle
 from textwrap import indent
+import re
 
 import wandb
 
@@ -17,6 +18,19 @@ from pvg.constants import (
     WANDB_ENTITY,
     WANDB_PROJECT,
 )
+
+
+class IterationNotFoundError(Exception):
+    """Error raised when the iteration is not found in the W&B run."""
+
+    def __init__(self, run_id: str, iteration: int, available_iterations: list[int]):
+        self.run_id = run_id
+        self.iteration = iteration
+        self.available_iterations = available_iterations
+        super().__init__(
+            f"Iteration {iteration} not found in W&B run {run_id}. "
+            f"Available iterations: {available_iterations}"
+        )
 
 
 class RolloutSamples(ABC):
@@ -72,7 +86,13 @@ class RolloutSamples(ABC):
         )
 
         # Load the agent names in order
-        self.agent_names: list[str] = self._wandb_run.config["agents"]["_agent_order"]
+        agent_config = self._wandb_run.config["agents"]
+        if "_agent_order" in agent_config:
+            self.agent_names: list[str] = self._wandb_run.config["agents"][
+                "_agent_order"
+            ]
+        else:
+            self.agent_names = list(agent_config.keys())
 
         # Load the rollout samples from W&B
         artifact = self._wandb_run.use_artifact(
@@ -81,8 +101,17 @@ class RolloutSamples(ABC):
         with TemporaryDirectory() as temp_dir:
             file_path = os.path.join(temp_dir, f"iteration_{iteration}")
             artifact.download(root=temp_dir)
-            with open(file_path, "rb") as f:
-                self._rollout_samples = pickle.load(f)
+            try:
+                with open(file_path, "rb") as f:
+                    self._rollout_samples = pickle.load(f)
+            except FileNotFoundError:
+                available_iterations = [
+                    int(filename.split("_")[-1])
+                    for filename in os.listdir(temp_dir)
+                    if re.match(r"iteration_\d+", filename)
+                ]
+                available_iterations.sort()
+                raise IterationNotFoundError(run_id, iteration, available_iterations)
 
     @abstractmethod
     def visualise(self):

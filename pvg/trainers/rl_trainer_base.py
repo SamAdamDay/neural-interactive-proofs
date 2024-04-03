@@ -440,6 +440,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 verifier_decision = tensordict_data.get(("agents", "decision"))[
                     ..., self._agent_names.index("verifier")
                 ]
+
                 mean_accuracy += (
                     (verifier_decision[done] == tensordict_data["y"][done].squeeze())
                     .float()
