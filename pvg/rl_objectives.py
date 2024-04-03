@@ -392,39 +392,22 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
         _, log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
-        previous_dist = self.actor_network.build_dist_from_params(tensordict)
-        with (
-            self.actor_network_params.to_module(self.actor_network)
-            if self.functional
-            else contextlib.nullcontext()
-        ):
-            current_dist = self.actor_network.get_dist(tensordict)
-        try:
-            kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
-        except NotImplementedError:
-            x = previous_dist.sample((self.samples_mc_kl,))
-            previous_log_prob = previous_dist.log_prob(x)
-            current_log_prob = current_dist.log_prob(x)
-            if isinstance(previous_log_prob, TensorDictBase):
-                previous_log_prob = previous_log_prob.flatten_keys()
-                current_log_prob = current_log_prob.flatten_keys()
-                keys = list(previous_log_prob.keys())
-                previous_log_prob = torch.cat(
-                    [previous_log_prob[key] for key in keys], dim=0
-                )
-                current_log_prob = torch.cat(
-                    [current_log_prob[key] for key in keys], dim=0
-                )
-            kl = (previous_log_prob - current_log_prob).mean(0)
+        # Compute KL penalty
+        kl = -log_weight.mean(0)
+        if self.beta.shape == torch.Size([]):
+            self.beta = self.beta * torch.ones_like(kl)
+        kl_penalty = (self.beta * kl).sum()
 
-        neg_loss = neg_loss - self.beta * kl
-        if kl.mean() > self.dtarg * 1.5:
-            self.beta.data *= self.increment
-        elif kl.mean() < self.dtarg / 1.5:
-            self.beta.data *= self.decrement
+        # Update KL penalty terms
+        for i in range(len(kl)):
+            if kl[i] > self.dtarg * 1.5:
+                self.beta[i].data *= self.increment
+            elif kl[i] < self.dtarg / 1.5:
+                self.beta[i].data *= self.decrement
+
         td_out = TensorDict(
             {
-                "loss_objective": -neg_loss.mean(),
+                "loss_objective": -neg_loss.mean(dim=0).sum() + kl_penalty,
                 "kl": kl.detach().mean(),
             },
             [],

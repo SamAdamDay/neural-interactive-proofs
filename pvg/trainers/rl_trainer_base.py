@@ -318,6 +318,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                             loss_outputs[key] = 0
                         loss_outputs[key] += val.mean().item()
 
+                    # Correct for the fact that the critic loss has already been scaled using the critic coefficient for the overall loss
+                    loss_outputs["loss_critic"] /= loss_module.critic_coef.item()
+
                     # Only perform the optimization step if the loss values require
                     # gradients. This can be false for example if all agents are frozen
                     if loss_vals.requires_grad:
@@ -367,7 +370,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 ..., self._agent_names.index("verifier")
             ]
             mean_accuracy = (
-                (verifier_decision[done] == tensordict_data["y"][done])
+                (verifier_decision[done] == tensordict_data["y"][done].squeeze())
                 .float()
                 .mean()
                 .item()
@@ -434,16 +437,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     mean_rewards[agent_name] += reward[..., i][done].mean().item()
 
                 # Compute the mean accuracy for the done episodes
+                verifier_decision = tensordict_data.get(("agents", "decision"))[
+                    ..., self._agent_names.index("verifier")
+                ]
                 mean_accuracy += (
-                    (
-                        (
-                            tensordict_data["agents"]["decision"][
-                                ..., self._agent_names.index("verifier")
-                            ]
-                            * tensordict_data["next"]["done"]
-                        ).view(tensordict_data["y"].shape)
-                        == tensordict_data["y"]
-                    )
+                    (verifier_decision[done] == tensordict_data["y"][done].squeeze())
                     .float()
                     .mean()
                     .item()

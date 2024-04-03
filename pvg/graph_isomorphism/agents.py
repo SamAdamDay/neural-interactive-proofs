@@ -2077,7 +2077,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
             The tensordict update in place with the output of the value heads.
         """
 
-        # Run the policy heads to obtain the value estimates
+        # Run the value heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self._agent_names):
             input_td = TensorDict(
