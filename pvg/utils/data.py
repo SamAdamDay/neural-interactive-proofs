@@ -1,6 +1,5 @@
 """Utilities for working with data."""
 
-
 from typing import Optional
 
 import torch
@@ -119,3 +118,69 @@ def max_length_iterator(iterable, maxlen):
         if i >= maxlen:
             break
         yield item
+
+
+def nested_dict_keys(data: dict) -> list[tuple[str, ...]]:
+    """Get the keys of a nested dict as a list of tuples of strings.
+
+    A nested dict is a dict that may contain other dicts as values. This function
+    recursively traverses the dict to get all the keys, where each key is a tuple of
+    strings.
+
+    Parameters
+    ----------
+    data : dict
+        The nested dict to get the keys of.
+
+    Returns
+    -------
+    keys : list
+        The keys of the nested dict.
+
+    Examples
+    --------
+    >>> data = {"a": {"b": 1, "c": 2}, "d": 3}
+    >>> get_nested_dict_keys(data)
+    [("a", "b"), ("a", "c"), ("d",)]
+    """
+
+    keys = []
+
+    def get_keys(data, prefix=()):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                get_keys(value, prefix + (key,))
+            else:
+                keys.append(prefix + (key,))
+
+    get_keys(data)
+    return keys
+
+
+def nested_dict_keys_stringified(data: dict, separator=".") -> list[str]:
+    """Get the keys of a nested dict as a list of joined strings.
+
+    A nested dict is a dict that may contain other dicts as values. This function
+    recursively traverses the dict to get all the keys and joins them with a separator.
+
+    Parameters
+    ----------
+    data : dict
+        The nested dict to get the keys of.
+    separator : str
+        The separator to use between keys.
+
+    Returns
+    -------
+    keys : list
+        The keys of the nested dict.
+
+    Examples
+    --------
+    >>> data = {"a": {"b": 1, "c": 2}, "d": 3}
+    >>> get_nested_dict_keys(data)
+    ["a.b", "a.c", "d"]
+    """
+
+    keys_tuple = nested_dict_keys(data)
+    return [separator.join(key) for key in keys_tuple]
