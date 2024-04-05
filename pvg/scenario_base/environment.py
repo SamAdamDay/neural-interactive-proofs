@@ -81,9 +81,23 @@ class Environment(EnvBase, ABC):
         self.data_cycler: Optional[VariableDataCycler] = None
 
         # The number of environments is the number of episodes we can fit in a batch
-        self.num_envs = (
-            params.ppo.frames_per_batch // self.protocol_handler.max_message_rounds
-        )
+        if params.ppo.steps_per_env_per_iteration is not None:
+            steps_per_env_per_iteration = params.ppo.steps_per_env_per_iteration
+            if params.ppo.frames_per_batch % steps_per_env_per_iteration != 0:
+                raise ValueError(
+                    f"The parameter `ppo.steps_per_env_per_iteration` must divide "
+                    f"`ppo.frames_per_batch` without remainder, but got "
+                    f"{steps_per_env_per_iteration} and {params.ppo.frames_per_batch} "
+                )
+        else:
+            steps_per_env_per_iteration = self.protocol_handler.max_message_rounds
+            if params.ppo.frames_per_batch % steps_per_env_per_iteration != 0:
+                raise ValueError(
+                    f"The maximum number of message rounds must divide "
+                    f"`ppo.frames_per_batch` without remainder, but got "
+                    f"{steps_per_env_per_iteration} and {params.ppo.frames_per_batch} "
+                )
+        self.num_envs = params.ppo.frames_per_batch // steps_per_env_per_iteration
         self.batch_size = (self.num_envs,)
 
         # Create environment specs
