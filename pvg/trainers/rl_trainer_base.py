@@ -358,7 +358,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             mean_values = {}
             mean_decision_entropy = {}
             for i, agent_name in enumerate(self._agent_names):
-                mean_rewards[agent_name] = reward[..., i][done].mean().item()
+                mean_rewards[agent_name] = reward[..., i].mean().item()
                 mean_values[agent_name] = value[..., i].mean().item()
                 mean_decision_entropy[agent_name] = (
                     logit_entropy(decision_logits[..., i]).mean().item()
@@ -381,7 +381,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 # Log the various statistics
                 to_log = dict(mean_episode_length=mean_episode_length)
                 for agent_name in self._agent_names:
-                    to_log[f"{agent_name}.mean_reward"] = mean_rewards[agent_name]
+                    to_log[f"{agent_name}.mean_step_reward"] = mean_rewards[agent_name]
+                    to_log[f"{agent_name}.mean_episode_reward"] = (
+                        mean_rewards[agent_name] * mean_episode_length
+                    )
                     to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
                     to_log[
                         f"{agent_name}.mean_decision_entropy"
@@ -431,11 +434,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     ),
                 )
 
-                # Compute the mean rewards for the done episodes
+                # Compute the mean rewards
                 done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
                 reward = tensordict_data.get(("next", "agents", "reward"))
                 for i, agent_name in enumerate(self._agent_names):
-                    mean_rewards[agent_name] += reward[..., i][done].mean().item()
+                    mean_rewards[agent_name] += reward[..., i].mean().item()
 
                 # Compute the mean accuracy for the done episodes
                 verifier_decision = tensordict_data.get(("agents", "decision"))[
@@ -470,7 +473,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 # Log the mean episode length and mean rewards
                 to_log = dict(test_mean_episode_length=mean_episode_length)
                 for agent_name in self._agent_names:
-                    to_log[f"{agent_name}.test_mean_reward"] = mean_rewards[agent_name]
+                    to_log[f"{agent_name}.test_mean_step_reward"] = mean_rewards[
+                        agent_name
+                    ]
+                    to_log[f"{agent_name}.test_mean_episode_reward"] = (
+                        mean_rewards[agent_name] * mean_episode_length
+                    )
                 to_log["test_mean_accuracy"] = mean_accuracy
                 self.settings.wandb_run.log(to_log)
 
