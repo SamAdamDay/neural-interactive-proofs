@@ -318,10 +318,6 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                             loss_outputs[key] = 0
                         loss_outputs[key] += val.mean().item()
 
-                    # Correct for the fact that the critic loss has already been scaled
-                    # using the critic coefficient for the overall loss
-                    loss_outputs["loss_critic"] /= loss_module.critic_coef.item()
-
                     # Only perform the optimization step if the loss values require
                     # gradients. This can be false for example if all agents are frozen
                     if loss_vals.requires_grad:
@@ -396,6 +392,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 to_log["mean_accuracy"] = mean_accuracy
                 for key, val in loss_outputs.items():
                     to_log[key] = val
+                if "loss_critic" in loss_outputs:
+                    to_log["loss_critic_unscaled"] = (
+                        loss_outputs["loss_critic"] / loss_module.critic_coef.item()
+                    )
                 self.settings.wandb_run.log(to_log, step=iteration)
 
                 # Log artifacts to W&B if it's time to do so
