@@ -190,11 +190,6 @@ class ProtocolHandler(ABC):
             verifier_decision_made & (decision[verifier_index] != y.squeeze())
         ] = protocol_params.verifier_incorrect_penalty
 
-        # Compute the rewards for the provers and add them
-        self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_index], reward
-        )
-
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         done = done | (round >= self.max_message_rounds - 1)
@@ -207,6 +202,11 @@ class ProtocolHandler(ABC):
         reward[verifier_index][
             verifier_turn_mask & ~done
         ] = protocol_params.verifier_no_guess_reward
+
+        # Compute the rewards for the provers and add them
+        self._include_prover_rewards(
+            verifier_decision_made, decision[verifier_index], reward
+        )
 
         return done, reward
 
