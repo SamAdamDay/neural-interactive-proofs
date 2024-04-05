@@ -525,8 +525,13 @@ class CommonPpoParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int
-        The number of frames to sample per training iteration. Should be divisible by
-        `max_message_rounds`.
+        The number of frames to sample per training iteration.
+    steps_per_env_per_iteration : int, optional
+        Each batch is divided into a number of environments which run trajectories for
+        this many steps. Note that when a trajectory ends, a new one is started
+        immediately. This must be a factor of `frames_per_batch`, since the number of
+        environments is `frames_per_batch / steps_per_env_per_iteration`. If not
+        provided, this defaults to `max_message_rounds`.
     num_iterations : int
         The number of sampling and training iterations. `num_iterations *
         frames_per_batch` is the total number of frames sampled during training.
@@ -569,6 +574,7 @@ class CommonPpoParameters(SubParameters):
 
     # Sampling
     frames_per_batch: int = 1000
+    steps_per_env_per_iteration: Optional[int] = None
     num_iterations: int = 1000
 
     # Training
