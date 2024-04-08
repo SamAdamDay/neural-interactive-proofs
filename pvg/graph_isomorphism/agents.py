@@ -429,6 +429,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 nhead=self._agent_params.num_heads,
                 batch_first=True,
                 dropout=self._agent_params.transformer_dropout,
+                dim_feedforward=self._agent_params.d_transformer_mlp,
             ),
             num_layers=self._agent_params.num_transformer_layers,
         )
