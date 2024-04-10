@@ -22,6 +22,10 @@ from .parameters import (
     IhvpVariant,
     InteractionProtocolType,
     MinMessageRoundsSchedulerType,
+    AgentUpdateSchedule,
+    ConstantUpdateSchedule,
+    ContiguousPeriodicUpdateSchedule,
+    AlternatingPeriodicUpdateSchedule,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment
