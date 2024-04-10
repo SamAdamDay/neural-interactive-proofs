@@ -349,12 +349,12 @@ class Environment(EnvBase, ABC):
                 pin_memory=self.settings.pin_memory,
                 pin_memory_device=str(self.device) if self.settings.pin_memory else "",
             )
-            self.data_cycler = VariableDataCycler(dataloader)
+            self.data_cycler = VariableDataCycler(
+                dataloader, device=self.device, non_blocking=self.settings.pin_memory
+            )
 
         # Sample a new batch of data for the episodes that are done
-        batch = self.data_cycler.get_batch(new_mask.sum().item()).to(
-            self.device, non_blocking=True
-        )
+        batch = self.data_cycler.get_batch(new_mask.sum().item())
 
         # Reset the episodes that are done
         env_td = self._masked_reset(env_td, new_mask, batch)
