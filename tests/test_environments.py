@@ -36,7 +36,7 @@ def test_environment_specs():
     ):
         params = Parameters(scenario_type, TrainerType.VANILLA_PPO, "test")
         protocol_handler = build_protocol_handler(params)
-        settings = ExperimentSettings(device="cpu", test_run=True)
+        settings = ExperimentSettings(device="cpu", test_run=True, pin_memory=False)
         dataset = dataset_class(params, settings, protocol_handler)
         env = environment_class(params, settings, dataset, protocol_handler)
         check_env_specs(env)
