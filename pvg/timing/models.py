@@ -12,8 +12,8 @@ import numpy as np
 
 from pvg.parameters import Parameters, SoloAgentParameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import ScenarioInstance
-from pvg.run import SCENARIO_MAP
+from pvg.scenario_base import DataLoader
+from pvg.scenario_instance import build_scenario_instance
 from pvg.utils.data import max_length_iterator
 from pvg.timing.timeables import Timeable, register_timeable
 
@@ -60,9 +60,7 @@ class ModelTimeable(Timeable, ABC):
         else:
             self.device = "cpu"
         self.settings = ExperimentSettings(device=self.device)
-        self.scenario_instance: ScenarioInstance = SCENARIO_MAP[self.params.scenario](
-            self.params, self.settings
-        )
+        self.scenario_instance = build_scenario_instance(self.params, self.settings)
 
         # Set the random seeds
         torch.manual_seed(self.params.seed)
@@ -101,7 +99,7 @@ class ModelTimeable(Timeable, ABC):
             The profiler to run the model with.
         """
 
-        dataloader = self.scenario_instance.dataloader_class(
+        dataloader = DataLoader(
             self.scenario_instance.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
