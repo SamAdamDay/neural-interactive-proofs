@@ -7,6 +7,10 @@ from functools import partial
 import torch
 from torch.autograd.profiler_util import EventList
 
+from pvg.constants import LOG_DIR
+import os
+import datetime
+
 
 class Timeable(ABC):
     """Base class for an action that can be timed."""
@@ -20,6 +24,113 @@ class Timeable(ABC):
         profiler : torch.profiler.profile
             The PyTorch profiler which is being used to time the action.
         """
+
+    def _get_profiler_args(self, log_dir: Optional[str]) -> dict:
+        """Get the arguments for the PyTorch profiler.
+
+        Parameters
+        ----------
+        log_dir : str, optional
+            The directory to save the profiling results to, if any.
+
+        Returns
+        -------
+        profiler_args : dict
+            The arguments for the PyTorch profiler.
+        """
+        if log_dir is not None:
+            on_trace_ready = torch.profiler.tensorboard_trace_handler(log_dir)
+        else:
+            on_trace_ready = None
+        return dict(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            on_trace_ready=on_trace_ready,
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        )
+
+    def time(self, log_dir: Optional[str]) -> torch.profiler.profile:
+        """Time the action.
+
+        Parameters
+        ----------
+        log_dir : str, optional
+            The directory to save the profiling results to, if any.
+
+        Returns
+        -------
+        profiler : torch.profiler.profile
+            The PyTorch profiler containing the timing information.
+        """
+
+        with torch.profiler.profile(
+            **self._get_profiler_args(log_dir=log_dir)
+        ) as profiler:
+            self.run(profiler)
+
+        return profiler
+
+
+class TrainingTimeable(Timeable, ABC):
+    """Base class timeable which involves some kind of training.
+
+    The schedule is as follows:
+
+    1. For the first `wait` steps of training, do nothing.
+    2. For each of the `repeat` cycles:
+        a. For the first `warmup` steps of the cycle, run the profiler but don't record.
+        b. For the next `active` steps of the cycle, run the profiler and record.
+
+    Parameters
+    ----------
+    wait : int, default=2
+        The number of training steps to wait before starting to profile.
+    warmup : int, default=1
+        The number of warmup steps in each cycle.
+    active : int, default=3
+        The number of steps to profile in each cycle.
+    repeat : int, default=2
+        The number of cycles to repeat.
+    """
+
+    def __init__(
+        self, *, wait: int = 2, warmup: int = 1, active: int = 3, repeat: int = 2
+    ):
+        super().__init__()
+        self.wait = wait
+        self.warmup = warmup
+        self.active = active
+        self.repeat = repeat
+
+        self.num_steps = wait + (warmup + active) * repeat
+
+    def _get_profiler_args(self, log_dir: Optional[str]) -> dict:
+        """Get the arguments for the PyTorch profiler.
+
+        Parameters
+        ----------
+        log_dir : str, optional
+            The directory to save the profiling results to, if any.
+
+        Returns
+        -------
+        profiler_args : dict
+            The arguments for the PyTorch profiler.
+        """
+        profiler_args = super()._get_profiler_args(log_dir=log_dir)
+        profiler_args.update(
+            schedule=torch.profiler.schedule(
+                wait=self.wait,
+                warmup=self.warmup,
+                active=self.active,
+                repeat=self.repeat,
+            )
+        )
+        return profiler_args
 
 
 TIMEABLES: dict[str, Timeable] = {}
@@ -84,34 +195,46 @@ def register_timeable(
     return _register_timeable(_timeable, name=name)
 
 
-def time_timeable(name: str, print_results: bool = True, **kwargs) -> EventList:
+def time_timeable(
+    name: str,
+    log_tensorboard_results: bool = True,
+    print_results: bool = False,
+    **kwargs,
+) -> torch.profiler.profile:
     """Time a timeable by its name.
 
     Parameters
     ----------
     name : str
         The name of the timeable to time.
-    print_results : bool, default=True
+    log_tensorboard_results : bool, default=True
+        Whether to log the results to TensorBoard in the log directory.
+    print_results : bool, default=False
         Whether to print the results of the timing.
     **kwargs
         Any additional keyword arguments that are passed to the timeable constructor.
 
     Returns
     -------
-    key_averages : torch.autograd.profiler.EventList
-        The profiling results.
+    profiler : torch.profiler.profile
+        The PyTorch profiler containing the timing information.
     """
     if name not in TIMEABLES:
         raise ValueError(f"No timeable with name '{name}' registered")
     timeable_instance = TIMEABLES[name](**kwargs)
 
-    with torch.profiler.profile() as profiler:
-        timeable_instance.run(profiler)
+    # Create a log directory for the profiler
+    if log_tensorboard_results:
+        time_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_dir = os.path.join(LOG_DIR, f"{name}_{time_now}")
+        os.makedirs(log_dir, exist_ok=False)
+
+    profiler = timeable_instance.time(log_dir)
 
     if print_results:
         print(profiler.key_averages().table(sort_by="self_cpu_time_total"))
 
-    return profiler.key_averages()
+    return profiler
 
 
 def time_all_timeables(

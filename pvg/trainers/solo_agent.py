@@ -106,6 +106,10 @@ class SoloAgentTrainer(Trainer):
 
         # Train the agents
         for epoch in range(self.params.solo_agent.num_epochs):
+            # Step the profiler if it's being used
+            if self.settings.profiler is not None:
+                self.settings.profiler.step()
+
             total_loss = {agent_name: 0 for agent_name in agents_params}
             total_accuracy = {agent_name: 0 for agent_name in agents_params}
 

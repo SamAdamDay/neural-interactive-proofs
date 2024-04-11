@@ -21,15 +21,27 @@ class RunTimeable(Timeable, ABC):
     Other than the arguments to the constructor, all other experiment params are their
     defaults.
 
+    The schedule is as follows:
+
+    1. For the first `wait` steps of training, do nothing.
+    2. For each of the `repeat` cycles:
+        a. For the first `warmup` steps of the cycle, run the profiler but don't record.
+        b. For the next `active` steps of the cycle, run the profiler and record.
+
     To subclass, define the class attributes below.
 
     Parameters
     ----------
+    wait : int, default=2
+        The number of training steps to wait before starting to profile.
+    warmup : int, default=1
+        The number of warmup steps in each cycle.
+    active : int, default=3
+        The number of steps to profile in each cycle.
+    repeat : int, default=2
+        The number of cycles to repeat.
     force_cpu : bool, default=False
         Whether to force everything to run on the CPU, even if a GPU is available.
-    num_steps : int, default=10
-        The number of steps to run the experiment for. Depending on the trainer, this
-        could be iterations or epochs.
     pretrain : bool, default=False
         When running an RL experiment, whether to pretrain the model.
 
@@ -48,10 +60,17 @@ class RunTimeable(Timeable, ABC):
     dataset: str
 
     def __init__(
-        self, *, force_cpu: bool = False, num_steps: int = 10, pretrain: bool = False
+        self,
+        *,
+        wait: int = 2,
+        warmup: int = 1,
+        active: int = 3,
+        repeat: int = 2,
+        force_cpu: bool = False,
+        pretrain: bool = False,
     ):
+        super().__init__(wait=wait, warmup=warmup, active=active, repeat=repeat)
         self.force_cpu = force_cpu
-        self.num_steps = num_steps
         self.pretrain = pretrain
 
         self.params = self._get_params()
