@@ -39,6 +39,7 @@ param_grid = dict(
     num_iterations=[10000],
     num_epochs=[4],
     minibatch_size=[256],
+    frames_per_batch=[1000],
     gamma=[1.0],
     lmbda=[0.95],
     ppo_loss_type=[PpoLossType.CLIP],
@@ -122,10 +123,10 @@ def experiment_fn(
     else:
         period = combo["update_spec"][0] + combo["update_spec"][1]
         verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
-            (period, combo["update_spec"][0]), first_agent=True
+            period, combo["update_spec"][0], first_agent=True
         )
         prover_update_schedule = AlternatingPeriodicUpdateSchedule(
-            (period, combo["update_spec"][0]), first_agent=False
+            period, combo["update_spec"][0], first_agent=False
         )
     if combo["prover_manual_architecture"]:
         prover_lr_factor = 0.0
@@ -178,6 +179,7 @@ def experiment_fn(
             prover=prover_params,
         ),
         ppo=CommonPpoParameters(
+            frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
