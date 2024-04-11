@@ -361,11 +361,15 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
 
+        # Compute the KL divergence for logging
+        kl = -log_weight.mean(0)
+
         td_out = TensorDict(
             {
                 "loss_objective": -flatten_batch_dims(gain, num_batch_dims)
                 .mean(dim=0)
-                .sum()
+                .sum(),
+                "kl": kl.detach().mean(),
             },
             [],
         )
