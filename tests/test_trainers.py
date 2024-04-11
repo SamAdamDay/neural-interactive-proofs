@@ -219,7 +219,7 @@ def test_gi_ppo_train_optimizer_groups():
         trainer = VanillaPpoTrainer(params, scenario_instance, settings)
         trainer._train_setup()
         loss_module, _ = trainer._get_loss_module_and_gae()
-        optimizer = trainer._get_optimizer(loss_module)
+        optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
 
         # Run through all the loss module parameters and make sure they are in the
         # optimizer with the correct learning rate

@@ -21,6 +21,8 @@ from pvg import (
     IhvpVariant,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    ConstantUpdateSchedule,
+    AlternatingPeriodicUpdateSchedule,
     run_experiment,
     prepare_experiment,
 )
@@ -84,6 +86,8 @@ param_grid = dict(
     min_message_rounds=[0],
     max_message_rounds=[8],
     verifier_first=[True],
+    # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
+    update_spec=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -112,6 +116,17 @@ def experiment_fn(
         pretrain_agents = combo["pretrain_agents"]
 
     # Create the parameters object
+    if combo["update_spec"] is None:
+        verifier_update_schedule = ConstantUpdateSchedule()
+        prover_update_schedule = ConstantUpdateSchedule()
+    else:
+        period = combo["update_spec"][0] + combo["update_spec"][1]
+        verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
+            (period, combo["update_spec"][0]), first_agent=True
+        )
+        prover_update_schedule = AlternatingPeriodicUpdateSchedule(
+            (period, combo["update_spec"][0]), first_agent=False
+        )
     if combo["prover_manual_architecture"]:
         prover_lr_factor = 0.0
     else:
@@ -137,6 +152,7 @@ def experiment_fn(
             gnn_lr_factor=combo["gnn_lr_factor"],
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
+            update_schedule=prover_update_schedule,
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
@@ -157,6 +173,7 @@ def experiment_fn(
                 gnn_lr_factor=combo["gnn_lr_factor"],
                 include_round_in_decider=combo["include_round_in_decider"],
                 use_batch_norm=combo["use_batch_norm"],
+                update_schedule=verifier_update_schedule,
             ),
             prover=prover_params,
         ),

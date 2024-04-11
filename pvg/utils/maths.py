@@ -262,3 +262,59 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     probs = F.softmax(logits, dim=-1)
     log_probs = F.log_softmax(logits, dim=-1)
     return -torch.sum(probs * log_probs, dim=-1)
+
+
+def mean_episode_reward(
+    reward: Float[Tensor, "... step"], done_mask: Float[Tensor, "... step"]
+) -> float:
+    """Compute the mean total episode reward for a batch of concatenated episodes.
+
+    The `done_mask` tensor specifies episode boundaries. The mean total reward per
+    episode is computed by summing the rewards within each episode and dividing by the
+    number of episodes.
+
+    Note that the first episode is ignored, because it could be partly included in the
+    previous batch.
+
+    Parameters
+    ----------
+    reward : Float["... step"]
+        The reward tensor. Multiple episodes are concatenated along the last dimension.
+    done_mask : Float["... step"]
+        A mask indicating the end of each episode.
+
+    Returns
+    -------
+    mean_total_reward : float
+        The mean total reward per episode.
+
+    Examples
+    --------
+    >>> reward = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0]])
+    >>> mask = torch.tensor([[True, True, False, True, False]])
+    >>> mean_episode_reward(reward, mask)
+    4.5
+    """
+
+    # Take the cumulative sum of the rewards throughout concatenated episodes
+    episode_rewards = torch.cumsum(reward, dim=-1)
+
+    # Select the cumsum rewards for the done steps
+    episode_rewards = episode_rewards[done_mask]
+
+    # A mask indicating the done steps which are not in the first episode
+    not_first_episode_mask, _ = torch.cummax(done_mask, dim=-1)
+    not_first_episode_mask = not_first_episode_mask.roll(shifts=1, dims=-1)
+    not_first_episode_mask[..., 0] = False
+    not_first_done_mask = not_first_episode_mask[done_mask]
+
+    # Take the difference between consecutive done steps to get the total rewards per
+    # episode, plus some junk corresponding to the first done step
+    episode_rewards = torch.diff(
+        episode_rewards, dim=-1, prepend=torch.tensor([0.0], device=reward.device)
+    )
+
+    # Remove the junk corresponding to the first done step
+    episode_rewards = episode_rewards[not_first_done_mask]
+
+    return episode_rewards.mean().item()
