@@ -158,6 +158,12 @@ class HyperparameterExperiment(ABC):
             help="Print additional info messages",
             action="store_true",
         )
+        self.parser.add_argument(
+            "-q",
+            "--quiet",
+            help="Print less output",
+            action="store_true",
+        )
 
         # Add parser arguments for W&B
         self.parser.add_argument(
@@ -376,13 +382,14 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         )
 
         # Print the run_id and the Parameters
-        base_logger.info("")
-        base_logger.info("=" * self.output_width)
-        title = f"| {self.experiment_name} | Run ID: {run_id}"
-        title += (" " * (self.output_width - 1 - len(title))) + "|"
-        title = textwrap.fill(title, self.output_width)
-        base_logger.info(title)
-        base_logger.info("=" * self.output_width)
+        if not cmd_args.quiet:
+            base_logger.info("")
+            base_logger.info("=" * self.output_width)
+            title = f"| {self.experiment_name} | Run ID: {run_id}"
+            title += (" " * (self.output_width - 1 - len(title))) + "|"
+            title = textwrap.fill(title, self.output_width)
+            base_logger.info(title)
+            base_logger.info("=" * self.output_width)
 
         # Run the experiment
         self.experiment_fn(
@@ -432,19 +439,22 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
 
         finally:
             # Print a summary of the experiment results
-            base_logger.info("")
-            base_logger.info("")
-            base_logger.info("=" * self.output_width)
-            title = f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
-            title += (" " * (self.output_width - 1 - len(title))) + "|"
-            title = textwrap.fill(title, self.output_width)
-            base_logger.info(title)
-            base_logger.info("=" * self.output_width)
-            for result, (combo_num, combo) in zip(run_results, combinations):
+            if not cmd_args.quiet:
                 base_logger.info("")
-                base_logger.info(f"COMBO {combo_num}")
-                base_logger.info(textwrap.fill(str(combo)))
-                base_logger.info(result)
+                base_logger.info("")
+                base_logger.info("=" * self.output_width)
+                title = (
+                    f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
+                )
+                title += (" " * (self.output_width - 1 - len(title))) + "|"
+                title = textwrap.fill(title, self.output_width)
+                base_logger.info(title)
+                base_logger.info("=" * self.output_width)
+                for result, (combo_num, combo) in zip(run_results, combinations):
+                    base_logger.info("")
+                    base_logger.info(f"COMBO {combo_num}")
+                    base_logger.info(textwrap.fill(str(combo)))
+                    base_logger.info(result)
 
 
 class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
