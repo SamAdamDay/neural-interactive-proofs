@@ -151,3 +151,14 @@ def time_all_timeables(
             print(result.table(sort_by="self_cpu_time_total"))
             print()
     return results
+
+
+def list_timeables():
+    """List all available timeables as tuples of (name, timeable).
+
+    Returns
+    -------
+    timeables : list[tuple[str, Timeable]]
+        The available timeables.
+    """
+    return list(TIMEABLES.items())
