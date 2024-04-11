@@ -12,6 +12,11 @@ from textwrap import indent
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader as TorchDataLoader
+from torch.utils.data.dataloader import (
+    _BaseDataLoaderIter,
+    _SingleProcessDataLoaderIter,
+    _MultiProcessingDataLoaderIter,
+)
 
 from tensordict import TensorDict
 from tensordict.utils import _td_fields
@@ -127,6 +132,26 @@ class Dataset(ABC):
         return f"{type(self).__name__}(\n{string})"
 
 
+class TensorDictSingleProcessDataLoaderIter(_SingleProcessDataLoaderIter):
+    """Single process DataLoaderIter for tensordicts.
+
+    This is a hack to allow the DataLoader to work with TensorDict memory pinning.
+    """
+
+    def _next_data(self):
+        index = self._next_index()  # may raise StopIteration
+        data: TensorDict = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+
+        if self._pin_memory:
+
+            def pin_memory(tensor: Tensor):
+                return tensor.pin_memory(self._pin_memory_device)
+
+            data = data._fast_apply(pin_memory)
+
+        return data
+
+
 class DataLoader(TorchDataLoader):
     """The dataloader class, which may be subclassed to add functionality.
 
@@ -141,3 +166,9 @@ class DataLoader(TorchDataLoader):
     def __init__(self, dataset: Dataset, **kwargs):
         collate_fn = kwargs.pop("collate_fn", lambda x: x)
         super().__init__(dataset, collate_fn=collate_fn, **kwargs)
+
+    def _get_iterator(self) -> _BaseDataLoaderIter:
+        if self.num_workers == 0:
+            return TensorDictSingleProcessDataLoaderIter(self)
+        else:
+            return _MultiProcessingDataLoaderIter(self)

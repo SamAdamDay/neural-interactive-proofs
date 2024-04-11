@@ -701,14 +701,19 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
 
 
 class Print(nn.Module):
-    """Print the shape or value of a tensor.
+    """Print information about an input tensor.
 
     Parameters
     ----------
     name : str, default=None
         The name of the tensor.
-    print_value : bool, default=False
-        Whether to print the value or the shape.
+    mode : str, default="shape"
+        The mode to print. One of the following:
+
+        - "shape": Print the shape of the tensor.
+        - "value": Print the value of the tensor.
+        - "nan": Print the fraction of NaN values in the tensor.
+
     transform : Callable, default=None
         A function to apply to the tensor before printing.
     """
@@ -716,28 +721,38 @@ class Print(nn.Module):
     def __init__(
         self,
         name: str = None,
-        print_value: bool = False,
+        mode: bool = False,
         transform: Optional[Callable] = None,
     ):
         super().__init__()
         self.name = name
-        self.print_value = print_value
+        self.mode = mode
         self.transform = transform
 
     def forward(self, x: Tensor) -> Tensor:
         if self.name is not None:
             print(f"{self.name}:")
-        if self.print_value:
+        if self.mode == "value":
             if self.transform is not None:
                 x = self.transform(x)
             print(x)
+        elif self.mode == "nan":
+            print(x.isnan().float().mean())
         else:
             print(x.shape)
         return x
 
 
 class TensorDictPrint(TensorDictModuleBase):
-    """Print a TensorDict."""
+    """Print information about an input tensordict.
+
+    Parameters
+    ----------
+    keys : NestedKey | Iterable[NestedKey]
+        The keys to print.
+    name : str, default=None
+        The name of the tensordict, which will be printed before the keys.
+    """
 
     def __init__(
         self,
@@ -757,6 +772,8 @@ class TensorDictPrint(TensorDictModuleBase):
         if self.name is not None:
             print(f"{type(self).__name__} {self.name!r}:")
         for key in self.in_keys:
-            print(f"{key} ({tensordict[key].shape}):")
-            print(tensordict[key].isnan().float().mean())
+            print(
+                f"{key}: ({tensordict[key].shape}), NaN proportion: "
+                f"{tensordict[key].isnan().float().mean()!s}"
+            )
         return tensordict

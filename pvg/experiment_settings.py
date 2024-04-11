@@ -43,6 +43,9 @@ class ExperimentSettings:
         RL training between each save of the models.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    pin_memory : bool, default=True
+        Whether to pin the memory of the tensors in the dataloader, and move them to the
+        GPU with `non_blocking=True`. This can speed up training.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -60,6 +63,7 @@ class ExperimentSettings:
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
+    pin_memory: bool = True
     test_run: bool = False
 
     def __post_init__(self):
