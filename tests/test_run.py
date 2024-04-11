@@ -205,7 +205,13 @@ def test_prepare_run_experiment():
         prepare_experiment(params=params, test_run=True, ignore_cache=True)
 
         # Run the experiment in test mode
-        run_experiment(params, tqdm_func=DummyTqdm, test_run=True, ignore_cache=True)
+        run_experiment(
+            params,
+            tqdm_func=DummyTqdm,
+            test_run=True,
+            ignore_cache=True,
+            pin_memory=False,
+        )
 
 
 test_prepare_run_experiment()

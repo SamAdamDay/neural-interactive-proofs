@@ -39,6 +39,7 @@ def run_experiment(
     allow_auto_generated_run_id: bool = False,
     wandb_tags: list = [],
     num_dataset_threads: int = 8,
+    pin_memory: bool = True,
     test_run: bool = False,
 ):
     """Build and run an experiment.
@@ -73,6 +74,9 @@ def run_experiment(
         The tags to add to the W&B run.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    pin_memory : bool, default=True
+        Whether to pin the memory of the tensors in the dataloader, and move them to the
+        GPU with `non_blocking=True`. This can speed up training.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -106,6 +110,7 @@ def run_experiment(
         logger=logger,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,
+        pin_memory=pin_memory,
         test_run=test_run,
     )
 

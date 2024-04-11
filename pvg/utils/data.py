@@ -7,6 +7,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from pvg.scenario_base import DataLoader
+from pvg.utils.types import TorchDevice
 
 
 def forgetful_cycle(iterable):
@@ -23,14 +24,28 @@ class VariableDataCycler:
     ----------
     dataloader : DataLoader
         The base dataloader to use. This dataloader will be cycled through.
+        device : TorchDevice, optional
+            The device to move the data to. If None, the data will not be moved.
+        non_blocking : bool, default=False
+            Whether to move the data to the device with `non_blocking=True`.
     """
 
-    def __init__(self, dataloader: DataLoader):
+    def __init__(
+        self,
+        dataloader: DataLoader,
+        device: Optional[TorchDevice] = None,
+        non_blocking: bool = False,
+    ):
         self.dataloader = dataloader
+        self.device = device
+        self.non_blocking = non_blocking
         self.dataloader_iter = iter(forgetful_cycle(self.dataloader))
         self.remainder: Optional[list[TensorDict]] = None
 
-    def get_batch(self, batch_size: int) -> TensorDict:
+    def get_batch(
+        self,
+        batch_size: int,
+    ) -> TensorDict:
         """Get a batch of data from the dataloader with the given batch size.
 
         If the dataloader is exhausted, it will be reset.
@@ -62,6 +77,8 @@ class VariableDataCycler:
         # Keep sampling batches until we have enough
         while left_to_sample > 0:
             batch: TensorDict = next(self.dataloader_iter)
+            if self.device is not None:
+                batch = batch.to(self.device, non_blocking=self.non_blocking)
             batch_components.append(batch[:left_to_sample])
             if len(batch) <= left_to_sample:
                 left_to_sample -= len(batch)
@@ -71,6 +88,7 @@ class VariableDataCycler:
 
         # Concatenate the batch components into a single batch
         batch = torch.cat(batch_components, dim=0)
+
         return batch
 
     def __repr__(self) -> str:

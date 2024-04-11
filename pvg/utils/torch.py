@@ -42,62 +42,6 @@ def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
     return x.flatten(0, num_batch_dims - 1)
 
 
-def mean_episode_reward(
-    reward: Float[Tensor, "... step"], done_mask: Float[Tensor, "... step"]
-) -> float:
-    """Compute the mean total episode reward for a batch of concatenated episodes.
-
-    The `done_mask` tensor specifies episode boundaries. The mean total reward per
-    episode is computed by summing the rewards within each episode and dividing by the
-    number of episodes.
-
-    Note that the first episode is ignored, because it could be partly included in the
-    previous batch.
-
-    Parameters
-    ----------
-    reward : Float["... step"]
-        The reward tensor. Multiple episodes are concatenated along the last dimension.
-    done_mask : Float["... step"]
-        A mask indicating the end of each episode.
-
-    Returns
-    -------
-    mean_total_reward : float
-        The mean total reward per episode.
-
-    Examples
-    --------
-    >>> reward = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0]])
-    >>> mask = torch.tensor([[True, True, False, True, False]])
-    >>> mean_episode_reward(reward, mask)
-    4.5
-    """
-
-    # Take the cumulative sum of the rewards throughout concatenated episodes
-    episode_rewards = torch.cumsum(reward, dim=-1)
-
-    # Select the cumsum rewards for the done steps
-    episode_rewards = episode_rewards[done_mask]
-
-    # A mask indicating the done steps which are not in the first episode
-    not_first_episode_mask, _ = torch.cummax(done_mask, dim=-1)
-    not_first_episode_mask = not_first_episode_mask.roll(shifts=1, dims=-1)
-    not_first_episode_mask[..., 0] = False
-    not_first_done_mask = not_first_episode_mask[done_mask]
-
-    # Take the difference between consecutive done steps to get the total rewards per
-    # episode, plus some junk corresponding to the first done step
-    episode_rewards = torch.diff(
-        episode_rewards, dim=-1, prepend=torch.tensor([0.0], device=reward.device)
-    )
-
-    # Remove the junk corresponding to the first done step
-    episode_rewards = episode_rewards[not_first_done_mask]
-
-    return episode_rewards.mean().item()
-
-
 class DummyOptimizer(torch.optim.Optimizer):
     """A dummy optimizer which does nothing."""
 
@@ -757,14 +701,19 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
 
 
 class Print(nn.Module):
-    """Print the shape or value of a tensor.
+    """Print information about an input tensor.
 
     Parameters
     ----------
     name : str, default=None
         The name of the tensor.
-    print_value : bool, default=False
-        Whether to print the value or the shape.
+    mode : str, default="shape"
+        The mode to print. One of the following:
+
+        - "shape": Print the shape of the tensor.
+        - "value": Print the value of the tensor.
+        - "nan": Print the fraction of NaN values in the tensor.
+
     transform : Callable, default=None
         A function to apply to the tensor before printing.
     """
@@ -772,28 +721,38 @@ class Print(nn.Module):
     def __init__(
         self,
         name: str = None,
-        print_value: bool = False,
+        mode: bool = False,
         transform: Optional[Callable] = None,
     ):
         super().__init__()
         self.name = name
-        self.print_value = print_value
+        self.mode = mode
         self.transform = transform
 
     def forward(self, x: Tensor) -> Tensor:
         if self.name is not None:
             print(f"{self.name}:")
-        if self.print_value:
+        if self.mode == "value":
             if self.transform is not None:
                 x = self.transform(x)
             print(x)
+        elif self.mode == "nan":
+            print(x.isnan().float().mean())
         else:
             print(x.shape)
         return x
 
 
 class TensorDictPrint(TensorDictModuleBase):
-    """Print a TensorDict."""
+    """Print information about an input tensordict.
+
+    Parameters
+    ----------
+    keys : NestedKey | Iterable[NestedKey]
+        The keys to print.
+    name : str, default=None
+        The name of the tensordict, which will be printed before the keys.
+    """
 
     def __init__(
         self,
@@ -813,6 +772,8 @@ class TensorDictPrint(TensorDictModuleBase):
         if self.name is not None:
             print(f"{type(self).__name__} {self.name!r}:")
         for key in self.in_keys:
-            print(f"{key} ({tensordict[key].shape}):")
-            print(tensordict[key].isnan().float().mean())
+            print(
+                f"{key}: ({tensordict[key].shape}), NaN proportion: "
+                f"{tensordict[key].isnan().float().mean()!s}"
+            )
         return tensordict

@@ -1,7 +1,7 @@
 """A generic reinforcement learning trainer."""
 
 from abc import ABC, abstractmethod
-import re
+from typing import Iterable, Any
 
 import numpy as np
 
@@ -15,7 +15,12 @@ from torchrl.collectors import DataCollectorBase
 from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 
-from pvg.parameters import Parameters
+from pvg.parameters import (
+    Parameters,
+    AgentUpdateSchedule,
+    ConstantUpdateSchedule,
+    ContiguousPeriodicUpdateSchedule,
+)
 from pvg.scenario_base import Environment
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
@@ -30,6 +35,32 @@ from pvg.artifact_logger import ArtifactLogger
 from pvg.rl_objectives import Objective
 from pvg.utils.maths import logit_entropy
 from pvg.utils.torch import DummyOptimizer
+from pvg.utils.training import ParamGroupFreezer
+
+
+def update_schedule_iterator(schedule: AgentUpdateSchedule):
+    """A True-False iterator which specifies on which iterations to update an agent.
+
+    Parameters
+    ----------
+    schedule : AgentUpdateSchedule
+        The update schedule.
+
+    Yields
+    ------
+    bool
+        Whether to update the agent on the current iteration.
+    """
+
+    if isinstance(schedule, ConstantUpdateSchedule):
+        while True:
+            yield True
+    elif isinstance(schedule, ContiguousPeriodicUpdateSchedule):
+        while True:
+            for i in range(schedule.period):
+                yield schedule.start <= i < schedule.stop
+    else:
+        raise ValueError(f"Unknown update schedule: {schedule}")
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):
@@ -84,7 +115,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         train_collector, test_collector = self._get_data_collectors()
         replay_buffer = self._get_replay_buffer()
         loss_module, gae = self._get_loss_module_and_gae()
-        optimizer = self._get_optimizer(loss_module)
+        optimizer, param_group_freezer = self._get_optimizer_and_param_freezer(
+            loss_module
+        )
 
         # Run the training loop
         self._run_rl_training_loop(
@@ -96,6 +129,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             loss_module,
             gae,
             optimizer,
+            param_group_freezer,
         )
 
     def _pretrain_agents(self):
@@ -185,8 +219,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         """
         pass
 
-    def _get_optimizer(self, loss_module: Objective) -> torch.optim.Adam:
-        """Construct the optimizer for the loss module
+    def _get_optimizer_and_param_freezer(
+        self, loss_module: Objective
+    ) -> tuple[torch.optim.Adam, ParamGroupFreezer]:
+        """Construct the optimizer for the loss module and the model parameter freezer.
 
         Parameters
         ----------
@@ -195,25 +231,32 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         Returns
         -------
-        torch.optim.Optimizer
+        optimizer : torch.optim.Optimizer
             The optimizer.
+        param_group_freezer : ParamGroupFreezer
+            The parameter dictionaries for each agent.
         """
 
         # Get the learning rates and parameters for each of the agents
-        model_param_dicts = []
-        for agent in self.scenario_instance.agents.values():
-            model_param_dicts.extend(
-                agent.get_param_dicts(
-                    base_lr=self.params.ppo.lr,
-                    named_parameters=loss_module.named_parameters(),
-                    body_lr_factor_override=self.params.ppo.body_lr_factor,
-                )
+        all_param_dicts = []
+        param_group_collections = {}
+        for agent_name, agent in self.scenario_instance.agents.items():
+            param_dict = agent.get_param_dicts(
+                base_lr=self.params.ppo.lr,
+                named_parameters=loss_module.named_parameters(),
+                body_lr_factor_override=self.params.ppo.body_lr_factor,
             )
+            all_param_dicts.extend(param_dict)
+            param_group_collections[agent_name] = param_dict
 
-        if len(model_param_dicts) == 0:
-            return DummyOptimizer()
+        if len(all_param_dicts) == 0:
+            optimizer = DummyOptimizer()
         else:
-            return torch.optim.Adam(model_param_dicts)
+            optimizer = torch.optim.Adam(all_param_dicts)
+
+        param_group_freezer = ParamGroupFreezer(optimizer, param_group_collections)
+
+        return optimizer, param_group_freezer
 
     def _run_rl_training_loop(
         self,
@@ -225,6 +268,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         loss_module: Objective,
         gae: GAE,
         optimizer: Optimizer,
+        param_group_freezer: ParamGroupFreezer,
     ):
         """Run a generic RL training loop.
 
@@ -246,7 +290,13 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             The generalized advantage estimator.
         optimizer : Optimizer
             The optimizer to use for optimizing the loss.
+        param_group_freezer : ParamGroupFreezer
+            The parameter group freezer to use for freezing the parameters of the
+            agents' models.
         """
+
+        agents = self.scenario_instance.agents
+        agent_names = list(agents.keys())
 
         # Set the seed
         torch.manual_seed(self.params.seed)
@@ -254,16 +304,29 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Create the artifact logger, which will log things are various stages to W&B
         if self.settings.wandb_run is not None:
-            artifact_logger = ArtifactLogger(
-                self.settings, self.scenario_instance.agents
-            )
+            artifact_logger = ArtifactLogger(self.settings, agents)
 
         # Create a progress bar
         pbar = self.settings.tqdm_func(
             total=self.params.ppo.num_iterations, desc="Training"
         )
 
-        for iteration, tensordict_data in enumerate(train_collector):
+        # Create the update schedule iterators
+        update_schedule_iterators = [
+            update_schedule_iterator(self.params.agents[name].update_schedule)
+            for name in agent_names
+        ]
+
+        iterator = zip(enumerate(train_collector), *update_schedule_iterators)
+        for (iteration, tensordict_data), *agent_updates in iterator:
+            # Freeze and unfreeze the parameters of the agents according to the update
+            # schedule
+            for agent_name, update in zip(agent_names, agent_updates):
+                if update:
+                    param_group_freezer.unfreeze(agent_name)
+                else:
+                    param_group_freezer.freeze(agent_name)
+
             # Expand the done and terminated to match the reward shape (this is expected
             # by the value estimator)
             tensordict_data.set(
