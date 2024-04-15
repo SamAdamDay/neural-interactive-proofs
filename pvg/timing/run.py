@@ -12,12 +12,13 @@ from pvg.parameters import (
     ScenarioType,
     TrainerType,
     CommonPpoParameters,
+    PvgProtocolParameters,
 )
 from pvg.run import run_experiment, prepare_experiment
-from pvg.timing.timeables import Timeable, register_timeable
+from pvg.timing.timeables import TrainingTimeable, register_timeable
 
 
-class RunTimeable(Timeable, ABC):
+class RunTimeable(TrainingTimeable, ABC):
     """Base class for a timeable that performs a complete experiment run.
 
     Other than the arguments to the constructor, all other experiment params are their
@@ -119,11 +120,18 @@ class RunTimeable(Timeable, ABC):
                     default_minibatch_size = field.default
                 elif field.name == "frames_per_batch":
                     default_frames_per_batch = field.default
+            for field in fields(PvgProtocolParameters):
+                if field.name == "max_message_rounds":
+                    max_message_rounds = field.default
+            frames_per_batch = (
+                ceil(default_frames_per_batch * self.param_scale / max_message_rounds)
+                * max_message_rounds
+            )
             solo_agent = None
             ppo = CommonPpoParameters(
                 num_iterations=self.num_steps,
                 minibatch_size=ceil(default_minibatch_size * self.param_scale),
-                frames_per_batch=ceil(default_frames_per_batch * self.param_scale),
+                frames_per_batch=frames_per_batch,
                 num_test_iterations=1,
             )
 
