@@ -10,6 +10,8 @@ import sys
 import warnings
 from typing import Optional
 
+import torch
+
 import wandb
 
 from tqdm import tqdm
@@ -29,7 +31,8 @@ import pvg.image_classification
 def run_experiment(
     params: Parameters,
     device: TorchDevice = "cpu",
-    logger: LoggingType = None,
+    logger: Optional[LoggingType] = None,
+    profiler: Optional[torch.profiler.profile] = None,
     tqdm_func: callable = tqdm,
     ignore_cache: bool = False,
     use_wandb: bool = False,
@@ -55,6 +58,8 @@ def run_experiment(
         The device to use for training.
     logger : logging.Logger | logging.LoggerAdapter, optional
         The logger to log to. If None, the trainer will create a logger.
+    profiler : torch.profiler.profile, optional
+        The PyTorch profiler being used to profile the training, if any.
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
     ignore_cache : bool, default=False
@@ -108,6 +113,7 @@ def run_experiment(
         wandb_run=wandb_run,
         tqdm_func=tqdm_func,
         logger=logger,
+        profiler=profiler,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,
         pin_memory=pin_memory,
@@ -142,6 +148,7 @@ def run_experiment(
 
 def prepare_experiment(
     params: Parameters,
+    profiler: Optional[torch.profiler.profile] = None,
     ignore_cache: bool = False,
     num_dataset_threads: int = 8,
     test_run: bool = False,
@@ -156,6 +163,8 @@ def prepare_experiment(
     ----------
     params : Parameters
         The parameters of the experiment.
+    profiler : torch.profiler.profile, optional
+        The PyTorch profiler being used to profile the training, if any.
     ignore_cache : bool, default=False
         If True, when the dataset is loaded, the cache is ignored and the dataset is
         rebuilt from the raw data.
@@ -173,6 +182,7 @@ def prepare_experiment(
         device="cpu",
         wandb_run=None,
         logger=None,
+        profiler=profiler,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,
         test_run=test_run,

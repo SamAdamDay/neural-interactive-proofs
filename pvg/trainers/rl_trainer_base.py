@@ -319,6 +319,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         iterator = zip(enumerate(train_collector), *update_schedule_iterators)
         for (iteration, tensordict_data), *agent_updates in iterator:
+            # Step the profiler if it's being used
+            if self.settings.profiler is not None:
+                self.settings.profiler.step()
+
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule
             for agent_name, update in zip(agent_names, agent_updates):

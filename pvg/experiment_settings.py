@@ -7,6 +7,8 @@ from typing import Optional
 from dataclasses import dataclass
 import logging
 
+import torch
+
 import wandb
 
 from tqdm import tqdm
@@ -30,6 +32,8 @@ class ExperimentSettings:
         The tqdm function to use. Defaults to tqdm.
     logger : logging.Logger | logging.LoggerAdapter, optional
         The logger to log to. If None, the trainer will create a logger.
+    profiler : torch.profiler.profile, optional
+        The PyTorch profiler being used to profile the training, if any.
     ignore_cache : bool, default=False
         If True, the dataset and model cache are ignored and rebuilt.
     num_rollout_samples : int, default=10
@@ -58,6 +62,7 @@ class ExperimentSettings:
     silence_wandb: bool = True
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
+    profiler: Optional[torch.profiler.profile] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
     rollout_sample_period: int = 1000
