@@ -25,6 +25,8 @@ class ModelTimeable(Timeable, ABC):
 
     Parameters
     ----------
+    param_scale : float, default=1.0
+        Scale factor for key default parameters (currently unused)
     force_cpu : bool, default=False
         Whether to force the model to run on the CPU, even if a GPU is available.
     batch_size : int, default=64
@@ -47,8 +49,14 @@ class ModelTimeable(Timeable, ABC):
     agent_name: str
 
     def __init__(
-        self, *, force_cpu: bool = False, batch_size: int = 64, num_batches: int = 100
+        self,
+        *,
+        param_scale: float = 1.0,
+        force_cpu: bool = False,
+        batch_size: int = 64,
+        num_batches: int = 100
     ):
+        super().__init__(param_scale=param_scale)
         self.force_cpu = force_cpu
         self.batch_size = batch_size
         self.num_batches = num_batches

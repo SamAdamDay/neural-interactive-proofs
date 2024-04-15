@@ -1,6 +1,8 @@
 """Timeables to check performance of a complete run."""
 
 from abc import ABC
+from dataclasses import fields
+from math import ceil
 
 import torch
 
@@ -32,6 +34,8 @@ class RunTimeable(Timeable, ABC):
 
     Parameters
     ----------
+    param_scale : float, default=1.0
+        Scale factor for key default experiment parameters.
     wait : int, default=2
         The number of training steps to wait before starting to profile.
     warmup : int, default=1
@@ -62,6 +66,7 @@ class RunTimeable(Timeable, ABC):
     def __init__(
         self,
         *,
+        param_scale: float = 1.0,
         wait: int = 2,
         warmup: int = 1,
         active: int = 3,
@@ -69,7 +74,13 @@ class RunTimeable(Timeable, ABC):
         force_cpu: bool = False,
         pretrain: bool = False,
     ):
-        super().__init__(wait=wait, warmup=warmup, active=active, repeat=repeat)
+        super().__init__(
+            param_scale=param_scale,
+            wait=wait,
+            warmup=warmup,
+            active=active,
+            repeat=repeat,
+        )
         self.force_cpu = force_cpu
         self.pretrain = pretrain
 
@@ -94,11 +105,27 @@ class RunTimeable(Timeable, ABC):
 
         # Set the number of steps in the appropriate place
         if self.trainer == TrainerType.SOLO_AGENT:
-            solo_agent = SoloAgentParameters(num_epochs=self.num_steps)
+            for field in fields(SoloAgentParameters):
+                if field.name == "batch_size":
+                    default_batch_size = field.default
+            solo_agent = SoloAgentParameters(
+                num_epochs=self.num_steps,
+                batch_size=ceil(default_batch_size * self.param_scale),
+            )
             ppo = None
         else:
+            for field in fields(CommonPpoParameters):
+                if field.name == "minibatch_size":
+                    default_minibatch_size = field.default
+                elif field.name == "frames_per_batch":
+                    default_frames_per_batch = field.default
             solo_agent = None
-            ppo = CommonPpoParameters(num_iterations=self.num_steps)
+            ppo = CommonPpoParameters(
+                num_iterations=self.num_steps,
+                minibatch_size=ceil(default_minibatch_size * self.param_scale),
+                frames_per_batch=ceil(default_frames_per_batch * self.param_scale),
+                num_test_iterations=1,
+            )
 
         return Parameters(
             scenario=self.scenario,

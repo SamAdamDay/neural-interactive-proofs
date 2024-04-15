@@ -13,7 +13,16 @@ import datetime
 
 
 class Timeable(ABC):
-    """Base class for an action that can be timed."""
+    """Base class for an action that can be timed.
+
+    Parameters
+    ----------
+    param_scale : float, default=1.0
+        Key default parameters (if any) will be scaled by this factor.
+    """
+
+    def __init__(self, *, param_scale: float = 1.0):
+        self.param_scale = param_scale
 
     @abstractmethod
     def run(self, profiler: torch.profiler.profile):
@@ -87,6 +96,8 @@ class TrainingTimeable(Timeable, ABC):
 
     Parameters
     ----------
+    param_scale : float, default=1.0
+        Key default parameters (if any) will be scaled by this factor.
     wait : int, default=2
         The number of training steps to wait before starting to profile.
     warmup : int, default=1
@@ -98,9 +109,15 @@ class TrainingTimeable(Timeable, ABC):
     """
 
     def __init__(
-        self, *, wait: int = 2, warmup: int = 1, active: int = 3, repeat: int = 2
+        self,
+        *,
+        param_scale: float = 1.0,
+        wait: int = 2,
+        warmup: int = 1,
+        active: int = 3,
+        repeat: int = 2,
     ):
-        super().__init__()
+        super().__init__(param_scale=param_scale)
         self.wait = wait
         self.warmup = warmup
         self.active = active
@@ -199,6 +216,8 @@ def time_timeable(
     name: str,
     log_tensorboard_results: bool = True,
     print_results: bool = False,
+    *,
+    param_scale: float = 1.0,
     **kwargs,
 ) -> torch.profiler.profile:
     """Time a timeable by its name.
@@ -211,6 +230,8 @@ def time_timeable(
         Whether to log the results to TensorBoard in the log directory.
     print_results : bool, default=False
         Whether to print the results of the timing.
+    param_scale : float, default=1.0
+        The scale factor for key default parameters.
     **kwargs
         Any additional keyword arguments that are passed to the timeable constructor.
 
@@ -221,7 +242,7 @@ def time_timeable(
     """
     if name not in TIMEABLES:
         raise ValueError(f"No timeable with name '{name}' registered")
-    timeable_instance = TIMEABLES[name](**kwargs)
+    timeable_instance = TIMEABLES[name](param_scale=param_scale, **kwargs)
 
     # Create a log directory for the profiler
     if log_tensorboard_results:

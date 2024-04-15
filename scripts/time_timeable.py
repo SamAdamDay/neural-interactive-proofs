@@ -19,6 +19,12 @@ parser.add_argument(
     nargs="*",
     help="The names of the timeables to time",
 )
+parser.add_argument(
+    "--param-scale",
+    type=float,
+    help="The scale factor for key default parameters",
+    default=0.1,
+)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -33,4 +39,4 @@ if __name__ == "__main__":
         parser.print_usage()
     else:
         for name in args.names:
-            time_timeable(name, print_results=True)
+            time_timeable(name, print_results=True, param_scale=args.param_scale)
