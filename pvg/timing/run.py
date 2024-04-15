@@ -16,7 +16,6 @@ from pvg.parameters import (
 )
 from pvg.run import run_experiment, prepare_experiment
 from pvg.timing.timeables import TrainingTimeable, register_timeable
-from pvg.utils.output import DummyTqdm
 
 
 class RunTimeable(TrainingTimeable, ABC):
@@ -69,10 +68,10 @@ class RunTimeable(TrainingTimeable, ABC):
         self,
         *,
         param_scale: float = 1.0,
-        wait: int = 1,
+        wait: int = 2,
         warmup: int = 1,
-        active: int = 2,
-        repeat: int = 1,
+        active: int = 3,
+        repeat: int = 2,
         force_cpu: bool = False,
         pretrain: bool = False,
     ):

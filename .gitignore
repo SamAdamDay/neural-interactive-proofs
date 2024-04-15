@@ -147,3 +147,6 @@ data/image_classification
 model_cache/*/*
 !model_cache/solo_agents/svhn_*
 !model_cache/solo_agents/gi_*
+
+# The log
+log

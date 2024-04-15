@@ -23,7 +23,27 @@ parser.add_argument(
     "--param-scale",
     type=float,
     help="The scale factor for key default parameters",
-    default=0.1,
+    default=1.0,
+)
+parser.add_argument(
+    "--no-record-shapes",
+    help="Don't record tensor shapes",
+    action="store_false",
+    dest="record_shapes",
+    default=True,
+)
+parser.add_argument(
+    "--no-profile-memory",
+    help="Don't profile memory usage",
+    action="store_false",
+    dest="profile_memory",
+    default=True,
+)
+parser.add_argument(
+    "--with-stack",
+    help="Record the stack trace. This introduces a significant additional overhead",
+    action="store_true",
+    dest="with_stack",
 )
 
 if __name__ == "__main__":
@@ -39,4 +59,11 @@ if __name__ == "__main__":
         parser.print_usage()
     else:
         for name in args.names:
-            time_timeable(name, print_results=True, param_scale=args.param_scale)
+            time_timeable(
+                name,
+                print_results=True,
+                param_scale=args.param_scale,
+                record_shapes=args.record_shapes,
+                profile_memory=args.profile_memory,
+                with_stack=args.with_stack,
+            )

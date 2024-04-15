@@ -34,13 +34,25 @@ class Timeable(ABC):
             The PyTorch profiler which is being used to time the action.
         """
 
-    def _get_profiler_args(self, log_dir: Optional[str]) -> dict:
+    def _get_profiler_args(
+        self,
+        log_dir: Optional[str],
+        record_shapes: bool,
+        profile_memory: bool,
+        with_stack: bool,
+    ) -> dict:
         """Get the arguments for the PyTorch profiler.
 
         Parameters
         ----------
-        log_dir : str, optional
+        log_dir : str or None
             The directory to save the profiling results to, if any.
+        record_shapes : bool
+            Whether to record tensor shapes. This introduces an additional overhead.
+        profile_memory : bool
+            Whether to profile memory usage.
+        with_stack : bool
+            Whether to record the stack trace. This introduces an additional overhead.
 
         Returns
         -------
@@ -48,7 +60,9 @@ class Timeable(ABC):
             The arguments for the PyTorch profiler.
         """
         if log_dir is not None:
-            on_trace_ready = torch.profiler.tensorboard_trace_handler(log_dir)
+            on_trace_ready = torch.profiler.tensorboard_trace_handler(
+                log_dir, use_gzip=True
+            )
         else:
             on_trace_ready = None
         return dict(
@@ -57,18 +71,30 @@ class Timeable(ABC):
                 torch.profiler.ProfilerActivity.CUDA,
             ],
             on_trace_ready=on_trace_ready,
-            record_shapes=True,
-            profile_memory=True,
-            with_stack=True,
+            record_shapes=record_shapes,
+            profile_memory=profile_memory,
+            with_stack=with_stack,
         )
 
-    def time(self, log_dir: Optional[str]) -> torch.profiler.profile:
+    def time(
+        self,
+        log_dir: Optional[str] = None,
+        record_shapes: bool = True,
+        profile_memory: bool = True,
+        with_stack: bool = False,
+    ) -> torch.profiler.profile:
         """Time the action.
 
         Parameters
         ----------
         log_dir : str, optional
             The directory to save the profiling results to, if any.
+        record_shapes : bool
+            Whether to record tensor shapes. This introduces an additional overhead.
+        profile_memory : bool
+            Whether to profile memory usage.
+        with_stack : bool
+            Whether to record the stack trace. This introduces an additional overhead.
 
         Returns
         -------
@@ -76,9 +102,13 @@ class Timeable(ABC):
             The PyTorch profiler containing the timing information.
         """
 
-        with torch.profiler.profile(
-            **self._get_profiler_args(log_dir=log_dir)
-        ) as profiler:
+        profiler_args = self._get_profiler_args(
+            log_dir=log_dir,
+            record_shapes=record_shapes,
+            profile_memory=profile_memory,
+            with_stack=with_stack,
+        )
+        with torch.profiler.profile(**profiler_args) as profiler:
             self.run(profiler)
 
         return profiler
@@ -125,20 +155,37 @@ class TrainingTimeable(Timeable, ABC):
 
         self.num_steps = wait + (warmup + active) * repeat
 
-    def _get_profiler_args(self, log_dir: Optional[str]) -> dict:
+    def _get_profiler_args(
+        self,
+        log_dir: Optional[str],
+        record_shapes: bool,
+        profile_memory: bool,
+        with_stack: bool,
+    ) -> dict:
         """Get the arguments for the PyTorch profiler.
 
         Parameters
         ----------
         log_dir : str, optional
             The directory to save the profiling results to, if any.
+        record_shapes : bool
+            Whether to record tensor shapes. This introduces an additional overhead.
+        profile_memory : bool
+            Whether to profile memory usage.
+        with_stack : bool
+            Whether to record the stack trace. This introduces an additional overhead.
 
         Returns
         -------
         profiler_args : dict
             The arguments for the PyTorch profiler.
         """
-        profiler_args = super()._get_profiler_args(log_dir=log_dir)
+        profiler_args = super()._get_profiler_args(
+            log_dir=log_dir,
+            record_shapes=record_shapes,
+            profile_memory=profile_memory,
+            with_stack=with_stack,
+        )
         profiler_args.update(
             schedule=torch.profiler.schedule(
                 wait=self.wait,
@@ -216,6 +263,9 @@ def time_timeable(
     name: str,
     log_tensorboard_results: bool = True,
     print_results: bool = False,
+    record_shapes: bool = True,
+    profile_memory: bool = True,
+    with_stack: bool = False,
     *,
     param_scale: float = 1.0,
     **kwargs,
@@ -228,6 +278,12 @@ def time_timeable(
         The name of the timeable to time.
     log_tensorboard_results : bool, default=True
         Whether to log the results to TensorBoard in the log directory.
+    record_shapes : bool, default=True
+        Whether to record tensor shapes. This introduces an additional overhead.
+    profile_memory : bool, default=True
+        Whether to profile memory usage.
+    with_stack : bool, default=False
+        Whether to record the stack trace. This introduces an additional overhead.
     print_results : bool, default=False
         Whether to print the results of the timing.
     param_scale : float, default=1.0
@@ -249,8 +305,15 @@ def time_timeable(
         time_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_dir = os.path.join(LOG_DIR, f"{name}_{time_now}")
         os.makedirs(log_dir, exist_ok=False)
+    else:
+        log_dir = None
 
-    profiler = timeable_instance.time(log_dir)
+    profiler = timeable_instance.time(
+        log_dir=log_dir,
+        record_shapes=record_shapes,
+        profile_memory=profile_memory,
+        with_stack=with_stack,
+    )
 
     if print_results:
         print(profiler.key_averages().table(sort_by="self_cpu_time_total"))
