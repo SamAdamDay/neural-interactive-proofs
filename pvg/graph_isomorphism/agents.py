@@ -1806,14 +1806,6 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     in_keys = ("round", "x", "adjacency", "message", "node_mask")
     out_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
 
-    def __init__(
-        self,
-        params: Parameters,
-        protocol_handler: ProtocolHandler,
-        bodies: dict[str, GraphIsomorphismAgentBody],
-    ) -> None:
-        super().__init__(params, protocol_handler, bodies)
-
     def forward(
         self,
         data: TensorDictBase,
@@ -1909,14 +1901,6 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         ("agents", "node_selected_logits"),
         ("agents", "decision_logits"),
     )
-
-    def __init__(
-        self,
-        params: Parameters,
-        protocol_handler: ProtocolHandler,
-        policy_heads: dict[str, GraphIsomorphismAgentPolicyHead],
-    ):
-        super().__init__(params, protocol_handler, policy_heads)
 
     def forward(
         self,
@@ -2046,14 +2030,6 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     in_keys = (("agents", "graph_level_repr"), "round")
     out_keys = (("agents", "value"),)
 
-    def __init__(
-        self,
-        params: Parameters,
-        protocol_handler: ProtocolHandler,
-        value_heads: dict[str, GraphIsomorphismAgentValueHead],
-    ):
-        super().__init__(params, protocol_handler, value_heads)
-
     def forward(
         self,
         head_output: TensorDictBase,
@@ -2122,11 +2098,6 @@ class GraphIsomorphismAgent(Agent):
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
         body_lr_factor_override: Optional[float] = None,
-        body_param_regex_prefixes: Iterable[str] = ("actor_network_params.module_0_",),
-        non_body_param_regex_prefixes: Iterable[str] = (
-            "actor_network_params.module_[1-9]_",
-            "critic_network_params.module_[0-9]_",
-        ),
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -2141,12 +2112,6 @@ class GraphIsomorphismAgent(Agent):
         body_lr_factor_override : float, optional
             The learning rate factor for the body, which overrides the one set in the
             agent params.
-        body_param_regex_prefixes : Iterable[str], optional
-            The regular expression prefixes for the names of the body parameters. If not
-            given, the default ones are used.
-        non_body_param_regex_prefixes : Iterable[str], optional
-            The regular expression prefixes for the names of the non-body parameters. If
-            not given, the default ones are used.
 
         Returns
         -------
@@ -2174,16 +2139,15 @@ class GraphIsomorphismAgent(Agent):
 
         # If named_parameters is not given, use the parameters of all the agent parts
         if named_parameters is None:
-            body_named_parameters = self.body.named_parameters()
             self._append_filtered_params(
                 model_param_dict,
-                body_named_parameters,
+                self._body_named_parameters,
                 lambda x: x.startswith("gnn"),
                 gnn_lr,
             )
             self._append_filtered_params(
                 model_param_dict,
-                body_named_parameters,
+                self._body_named_parameters,
                 lambda x: not x.startswith("gnn"),
                 body_lr,
             )
@@ -2205,17 +2169,13 @@ class GraphIsomorphismAgent(Agent):
         # multiple times
         named_parameters = list(named_parameters)
 
-        def is_gnn_param(param_name: str):
-            return any(
-                re.match(f"{prefix}{self.agent_name}_gnn", param_name)
-                for prefix in body_param_regex_prefixes
-            )
+        # print([name for name, _ in named_parameters])
 
-        def is_body_param(param_name: str):
-            return any(
-                re.match(f"{prefix}{self.agent_name}", param_name)
-                for prefix in body_param_regex_prefixes
-            ) and not is_gnn_param(param_name)
+        def is_gnn_param(name: str):
+            return re.match(f"{self._body_param_regex}_gnn", name)
+
+        def is_body_param(name: str):
+            return re.match(self._body_param_regex, name) and not is_gnn_param(name)
 
         # Set the learning rate for the GNN parameters
         self._append_filtered_params(
@@ -2228,15 +2188,11 @@ class GraphIsomorphismAgent(Agent):
         )
 
         # Set the learning rate for the non-body parameters
-        def is_non_body_param(param_name: str):
-            return any(
-                re.match(f"{prefix}{self.agent_name}", param_name)
-                for prefix in non_body_param_regex_prefixes
-            )
-
-        # Set the learning rate for the non-body parameters
         self._append_filtered_params(
-            model_param_dict, named_parameters, is_non_body_param, agent_lr
+            model_param_dict,
+            named_parameters,
+            lambda name: re.match(self._non_body_param_regex, name),
+            agent_lr,
         )
 
         return model_param_dict

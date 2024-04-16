@@ -1,4 +1,6 @@
-"""A dataclass for holding the components of a scenario and a registry
+"""A dataclass for building and holding the components of a scenario and a registry
+
+This is where the logic for creating the agents and environments lives.
 
 The `ScenarioInstance` class holds the components of a scenario, which serves to
 abstract away the details of the particular experiment being run.
@@ -87,7 +89,14 @@ class ScenarioInstance:
     test_environment : Optional[Environment]
         The environment for testing the agents, which uses the test dataset.
     combined_body : Optional[CombinedBody]
-        The combined body of the agents, if the agents are combined.
+        The combined body of the agents, if the agents are combined the actor and critic
+        share the same body.
+    combined_policy_body : Optional[CombinedBody]
+        The combined policy body of the agents, if the agents are combined and the actor
+        and critic have separate bodies.
+    combined_value_body : Optional[CombinedBody]
+        The combined value body of the agents, if the agents are combined and the actor
+        and critic have separate bodies.
     combined_policy_head : Optional[CombinedPolicyHead]
         The combined policy head of the agents, if the agents are combined.
     combined_value_head : Optional[CombinedValueHead]
@@ -101,6 +110,8 @@ class ScenarioInstance:
     train_environment: Optional[Environment] = None
     test_environment: Optional[Environment] = None
     combined_body: Optional[CombinedBody] = None
+    combined_policy_body: Optional[CombinedBody] = None
+    combined_value_body: Optional[CombinedBody] = None
     combined_policy_head: Optional[CombinedPolicyHead] = None
     combined_value_head: Optional[CombinedValueHead] = None
 
@@ -161,21 +172,28 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         torch.manual_seed(agent_seed)
         np.random.seed(agent_seed)
 
-        # Random agents have a dummy body
-        if agent_params.is_random:
-            agent_dict["body"] = scenario_classes[DummyAgentBody](
-                params=params,
-                protocol_handler=protocol_handler,
-                device=device,
-                agent_name=agent_name,
-            )
+        # Get the names of the bodies
+        if params.trainer == TrainerType.SOLO_AGENT or params.ppo.use_shared_body:
+            body_names = ["body"]
         else:
-            agent_dict["body"] = scenario_classes[AgentBody](
-                params=params,
-                protocol_handler=protocol_handler,
-                device=device,
-                agent_name=agent_name,
-            )
+            body_names = ["policy_body", "value_body"]
+
+        # Random agents have a dummy body
+        for name in body_names:
+            if agent_params.is_random:
+                agent_dict[name] = scenario_classes[DummyAgentBody](
+                    params=params,
+                    protocol_handler=protocol_handler,
+                    device=device,
+                    agent_name=agent_name,
+                )
+            else:
+                agent_dict[name] = scenario_classes[AgentBody](
+                    params=params,
+                    protocol_handler=protocol_handler,
+                    device=device,
+                    agent_name=agent_name,
+                )
 
         if (
             params.trainer == TrainerType.VANILLA_PPO
@@ -251,6 +269,8 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     train_environment = None
     test_environment = None
     combined_body = None
+    combined_policy_body = None
+    combined_value_body = None
     combined_policy_head = None
     combined_value_head = None
     if params.trainer == TrainerType.VANILLA_PPO or params.trainer == TrainerType.SPG:
@@ -271,11 +291,23 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         )
 
         # Create the combined agents
-        combined_body = scenario_classes[CombinedBody](
-            params,
-            protocol_handler,
-            {name: agents[name].body for name in params.agents},
-        )
+        if params.ppo.use_shared_body:
+            combined_body = scenario_classes[CombinedBody](
+                params,
+                protocol_handler,
+                {name: agents[name].body for name in params.agents},
+            )
+        else:
+            combined_policy_body = scenario_classes[CombinedBody](
+                params,
+                protocol_handler,
+                {name: agents[name].policy_body for name in params.agents},
+            )
+            combined_value_body = scenario_classes[CombinedBody](
+                params,
+                protocol_handler,
+                {name: agents[name].value_body for name in params.agents},
+            )
         combined_policy_head = scenario_classes[CombinedPolicyHead](
             params,
             protocol_handler,
@@ -295,6 +327,8 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         train_environment=train_environment,
         test_environment=test_environment,
         combined_body=combined_body,
+        combined_policy_body=combined_policy_body,
+        combined_value_body=combined_value_body,
         combined_policy_head=combined_policy_head,
         combined_value_head=combined_value_head,
     )

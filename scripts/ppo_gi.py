@@ -71,6 +71,7 @@ param_grid = dict(
     d_representation=[16],
     use_batch_norm=[True],
     random_prover=[False],
+    use_shared_body=[True],
     pretrain_agents=[True],
     activation_function=[ActivationType.TANH],
     spg_variant=[SpgVariant.SPG],
@@ -197,6 +198,7 @@ def experiment_fn(
             lr=combo["lr"],
             max_grad_norm=combo["max_grad_norm"],
             normalize_advantage=combo["normalize_advantage"],
+            use_shared_body=combo["use_shared_body"],
         ),
         spg=SpgParameters(
             variant=combo["spg_variant"],

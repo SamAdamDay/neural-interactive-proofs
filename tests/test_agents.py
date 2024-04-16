@@ -9,6 +9,7 @@ from pvg import (
     InteractionProtocolType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
+    CommonPpoParameters,
 )
 from pvg.scenario_instance import build_scenario_instance
 from pvg.experiment_settings import ExperimentSettings
@@ -48,6 +49,9 @@ def test_graph_isomorphism_combined_agents():
             prover0=agent_params,
             prover1=agent_params,
             verifier=agent_params,
+        ),
+        ppo=CommonPpoParameters(
+            use_shared_body=True,
         ),
     )
 

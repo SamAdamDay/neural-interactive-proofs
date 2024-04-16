@@ -657,6 +657,8 @@ class CommonPpoParameters(SubParameters):
     body_lr_factor : float, optional
         The learning rate factor for the body part of the model. If set this overrides
         the `body_lr_factor` parameter of each agent.
+    use_shared_body : bool
+        Whether the actor and critic share the same body.
     num_test_iterations : int
         The number of iterations to run the test for.
     """
@@ -689,6 +691,7 @@ class CommonPpoParameters(SubParameters):
 
     # Agents
     body_lr_factor: Optional[float] = None
+    use_shared_body: bool = True
 
     # Testing
     num_test_iterations: int = 10
