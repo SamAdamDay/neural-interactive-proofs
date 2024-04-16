@@ -13,6 +13,7 @@ from typing import Optional, Any, Iterable, Callable
 from dataclasses import dataclass, fields, InitVar
 from functools import partial
 import re
+import itertools
 
 import torch
 from torch import Tensor
@@ -82,6 +83,10 @@ class AgentPart(TensorDictModuleBase, ABC):
     ----------
     params : Parameters
         The parameters of the experiment.
+    agent_name : str
+        The name of the agent.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
     """
@@ -381,8 +386,12 @@ class Agent:
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
-    body : AgentBody
-        The body of the agent.
+    body : AgentBody, optional
+        The (shared) body of the agent.
+    policy_body : AgentBody, optional
+        The body of the agent's policy head, if not using a shared body.
+    value_body : AgentBody, optional
+        The body of the agent's value head, if not using a shared body.
     policy_head : AgentPolicyHead, optional
         The policy head of the agent.
     value_head : AgentValueHead, optional
@@ -393,7 +402,9 @@ class Agent:
 
     params: InitVar[Parameters]
     agent_name: InitVar[str]
-    body: AgentBody
+    body: Optional[AgentBody] = None
+    policy_body: Optional[AgentBody] = None
+    value_body: Optional[AgentBody] = None
     policy_head: Optional[AgentPolicyHead] = None
     value_head: Optional[AgentValueHead] = None
     solo_head: Optional[SoloAgentHead] = None
@@ -403,6 +414,12 @@ class Agent:
         params: Parameters,
         agent_name: str,
     ):
+        if self.body is None and (self.policy_body is None or self.value_body is None):
+            raise ValueError(
+                "An agent must have either a shared body or separate policy and value"
+                " bodies."
+            )
+
         if self.policy_head is None and self.solo_head is None:
             raise ValueError(
                 "An agent must have either a policy head or a solo head, or both."
@@ -451,16 +468,55 @@ class Agent:
         else:
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
+    @property
+    def _body_param_regex(self) -> str:
+        if self.params.ppo.use_shared_body:
+            return f"actor_network_params.module_0_{self.agent_name}"
+        else:
+            return (
+                f"(actor_network_params.module_0_module_[0-9]"
+                f"|critic_network_params.module_0)"
+                f"_{self.agent_name}"
+            )
+
+    @property
+    def _non_body_param_regex(self) -> str:
+        if self.params.ppo.use_shared_body:
+            return (
+                f"(actor_network_params.module_[1-9]|"
+                f"critic_network_params.module_[0-9])"
+                f"_{self.agent_name}"
+            )
+        else:
+            return (
+                f"(actor_network_params.module_[1-9]|"
+                f"critic_network_params.module_[1-9])"
+                f"_{self.agent_name}"
+            )
+
+    @property
+    def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
+        if self.params.ppo.use_shared_body:
+            return self.body.named_parameters()
+        else:
+            return itertools.chain(
+                self.policy_body.named_parameters(), self.value_body.named_parameters()
+            )
+
+    @property
+    def _body_parameters(self) -> Iterable[TorchParameter]:
+        if self.params.ppo.use_shared_body:
+            return self.body.parameters()
+        else:
+            return itertools.chain(
+                self.policy_body.parameters(), self.value_body.parameters()
+            )
+
     def get_param_dicts(
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
         body_lr_factor_override: Optional[float] = None,
-        body_param_regex_prefixes: Iterable[str] = ("actor_network_params.module_0_",),
-        non_body_param_regex_prefixes: Iterable[str] = (
-            "actor_network_params.module_[1-9]_",
-            "critic_network_params.module_[0-9]_",
-        ),
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -475,12 +531,6 @@ class Agent:
         body_lr_factor_override : float, optional
             The learning rate factor for the body, which overrides the one set in the
             agent params.
-        body_param_regex_prefixes : Iterable[str], optional
-            The regular expression prefixes for the names of the body parameters. If not
-            given, the default ones are used.
-        non_body_param_regex_prefixes : Iterable[str], optional
-            The regular expression prefixes for the names of the non-body parameters. If
-            not given, the default ones are used.
 
         Returns
         -------
@@ -503,7 +553,7 @@ class Agent:
         # If named_parameters is not given, use the parameters of all the agent parts.
         # In this case, we don't need to filter by name
         if named_parameters is None:
-            model_param_dict.append(dict(params=self.body.parameters(), lr=body_lr))
+            model_param_dict.append(dict(params=self._body_parameters, lr=body_lr))
             if self.policy_head is not None:
                 model_param_dict.append(
                     dict(params=self.policy_head.parameters(), lr=agent_lr)
@@ -522,27 +572,50 @@ class Agent:
         # multiple times
         named_parameters = list(named_parameters)
 
-        def is_body_param(param_name: str):
-            return any(
-                re.match(f"{prefix}{self.agent_name}", param_name)
-                for prefix in body_param_regex_prefixes
-            )
-
         # Set the learning rate for the body parameters
         self._append_filtered_params(
-            model_param_dict, named_parameters, is_body_param, body_lr
+            model_param_dict,
+            named_parameters,
+            lambda name: re.match(self._body_param_regex, name),
+            body_lr,
         )
 
         # Set the learning rate for the non-body parameters
-        def is_non_body_param(param_name: str):
-            return any(
-                re.match(f"{prefix}{self.agent_name}", param_name)
-                for prefix in non_body_param_regex_prefixes
-            )
-
-        # Set the learning rate for the non-body parameters
         self._append_filtered_params(
-            model_param_dict, named_parameters, is_non_body_param, agent_lr
+            model_param_dict,
+            named_parameters,
+            lambda name: re.match(self._non_body_param_regex, name),
+            agent_lr,
         )
 
         return model_param_dict
+
+    def train(self):
+        """Set the agent to training mode."""
+        if self.body is not None:
+            self.body.train()
+        if self.policy_body is not None:
+            self.policy_body.train()
+        if self.value_body is not None:
+            self.value_body.train()
+        if self.policy_head is not None:
+            self.policy_head.train()
+        if self.value_head is not None:
+            self.value_head.train()
+        if self.solo_head is not None:
+            self.solo_head.train()
+
+    def eval(self):
+        """Set the agent to evaluation mode."""
+        if self.body is not None:
+            self.body.eval()
+        if self.policy_body is not None:
+            self.policy_body.eval()
+        if self.value_body is not None:
+            self.value_body.eval()
+        if self.policy_head is not None:
+            self.policy_head.eval()
+        if self.value_head is not None:
+            self.value_head.eval()
+        if self.solo_head is not None:
+            self.solo_head.eval()

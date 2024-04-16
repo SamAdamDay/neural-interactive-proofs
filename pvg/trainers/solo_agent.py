@@ -13,6 +13,7 @@ from torch.utils.data import random_split
 from torch.optim import Adam, Optimizer
 
 from tensordict import TensorDict
+from tensordict.nn import TensorDictSequential
 
 from pvg.scenario_base.data import DataLoader
 from pvg.trainers.base import Trainer
@@ -75,6 +76,19 @@ class SoloAgentTrainer(Trainer):
             if name in agents_params
         }
 
+        # Get the agent models, for convenience. When using a separate body for the
+        # policy and value networks, we use the policy body.
+        if self.params.ppo.use_shared_body or not as_pretraining:
+            agent_models = {
+                name: TensorDictSequential(agent.body, agent.solo_head)
+                for name, agent in agents.items()
+            }
+        else:
+            agent_models = {
+                name: TensorDictSequential(agent.policy_body, agent.solo_head)
+                for name, agent in agents.items()
+            }
+
         # Create the optimizers, specifying the learning rates for the different parts of
         # the agent
         optimizers: dict[str, Optimizer] = {}
@@ -118,14 +132,12 @@ class SoloAgentTrainer(Trainer):
                 data = data.to(self.settings.device)
 
                 # Train the agents on the batch
-                for agent_name in agents_params:
-                    agents[agent_name].body.train()
-                    agents[agent_name].solo_head.train()
+                for agent_name, agent_model in agent_models.items():
+                    agents[agent_name].train()
                     optimizers[agent_name].zero_grad()
 
-                    body_output = agents[agent_name].body(data)
-                    head_output = agents[agent_name].solo_head(body_output)
-                    logits = head_output["decision_logits"]
+                    model_output = agent_model(data)
+                    logits = model_output["decision_logits"]
                     loss = F.cross_entropy(logits, data["y"])
 
                     loss.backward()
@@ -171,14 +183,12 @@ class SoloAgentTrainer(Trainer):
         for data in test_loader:
             data = data.to(self.settings.device)
 
-            for agent_name in agents_params:
-                agents[agent_name].body.eval()
-                agents[agent_name].solo_head.eval()
+            for agent_name, agent_model in agent_models.items():
+                agents[agent_name].eval()
 
                 with torch.no_grad():
-                    body_output = agents[agent_name].body(data)
-                    head_output = agents[agent_name].solo_head(body_output)
-                    logits = head_output["decision_logits"]
+                    model_output = agent_model(data)
+                    logits = model_output["decision_logits"]
                     loss = F.cross_entropy(logits, data["y"])
                     accuracy = (logits.argmax(dim=1) == data["y"]).float().mean().item()
 

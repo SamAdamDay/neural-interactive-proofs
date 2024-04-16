@@ -1,3 +1,6 @@
+from itertools import product
+import re
+
 import pytest
 
 from pvg import (
@@ -210,8 +213,9 @@ def test_gi_ppo_train_optimizer_groups():
         ),
     ]
 
-    for i, params in enumerate(params_list):
+    for use_shared_body, (i, params) in product([True, False], enumerate(params_list)):
         # Create the experiment settings and scenario instance to pass to the trainer
+        params.ppo.use_shared_body = use_shared_body
         settings = ExperimentSettings(device="cpu", test_run=True)
         scenario_instance = build_scenario_instance(params, settings)
 
@@ -220,6 +224,43 @@ def test_gi_ppo_train_optimizer_groups():
         trainer._train_setup()
         loss_module, _ = trainer._get_loss_module_and_gae()
         optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
+
+        print(i, use_shared_body)
+
+        def get_network_part(param_name: str) -> str:
+            """Determine which part of the network the parameter is in."""
+            if use_shared_body:
+                if param_name.startswith("actor_network_params.module_0_prover_gnn"):
+                    return "prover_gnn"
+                if param_name.startswith("actor_network_params.module_0_verifier_gnn"):
+                    return "verifier_gnn"
+                if param_name.startswith("actor_network_params.module_0_prover"):
+                    return "prover_body"
+                if param_name.startswith("actor_network_params.module_0_verifier"):
+                    return "verifier_body"
+                return "rest"
+            else:
+                if re.match(
+                    "actor_network_params.module_0_module_[0-9]+_prover_gnn", param_name
+                ) or param_name.startswith("critic_network_params.module_0_prover_gnn"):
+                    return "prover_gnn"
+                if re.match(
+                    "actor_network_params.module_0_module_[0-9]+_verifier_gnn",
+                    param_name,
+                ) or param_name.startswith(
+                    "critic_network_params.module_0_verifier_gnn"
+                ):
+                    return "verifier_gnn"
+                if re.match(
+                    "actor_network_params.module_0_module_[0-9]+_prover", param_name
+                ) or param_name.startswith("critic_network_params.module_0_prover"):
+                    return "prover_body"
+                if re.match(
+                    "actor_network_params.module_0_module_[0-9]+_verifier",
+                    param_name,
+                ) or param_name.startswith("critic_network_params.module_0_verifier"):
+                    return "verifier_body"
+                return "rest"
 
         # Run through all the loss module parameters and make sure they are in the
         # optimizer with the correct learning rate
@@ -234,16 +275,14 @@ def test_gi_ppo_train_optimizer_groups():
                         break
 
             # Make sure the optimizer has the parameter
-            assert optimizer_has_param
+            assert (
+                optimizer_has_param
+            ), f"Optimizer does not have parameter {param_name}"
 
             # Check that the learning rate is correct
-            if param_name.startswith("actor_network_params.module_0_prover_gnn"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["prover_gnn"])
-            elif param_name.startswith("actor_network_params.module_0_verifier_gnn"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier_gnn"])
-            elif param_name.startswith("actor_network_params.module_0_prover"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["prover_body"])
-            elif param_name.startswith("actor_network_params.module_0_verifier"):
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["verifier_body"])
-            else:
-                assert optimizer_lr == pytest.approx(expected_lrs[i]["rest"])
+            network_part = get_network_part(param_name)
+            assert optimizer_lr == pytest.approx(expected_lrs[i][network_part]), (
+                f"Parameter {param_name} has learning rate {optimizer_lr} "
+                f"instead of {expected_lrs[i][network_part]}. Matched network part: "
+                f"{network_part}"
+            )

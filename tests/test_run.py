@@ -89,6 +89,7 @@ def test_prepare_run_experiment():
             "is_random": [True, False],
             "pretrain_agents": [True, False],
             "manual_architecture": [None],
+            "use_shared_body": [True],
         },
         # Test the KL penalty loss
         {
@@ -100,8 +101,24 @@ def test_prepare_run_experiment():
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [None],
+            "use_shared_body": [True],
         },
-        # Test the other solo agent trainer
+        # Test the using non-shared bodies
+        {
+            "scenario": [
+                ScenarioType.GRAPH_ISOMORPHISM,
+                ScenarioType.IMAGE_CLASSIFICATION,
+            ],
+            "trainer": [TrainerType.VANILLA_PPO],
+            "ppo_loss": [PpoLossType.CLIP],
+            "protocol": [InteractionProtocolType.PVG],
+            "spg_variant": [SpgVariant.SPG],
+            "is_random": [False],
+            "pretrain_agents": [True],
+            "manual_architecture": [None],
+            "use_shared_body": [False],
+        },
+        # Test the other trainers
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT],
@@ -111,6 +128,7 @@ def test_prepare_run_experiment():
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [None],
+            "use_shared_body": [True],
         },
         # Test the SPG trainer with different variants
         {
@@ -129,6 +147,7 @@ def test_prepare_run_experiment():
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [None],
+            "use_shared_body": [True],
         },
         # Test the other protocols
         {
@@ -144,6 +163,7 @@ def test_prepare_run_experiment():
             "is_random": [True],
             "pretrain_agents": [False],
             "manual_architecture": [None],
+            "use_shared_body": [True],
         },
         # Test manual architectures
         {
@@ -155,6 +175,7 @@ def test_prepare_run_experiment():
             "is_random": [False],
             "pretrain_agents": [False],
             "manual_architecture": [("prover",), ("verifier",), ("prover", "verifier")],
+            "use_shared_body": [True],
         },
     ]
 
@@ -166,9 +187,11 @@ def test_prepare_run_experiment():
         is_random = param_spec["is_random"]
         pretrain_agents = param_spec["pretrain_agents"]
         manual_architecture = param_spec["manual_architecture"]
+        use_shared_body = param_spec["use_shared_body"]
 
         # Construct the PPO parameters
         common_ppo_params.loss_type = ppo_loss_type
+        common_ppo_params.use_shared_body = use_shared_body
 
         # Construct the agent parameters
         agents_param = {}

@@ -1,7 +1,6 @@
 """A generic reinforcement learning trainer."""
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Any
 
 import numpy as np
 
@@ -10,10 +9,14 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase, SyncDataCollector
 from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
+from torchrl.modules import ProbabilisticActor, ActorValueOperator
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 from pvg.parameters import (
     Parameters,
@@ -36,6 +39,7 @@ from pvg.rl_objectives import Objective
 from pvg.utils.maths import logit_entropy
 from pvg.utils.torch import DummyOptimizer
 from pvg.utils.training import ParamGroupFreezer
+from pvg.utils.distributions import CompositeCategoricalDistribution
 
 
 def update_schedule_iterator(schedule: AgentUpdateSchedule):
@@ -90,6 +94,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         "debate_protocol",
     ]
 
+    policy_operator: TensorDictModuleBase
+    value_operator: TensorDictModuleBase
+
     def __init__(
         self,
         params: Parameters,
@@ -138,11 +145,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         This just uses the SoloAgentTrainer class.
         """
 
-        # The body models of the agents
-        body_model_dict = {
-            agent_name: agent.body
-            for agent_name, agent in self.scenario_instance.agents.items()
-        }
+        # The body models of the agents. When the actor and critic don't share a body,
+        # we use the policy body for pretraining, so this is the relevant body.
+        if self.params.ppo.use_shared_body:
+            body_model_dict = {
+                agent_name: agent.body
+                for agent_name, agent in self.scenario_instance.agents.items()
+            }
+        else:
+            body_model_dict = {
+                agent_name: agent.policy_body
+                for agent_name, agent in self.scenario_instance.agents.items()
+            }
 
         # Get the parameters that define the model cache
         model_cache_params = self.params.to_dict()
@@ -173,15 +187,70 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Put the agents (back) in training mode
         for agent in self.scenario_instance.agents.values():
-            agent.body.train()
-            agent.policy_head.train()
-            agent.value_head.train()
+            agent.train()
 
     def _train_setup(self):
-        """Optional setup before training."""
+        """Some setup before the training loop"""
 
-    @abstractmethod
-    def _get_data_collectors(self) -> tuple[DataCollectorBase, DataCollectorBase]:
+        # Build the policy and value operators differently depending on whether the body
+        # is shared
+        if self.params.ppo.use_shared_body:
+            # Create the policy head, which samples actions from the policy probability
+            # distribution
+            combined_policy_head = self.scenario_instance.combined_policy_head
+            combined_probabilistic_policy_head = ProbabilisticActor(
+                combined_policy_head,
+                spec=self.train_environment.action_spec,
+                distribution_class=CompositeCategoricalDistribution,
+                distribution_kwargs=dict(
+                    key_transform=lambda x: ("agents", x),
+                    log_prob_key=("agents", "sample_log_prob"),
+                ),
+                in_keys={
+                    out_key[1]: out_key for out_key in combined_policy_head.out_keys
+                },
+                out_keys=self.train_environment.action_keys,
+                return_log_prob=True,
+                log_prob_key=("agents", "sample_log_prob"),
+            )
+
+            # Create the full model, which runs the combined body and heads
+            full_model = ActorValueOperator(
+                self.scenario_instance.combined_body,
+                combined_probabilistic_policy_head,
+                self.scenario_instance.combined_value_head,
+            )
+            self.policy_operator = full_model.get_policy_operator()
+            self.value_operator = full_model.get_value_operator()
+
+        else:
+            # Create the policy operator, which runs the combined policy body and head
+            # and samples actions from the policy probability distribution
+            combined_policy_body = self.scenario_instance.combined_policy_body
+            combined_policy_head = self.scenario_instance.combined_policy_head
+            self.policy_operator = ProbabilisticActor(
+                TensorDictSequential(combined_policy_body, combined_policy_head),
+                spec=self.train_environment.action_spec,
+                distribution_class=CompositeCategoricalDistribution,
+                distribution_kwargs=dict(
+                    key_transform=lambda x: ("agents", x),
+                    log_prob_key=("agents", "sample_log_prob"),
+                ),
+                in_keys={
+                    out_key[1]: out_key for out_key in combined_policy_head.out_keys
+                },
+                out_keys=self.train_environment.action_keys,
+                return_log_prob=True,
+                log_prob_key=("agents", "sample_log_prob"),
+            )
+
+            # Create the value operator, which runs the combined value body and head
+            self.value_operator = TensorDictSequential(
+                self.scenario_instance.combined_value_body,
+                self.scenario_instance.combined_value_head,
+            )
+
+    def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
         """Construct the data collectors, which generate rollouts from the environment
 
         Constructs a collector for both the train and the test environment.
@@ -193,9 +262,29 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         test_collector : SyncDataCollector
             The test data collector.
         """
-        pass
 
-    @abstractmethod
+        train_collector = SyncDataCollector(
+            self.train_environment,
+            self.policy_operator,
+            device=self.device,
+            storing_device=self.device,
+            frames_per_batch=self.params.ppo.frames_per_batch,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_iterations,
+        )
+
+        test_collector = SyncDataCollector(
+            self.train_environment,
+            self.policy_operator,
+            device=self.device,
+            storing_device=self.device,
+            frames_per_batch=self.params.ppo.frames_per_batch,
+            total_frames=self.params.ppo.frames_per_batch
+            * self.params.ppo.num_test_iterations,
+        )
+
+        return train_collector, test_collector
+
     def _get_replay_buffer(self) -> ReplayBuffer:
         """Construct the replay buffer, which will store the rollouts
 
@@ -204,7 +293,13 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         ReplayBuffer
             The replay buffer.
         """
-        pass
+        return ReplayBuffer(
+            storage=LazyTensorStorage(
+                self.params.ppo.frames_per_batch, device=self.device
+            ),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=self.params.ppo.minibatch_size,
+        )
 
     @abstractmethod
     def _get_loss_module_and_gae(self) -> tuple[Objective, GAE]:
@@ -485,6 +580,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Run the test loop
         with torch.no_grad():
+            # Put the agents in eval mode
+            for agent in self.scenario_instance.agents.values():
+                agent.eval()
+
             mean_rewards = {agent_name: 0 for agent_name in self._agent_names}
             mean_episode_length = 0
             mean_accuracy = 0

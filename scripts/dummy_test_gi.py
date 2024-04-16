@@ -55,6 +55,7 @@ def run(cmd_args: Namespace):
             minibatch_size=2,
             frames_per_batch=16,
             loss_type=PpoLossType.CLIP,
+            use_shared_body=True,
         ),
         protocol_common=CommonProtocolParameters(
             shared_reward=False,
