@@ -2,21 +2,8 @@
 
 # This script is used to start a tmux session for the pvg project
 
-# The script takes an optional argument for the session name
-SESSION_NAME=${1:-"pvg"}
+# Get the directory of the script
+script_dir=`dirname -- "$( readlink -f -- "$0"; )";`
 
-# Check if tmux session exists
-tmux has-session -t $SESSION_NAME 2>/dev/null
-
-# If session does not exist, start a new one
-if [ $? != 0 ]; then
-    echo "Starting new tmux session"
-    cd /root/pvg-experiments
-    tmux new-session -s $SESSION_NAME -n "main" -d
-    tmux split-window -h -t $SESSION_NAME
-    tmux send-keys -t $SESSION_NAME "nvitop" C-m
-    tmux select-pane -t 0
-fi
-
-# Attach to the session
-tmux attach -t $SESSION_NAME
+# Run the python script with all the arguments
+python3 "$script_dir/pvg-tmux.py" $@
