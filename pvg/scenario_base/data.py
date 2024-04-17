@@ -86,6 +86,8 @@ class Dataset(ABC):
         else:
             # Load the memory-mapped tensordict
             self._tensor_dict = TensorDict.load_memmap(self.processed_dir)
+            if self.settings.dataset_on_device:
+                self._tensor_dict.to(self.settings.device)
 
     def _download(self):
         """Download the raw data."""

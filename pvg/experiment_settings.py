@@ -50,6 +50,9 @@ class ExperimentSettings:
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training.
+    dataset_on_device : bool, default=False
+        Whether store the whole dataset on the device. This can speed up training but
+        requires that the dataset fits on the device. This makes `pin_memory` redundant.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -69,6 +72,7 @@ class ExperimentSettings:
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
     pin_memory: bool = True
+    dataset_on_device: bool = False
     test_run: bool = False
 
     def __post_init__(self):

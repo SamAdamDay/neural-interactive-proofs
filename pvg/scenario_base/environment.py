@@ -263,6 +263,7 @@ class Environment(EnvBase, ABC):
                 round=env_td["round"] + 1,
             ),
             batch_size=self.batch_size,
+            device=self.device,
         )
 
         # The observations are passed through unchanged
