@@ -232,6 +232,7 @@ def experiment_fn(
     run_experiment(
         params,
         device=device,
+        dataset_on_device=cmd_args.dataset_on_device,
         logger=logger,
         tqdm_func=tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
@@ -272,4 +273,13 @@ if __name__ == "__main__":
         experiment_name="PPO_GI",
         **extra_args,
     )
+
+    experiment.parser.add_argument(
+        "--no-dataset-on-device",
+        action="store_false",
+        dest="dataset_on_device",
+        default=True,
+        help="Don't store the whole dataset on the device.",
+    )
+
     experiment.run()
