@@ -92,6 +92,7 @@ class TrainerType(StrEnum):
     VANILLA_PPO = enum_auto()
     SOLO_AGENT = enum_auto()
     SPG = enum_auto()
+    REINFORCE = enum_auto()
 
 
 class PpoLossType(StrEnum):
@@ -608,8 +609,8 @@ class AgentsParameters(dict[str, AgentParameters]):
 
 
 @dataclass
-class CommonPpoParameters(SubParameters):
-    """Common parameters for PPO trainers.
+class RlTrainerParameters(SubParameters):
+    """Additional parameters common to all RL trainers.
 
     Parameters
     ----------
@@ -632,6 +633,48 @@ class CommonPpoParameters(SubParameters):
         The learning rate.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
+    gamma : float
+        The discount factor.
+    lmbda : float
+        The GAE lambda parameter.
+    body_lr_factor : float, optional
+        The learning rate factor for the body part of the model. If set this overrides
+        the `body_lr_factor` parameter of each agent.
+    use_shared_body : bool
+        Whether the actor and critic share the same body, when using a critic.
+    num_test_iterations : int
+        The number of iterations to run the test for.
+    """
+
+    # Sampling
+    frames_per_batch: int = 1000
+    steps_per_env_per_iteration: Optional[int] = None
+    num_iterations: int = 1000
+
+    # Training
+    num_epochs: int = 4
+    minibatch_size: int = 64
+    lr: float = 0.003
+    max_grad_norm: float = 1.0
+
+    # Reinforcement learning
+    gamma: float = 0.9
+    lmbda: float = 0.95
+
+    # Agents
+    body_lr_factor: Optional[float] = None
+    use_shared_body: bool = True
+
+    # Testing
+    num_test_iterations: int = 10
+
+
+@dataclass
+class CommonPpoParameters(SubParameters):
+    """Common parameters for PPO trainers.
+
+    Parameters
+    ----------
     loss_type : PpoLossType
         The type of PPO loss function to use. See `PpoLossType` for options.
     clip_epsilon : float
@@ -650,29 +693,7 @@ class CommonPpoParameters(SubParameters):
         The coefficient of the entropy term in the PPO loss.
     normalize_advantage : bool
         Whether to normalise the advantages in the PPO loss.
-    gamma : float
-        The discount factor.
-    lmbda : float
-        The GAE lambda parameter.
-    body_lr_factor : float, optional
-        The learning rate factor for the body part of the model. If set this overrides
-        the `body_lr_factor` parameter of each agent.
-    use_shared_body : bool
-        Whether the actor and critic share the same body.
-    num_test_iterations : int
-        The number of iterations to run the test for.
     """
-
-    # Sampling
-    frames_per_batch: int = 1000
-    steps_per_env_per_iteration: Optional[int] = None
-    num_iterations: int = 1000
-
-    # Training
-    num_epochs: int = 4
-    minibatch_size: int = 64
-    lr: float = 0.003
-    max_grad_norm: float = 1.0
 
     # Loss function
     loss_type: PpoLossType = PpoLossType.CLIP
@@ -684,17 +705,6 @@ class CommonPpoParameters(SubParameters):
     critic_coef: float = 1.0
     entropy_eps: float = 0.001
     normalize_advantage: bool = True
-
-    # PPO
-    gamma: float = 0.9
-    lmbda: float = 0.95
-
-    # Agents
-    body_lr_factor: Optional[float] = None
-    use_shared_body: bool = True
-
-    # Testing
-    num_test_iterations: int = 10
 
 
 @dataclass
@@ -742,6 +752,20 @@ class SpgParameters(SubParameters):
     ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
     ihvp_rank: int = 5  # Default value taken from hypergrad package example
     ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
+
+
+@dataclass
+class ReinforceParameters(SubParameters):
+    """Additional parameters for the REINFORCE trainer.
+
+    Parameters
+    ----------
+    use_advantage_and_critic : bool
+        Whether to use a critic in the REINFORCE trainer and use the advantage estimated
+        using it in the loss function. Otherwise reward-to-go is used.
+    """
+
+    use_advantage_and_critic: bool = False
 
 
 @dataclass
@@ -941,12 +965,16 @@ class Parameters(BaseParameters):
         Additional parameters for the agents. The keys are the names of the agents, and
         the values are the parameters for each agent. If not provided, the default
         parameters are used for each agent for a given scenario.
+    rl : RlTrainerParams, optional
+        Common parameters for all RL trainers.
     ppo : PpoParameters, optional
         Common parameters for PPO trainers.
     vanilla_ppo : VanillaPpoParameters, optional
         Additional parameters for the vanilla PPO trainer.
     spg : SpgParameters, optional
         Additional parameters for SPG and its variants.
+    reinforce : ReinforceParameters, optional
+        Additional parameters for the REINFORCE trainer.
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
@@ -972,9 +1000,11 @@ class Parameters(BaseParameters):
 
     agents: Optional[AgentsParameters | dict[str, AgentParameters]] = None
 
+    rl: Optional[RlTrainerParameters | dict] = None
     ppo: Optional[CommonPpoParameters | dict] = None
     vanilla_ppo: Optional[VanillaPpoParameters | dict] = None
     spg: Optional[SpgParameters | dict] = None
+    reinforce: Optional[ReinforceParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
@@ -1017,6 +1047,17 @@ class Parameters(BaseParameters):
                     **self.image_classification
                 )
 
+        # Add common RL parameters if they are not provided
+        if (
+            self.trainer == TrainerType.VANILLA_PPO
+            or self.trainer == TrainerType.SPG
+            or self.trainer == TrainerType.REINFORCE
+        ):
+            if self.rl is None:
+                self.rl = RlTrainerParameters()
+            elif isinstance(self.rl, dict):
+                self.rl = RlTrainerParameters(**self.rl)
+
         # Add common PPO parameters if they are not provided
         if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
             if self.ppo is None:
@@ -1024,7 +1065,7 @@ class Parameters(BaseParameters):
             elif isinstance(self.ppo, dict):
                 self.ppo = CommonPpoParameters(**self.ppo)
 
-        # Convert PPO parameters for specific variants to the appropriate class
+        # Add PPO parameters for specific variants to the appropriate class
         if self.trainer == TrainerType.VANILLA_PPO:
             if self.vanilla_ppo is None:
                 self.vanilla_ppo = VanillaPpoParameters()
@@ -1039,6 +1080,11 @@ class Parameters(BaseParameters):
                 )
             elif isinstance(self.spg, dict):
                 self.spg = SpgParameters(**self.spg)
+        elif self.trainer == TrainerType.REINFORCE:
+            if self.reinforce is None:
+                self.reinforce = ReinforceParameters()
+            elif isinstance(self.reinforce, dict):
+                self.reinforce = ReinforceParameters(**self.reinforce)
 
         # Convert solo agent parameters to SoloAgentParameters
         if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:

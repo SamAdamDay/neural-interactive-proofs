@@ -71,8 +71,8 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
         # Make the generalized advantage estimator
         loss_module.make_value_estimator(
             ValueEstimators.GAE,
-            gamma=self.params.ppo.gamma,
-            lmbda=self.params.ppo.lmbda,
+            gamma=self.params.rl.gamma,
+            lmbda=self.params.rl.lmbda,
         )
         gae = loss_module.value_estimator
 

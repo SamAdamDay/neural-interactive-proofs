@@ -2169,8 +2169,6 @@ class GraphIsomorphismAgent(Agent):
         # multiple times
         named_parameters = list(named_parameters)
 
-        # print([name for name, _ in named_parameters])
-
         def is_gnn_param(name: str):
             return re.match(f"{self._body_param_regex}_gnn", name)
 

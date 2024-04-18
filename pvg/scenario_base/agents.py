@@ -26,9 +26,10 @@ from einops import repeat
 
 from jaxtyping import Float, Int
 
-from pvg.parameters import Parameters, TrainerType, ScenarioType
+from pvg.parameters import Parameters
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
+from pvg.utils.params import check_if_critic_and_single_body
 
 
 @dataclass
@@ -414,19 +415,59 @@ class Agent:
         params: Parameters,
         agent_name: str,
     ):
-        if self.body is None and (self.policy_body is None or self.value_body is None):
-            raise ValueError(
-                "An agent must have either a shared body or separate policy and value"
-                " bodies."
-            )
+        if self.body is None and self.policy_body is None:
+            raise ValueError("An agent must have either a body or a policy body")
+
+        if self.body is not None and self.policy_body is not None:
+            raise ValueError("An agent cannot have both a body and a policy body")
+
+        if self.value_body is not None and self.policy_body is None:
+            raise ValueError("An agent with a value body must have a policy body")
 
         if self.policy_head is None and self.solo_head is None:
             raise ValueError(
                 "An agent must have either a policy head or a solo head, or both."
             )
 
-        if self.policy_head is not None and self.value_head is None:
-            raise ValueError("An agent with a policy head must have a value head")
+        if self.value_head is not None and self.policy_head is None:
+            raise ValueError("An agent with a value head must have a policy head")
+
+        if (
+            self.policy_head is not None
+            and self.body is None
+            and self.policy_body is None
+        ):
+            raise ValueError(
+                "An agent with a policy head must have a body or a policy body"
+            )
+
+        if (
+            self.value_head is not None
+            and self.body is None
+            and self.value_body is None
+        ):
+            raise ValueError(
+                "An agent with a value head must have a body or a value body"
+            )
+
+        if (
+            self.solo_head is not None
+            and self.body is None
+            and self.policy_body is None
+        ):
+            raise ValueError(
+                "An agent with a solo head must have a body or a policy body"
+            )
+
+        if (
+            self.policy_head is not None
+            and self.value_head is None
+            and self.body is None
+        ):
+            raise ValueError(
+                "An agent with a policy head but no value head must have a 'body', and"
+                " not a 'policy_body'"
+            )
 
         self.params = params
         self.agent_name = agent_name
@@ -470,7 +511,7 @@ class Agent:
 
     @property
     def _body_param_regex(self) -> str:
-        if self.params.ppo.use_shared_body:
+        if self.params.rl.use_shared_body:
             return f"actor_network_params.module_0_{self.agent_name}"
         else:
             return (
@@ -481,7 +522,7 @@ class Agent:
 
     @property
     def _non_body_param_regex(self) -> str:
-        if self.params.ppo.use_shared_body:
+        if self.params.rl.use_shared_body:
             return (
                 f"(actor_network_params.module_[1-9]|"
                 f"critic_network_params.module_[0-9])"
@@ -496,21 +537,21 @@ class Agent:
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
-        if self.params.ppo.use_shared_body:
-            return self.body.named_parameters()
-        else:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.named_parameters(), self.value_body.named_parameters()
             )
+        return self.body.named_parameters()
 
     @property
     def _body_parameters(self) -> Iterable[TorchParameter]:
-        if self.params.ppo.use_shared_body:
-            return self.body.parameters()
-        else:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.parameters(), self.value_body.parameters()
             )
+        return self.body.parameters()
 
     def get_param_dicts(
         self,

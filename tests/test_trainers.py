@@ -9,7 +9,7 @@ from pvg import (
     TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
-    CommonPpoParameters,
+    RlTrainerParameters,
     ExperimentSettings,
 )
 from pvg.trainers.vanilla_ppo import VanillaPpoTrainer
@@ -42,7 +42,7 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
@@ -56,35 +56,7 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
-            agents=AgentsParameters(
-                prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-                verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-            ),
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
-            agents=AgentsParameters(
-                prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-                verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-            ),
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.01),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
@@ -98,7 +70,35 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.01),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                ),
+            ),
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
@@ -112,7 +112,7 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=0.1, gnn_lr_factor=0.1, **basic_agent_params
@@ -126,7 +126,7 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=0.1),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.1),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
@@ -140,7 +140,7 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            ppo=CommonPpoParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
@@ -215,7 +215,7 @@ def test_gi_ppo_train_optimizer_groups():
 
     for use_shared_body, (i, params) in product([True, False], enumerate(params_list)):
         # Create the experiment settings and scenario instance to pass to the trainer
-        params.ppo.use_shared_body = use_shared_body
+        params.rl.use_shared_body = use_shared_body
         settings = ExperimentSettings(device="cpu", test_run=True)
         scenario_instance = build_scenario_instance(params, settings)
 
@@ -224,8 +224,6 @@ def test_gi_ppo_train_optimizer_groups():
         trainer._train_setup()
         loss_module, _ = trainer._get_loss_module_and_gae()
         optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
-
-        print(i, use_shared_body)
 
         def get_network_part(param_name: str) -> str:
             """Determine which part of the network the parameter is in."""

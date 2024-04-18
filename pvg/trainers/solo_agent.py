@@ -78,7 +78,7 @@ class SoloAgentTrainer(Trainer):
 
         # Get the agent models, for convenience. When using a separate body for the
         # policy and value networks, we use the policy body.
-        if self.params.ppo.use_shared_body or not as_pretraining:
+        if self.params.rl.use_shared_body or not as_pretraining:
             agent_models = {
                 name: TensorDictSequential(agent.body, agent.solo_head)
                 for name, agent in agents.items()

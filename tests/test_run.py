@@ -5,6 +5,7 @@ from pvg import (
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     SoloAgentParameters,
+    RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
     SpgVariant,
@@ -60,7 +61,7 @@ def test_prepare_run_experiment():
     }
 
     # Very basic parameters for each trainer
-    common_ppo_params = CommonPpoParameters(
+    rl_params = RlTrainerParameters(
         num_iterations=2,
         num_epochs=1,
         minibatch_size=1,
@@ -73,7 +74,9 @@ def test_prepare_run_experiment():
         ),
         TrainerType.VANILLA_PPO: None,
         TrainerType.SPG: SpgParameters(),
+        TrainerType.REINFORCE: None,
     }
+    common_ppo_params = CommonPpoParameters()
 
     param_specs = [
         # Test combinations of scenario, random provers, and pretraining
@@ -121,7 +124,7 @@ def test_prepare_run_experiment():
         # Test the other trainers
         {
             "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
-            "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT],
+            "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT, TrainerType.REINFORCE],
             "ppo_loss": [PpoLossType.CLIP],
             "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [SpgVariant.SPG],
@@ -191,7 +194,9 @@ def test_prepare_run_experiment():
 
         # Construct the PPO parameters
         common_ppo_params.loss_type = ppo_loss_type
-        common_ppo_params.use_shared_body = use_shared_body
+
+        # Construct the RL parameters
+        rl_params.use_shared_body = use_shared_body
 
         # Construct the agent parameters
         agents_param = {}
@@ -218,6 +223,7 @@ def test_prepare_run_experiment():
                 "interaction_protocol": protocol_type,
                 "agents": agents_param,
                 "pretrain_agents": pretrain_agents,
+                "rl": rl_params,
                 "ppo": common_ppo_params,
                 str(trainer_type): trainer_param,
                 "d_representation": 1,

@@ -1,17 +1,25 @@
 """Implementations of RL objectives, extending those of TorchRL"""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable, NamedTuple
+from typing import Iterable, NamedTuple, Optional
 import contextlib
 from abc import ABC, abstractmethod
+import warnings
 
 import torch
 from torch import Tensor
 
-from torchrl.objectives import PPOLoss, ClipPPOLoss, KLPENPPOLoss, LossModule
+from torchrl.objectives import (
+    PPOLoss,
+    ClipPPOLoss,
+    KLPENPPOLoss,
+    ReinforceLoss,
+    LossModule,
+)
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn.distributions import CompositeDistribution
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
 from pvg.parameters import SpgVariant
@@ -20,26 +28,15 @@ from pvg.utils.torch import flatten_batch_dims
 
 
 class Objective(LossModule, ABC):
-    """Base class for all RL objectives."""
+    """Base class for all RL objectives.
 
-    @abstractmethod
-    def backward(self, loss_vals: TensorDictBase):
-        """Perform the backward pass for the loss.
-
-        Parameters
-        ----------
-        loss_vals : TensorDictBase
-            The loss values.
-        """
-
-
-class PPOLossImproved(Objective, PPOLoss, ABC):
-    """Base PPO loss class which allows multiple actions keys and normalises advantages
+    Extends the LossModule class from TorchRL to allow multiple actions keys and
+    normalise advantages.
 
     The implementation is a bit of a hack. We change the _AcceptedKeys class dynamically
     to allow for multiple action keys.
 
-    See `torchrl.objectives.PPOLoss` for more details
+    See `torchrl.objectives.LossModule` for more details
     """
 
     action_keys: Iterable[NestedKey] = ("action",)
@@ -158,8 +155,9 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
             ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic_network.in_keys,
         ]
+        if self.critic_network is not None:
+            keys.extend(self.critic_network.in_keys)
         self._in_keys = list(set(keys))
 
     # Modified to output both log probabilities and log_weights
@@ -233,7 +231,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
 
         Returns
         -------
-        torch.Tensor
+        advantage : torch.Tensor
             The normalised advantage.
         """
 
@@ -256,6 +254,23 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
             advantage = (advantage - loc) / scale
 
         return advantage
+
+    @abstractmethod
+    def backward(self, loss_vals: TensorDictBase):
+        """Perform the backward pass for the loss.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
+
+
+class PPOLossImproved(Objective, PPOLoss, ABC):
+    """Base PPO loss class which allows multiple actions keys and normalises advantages
+
+    See `torchrl.objectives.PPOLoss` for more details
+    """
 
     def _set_entropy_and_critic_losses(
         self,
@@ -542,7 +557,6 @@ class SpgLoss(ClipPPOLossImproved):
         tensordict = tensordict.clone(False)
 
         num_batch_dims = len(tensordict.batch_size)
-        print(num_batch_dims)
 
         advantage = self._get_advantage(tensordict)
 
@@ -782,3 +796,175 @@ class SpgLoss(ClipPPOLossImproved):
         additional_loss.backward()
 
         return
+
+
+class ReinforceLossImproved(Objective, ReinforceLoss):
+    """Reinforce loss which allows multiple actions keys and normalises advantages
+
+    The implementation is also tweaked slightly to allow it to work without a critic. In
+    this case reward-to-go is used instead of the advantage.
+
+    The __init__ method is copied from the original ReinforceLoss class with some
+    tweaks.
+
+    See `torchrl.objectives.ReinforceLoss` for more details
+
+    Parameters
+    ----------
+    actor_network : ProbabilisticTensorDictSequential
+        The policy operator.
+    critic_network : TensorDictModule, optional
+        The value operator, if using a critic.
+    loss_weighting_type : str, optional
+        The type of weighting to use in the loss. Can be one of "advantage" or
+        "reward_to_go". The former requires a critic network. Defaults to "advantage" when
+        a critic is used, otherwise "reward_to_go".
+    delay_value : bool, optional
+        If ``True``, a target network is needed for the critic. Defaults to ``False``.
+        Incompatible with ``functional=False``.
+    loss_critic_type : str, default="smooth_l1"
+        Loss function for the value discrepancy. Can be one of "l1", "l2" or
+        "smooth_l1".
+    gamma : float, optional
+        The discount factor. Required if ``loss_weighting_type="reward_to_go"``.
+    separate_losses : bool, default=False
+        If ``True``, shared parameters between policy and critic will only be trained on
+        the policy loss. Defaults to ``False``, ie. gradients are propagated to shared
+        parameters for both policy and critic losses.
+    functional : bool, default=True
+        Whether modules should be functionalized. Functionalizing permits features like
+        meta-RL, but makes it impossible to use distributed models (DDP, FSDP, ...) and
+        comes with a little cost. Defaults to ``True``.
+    normalize_advantage : bool, default=True
+        Whether to normalise the advantage. Defaults to ``True``.
+    """
+
+    def __init__(
+        self,
+        actor_network: ProbabilisticTensorDictSequential,
+        critic_network: Optional[TensorDictModule] = None,
+        *,
+        loss_weighting_type: Optional[str] = None,
+        delay_value: bool = False,
+        loss_critic_type: str = "smooth_l1",
+        gamma: Optional[float] = None,
+        advantage_key: Optional[str] = None,
+        value_target_key: Optional[str] = None,
+        separate_losses: bool = False,
+        functional: bool = True,
+        normalize_advantage: bool = True,
+    ) -> None:
+        if actor_network is None:
+            raise TypeError("Missing positional argument actor_network.")
+        if not functional and delay_value:
+            raise RuntimeError(
+                "delay_value and ~functional are incompatible, as delayed value currently relies on functional calls."
+            )
+
+        if loss_weighting_type is None:
+            if critic_network is None:
+                loss_weighting_type = "reward_to_go"
+            else:
+                loss_weighting_type = "advantage"
+        elif loss_weighting_type == "advantage" and critic_network is None:
+            raise ValueError("Cannot use advantage weighting without a critic network.")
+        elif loss_weighting_type == "reward_to_go" and critic_network is not None:
+            warnings.warn(
+                "Using reward-to-go weighting but a critic network is provided. "
+                "This will result in the critic being ignored."
+            )
+        if loss_weighting_type not in ["advantage", "reward_to_go"]:
+            raise ValueError(
+                f"loss_weighting_type must be one of 'advantage' or 'reward_to_go', but "
+                f"got {loss_weighting_type!r}."
+            )
+        if loss_weighting_type == "reward_to_go":
+            if gamma is None:
+                raise ValueError(
+                    f"gamma must be provided when using 'reward_to_go' weighting."
+                )
+            self.gamma = gamma
+
+        self.loss_weighting_type = loss_weighting_type
+        self._functional = functional
+        self.normalize_advantage = normalize_advantage
+
+        # A hacky way to all the grandparent class's __init__ method
+        super(ReinforceLoss, self).__init__()
+        self.in_keys = None
+        self._set_deprecated_ctor_keys(
+            advantage=advantage_key, value_target=value_target_key
+        )
+
+        self.delay_value = delay_value
+        self.loss_critic_type = loss_critic_type
+
+        # Actor
+        if self.functional:
+            self.convert_to_functional(
+                actor_network,
+                "actor_network",
+                create_target_params=False,
+            )
+        else:
+            self.actor_network = actor_network
+
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
+        # Value
+        if critic_network is not None:
+            if self.functional:
+                self.convert_to_functional(
+                    critic_network,
+                    "critic_network",
+                    create_target_params=self.delay_value,
+                    compare_against=policy_params,
+                )
+            else:
+                self.critic_network = critic_network
+                self.target_critic_network_params = None
+        else:
+            self.critic_network = None
+            self.target_critic_network_params = None
+            self.critic_network_params = None
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Compute the weighting used in the loss, which is either the reward-to-go or
+        # the advantage, depending on whether a critic is used
+        if self.loss_weighting_type == "reward_to_go":
+            loss_weighting = tensordict.get(("agents", "reward_to_go"))
+        else:
+            loss_weighting = self._get_advantage(tensordict)
+
+        # Compute the log-prob
+        log_prob, _, _ = self._log_weight(tensordict)
+        if log_prob.shape == loss_weighting.shape[:-1]:
+            log_prob = log_prob.unsqueeze(-1)
+
+        # Compute the loss
+        loss_actor = -log_prob * loss_weighting.detach()
+        loss_actor = loss_actor.mean()
+        td_out = TensorDict({"loss_actor": loss_actor}, [])
+
+        if self.critic_network is not None:
+            td_out.set("loss_value", self.loss_critic(tensordict).mean())
+
+        return td_out
+
+    def backward(self, loss_vals: TensorDictBase):
+        """Perform the backward pass for the loss.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
+        if self.critic_network is not None:
+            loss_value = loss_vals["loss_actor"] + loss_vals["loss_value"]
+        else:
+            loss_value = loss_vals["loss_actor"]
+        loss_value.backward()

@@ -12,6 +12,7 @@ from pvg import (
     RandomAgentParameters,
     ImageClassificationAgentParameters,
     ImageClassificationParameters,
+    RlTrainerParameters,
     CommonPpoParameters,
     SoloAgentParameters,
     SpgParameters,
@@ -126,16 +127,18 @@ def experiment_fn(
             ),
             prover=prover_params,
         ),
-        ppo=CommonPpoParameters(
+        rl=RlTrainerParameters(
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
-            gamma=combo["gamma"],
-            lmbda=combo["lmbda"],
-            clip_epsilon=combo["clip_epsilon"],
-            entropy_eps=combo["entropy_eps"],
             body_lr_factor=combo["body_lr_factor"],
             lr=combo["lr"],
+            gamma=combo["gamma"],
+            lmbda=combo["lmbda"],
+        ),
+        ppo=CommonPpoParameters(
+            clip_epsilon=combo["clip_epsilon"],
+            entropy_eps=combo["entropy_eps"],
             normalize_advantage=combo["normalize_advantage"],
         ),
         image_classification=ImageClassificationParameters(

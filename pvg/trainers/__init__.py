@@ -12,6 +12,7 @@ from .rl_trainer_base import ReinforcementLearningTrainer
 from .vanilla_ppo import VanillaPpoTrainer
 from .solo_agent import SoloAgentTrainer
 from .spg import SpgTrainer
+from .reinforce import ReinforceTrainer
 from .registry import register_trainer, TRAINER_REGISTRY
 
 

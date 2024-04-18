@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from pvg.parameters import Parameters
 from pvg.scenario_instance import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
+from pvg.utils.params import check_if_critic_and_single_body
 
 
 class Trainer(ABC):
@@ -33,6 +34,9 @@ class Trainer(ABC):
         self._agent_names = self.scenario_instance.protocol_handler.agent_names
 
         self.device = self.settings.device
+
+        # Check if we need a critic and if it shares a body with the actor
+        self.use_critic, self.use_single_body = check_if_critic_and_single_body(params)
 
     @abstractmethod
     def train(self):
