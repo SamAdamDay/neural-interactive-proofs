@@ -61,7 +61,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 agent_params.agent_lr_factor
                 for agent_params in self.params.agents.values()
             ],
-            lr=self.params.ppo.lr,
+            lr=self.params.rl.lr,
             clip_epsilon=self.params.ppo.clip_epsilon,
             entropy_coef=self.params.ppo.entropy_eps,
             normalize_advantage=self.params.ppo.normalize_advantage,
@@ -78,8 +78,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
         # Make the generalized advantage estimator
         loss_module.make_value_estimator(
             ValueEstimators.GAE,
-            gamma=self.params.ppo.gamma,
-            lmbda=self.params.ppo.lmbda,
+            gamma=self.params.rl.gamma,
+            lmbda=self.params.rl.lmbda,
         )
         gae = loss_module.value_estimator
 

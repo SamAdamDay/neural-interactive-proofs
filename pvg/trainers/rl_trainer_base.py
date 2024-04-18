@@ -1,6 +1,7 @@
 """A generic reinforcement learning trainer."""
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs.transforms import Transform
 
 from pvg.parameters import (
     Parameters,
@@ -95,7 +97,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     ]
 
     policy_operator: TensorDictModuleBase
-    value_operator: TensorDictModuleBase
+    value_operator: TensorDictModuleBase | None
 
     def __init__(
         self,
@@ -147,7 +149,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # The body models of the agents. When the actor and critic don't share a body,
         # we use the policy body for pretraining, so this is the relevant body.
-        if self.params.ppo.use_shared_body:
+        if self.use_single_body:
             body_model_dict = {
                 agent_name: agent.body
                 for agent_name, agent in self.scenario_instance.agents.items()
@@ -194,7 +196,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Build the policy and value operators differently depending on whether the body
         # is shared
-        if self.params.ppo.use_shared_body:
+        if self.use_single_body and self.use_critic:
             # Create the policy head, which samples actions from the policy probability
             # distribution
             combined_policy_head = self.scenario_instance.combined_policy_head
@@ -226,7 +228,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         else:
             # Create the policy operator, which runs the combined policy body and head
             # and samples actions from the policy probability distribution
-            combined_policy_body = self.scenario_instance.combined_policy_body
+            if self.use_critic:
+                combined_policy_body = self.scenario_instance.combined_policy_body
+            else:
+                combined_policy_body = self.scenario_instance.combined_body
             combined_policy_head = self.scenario_instance.combined_policy_head
             self.policy_operator = ProbabilisticActor(
                 TensorDictSequential(combined_policy_body, combined_policy_head),
@@ -245,10 +250,13 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Create the value operator, which runs the combined value body and head
-            self.value_operator = TensorDictSequential(
-                self.scenario_instance.combined_value_body,
-                self.scenario_instance.combined_value_head,
-            )
+            if self.use_critic:
+                self.value_operator = TensorDictSequential(
+                    self.scenario_instance.combined_value_body,
+                    self.scenario_instance.combined_value_head,
+                )
+            else:
+                self.value_operator = None
 
     def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
         """Construct the data collectors, which generate rollouts from the environment
@@ -268,9 +276,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.ppo.frames_per_batch,
-            total_frames=self.params.ppo.frames_per_batch
-            * self.params.ppo.num_iterations,
+            frames_per_batch=self.params.rl.frames_per_batch,
+            total_frames=self.params.rl.frames_per_batch
+            * self.params.rl.num_iterations,
         )
 
         test_collector = SyncDataCollector(
@@ -278,15 +286,20 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.ppo.frames_per_batch,
-            total_frames=self.params.ppo.frames_per_batch
-            * self.params.ppo.num_test_iterations,
+            frames_per_batch=self.params.rl.frames_per_batch,
+            total_frames=self.params.rl.frames_per_batch
+            * self.params.rl.num_test_iterations,
         )
 
         return train_collector, test_collector
 
-    def _get_replay_buffer(self) -> ReplayBuffer:
+    def _get_replay_buffer(self, transform: Optional[Transform] = None) -> ReplayBuffer:
         """Construct the replay buffer, which will store the rollouts
+
+        Parameters
+        ----------
+        transform : Transform, optional
+            The transform to apply to the data before storing it in the replay buffer.
 
         Returns
         -------
@@ -295,22 +308,24 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         """
         return ReplayBuffer(
             storage=LazyTensorStorage(
-                self.params.ppo.frames_per_batch, device=self.device
+                self.params.rl.frames_per_batch, device=self.device
             ),
             sampler=SamplerWithoutReplacement(),
-            batch_size=self.params.ppo.minibatch_size,
+            batch_size=self.params.rl.minibatch_size,
+            transform=transform,
         )
 
     @abstractmethod
-    def _get_loss_module_and_gae(self) -> tuple[Objective, GAE]:
+    def _get_loss_module_and_gae(self) -> tuple[Objective, GAE | None]:
         """Construct the loss module and the generalized advantage estimator
 
         Returns
         -------
         loss_module : Objective
             The loss module.
-        gae : GAE
-            The generalized advantage estimator.
+        gae : GAE | None
+            The generalized advantage estimator, or None if the loss module doesn't use
+            one.
         """
         pass
 
@@ -337,9 +352,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         param_group_collections = {}
         for agent_name, agent in self.scenario_instance.agents.items():
             param_dict = agent.get_param_dicts(
-                base_lr=self.params.ppo.lr,
+                base_lr=self.params.rl.lr,
                 named_parameters=loss_module.named_parameters(),
-                body_lr_factor_override=self.params.ppo.body_lr_factor,
+                body_lr_factor_override=self.params.rl.body_lr_factor,
             )
             all_param_dicts.extend(param_dict)
             param_group_collections[agent_name] = param_dict
@@ -361,7 +376,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         test_collector: DataCollectorBase,
         replay_buffer: ReplayBuffer,
         loss_module: Objective,
-        gae: GAE,
+        gae: GAE | None,
         optimizer: Optimizer,
         param_group_freezer: ParamGroupFreezer,
     ):
@@ -381,8 +396,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             The replay buffer to use for storing the collected data.
         loss_module : Objective
             The loss module.
-        gae : GAE
-            The generalized advantage estimator.
+        gae : GAE | None
+            The generalized advantage estimator, or None if the loss module doesn't use
+            one.
         optimizer : Optimizer
             The optimizer to use for optimizing the loss.
         param_group_freezer : ParamGroupFreezer
@@ -403,7 +419,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Create a progress bar
         pbar = self.settings.tqdm_func(
-            total=self.params.ppo.num_iterations, desc="Training"
+            total=self.params.rl.num_iterations, desc="Training"
         )
 
         # Create the update schedule iterators
@@ -450,12 +466,13 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the GAE
-            with torch.no_grad():
-                gae(
-                    tensordict_data,
-                    params=loss_module.critic_network_params,
-                    target_params=loss_module.target_critic_network_params,
-                )
+            if gae is not None:
+                with torch.no_grad():
+                    gae(
+                        tensordict_data,
+                        params=loss_module.critic_network_params,
+                        target_params=loss_module.target_critic_network_params,
+                    )
 
             # Flatten the data and add it to the replay buffer
             data_view = tensordict_data.reshape(-1)
@@ -464,9 +481,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             loss_outputs = {}
 
             total_steps = 0
-            for _ in range(self.params.ppo.num_epochs):
+            for _ in range(self.params.rl.num_epochs):
                 for _ in range(
-                    self.params.ppo.frames_per_batch // self.params.ppo.minibatch_size
+                    self.params.rl.frames_per_batch // self.params.rl.minibatch_size
                 ):
                     # Sample a minibatch from the replay buffer
                     sub_data = replay_buffer.sample()
@@ -488,7 +505,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
                         # Clip gradients and update parameters
                         clip_grad_norm_(
-                            loss_module.parameters(), self.params.ppo.max_grad_norm
+                            loss_module.parameters(), self.params.rl.max_grad_norm
                         )
                         optimizer.step()
                         optimizer.zero_grad()
@@ -512,16 +529,17 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 loss_outputs[key] /= total_steps
 
             # Compute various statistics for the sampled episodes for logging
-            done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
+            done = tensordict_data.get(("next", "done"))
             reward = tensordict_data.get(("next", "agents", "reward"))
-            value = tensordict_data.get(("agents", "value"))
+            value = tensordict_data.get(("agents", "value"), None)
             decision_logits = tensordict_data.get(("agents", "decision_logits"))
             mean_rewards = {}
             mean_values = {}
             mean_decision_entropy = {}
             for i, agent_name in enumerate(self._agent_names):
                 mean_rewards[agent_name] = reward[..., i].mean().item()
-                mean_values[agent_name] = value[..., i].mean().item()
+                if value is not None:
+                    mean_values[agent_name] = value[..., i].mean().item()
                 mean_decision_entropy[agent_name] = (
                     logit_entropy(decision_logits[..., i]).mean().item()
                 )
@@ -547,7 +565,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     to_log[f"{agent_name}.mean_episode_reward"] = (
                         mean_rewards[agent_name] * mean_episode_length
                     )
-                    to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
+                    if agent_name in mean_values:
+                        to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
                     to_log[
                         f"{agent_name}.mean_decision_entropy"
                     ] = mean_decision_entropy[agent_name]
@@ -575,7 +594,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Create a progress bar
         pbar = self.settings.tqdm_func(
-            total=self.params.ppo.num_test_iterations, desc="Testing"
+            total=self.params.rl.num_test_iterations, desc="Testing"
         )
 
         # Run the test loop
@@ -631,9 +650,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
             # Compute the mean of the statistics
             for agent_name in self._agent_names:
-                mean_rewards[agent_name] /= self.params.ppo.num_test_iterations
-            mean_episode_length /= self.params.ppo.num_test_iterations
-            mean_accuracy /= self.params.ppo.num_test_iterations
+                mean_rewards[agent_name] /= self.params.rl.num_test_iterations
+            mean_episode_length /= self.params.rl.num_test_iterations
+            mean_accuracy /= self.params.rl.num_test_iterations
 
             if self.settings.wandb_run is not None:
                 # Log the mean episode length and mean rewards

@@ -11,7 +11,7 @@ from pvg.parameters import (
     SoloAgentParameters,
     ScenarioType,
     TrainerType,
-    CommonPpoParameters,
+    RlTrainerParameters,
     PvgProtocolParameters,
 )
 from pvg.run import run_experiment, prepare_experiment
@@ -113,9 +113,9 @@ class RunTimeable(TrainingTimeable, ABC):
                 num_epochs=self.num_steps,
                 batch_size=ceil(default_batch_size * self.param_scale),
             )
-            ppo = None
+            rl = None
         else:
-            for field in fields(CommonPpoParameters):
+            for field in fields(RlTrainerParameters):
                 if field.name == "minibatch_size":
                     default_minibatch_size = field.default
                 elif field.name == "frames_per_batch":
@@ -128,7 +128,7 @@ class RunTimeable(TrainingTimeable, ABC):
                 * max_message_rounds
             )
             solo_agent = None
-            ppo = CommonPpoParameters(
+            rl = RlTrainerParameters(
                 num_iterations=self.num_steps,
                 minibatch_size=ceil(default_minibatch_size * self.param_scale),
                 frames_per_batch=frames_per_batch,
@@ -139,7 +139,7 @@ class RunTimeable(TrainingTimeable, ABC):
             scenario=self.scenario,
             trainer=self.trainer,
             dataset=self.dataset,
-            ppo=ppo,
+            rl=rl,
             solo_agent=solo_agent,
             pretrain_agents=self.pretrain,
         )

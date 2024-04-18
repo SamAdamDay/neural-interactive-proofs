@@ -12,7 +12,7 @@ from pvg.parameters import (
     TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
-    CommonPpoParameters,
+    RlTrainerParameters,
     CommonProtocolParameters,
     PvgProtocolParameters,
 )
@@ -53,7 +53,7 @@ def test_graph_isomorphism_environment_step():
         ScenarioType.GRAPH_ISOMORPHISM,
         TrainerType.VANILLA_PPO,
         "test",
-        ppo=CommonPpoParameters(
+        rl=RlTrainerParameters(
             frames_per_batch=batch_size * max_message_rounds,
             steps_per_env_per_iteration=max_message_rounds,
         ),

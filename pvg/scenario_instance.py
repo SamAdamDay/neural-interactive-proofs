@@ -41,6 +41,7 @@ from pvg.scenario_base.agents import (
 from pvg.scenario_base.environment import Environment
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
+from pvg.utils.params import check_if_critic_and_single_body
 
 
 SCENARIO_CLASS_REGISTRY: dict[ScenarioType, dict[type, type]] = {}
@@ -138,6 +139,9 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     if settings.silence_wandb:
         os.environ["WANDB_SILENT"] = "true"
 
+    # Check if we need a critic and if it shares a body with the actor
+    use_critic, use_single_body = check_if_critic_and_single_body(params)
+
     # Create the protocol handler
     protocol_handler = build_protocol_handler(params)
 
@@ -173,7 +177,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         np.random.seed(agent_seed)
 
         # Get the names of the bodies
-        if params.trainer == TrainerType.SOLO_AGENT or params.ppo.use_shared_body:
+        if use_single_body:
             body_names = ["body"]
         else:
             body_names = ["policy_body", "value_body"]
@@ -198,6 +202,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         if (
             params.trainer == TrainerType.VANILLA_PPO
             or params.trainer == TrainerType.SPG
+            or params.trainer == TrainerType.REINFORCE
         ):
             if agent_params.is_random:
                 agent_dict["policy_head"] = scenario_classes[RandomAgentPolicyHead](
@@ -206,12 +211,13 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                     device=device,
                     agent_name=agent_name,
                 )
-                agent_dict["value_head"] = scenario_classes[ConstantAgentValueHead](
-                    params=params,
-                    protocol_handler=protocol_handler,
-                    device=device,
-                    agent_name=agent_name,
-                )
+                if use_critic:
+                    agent_dict["value_head"] = scenario_classes[ConstantAgentValueHead](
+                        params=params,
+                        protocol_handler=protocol_handler,
+                        device=device,
+                        agent_name=agent_name,
+                    )
             else:
                 agent_dict["policy_head"] = scenario_classes[AgentPolicyHead](
                     params=params,
@@ -219,12 +225,13 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                     device=device,
                     agent_name=agent_name,
                 )
-                agent_dict["value_head"] = scenario_classes[AgentValueHead](
-                    params=params,
-                    protocol_handler=protocol_handler,
-                    device=device,
-                    agent_name=agent_name,
-                )
+                if use_critic:
+                    agent_dict["value_head"] = scenario_classes[AgentValueHead](
+                        params=params,
+                        protocol_handler=protocol_handler,
+                        device=device,
+                        agent_name=agent_name,
+                    )
         if params.trainer == TrainerType.SOLO_AGENT or (
             params.pretrain_agents and not agent_params.is_random
         ):
@@ -273,7 +280,11 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
     combined_value_body = None
     combined_policy_head = None
     combined_value_head = None
-    if params.trainer == TrainerType.VANILLA_PPO or params.trainer == TrainerType.SPG:
+    if (
+        params.trainer == TrainerType.VANILLA_PPO
+        or params.trainer == TrainerType.SPG
+        or params.trainer == TrainerType.REINFORCE
+    ):
         # Create the environments
         train_environment = scenario_classes[Environment](
             params=params,
@@ -291,7 +302,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         )
 
         # Create the combined agents
-        if params.ppo.use_shared_body:
+        if use_single_body:
             combined_body = scenario_classes[CombinedBody](
                 params,
                 protocol_handler,
@@ -303,21 +314,23 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                 protocol_handler,
                 {name: agents[name].policy_body for name in params.agents},
             )
-            combined_value_body = scenario_classes[CombinedBody](
-                params,
-                protocol_handler,
-                {name: agents[name].value_body for name in params.agents},
-            )
+            if use_critic:
+                combined_value_body = scenario_classes[CombinedBody](
+                    params,
+                    protocol_handler,
+                    {name: agents[name].value_body for name in params.agents},
+                )
         combined_policy_head = scenario_classes[CombinedPolicyHead](
             params,
             protocol_handler,
             {name: agents[name].policy_head for name in params.agents},
         )
-        combined_value_head = scenario_classes[CombinedValueHead](
-            params,
-            protocol_handler,
-            {name: agents[name].value_head for name in params.agents},
-        )
+        if use_critic:
+            combined_value_head = scenario_classes[CombinedValueHead](
+                params,
+                protocol_handler,
+                {name: agents[name].value_head for name in params.agents},
+            )
 
     return ScenarioInstance(
         train_dataset=train_dataset,

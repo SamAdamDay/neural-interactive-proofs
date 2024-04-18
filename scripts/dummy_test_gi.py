@@ -9,7 +9,9 @@ from pvg import (
     Parameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
+    RlTrainerParameters,
     CommonPpoParameters,
+    ReinforceParameters,
     ScenarioType,
     TrainerType,
     CommonProtocolParameters,
@@ -33,7 +35,7 @@ def run(cmd_args: Namespace):
     # Create the parameters object
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        trainer=TrainerType.REINFORCE,
         dataset="eru10000",
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(
@@ -49,13 +51,18 @@ def run(cmd_args: Namespace):
                 use_manual_architecture=False,
             ),
         ),
-        ppo=CommonPpoParameters(
+        rl=RlTrainerParameters(
             num_iterations=100,
             num_epochs=1,
-            minibatch_size=2,
+            minibatch_size=4,
             frames_per_batch=16,
-            loss_type=PpoLossType.CLIP,
             use_shared_body=True,
+        ),
+        ppo=CommonPpoParameters(
+            loss_type=PpoLossType.CLIP,
+        ),
+        reinforce=ReinforceParameters(
+            use_advantage_and_critic=False,
         ),
         protocol_common=CommonProtocolParameters(
             shared_reward=False,
