@@ -460,6 +460,7 @@ class SpgLoss(ClipPPOLossImproved):
         clip_epsilon,
         entropy_coef,
         normalize_advantage,
+        functional: bool = True,
     ):
         super().__init__(
             actor=actor,
@@ -467,6 +468,7 @@ class SpgLoss(ClipPPOLossImproved):
             clip_epsilon=clip_epsilon,
             entropy_coef=entropy_coef,
             normalize_advantage=normalize_advantage,
+            functional=functional,
         )
         self.variant = variant
         self.stackelberg_sequence = stackelberg_sequence

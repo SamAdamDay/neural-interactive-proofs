@@ -952,6 +952,11 @@ class Parameters(BaseParameters):
         The interaction protocol between the agents.
     seed : int
         The random seed.
+    functionalize_modules : bool
+        Whether to functionalize the modules in the agents. This allows some additional
+        features which we don't currently use, and comes with a big efficienty cost.
+        Disabling it also prevents batch norm from tracking running statistics in eval
+        mode, which might have a small effect on performance (unknown).
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
@@ -991,6 +996,8 @@ class Parameters(BaseParameters):
     interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
 
     seed: int = 6198
+
+    functionalize_modules: bool = False
 
     pretrain_agents: bool = False
 

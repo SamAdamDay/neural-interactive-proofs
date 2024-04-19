@@ -90,6 +90,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             critic_network=self.value_operator,
             loss_weighting_type=loss_weighting_type,
             gamma=self.params.rl.gamma,
+            functional=self.params.functionalize_modules,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

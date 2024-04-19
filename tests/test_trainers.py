@@ -51,6 +51,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -65,6 +66,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -79,6 +81,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -93,6 +96,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -107,6 +111,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -121,6 +126,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -135,6 +141,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
         Parameters(
             ScenarioType.GRAPH_ISOMORPHISM,
@@ -149,6 +156,7 @@ def test_gi_ppo_train_optimizer_groups():
                     body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
                 ),
             ),
+            functionalize_modules=False,
         ),
     ]
 
@@ -228,35 +236,33 @@ def test_gi_ppo_train_optimizer_groups():
         def get_network_part(param_name: str) -> str:
             """Determine which part of the network the parameter is in."""
             if use_shared_body:
-                if param_name.startswith("actor_network_params.module_0_prover_gnn"):
+                if param_name.startswith("actor_network.module.0.prover.gnn"):
                     return "prover_gnn"
-                if param_name.startswith("actor_network_params.module_0_verifier_gnn"):
+                if param_name.startswith("actor_network.module.0.verifier.gnn"):
                     return "verifier_gnn"
-                if param_name.startswith("actor_network_params.module_0_prover"):
+                if param_name.startswith("actor_network.module.0.prover"):
                     return "prover_body"
-                if param_name.startswith("actor_network_params.module_0_verifier"):
+                if param_name.startswith("actor_network.module.0.verifier"):
                     return "verifier_body"
                 return "rest"
             else:
                 if re.match(
-                    "actor_network_params.module_0_module_[0-9]+_prover_gnn", param_name
-                ) or param_name.startswith("critic_network_params.module_0_prover_gnn"):
+                    "actor_network.module.0.module.[0-9]+.prover.gnn", param_name
+                ) or param_name.startswith("critic_network.module.0.prover.gnn"):
                     return "prover_gnn"
                 if re.match(
-                    "actor_network_params.module_0_module_[0-9]+_verifier_gnn",
+                    "actor_network.module.0.module.[0-9]+.verifier.gnn",
                     param_name,
-                ) or param_name.startswith(
-                    "critic_network_params.module_0_verifier_gnn"
-                ):
+                ) or param_name.startswith("critic_network.module.0.verifier.gnn"):
                     return "verifier_gnn"
                 if re.match(
-                    "actor_network_params.module_0_module_[0-9]+_prover", param_name
-                ) or param_name.startswith("critic_network_params.module_0_prover"):
+                    "actor_network.module.0.module.[0-9]+.prover", param_name
+                ) or param_name.startswith("critic_network.module.0.prover"):
                     return "prover_body"
                 if re.match(
-                    "actor_network_params.module_0_module_[0-9]+_verifier",
+                    "actor_network.module.0.module.[0-9]+.verifier",
                     param_name,
-                ) or param_name.startswith("critic_network_params.module_0_verifier"):
+                ) or param_name.startswith("critic_network.module.0.verifier"):
                     return "verifier_body"
                 return "rest"
 
