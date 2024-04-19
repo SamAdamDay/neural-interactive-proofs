@@ -364,7 +364,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         else:
             optimizer = torch.optim.Adam(all_param_dicts)
 
-        param_group_freezer = ParamGroupFreezer(optimizer, param_group_collections)
+        param_group_freezer = ParamGroupFreezer(
+            optimizer,
+            param_group_collections,
+            use_required_grad=self.params.functionalize_modules,
+        )
 
         return optimizer, param_group_freezer
 

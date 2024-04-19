@@ -954,9 +954,12 @@ class Parameters(BaseParameters):
         The random seed.
     functionalize_modules : bool
         Whether to functionalize the modules in the agents. This allows some additional
-        features which we don't currently use, and comes with a big efficienty cost.
+        features which we don't currently use, and comes with a big speed cost.
         Disabling it also prevents batch norm from tracking running statistics in eval
-        mode, which might have a small effect on performance (unknown).
+        mode, which might have a small effect on performance (unknown). Furthermore,
+        disabling this prevents freezing parameters using `requires_grad` when doing a
+        non-constant agent update schedule. Otherwise we get "RuntimeError: LSE is not
+        correctly aligned".
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in `solo_agent`.
