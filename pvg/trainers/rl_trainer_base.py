@@ -468,11 +468,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the GAE
             if gae is not None:
                 with torch.no_grad():
-                    gae(
-                        tensordict_data,
-                        params=loss_module.critic_network_params,
-                        target_params=loss_module.target_critic_network_params,
-                    )
+                    if self.params.functionalize_modules:
+                        gae(
+                            tensordict_data,
+                            params=loss_module.critic_network_params,
+                            target_params=loss_module.target_critic_network_params,
+                        )
+                    else:
+                        gae(tensordict_data)
 
             # Flatten the data and add it to the replay buffer
             data_view = tensordict_data.reshape(-1)

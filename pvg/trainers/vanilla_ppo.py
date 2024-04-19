@@ -46,6 +46,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 entropy_coef=self.params.ppo.entropy_eps,
                 critic_coef=self.params.ppo.critic_coef,
                 normalize_advantage=self.params.ppo.normalize_advantage,
+                functional=self.params.functionalize_modules,
             )
         elif self.params.ppo.loss_type == PpoLossType.KL_PENALTY:
             loss_module = KLPENPPOLossImproved(
@@ -58,6 +59,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 entropy_coef=self.params.ppo.entropy_eps,
                 critic_coef=self.params.ppo.critic_coef,
                 normalize_advantage=self.params.ppo.normalize_advantage,
+                functional=self.params.functionalize_modules,
             )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

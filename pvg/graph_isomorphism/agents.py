@@ -467,7 +467,12 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         ]
 
         if self._agent_params.use_batch_norm:
-            layers.append(BatchNorm1dSimulateBatchDims(num_features=self.d_gnn_out))
+            layers.append(
+                BatchNorm1dSimulateBatchDims(
+                    num_features=self.d_gnn_out,
+                    track_running_stats=self.params.functionalize_modules,
+                )
+            )
 
         layers.append(
             PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),
@@ -2169,8 +2174,13 @@ class GraphIsomorphismAgent(Agent):
         # multiple times
         named_parameters = list(named_parameters)
 
+        print([name for name, _ in named_parameters])
+
         def is_gnn_param(name: str):
-            return re.match(f"{self._body_param_regex}_gnn", name)
+            if self.params.functionalize_modules:
+                return re.match(f"{self._body_param_regex}_gnn", name)
+            else:
+                return re.match(f"{self._body_param_regex}.gnn", name)
 
         def is_body_param(name: str):
             return re.match(self._body_param_regex, name) and not is_gnn_param(name)
