@@ -159,7 +159,7 @@ def experiment_fn(
         )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(
