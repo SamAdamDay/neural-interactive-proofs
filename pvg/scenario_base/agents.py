@@ -511,29 +511,31 @@ class Agent:
 
     @property
     def _body_param_regex(self) -> str:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         if self.params.functionalize_modules:
-            if self.params.rl.use_shared_body:
+            if use_single_body and use_critic:
                 return f"actor_network_params.module_0_{self.agent_name}"
             else:
                 return (
-                    f"(actor_network_params.module_0_module_[0-9]"
+                    f"(actor_network_params.module_0_module_0"
                     f"|critic_network_params.module_0)"
                     f"_{self.agent_name}"
                 )
         else:
-            if self.params.rl.use_shared_body:
+            if use_single_body and use_critic:
                 return f"actor_network.module.0.{self.agent_name}"
             else:
                 return (
-                    f"(actor_network.module.0.module.[0-9]"
+                    f"(actor_network.module.0.module.0"
                     f"|critic_network.module.0)"
                     f".{self.agent_name}"
                 )
 
     @property
     def _non_body_param_regex(self) -> str:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         if self.params.functionalize_modules:
-            if self.params.rl.use_shared_body:
+            if use_single_body and use_critic:
                 return (
                     f"(actor_network_params.module_[1-9]|"
                     f"critic_network_params.module_[0-9])"
@@ -541,12 +543,12 @@ class Agent:
                 )
             else:
                 return (
-                    f"(actor_network_params.module_[1-9]|"
+                    f"(actor_network_params.module_0_module_[1-9]|"
                     f"critic_network_params.module_[1-9])"
                     f"_{self.agent_name}"
                 )
         else:
-            if self.params.rl.use_shared_body:
+            if use_single_body and use_critic:
                 return (
                     f"(actor_network.module.[1-9]|"
                     f"critic_network.module.[0-9])"
@@ -554,7 +556,7 @@ class Agent:
                 )
             else:
                 return (
-                    f"(actor_network.module.[1-9]|"
+                    f"(actor_network.module.0.module.[1-9]|"
                     f"critic_network.module.[1-9])"
                     f".{self.agent_name}"
                 )
