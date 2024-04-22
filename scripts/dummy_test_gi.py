@@ -35,7 +35,7 @@ def run(cmd_args: Namespace):
     # Create the parameters object
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.REINFORCE,
+        trainer=TrainerType.VANILLA_PPO,
         dataset="eru10000",
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(

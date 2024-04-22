@@ -311,6 +311,11 @@ class BaseParameters(ABC):
 
         return params_dict
 
+    @classmethod
+    def construct_test_params(cls) -> "BaseParameters":
+        """Construct a set of basic parameters for testing."""
+        raise NotImplementedError
+
 
 class SubParameters(BaseParameters, ABC):
     """Base class for sub-parameters objects."""
@@ -527,6 +532,24 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     body_lr_factor: float = 1.0
     gnn_lr_factor: float = 0.1
 
+    @classmethod
+    def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
+        return cls(
+            num_gnn_layers=1,
+            d_gnn=1,
+            d_gin_mlp=1,
+            num_heads=2,
+            num_transformer_layers=1,
+            d_transformer=2,
+            d_transformer_mlp=1,
+            d_node_selector=1,
+            num_node_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+        )
+
 
 @dataclass
 class ImageClassificationAgentParameters(AgentParameters):
@@ -579,6 +602,18 @@ class ImageClassificationAgentParameters(AgentParameters):
     d_value: int = 16
     num_value_layers: int = 2
     include_round_in_value: bool = True
+
+    @classmethod
+    def construct_test_params(cls) -> "ImageClassificationAgentParameters":
+        return cls(
+            num_convs_per_group=1,
+            d_latent_pixel_selector=1,
+            num_latent_pixel_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+        )
 
 
 class AgentsParameters(dict[str, AgentParameters]):
