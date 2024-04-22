@@ -938,7 +938,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         # Compute the weighting used in the loss, which is either the reward-to-go or
         # the advantage, depending on whether a critic is used
         if self.loss_weighting_type == "reward_to_go":
-            loss_weighting = -tensordict.get(("agents", "reward_to_go"))
+            loss_weighting = tensordict.get(("agents", "reward_to_go"))
         else:
             loss_weighting = self._get_advantage(tensordict)
 
