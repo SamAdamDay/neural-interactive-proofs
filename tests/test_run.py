@@ -220,6 +220,3 @@ def test_prepare_run_experiment():
             ignore_cache=True,
             pin_memory=False,
         )
-
-
-test_prepare_run_experiment()

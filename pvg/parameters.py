@@ -48,11 +48,14 @@ Create a parameters object using a dictionary for the ppo parameters
 ... )
 """
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field
+import dataclasses
 from abc import ABC
-from typing import Optional, ClassVar, Iterable, NamedTuple
+from typing import Optional, ClassVar, NamedTuple, Union
+from types import UnionType
+import typing
 from enum import auto as enum_auto
-from itertools import product
+from inspect import isclass
 
 try:
     from enum import StrEnum
@@ -299,7 +302,7 @@ class BaseParameters(ABC):
 
         # Add all dataclass fields to the dictionary
         params_dict = {}
-        for field in fields(self):
+        for field in dataclasses.fields(self):
             value = getattr(self, field.name)
             if isinstance(value, StrEnum):
                 value = value.value
@@ -316,11 +319,30 @@ class BaseParameters(ABC):
         """Construct a set of basic parameters for testing."""
         raise NotImplementedError
 
+    def __post_init__(self):
+        # Replace all Nones and all dictionaries with SubParameters objects
+        for param in dataclasses.fields(self):
+            param_value = getattr(self, param.name)
+            if not isinstance(param_value, dict) and param_value is not None:
+                continue
+            origin_type = typing.get_origin(param.type)
+            if origin_type is not Union and origin_type is not UnionType:
+                continue
+            for union_element in typing.get_args(param.type):
+                if isclass(union_element) and issubclass(union_element, SubParameters):
+                    param_class = union_element
+                    break
+            else:
+                continue
+            if param_value is None:
+                setattr(self, param.name, param_class())
+            else:
+                setattr(self, param.name, param_class(**param_value))
 
+
+@dataclass
 class SubParameters(BaseParameters, ABC):
     """Base class for sub-parameters objects."""
-
-    pass
 
 
 @dataclass
@@ -415,7 +437,7 @@ class AgentParameters(SubParameters, ABC):
             The W&B config dictionary for this agent (e.g.
             `wandb_run.config["agents"][agent_name]`).
         """
-        for field in fields(self):
+        for field in dataclasses.fields(self):
             if field.name in self.LOAD_PRESERVED_PARAMETERS:
                 continue
             if field.name in wandb_config:
@@ -922,6 +944,8 @@ class LongProtocolParameters(SubParameters, ABC):
     )
 
     def __post_init__(self):
+        super().__post_init__()
+
         # Convert the scheduler to an enum type
         if not isinstance(
             self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
@@ -1085,82 +1109,17 @@ class Parameters(BaseParameters):
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
             )
-            if self.image_classification is None:
-                self.image_classification = ImageClassificationParameters()
-            elif isinstance(self.image_classification, dict):
-                self.image_classification = ImageClassificationParameters(
-                    **self.image_classification
-                )
-
-        # Add common RL parameters if they are not provided
-        if (
-            self.trainer == TrainerType.VANILLA_PPO
-            or self.trainer == TrainerType.SPG
-            or self.trainer == TrainerType.REINFORCE
-        ):
-            if self.rl is None:
-                self.rl = RlTrainerParameters()
-            elif isinstance(self.rl, dict):
-                self.rl = RlTrainerParameters(**self.rl)
-
-        # Add common PPO parameters if they are not provided
-        if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
-            if self.ppo is None:
-                self.ppo = CommonPpoParameters()
-            elif isinstance(self.ppo, dict):
-                self.ppo = CommonPpoParameters(**self.ppo)
 
         # Add PPO parameters for specific variants to the appropriate class
-        if self.trainer == TrainerType.VANILLA_PPO:
-            if self.vanilla_ppo is None:
-                self.vanilla_ppo = VanillaPpoParameters()
-            elif isinstance(self.vanilla_ppo, dict):
-                self.vanilla_ppo = VanillaPpoParameters(**self.vanilla_ppo)
-        elif self.trainer == TrainerType.SPG:
+        if self.trainer == TrainerType.SPG:
             if self.spg is None:
                 self.spg = SpgParameters(
                     stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[
                         self.interaction_protocol
                     ]
                 )
-            elif isinstance(self.spg, dict):
-                self.spg = SpgParameters(**self.spg)
-        elif self.trainer == TrainerType.REINFORCE:
-            if self.reinforce is None:
-                self.reinforce = ReinforceParameters()
-            elif isinstance(self.reinforce, dict):
-                self.reinforce = ReinforceParameters(**self.reinforce)
 
-        # Convert solo agent parameters to SoloAgentParameters
-        if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:
-            if self.solo_agent is None:
-                self.solo_agent = SoloAgentParameters()
-            elif isinstance(self.solo_agent, dict):
-                self.solo_agent = SoloAgentParameters(**self.solo_agent)
-
-        # Add common interaction protocol parameters if they are not provided
-        if self.protocol_common is None:
-            self.protocol_common = CommonProtocolParameters()
-        elif isinstance(self.protocol_common, dict):
-            self.protocol_common = CommonProtocolParameters(**self.protocol_common)
-
-        # Convert PVG and debate protocol parameters to the appropriate class
-        if self.interaction_protocol == InteractionProtocolType.PVG:
-            if self.pvg_protocol is None:
-                self.pvg_protocol = PvgProtocolParameters()
-            elif isinstance(self.pvg_protocol, dict):
-                self.pvg_protocol = PvgProtocolParameters(**self.pvg_protocol)
-        elif self.interaction_protocol == InteractionProtocolType.DEBATE:
-            if self.debate_protocol is None:
-                self.debate_protocol = DebateProtocolParameters()
-            elif isinstance(self.debate_protocol, dict):
-                self.debate_protocol = DebateProtocolParameters(**self.debate_protocol)
-
-        # Convert dataset options to DatasetParameters
-        if self.dataset_options is None:
-            self.dataset_options = DatasetParameters()
-        elif isinstance(self.dataset_options, dict):
-            self.dataset_options = DatasetParameters(**self.dataset_options)
+        super().__post_init__()
 
     def _process_agents_params(
         self,
