@@ -55,7 +55,6 @@ from typing import Optional, ClassVar, NamedTuple, Union
 from types import UnionType
 import typing
 from enum import auto as enum_auto
-from inspect import isclass
 
 try:
     from enum import StrEnum
@@ -329,9 +328,12 @@ class BaseParameters(ABC):
             if origin_type is not Union and origin_type is not UnionType:
                 continue
             for union_element in typing.get_args(param.type):
-                if isclass(union_element) and issubclass(union_element, SubParameters):
-                    param_class = union_element
-                    break
+                try:
+                    if issubclass(union_element, SubParameters):
+                        param_class = union_element
+                        break
+                except TypeError:
+                    continue
             else:
                 continue
             if param_value is None:
