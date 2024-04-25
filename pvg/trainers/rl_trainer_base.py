@@ -40,6 +40,7 @@ from pvg.utils.maths import logit_entropy
 from pvg.utils.torch import DummyOptimizer
 from pvg.utils.training import ParamGroupFreezer
 from pvg.utils.distributions import CompositeCategoricalDistribution
+from pvg.utils.tensordict import tensordict_add, tensordict_scalar_multiply
 
 
 def update_schedule_iterator(schedule: AgentUpdateSchedule):
@@ -364,7 +365,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     def _get_log_stats(
         self,
         tensordict_data: TensorDictBase,
-        loss_outputs: Optional[TensorDictBase] = None,
+        mean_loss_vals: Optional[TensorDictBase] = None,
         *,
         train=True,
     ) -> dict[str, float]:
@@ -374,7 +375,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         ----------
         tensordict_data : TensorDict
             The data sampled from the data collector.
-        loss_outputs : TensorDict, optional
+        mean_loss_vals : TensorDict, optional
             The average loss values.
         train : bool, default=True
             Whether the statistics are for training or testing.
@@ -459,13 +460,23 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         )
 
         # Log the loss values
-        if loss_outputs is not None:
-            for key, val in loss_outputs.items():
-                log_stats[f"{prefix}{key}"] = val
-            if "loss_critic" in loss_outputs:
+        if mean_loss_vals is not None:
+
+            def log_per_agent_losses(agent_losses: TensorDictBase):
+                for key, val in agent_losses.items():
+                    for i, agent_name in enumerate(self._agent_names):
+                        log_stats[f"{prefix}{agent_name}.{key}"] = val[..., i].item()
+
+            for key, val in mean_loss_vals.items():
+                if key == "agents":
+                    log_per_agent_losses(val)
+                else:
+                    log_stats[f"{prefix}{key}"] = val.item()
+
+            if "loss_critic" in mean_loss_vals.keys():
                 log_stats[f"{prefix}loss_critic_unscaled"] = (
-                    loss_outputs["loss_critic"] / self.loss_module.critic_coef.item()
-                )
+                    mean_loss_vals["loss_critic"] / self.loss_module.critic_coef
+                ).item()
 
         return log_stats
 
@@ -546,7 +557,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             data_view = tensordict_data.reshape(-1)
             self.replay_buffer.extend(data_view)
 
-            loss_outputs = {}
+            mean_loss_vals = None
 
             total_steps = 0
             for _ in range(self.params.rl.num_epochs):
@@ -560,10 +571,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     loss_vals: TensorDict = self.loss_module(sub_data)
 
                     # Log the loss values
-                    for key, val in loss_vals.items():
-                        if key not in loss_outputs:
-                            loss_outputs[key] = 0
-                        loss_outputs[key] += val.mean().item()
+                    if mean_loss_vals is None:
+                        mean_loss_vals = loss_vals.clone()
+                    else:
+                        mean_loss_vals = tensordict_add(
+                            mean_loss_vals, loss_vals, inplace=True
+                        )
 
                     # Only perform the optimization step if the loss values require
                     # gradients. This can be false for example if all agents are frozen
@@ -593,12 +606,13 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self.train_collector.update_policy_weights_()
 
             # Take an average of the loss values
-            for key in loss_outputs:
-                loss_outputs[key] /= total_steps
+            mean_loss_vals = tensordict_scalar_multiply(
+                mean_loss_vals, 1 / total_steps, inplace=True
+            )
 
             # Log stats and artifacts to W&B
             if self.settings.wandb_run is not None:
-                to_log = self._get_log_stats(tensordict_data, loss_outputs)
+                to_log = self._get_log_stats(tensordict_data, mean_loss_vals)
                 self.settings.wandb_run.log(to_log, step=iteration)
                 artifact_logger.log(tensordict_data, iteration)
 
