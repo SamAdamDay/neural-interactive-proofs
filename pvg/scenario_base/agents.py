@@ -9,7 +9,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Iterable, Callable
+from typing import Optional, Any, Iterable, Callable, ClassVar
 from dataclasses import dataclass, fields, InitVar
 from functools import partial
 import re
@@ -378,8 +378,11 @@ class CombinedValueHead(CombinedAgentPart, ABC):
 
 
 @dataclass
-class Agent:
-    """A class which holds all the parts of an agent for an experiment.
+class Agent(ABC):
+    """A base class for holding all the parts of an agent for an experiment.
+
+    Subclasses should define the `message_logits_key` class variable, which is the key
+    in the output of the policy head which contains the logits for the message.
 
     Parameters
     ----------
@@ -409,6 +412,8 @@ class Agent:
     policy_head: Optional[AgentPolicyHead] = None
     value_head: Optional[AgentValueHead] = None
     solo_head: Optional[SoloAgentHead] = None
+
+    message_logits_key: ClassVar[str]
 
     def __post_init__(
         self,

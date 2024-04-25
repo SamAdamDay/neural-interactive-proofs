@@ -21,7 +21,7 @@ The structure of all agent bodies is the same:
 """
 
 from abc import ABC
-from typing import Optional
+from typing import Optional, ClassVar
 from dataclasses import dataclass
 
 import torch
@@ -1500,4 +1500,4 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 @register_scenario_class(IC_SCENARIO, Agent)
 @dataclass
 class ImageClassificationAgent(Agent):
-    pass
+    message_logits_key: ClassVar[str] = "latent_pixel_selected_logits"

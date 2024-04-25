@@ -384,7 +384,7 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
                 "loss_objective": -flatten_batch_dims(gain, num_batch_dims)
                 .mean(dim=0)
                 .sum(),
-                "kl": kl.detach().mean(),
+                "kl_divergence": kl.detach().mean(),
             },
             [],
         )
@@ -427,7 +427,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
         td_out = TensorDict(
             {
                 "loss_objective": -neg_loss.mean(dim=0).sum() + kl_penalty,
-                "kl": kl.detach().mean(),
+                "kl_divergence": kl.detach().mean(),
             },
             [],
         )

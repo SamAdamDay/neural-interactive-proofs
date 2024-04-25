@@ -7,12 +7,11 @@ import numpy as np
 
 import torch
 from torch.nn.utils import clip_grad_norm_
-from torch.optim import Optimizer
 
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 
-from torchrl.collectors import DataCollectorBase, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.objectives.value import GAE
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
@@ -26,7 +25,6 @@ from pvg.parameters import (
     ConstantUpdateSchedule,
     ContiguousPeriodicUpdateSchedule,
 )
-from pvg.scenario_base import Environment
 from pvg.experiment_settings import ExperimentSettings
 from pvg.trainers.base import Trainer
 from pvg.trainers.solo_agent import SoloAgentTrainer
@@ -121,25 +119,16 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         self._train_setup()
 
         # Build everything we need for training
-        train_collector, test_collector = self._get_data_collectors()
-        replay_buffer = self._get_replay_buffer()
-        loss_module, gae = self._get_loss_module_and_gae()
-        optimizer, param_group_freezer = self._get_optimizer_and_param_freezer(
-            loss_module
-        )
+        self.train_collector, self.test_collector = self._get_data_collectors()
+        self.replay_buffer = self._get_replay_buffer()
+        self.loss_module, self.gae = self._get_loss_module_and_gae()
+        (
+            self.optimizer,
+            self.param_group_freezer,
+        ) = self._get_optimizer_and_param_freezer(self.loss_module)
 
         # Run the training loop
-        self._run_rl_training_loop(
-            self.train_environment,
-            self.test_environment,
-            train_collector,
-            test_collector,
-            replay_buffer,
-            loss_module,
-            gae,
-            optimizer,
-            param_group_freezer,
-        )
+        self._run_rl_training_loop()
 
     def _pretrain_agents(self):
         """Pretrain the agent bodies in isolation.
@@ -372,46 +361,118 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         return optimizer, param_group_freezer
 
-    def _run_rl_training_loop(
+    def _get_log_stats(
         self,
-        train_environment: Environment,
-        test_environment: Environment,
-        train_collector: DataCollectorBase,
-        test_collector: DataCollectorBase,
-        replay_buffer: ReplayBuffer,
-        loss_module: Objective,
-        gae: GAE | None,
-        optimizer: Optimizer,
-        param_group_freezer: ParamGroupFreezer,
-    ):
-        """Run a generic RL training loop.
+        tensordict_data: TensorDictBase,
+        loss_outputs: Optional[TensorDictBase] = None,
+        *,
+        train=True,
+    ) -> dict[str, float]:
+        """Compute the statistics to log during training or testing.
 
         Parameters
         ----------
-        train_environment : Environment
-            The environment to train in.
-        test_environment : Environment
-            The environment to test in.
-        train_collector : DataCollectorBase
-            The data collector to use for collecting data from the train environment.
-        test_collector : DataCollectorBase
-            The data collector to use for collecting data from the test environment.
-        replay_buffer : ReplayBuffer
-            The replay buffer to use for storing the collected data.
-        loss_module : Objective
-            The loss module.
-        gae : GAE | None
-            The generalized advantage estimator, or None if the loss module doesn't use
-            one.
-        optimizer : Optimizer
-            The optimizer to use for optimizing the loss.
-        param_group_freezer : ParamGroupFreezer
-            The parameter group freezer to use for freezing the parameters of the
-            agents' models.
+        tensordict_data : TensorDict
+            The data sampled from the data collector.
+        loss_outputs : TensorDict, optional
+            The average loss values.
+        train : bool, default=True
+            Whether the statistics are for training or testing.
+
+        Returns
+        -------
+        log_stats : dict[str, float]
+            The statistics to log.
         """
 
+        if train:
+            prefix = ""
+        else:
+            prefix = "test_"
+
+        round = tensordict_data.get(("next", "round"))
+        done = tensordict_data.get(("next", "done"))
+        reward = tensordict_data.get(("next", "agents", "reward"))
+        value = tensordict_data.get(("agents", "value"), None)
+        decision_logits = tensordict_data.get(("agents", "decision_logits"))
+        message_logits_key = self.scenario_instance.agents[
+            self._agent_names[0]
+        ].message_logits_key
+        message_logits = tensordict_data.get(("agents", message_logits_key))
+
+        log_stats = {}
+
+        # Compute the mean episode length
+        mean_episode_length = round[done].float().mean().item()
+        log_stats[f"{prefix}mean_episode_length"] = mean_episode_length
+
+        for i, agent_name in enumerate(self._agent_names):
+            # Compute the mean reward per step and per episode
+            mean_reward = reward[..., i].mean().item()
+            log_stats[f"{agent_name}.{prefix}mean_step_reward"] = mean_reward
+            log_stats[f"{agent_name}.{prefix}mean_episode_reward"] = (
+                mean_reward * mean_episode_length
+            )
+
+            # Compute the mean agent value
+            if value is not None:
+                log_stats[f"{agent_name}.{prefix}mean_value"] = (
+                    value[..., i].mean().item()
+                )
+
+            # Compute the agent decision entropy mean and standard deviation
+            log_stats[f"{agent_name}.{prefix}mean_decision_entropy"] = (
+                logit_entropy(decision_logits[..., i]).mean().item()
+            )
+            log_stats[f"{agent_name}.{prefix}std_decision_entropy"] = (
+                logit_entropy(decision_logits[..., i]).std().item()
+            )
+
+            # Compute the agent message entropy mean and standard deviation
+            message_logit_entropy = logit_entropy(message_logits[..., i])
+            log_stats[
+                f"{agent_name}.{prefix}mean_message_entropy"
+            ] = message_logit_entropy.mean().item()
+            log_stats[
+                f"{agent_name}.{prefix}std_message_entropy"
+            ] = message_logit_entropy.std().item()
+
+            # Compute the maximum message probability mean and standard deviation
+            message_probs = torch.softmax(message_logits[..., i], dim=-1)
+            max_message_probs = message_probs.max(dim=-1).values
+            log_stats[
+                f"{agent_name}.{prefix}mean_max_message_prob"
+            ] = max_message_probs.mean().item()
+            log_stats[
+                f"{agent_name}.{prefix}std_max_message_prob"
+            ] = max_message_probs.std().item()
+
+        # Compute the mean accuracy for the done episodes
+        verifier_decision = tensordict_data.get(("agents", "decision"))[
+            ..., self._agent_names.index("verifier")
+        ]
+        log_stats[f"{prefix}mean_accuracy"] = (
+            (verifier_decision[done] == tensordict_data["y"][done].squeeze())
+            .float()
+            .mean()
+            .item()
+        )
+
+        # Log the loss values
+        if loss_outputs is not None:
+            for key, val in loss_outputs.items():
+                log_stats[f"{prefix}{key}"] = val
+            if "loss_critic" in loss_outputs:
+                log_stats[f"{prefix}loss_critic_unscaled"] = (
+                    loss_outputs["loss_critic"] / self.loss_module.critic_coef.item()
+                )
+
+        return log_stats
+
+    def _run_rl_training_loop(self):
+        """Run a generic RL training loop."""
+
         agents = self.scenario_instance.agents
-        agent_names = list(agents.keys())
 
         # Set the seed
         torch.manual_seed(self.params.seed)
@@ -429,10 +490,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         # Create the update schedule iterators
         update_schedule_iterators = [
             update_schedule_iterator(self.params.agents[name].update_schedule)
-            for name in agent_names
+            for name in self._agent_names
         ]
 
-        iterator = zip(enumerate(train_collector), *update_schedule_iterators)
+        iterator = zip(enumerate(self.train_collector), *update_schedule_iterators)
         for (iteration, tensordict_data), *agent_updates in iterator:
             # Step the profiler if it's being used
             if self.settings.profiler is not None:
@@ -440,11 +501,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule
-            for agent_name, update in zip(agent_names, agent_updates):
+            for agent_name, update in zip(self._agent_names, agent_updates):
                 if update:
-                    param_group_freezer.unfreeze(agent_name)
+                    self.param_group_freezer.unfreeze(agent_name)
                 else:
-                    param_group_freezer.freeze(agent_name)
+                    self.param_group_freezer.freeze(agent_name)
 
             # Expand the done and terminated to match the reward shape (this is expected
             # by the value estimator)
@@ -454,7 +515,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 .unsqueeze(-1)
                 .expand(
                     tensordict_data.get_item_shape(
-                        ("next", train_environment.reward_key)
+                        ("next", self.train_environment.reward_key)
                     )
                 ),
             )
@@ -464,26 +525,26 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 .unsqueeze(-1)
                 .expand(
                     tensordict_data.get_item_shape(
-                        ("next", train_environment.reward_key)
+                        ("next", self.train_environment.reward_key)
                     )
                 ),
             )
 
             # Compute the GAE
-            if gae is not None:
+            if self.gae is not None:
                 with torch.no_grad():
                     if self.params.functionalize_modules:
-                        gae(
+                        self.gae(
                             tensordict_data,
-                            params=loss_module.critic_network_params,
-                            target_params=loss_module.target_critic_network_params,
+                            params=self.loss_module.critic_network_params,
+                            target_params=self.loss_module.target_critic_network_params,
                         )
                     else:
-                        gae(tensordict_data)
+                        self.gae(tensordict_data)
 
             # Flatten the data and add it to the replay buffer
             data_view = tensordict_data.reshape(-1)
-            replay_buffer.extend(data_view)
+            self.replay_buffer.extend(data_view)
 
             loss_outputs = {}
 
@@ -493,10 +554,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     self.params.rl.frames_per_batch // self.params.rl.minibatch_size
                 ):
                     # Sample a minibatch from the replay buffer
-                    sub_data = replay_buffer.sample()
+                    sub_data = self.replay_buffer.sample()
 
                     # Compute the loss
-                    loss_vals: TensorDict = loss_module(sub_data)
+                    loss_vals: TensorDict = self.loss_module(sub_data)
 
                     # Log the loss values
                     for key, val in loss_vals.items():
@@ -508,14 +569,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     # gradients. This can be false for example if all agents are frozen
                     if loss_vals.requires_grad:
                         # Compute the gradients
-                        loss_module.backward(loss_vals)
+                        self.loss_module.backward(loss_vals)
 
                         # Clip gradients and update parameters
                         clip_grad_norm_(
-                            loss_module.parameters(), self.params.rl.max_grad_norm
+                            self.loss_module.parameters(), self.params.rl.max_grad_norm
                         )
-                        optimizer.step()
-                        optimizer.zero_grad()
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
 
                     total_steps += 1
 
@@ -529,64 +590,16 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
             # Update the policy weights if the policy of the data collector and the
             # trained policy live on different devices.
-            train_collector.update_policy_weights_()
+            self.train_collector.update_policy_weights_()
 
             # Take an average of the loss values
             for key in loss_outputs:
                 loss_outputs[key] /= total_steps
 
-            # Compute various statistics for the sampled episodes for logging
-            done = tensordict_data.get(("next", "done"))
-            reward = tensordict_data.get(("next", "agents", "reward"))
-            value = tensordict_data.get(("agents", "value"), None)
-            decision_logits = tensordict_data.get(("agents", "decision_logits"))
-            mean_rewards = {}
-            mean_values = {}
-            mean_decision_entropy = {}
-            for i, agent_name in enumerate(self._agent_names):
-                mean_rewards[agent_name] = reward[..., i].mean().item()
-                if value is not None:
-                    mean_values[agent_name] = value[..., i].mean().item()
-                mean_decision_entropy[agent_name] = (
-                    logit_entropy(decision_logits[..., i]).mean().item()
-                )
-            verifier_decision = tensordict_data.get(("agents", "decision"))[
-                ..., self._agent_names.index("verifier")
-            ]
-            mean_accuracy = (
-                (verifier_decision[done] == tensordict_data["y"][done].squeeze())
-                .float()
-                .mean()
-                .item()
-            )
-
+            # Log stats and artifacts to W&B
             if self.settings.wandb_run is not None:
-                # Compute the average episode length
-                round = tensordict_data.get(("next", "round"))
-                mean_episode_length = round[done].float().mean().item()
-
-                # Log the various statistics
-                to_log = dict(mean_episode_length=mean_episode_length)
-                for agent_name in self._agent_names:
-                    to_log[f"{agent_name}.mean_step_reward"] = mean_rewards[agent_name]
-                    to_log[f"{agent_name}.mean_episode_reward"] = (
-                        mean_rewards[agent_name] * mean_episode_length
-                    )
-                    if agent_name in mean_values:
-                        to_log[f"{agent_name}.mean_value"] = mean_values[agent_name]
-                    to_log[
-                        f"{agent_name}.mean_decision_entropy"
-                    ] = mean_decision_entropy[agent_name]
-                to_log["mean_accuracy"] = mean_accuracy
-                for key, val in loss_outputs.items():
-                    to_log[key] = val
-                if "loss_critic" in loss_outputs:
-                    to_log["loss_critic_unscaled"] = (
-                        loss_outputs["loss_critic"] / loss_module.critic_coef.item()
-                    )
+                to_log = self._get_log_stats(tensordict_data, loss_outputs)
                 self.settings.wandb_run.log(to_log, step=iteration)
-
-                # Log artifacts to W&B if it's time to do so
                 artifact_logger.log(tensordict_data, iteration)
 
             # If we're in test mode, exit after one iteration
@@ -607,13 +620,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         # Run the test loop
         with torch.no_grad():
             # Put the agents in eval mode
-            for agent in self.scenario_instance.agents.values():
+            for agent in agents.values():
                 agent.eval()
 
-            mean_rewards = {agent_name: 0 for agent_name in self._agent_names}
-            mean_episode_length = 0
-            mean_accuracy = 0
-            for iteration, tensordict_data in enumerate(test_collector):
+            aggregate_data = None
+
+            for iteration, tensordict_data in enumerate(self.test_collector):
                 # Expand the done to match the reward shape
                 tensordict_data.set(
                     ("next", "agents", "done"),
@@ -621,32 +633,17 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     .unsqueeze(-1)
                     .expand(
                         tensordict_data.get_item_shape(
-                            ("next", test_environment.reward_key)
+                            ("next", self.test_environment.reward_key)
                         )
                     ),
                 )
 
-                # Compute the mean rewards
-                done = tensordict_data.get(("next", "agents", "done")).any(dim=-1)
-                reward = tensordict_data.get(("next", "agents", "reward"))
-                for i, agent_name in enumerate(self._agent_names):
-                    mean_rewards[agent_name] += reward[..., i].mean().item()
-
-                # Compute the mean accuracy for the done episodes
-                verifier_decision = tensordict_data.get(("agents", "decision"))[
-                    ..., self._agent_names.index("verifier")
-                ]
-
-                mean_accuracy += (
-                    (verifier_decision[done] == tensordict_data["y"][done].squeeze())
-                    .float()
-                    .mean()
-                    .item()
-                )
-
-                # Compute the average episode length
-                round = tensordict_data.get(("next", "round"))
-                mean_episode_length += round[done].float().mean().item()
+                if aggregate_data is None:
+                    aggregate_data = tensordict_data.cpu()
+                else:
+                    aggregate_data = torch.cat(
+                        [aggregate_data, tensordict_data.cpu()], dim=0
+                    )
 
                 # If we're in test mode, exit after one iteration
                 if self.settings.test_run:
@@ -655,23 +652,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 # Update the progress bar
                 pbar.update(1)
 
-            # Compute the mean of the statistics
-            for agent_name in self._agent_names:
-                mean_rewards[agent_name] /= self.params.rl.num_test_iterations
-            mean_episode_length /= self.params.rl.num_test_iterations
-            mean_accuracy /= self.params.rl.num_test_iterations
-
             if self.settings.wandb_run is not None:
-                # Log the mean episode length and mean rewards
-                to_log = dict(test_mean_episode_length=mean_episode_length)
-                for agent_name in self._agent_names:
-                    to_log[f"{agent_name}.test_mean_step_reward"] = mean_rewards[
-                        agent_name
-                    ]
-                    to_log[f"{agent_name}.test_mean_episode_reward"] = (
-                        mean_rewards[agent_name] * mean_episode_length
-                    )
-                to_log["test_mean_accuracy"] = mean_accuracy
+                to_log = self._get_log_stats(tensordict_data, train=False)
                 self.settings.wandb_run.log(to_log)
 
         # Close the progress bar

@@ -2098,6 +2098,8 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 class GraphIsomorphismAgent(Agent):
     _agent_params: ClassVar[GraphIsomorphismAgentParameters | RandomAgentParameters]
 
+    message_logits_key: ClassVar[str] = "node_selected_logits"
+
     def get_param_dicts(
         self,
         base_lr: float,
