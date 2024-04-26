@@ -654,17 +654,79 @@ class AgentsParameters(dict[str, AgentParameters]):
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
 
-        Turns sub-parameters into dictionaries.
+        Turns sub-parameters into dictionaries and adds the combined agents update
+        schedule representation.
 
         Returns
         -------
         params_dict : dict
             A dictionary of the parameters.
         """
+
         params_dict = {}
+
         for param_name, param in self.items():
             params_dict[param_name] = param.to_dict()
+
+        params_dict["agents_update_repr"] = self._agents_update_repr()
+
         return params_dict
+
+    def _agents_update_repr(self) -> str:
+        """Return a string representation of the combined agents update schedule.
+
+        Returns
+        -------
+        agents_update_repr : str
+            A string representation of the combined agents update schedule.
+        """
+
+        # If all agents have the constant update schedule, return "Standard"
+        for agent_params in self.values():
+            if not isinstance(agent_params.update_schedule, ConstantUpdateSchedule):
+                break
+        else:
+            return "Standard"
+
+        # If all agents have an alternating update schedule with the same properties,
+        # return a string representation of the alternating update schedule
+        period = None
+        first_agent_num_rounds = None
+        first_agent_name = None
+        second_agent_name = None
+        for agent_name, agent_params in self.items():
+            update_schedule = agent_params.update_schedule
+            if not isinstance(update_schedule, AlternatingPeriodicUpdateSchedule):
+                break
+            if period is not None and period != update_schedule.period:
+                break
+            period = update_schedule.period
+            if (
+                first_agent_num_rounds is not None
+                and first_agent_num_rounds != update_schedule.first_agent_num_rounds
+            ):
+                break
+            first_agent_num_rounds = update_schedule.first_agent_num_rounds
+            if update_schedule.first_agent:
+                if first_agent_name is not None:
+                    break
+                first_agent_name = agent_name
+            else:
+                if second_agent_name is not None:
+                    break
+                second_agent_name = agent_name
+        else:
+            return (
+                f"Alternating({period}, {first_agent_num_rounds}, "
+                f"{first_agent_name!r}, {second_agent_name!r})"
+            )
+
+        # Otherwise, return "Custom" with the update schedules of all agents
+        agents_update_repr = "Custom("
+        for agent_name, agent_params in self.items():
+            agents_update_repr += f"{agent_name!r}: {agent_params.update_schedule}, "
+        agents_update_repr = agents_update_repr[:-2] + ")"
+        return agents_update_repr
 
 
 @dataclass
