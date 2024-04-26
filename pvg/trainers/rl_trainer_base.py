@@ -465,7 +465,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             def log_per_agent_losses(agent_losses: TensorDictBase):
                 for key, val in agent_losses.items():
                     for i, agent_name in enumerate(self._agent_names):
-                        log_stats[f"{prefix}{agent_name}.{key}"] = val[..., i].item()
+                        log_stats[f"{prefix}{agent_name}.{key}"] = (
+                            val[..., i].mean().item()
+                        )
 
             for key, val in mean_loss_vals.items():
                 if key == "agents":
@@ -610,10 +612,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 mean_loss_vals, 1 / total_steps, inplace=True
             )
 
-            # Log stats and artifacts to W&B
+            # Log statistics
+            to_log = self._get_log_stats(tensordict_data, mean_loss_vals)
+            self.settings.stat_logger.log(to_log, step=iteration)
+
+            # Log artifacts to W&B
             if self.settings.wandb_run is not None:
-                to_log = self._get_log_stats(tensordict_data, mean_loss_vals)
-                self.settings.wandb_run.log(to_log, step=iteration)
                 artifact_logger.log(tensordict_data, iteration)
 
             # If we're in test mode, exit after one iteration
@@ -666,9 +670,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 # Update the progress bar
                 pbar.update(1)
 
-            if self.settings.wandb_run is not None:
-                to_log = self._get_log_stats(tensordict_data, train=False)
-                self.settings.wandb_run.log(to_log)
+            to_log = self._get_log_stats(tensordict_data, train=False)
+            self.settings.stat_logger.log(to_log)
 
         # Close the progress bar
         pbar.close()

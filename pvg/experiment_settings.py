@@ -4,7 +4,7 @@ Changing these settings should not effect the reproducibility of the experiment.
 """
 
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 
 import torch
@@ -13,6 +13,7 @@ import wandb
 
 from tqdm import tqdm
 
+from pvg.stat_logger import StatLogger, DummyStatLogger
 from pvg.utils.types import TorchDevice, LoggingType
 
 
@@ -28,6 +29,9 @@ class ExperimentSettings:
         The W&B run to log to, if any.
     silence_wandb : bool, default=True
         Whether to suppress W&B output.
+    stat_logger : StatLogger, optional
+        The logger to use for logging statistics. If not provided, a dummy logger is
+        used, which does nothing.
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
     logger : logging.Logger | logging.LoggerAdapter, optional
@@ -63,6 +67,7 @@ class ExperimentSettings:
     device: TorchDevice = "cpu"
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
+    stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     profiler: Optional[torch.profiler.profile] = None

@@ -24,6 +24,7 @@ from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 from pvg.protocols import build_protocol_handler
+from pvg.stat_logger import WandbStatLogger, DummyStatLogger
 import pvg.graph_isomorphism
 import pvg.image_classification
 
@@ -108,13 +109,16 @@ def run_experiment(
             resume="never",
         )
         wandb_run.config.update(params.to_dict())
+        stat_logger = WandbStatLogger(wandb_run)
     else:
         wandb_run = None
+        stat_logger = DummyStatLogger()
 
     # Set up the experiment settings
     settings = ExperimentSettings(
         device=device,
         wandb_run=wandb_run,
+        stat_logger=stat_logger,
         tqdm_func=tqdm_func,
         logger=logger,
         profiler=profiler,
