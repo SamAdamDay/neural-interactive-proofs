@@ -41,6 +41,7 @@ def run_experiment(
     wandb_entity: str = WANDB_ENTITY,
     run_id: Optional[str] = None,
     allow_auto_generated_run_id: bool = False,
+    print_wandb_run_url: bool = False,
     wandb_tags: list = [],
     num_dataset_threads: int = 8,
     pin_memory: bool = True,
@@ -77,6 +78,8 @@ def run_experiment(
         is False.
     allow_auto_generated_run_id : bool, default=False
         If True, the run ID can be auto-generated if not specified.
+    print_wandb_run_url : bool, default=False
+        If True, print the URL of the W&B run at the start of the experiment.
     wandb_tags : list[str], default=[]
         The tags to add to the W&B run.
     num_dataset_threads : int, default=8
@@ -109,6 +112,8 @@ def run_experiment(
             resume="never",
         )
         wandb_run.config.update(params.to_dict())
+        if print_wandb_run_url:
+            print(f"W&B run URL: {wandb_run.get_url()}")
         stat_logger = WandbStatLogger(wandb_run)
     else:
         wandb_run = None
