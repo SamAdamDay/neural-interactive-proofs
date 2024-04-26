@@ -87,6 +87,7 @@ def run(cmd_args: Namespace):
         wandb_entity=cmd_args.wandb_entity,
         run_id=run_id,
         allow_auto_generated_run_id=True,
+        print_wandb_run_url=True,
     )
 
 
