@@ -45,10 +45,14 @@ def test_gi_ppo_train_optimizer_groups():
             rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
             ),
             functionalize_modules=False,
@@ -60,10 +64,14 @@ def test_gi_ppo_train_optimizer_groups():
             rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
             ),
             functionalize_modules=False,
@@ -75,10 +83,14 @@ def test_gi_ppo_train_optimizer_groups():
             rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
             ),
             functionalize_modules=False,
@@ -87,58 +99,19 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.01),
-            agents=AgentsParameters(
-                prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-                verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
-                ),
+            rl=RlTrainerParameters(
+                lr=3.0, body_lr_factor={"actor": 0.01, "critic": 0.01}
             ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
-            agents=AgentsParameters(
-                prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=0.1, gnn_lr_factor=0.1, **basic_agent_params
-                ),
-                verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.1),
-            agents=AgentsParameters(
-                prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
-                ),
-                verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
                 ),
             ),
             functionalize_modules=False,
@@ -150,10 +123,73 @@ def test_gi_ppo_train_optimizer_groups():
             rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=1.0, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
+                    **basic_agent_params,
                 ),
                 verifier=GraphIsomorphismAgentParameters(
-                    body_lr_factor=1.0, gnn_lr_factor=0.1, **basic_agent_params
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
+                ),
+            ),
+            functionalize_modules=False,
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
+                    **basic_agent_params,
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
+                ),
+            ),
+            functionalize_modules=False,
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(
+                lr=3.0, body_lr_factor={"actor": 0.1, "critic": 0.1}
+            ),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
+                    **basic_agent_params,
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
+                ),
+            ),
+            functionalize_modules=False,
+        ),
+        Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            agents=AgentsParameters(
+                prover=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
+                    **basic_agent_params,
+                ),
+                verifier=GraphIsomorphismAgentParameters(
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
+                    **basic_agent_params,
                 ),
             ),
             functionalize_modules=False,

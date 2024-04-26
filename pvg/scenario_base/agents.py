@@ -509,55 +509,43 @@ class Agent:
         else:
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
-    @property
-    def _body_param_regex(self) -> str:
+    def _body_param_regex(self, part) -> str:
         if self.params.functionalize_modules:
             if self.params.rl.use_shared_body:
-                return f"actor_network_params.module_0_{self.agent_name}"
+                return f"{part}_network_params.module_0_{self.agent_name}"
             else:
-                return (
-                    f"(actor_network_params.module_0_module_[0-9]"
-                    f"|critic_network_params.module_0)"
-                    f"_{self.agent_name}"
-                )
+                if part == "actor":
+                    return (
+                        f"(actor_network_params.module_0_module_[0-9]_{self.agent_name}"
+                    )
+                elif part == "critic":
+                    return f"(critic_network_params.module_0_{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
         else:
             if self.params.rl.use_shared_body:
-                return f"actor_network.module.0.{self.agent_name}"
+                return f"{part}_network.module.0.{self.agent_name}"
             else:
-                return (
-                    f"(actor_network.module.0.module.[0-9]"
-                    f"|critic_network.module.0)"
-                    f".{self.agent_name}"
-                )
+                if part == "actor":
+                    return f"(actor_network.module.0.module.[0-9].{self.agent_name}"
+                elif part == "critic":
+                    return f"(critic_network.module.0.{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
 
-    @property
-    def _non_body_param_regex(self) -> str:
+    def _non_body_param_regex(self, part) -> str:
+        nums = {"actor": "1-9", "critic": "0-9"}
+
         if self.params.functionalize_modules:
             if self.params.rl.use_shared_body:
-                return (
-                    f"(actor_network_params.module_[1-9]|"
-                    f"critic_network_params.module_[0-9])"
-                    f"_{self.agent_name}"
-                )
+                return f"{part}_network_params.module_[{nums[part]}]_{self.agent_name}"
             else:
-                return (
-                    f"(actor_network_params.module_[1-9]|"
-                    f"critic_network_params.module_[1-9])"
-                    f"_{self.agent_name}"
-                )
+                return f"{part}_network_params.module_[1-9]_{self.agent_name}"
         else:
             if self.params.rl.use_shared_body:
-                return (
-                    f"(actor_network.module.[1-9]|"
-                    f"critic_network.module.[0-9])"
-                    f".{self.agent_name}"
-                )
+                return f"{part}_network.module.[{nums[part]}].{self.agent_name}"
             else:
-                return (
-                    f"(actor_network.module.[1-9]|"
-                    f"critic_network.module.[1-9])"
-                    f".{self.agent_name}"
-                )
+                return f"{part}_network.module.[1-9].{self.agent_name}"
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
@@ -581,7 +569,7 @@ class Agent:
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[float] = None,
+        body_lr_factor_override: Optional[dict[str, float]] = None,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -593,9 +581,8 @@ class Agent:
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : float, optional
-            The learning rate factor for the body, which overrides the one set in the
-            agent params.
+        body_lr_factor_override : dict[str, float], optional
+            The learning rate factor for the body (for the actor and critic), which overrides the one set in the agent params.
 
         Returns
         -------
@@ -604,32 +591,63 @@ class Agent:
             iterable of dictionaries with the keys `params` and `lr`.
         """
 
+        # Check for mistakes
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.agent_lr_factor["actor"]
+            != self._agent_params.agent_lr_factor["critic"]
+        ):
+            raise ValueError(
+                "The agent learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.body_lr_factor["actor"]
+            != self._agent_params.body_lr_factor["critic"]
+        ):
+            raise ValueError(
+                "The body learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if body_lr_factor_override["actor"] != body_lr_factor_override["critic"]:
+            raise ValueError(
+                "The body learning rate factor for the actor and critic must be the same if it is overridden."
+            )
+
         # The learning rate of the whole agent
-        agent_lr = self._agent_params.agent_lr_factor * base_lr
+        agent_lr = {}
+        for part in ["actor", "critic"]:
+            agent_lr[part] = self._agent_params.agent_lr_factor[part] * base_lr
 
         # Determine the learning rate of the body.
-        if body_lr_factor_override is None:
-            body_lr = agent_lr * self._agent_params.body_lr_factor
-        else:
-            body_lr = agent_lr * body_lr_factor_override
+        body_lr = {}
+        for part in ["actor", "critic"]:
+            if body_lr_factor_override is None:
+                body_lr[part] = agent_lr[part] * self._agent_params.body_lr_factor[part]
+            else:
+                body_lr[part] = agent_lr[part] * body_lr_factor_override[part]
 
         model_param_dict = []
 
         # If named_parameters is not given, use the parameters of all the agent parts.
-        # In this case, we don't need to filter by name
         if named_parameters is None:
-            model_param_dict.append(dict(params=self._body_parameters, lr=body_lr))
+            for part in ["actor", "critic"]:
+                self._append_filtered_params(
+                    model_param_dict,
+                    list(self._body_parameters.items()),
+                    lambda name: re.match(self._body_param_regex(part), name),
+                    body_lr[part],
+                )
             if self.policy_head is not None:
                 model_param_dict.append(
-                    dict(params=self.policy_head.parameters(), lr=agent_lr)
+                    dict(params=self.policy_head.parameters(), lr=agent_lr["actor"])
                 )
             if self.value_head is not None:
                 model_param_dict.append(
-                    dict(params=self.value_head.parameters(), lr=agent_lr)
+                    dict(params=self.value_head.parameters(), lr=agent_lr["critic"])
                 )
             if self.solo_head is not None:
                 model_param_dict.append(
-                    dict(params=self.solo_head.parameters(), lr=agent_lr)
+                    dict(params=self.solo_head.parameters(), lr=agent_lr["actor"])
                 )
             return model_param_dict
 
@@ -638,20 +656,22 @@ class Agent:
         named_parameters = list(named_parameters)
 
         # Set the learning rate for the body parameters
-        self._append_filtered_params(
-            model_param_dict,
-            named_parameters,
-            lambda name: re.match(self._body_param_regex, name),
-            body_lr,
-        )
+        for part in ["actor", "critic"]:
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                lambda name: re.match(self._body_param_regex(part), name),
+                body_lr[part],
+            )
 
         # Set the learning rate for the non-body parameters
-        self._append_filtered_params(
-            model_param_dict,
-            named_parameters,
-            lambda name: re.match(self._non_body_param_regex, name),
-            agent_lr,
-        )
+        for part in ["actor", "critic"]:
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                lambda name: re.match(self._non_body_param_regex(part), name),
+                agent_lr[part],
+            )
 
         return model_param_dict
 

@@ -18,6 +18,7 @@ The structure of all agent bodies is the same:
 from abc import ABC
 from typing import Optional, Any, Iterable, ClassVar
 from dataclasses import dataclass
+from functools import partial
 import re
 
 import torch
@@ -2102,7 +2103,7 @@ class GraphIsomorphismAgent(Agent):
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[float] = None,
+        body_lr_factor_override: Optional[dict[str, float]] = None,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -2114,9 +2115,8 @@ class GraphIsomorphismAgent(Agent):
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : float, optional
-            The learning rate factor for the body, which overrides the one set in the
-            agent params.
+        body_lr_factor_override : dict[str, float], optional
+            The learning rate factor for the body (for the actor and critic), which overrides the one set in the agent params.
 
         Returns
         -------
@@ -2125,48 +2125,86 @@ class GraphIsomorphismAgent(Agent):
             iterable of dictionaries with the keys `params` and `lr`.
         """
 
+        # Check for mistakes
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.agent_lr_factor["actor"]
+            != self._agent_params.agent_lr_factor["critic"]
+        ):
+            raise ValueError(
+                "The agent learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.body_lr_factor["actor"]
+            != self._agent_params.body_lr_factor["critic"]
+        ):
+            raise ValueError(
+                "The body learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.gnn_lr_factor["actor"]
+            != self._agent_params.gnn_lr_factor["critic"]
+        ):
+            raise ValueError(
+                "The GNN learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if body_lr_factor_override["actor"] != body_lr_factor_override["critic"]:
+            raise ValueError(
+                "The body learning rate factor for the actor and critic must be the same if it is overridden."
+            )
+
         # The learning rate of the whole agent
-        agent_lr = self._agent_params.agent_lr_factor * base_lr
+        agent_lr = {}
+        for part in ["actor", "critic"]:
+            agent_lr[part] = self._agent_params.agent_lr_factor[part] * base_lr
 
         # Determine the learning rate of the body.
-        if body_lr_factor_override is None:
-            body_lr = agent_lr * self._agent_params.body_lr_factor
-        else:
-            body_lr = agent_lr * body_lr_factor_override
+        body_lr = {}
+        for part in ["actor", "critic"]:
+            if body_lr_factor_override is None:
+                body_lr[part] = agent_lr[part] * self._agent_params.body_lr_factor[part]
+            else:
+                body_lr[part] = agent_lr[part] * body_lr_factor_override[part]
 
         # Determine the learning rate for the GNN encoder
-        if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
-            gnn_lr = body_lr * self._agent_params.gnn_lr_factor
-        else:
-            gnn_lr = 0
+        gnn_lr = {}
+        for part in ["actor", "critic"]:
+            if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
+                gnn_lr[part] = body_lr[part] * self._agent_params.gnn_lr_factor[part]
+            else:
+                gnn_lr[part] = 0
 
         model_param_dict = []
 
         # If named_parameters is not given, use the parameters of all the agent parts
         if named_parameters is None:
-            self._append_filtered_params(
-                model_param_dict,
-                self._body_named_parameters,
-                lambda x: x.startswith("gnn"),
-                gnn_lr,
-            )
-            self._append_filtered_params(
-                model_param_dict,
-                self._body_named_parameters,
-                lambda x: not x.startswith("gnn"),
-                body_lr,
-            )
+            for part in ["actor", "critic"]:
+                self._append_filtered_params(
+                    model_param_dict,
+                    self._body_named_parameters,
+                    lambda x: part in x and x.startswith("gnn"),
+                    gnn_lr[part],
+                )
+                self._append_filtered_params(
+                    model_param_dict,
+                    self._body_named_parameters,
+                    lambda x: part in x and not x.startswith("gnn"),
+                    body_lr[part],
+                )
+
             if self.policy_head is not None:
                 model_param_dict.append(
-                    dict(params=self.policy_head.parameters(), lr=agent_lr)
+                    dict(params=self.policy_head.parameters(), lr=agent_lr["actor"])
                 )
             if self.value_head is not None:
                 model_param_dict.append(
-                    dict(params=self.value_head.parameters(), lr=agent_lr)
+                    dict(params=self.value_head.parameters(), lr=agent_lr["critic"])
                 )
             if self.solo_head is not None:
                 model_param_dict.append(
-                    dict(params=self.solo_head.parameters(), lr=agent_lr)
+                    dict(params=self.solo_head.parameters(), lr=agent_lr["actor"])
                 )
             return model_param_dict
 
@@ -2174,31 +2212,40 @@ class GraphIsomorphismAgent(Agent):
         # multiple times
         named_parameters = list(named_parameters)
 
-        def is_gnn_param(name: str):
+        def is_gnn_param(name: str, part: str):
             if self.params.functionalize_modules:
-                return re.match(f"{self._body_param_regex}_gnn", name)
+                return re.match(f"{self._body_param_regex(part)}_gnn", name)
             else:
-                return re.match(f"{self._body_param_regex}.gnn", name)
+                return re.match(f"{self._body_param_regex(part)}.gnn", name)
 
-        def is_body_param(name: str):
-            return re.match(self._body_param_regex, name) and not is_gnn_param(name)
+        def is_body_param(name: str, part: str):
+            return re.match(self._body_param_regex(part), name) and not is_gnn_param(
+                name, part
+            )
 
-        # Set the learning rate for the GNN parameters
-        self._append_filtered_params(
-            model_param_dict, named_parameters, is_gnn_param, gnn_lr
-        )
+        for part in ["actor", "critic"]:
+            # Set the learning rate for the GNN parameters
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                partial(is_gnn_param, part=part),
+                gnn_lr[part],
+            )
 
-        # Set the learning rate for the body parameters other than the GNN parameters
-        self._append_filtered_params(
-            model_param_dict, named_parameters, is_body_param, body_lr
-        )
+            # Set the learning rate for the body parameters other than the GNN parameters
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                partial(is_body_param, part=part),
+                body_lr[part],
+            )
 
-        # Set the learning rate for the non-body parameters
-        self._append_filtered_params(
-            model_param_dict,
-            named_parameters,
-            lambda name: re.match(self._non_body_param_regex, name),
-            agent_lr,
-        )
+            # Set the learning rate for the non-body parameters
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                lambda name: re.match(self._non_body_param_regex(part), name),
+                agent_lr[part],
+            )
 
         return model_param_dict
