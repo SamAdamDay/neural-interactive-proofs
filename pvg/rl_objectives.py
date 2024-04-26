@@ -978,6 +978,10 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
             td_out.set("loss_critic", critic_loss_per_agent.sum())
             td_out.set(("agents", "loss_value"), self.loss_critic(tensordict).mean())
 
+        if self.loss_weighting_type == "reward_to_go":
+            td_out.set("reward_to_go", loss_weighting.mean(dim=0).sum())
+            td_out.set(("agents", "reward_to_go"), loss_weighting.mean(dim=0))
+
         return td_out
 
     def backward(self, loss_vals: TensorDictBase):
