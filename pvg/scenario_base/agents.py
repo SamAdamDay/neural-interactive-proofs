@@ -26,7 +26,7 @@ from einops import repeat
 
 from jaxtyping import Float, Int
 
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, LrFactors
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
 from pvg.utils.params import check_if_critic_and_single_body
@@ -585,7 +585,7 @@ class Agent(ABC):
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[dict[str, float]] = None,
+        body_lr_factor_override: Optional[LrFactors | dict] = None,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -597,7 +597,7 @@ class Agent(ABC):
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : dict[str, float], optional
+        body_lr_factor_override : Optional[LrFactors | dict] = None
             The learning rate factor for the body (for the actor and critic), which overrides the one set in the agent params.
 
         Returns
@@ -610,37 +610,40 @@ class Agent(ABC):
         # Check for mistakes
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.agent_lr_factor["actor"]
-            != self._agent_params.agent_lr_factor["critic"]
+            and self._agent_params.agent_lr_factor.actor
+            != self._agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
                 "The agent learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.body_lr_factor["actor"]
-            != self._agent_params.body_lr_factor["critic"]
+            and self._agent_params.body_lr_factor.actor
+            != self._agent_params.body_lr_factor.critic
         ):
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if the body is shared."
             )
-        if body_lr_factor_override["actor"] != body_lr_factor_override["critic"]:
+        if body_lr_factor_override.actor != body_lr_factor_override.critic:
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if it is overridden."
             )
 
         # The learning rate of the whole agent
-        agent_lr = {}
-        for part in ["actor", "critic"]:
-            agent_lr[part] = self._agent_params.agent_lr_factor[part] * base_lr
+        agent_lr = {
+            "actor": self._agent_params.agent_lr_factor.actor * base_lr,
+            "critic": self._agent_params.agent_lr_factor.critic * base_lr,
+        }
 
-        # Determine the learning rate of the body.
-        body_lr = {}
-        for part in ["actor", "critic"]:
-            if body_lr_factor_override is None:
-                body_lr[part] = agent_lr[part] * self._agent_params.body_lr_factor[part]
-            else:
-                body_lr[part] = agent_lr[part] * body_lr_factor_override[part]
+        # Determine the learning rate of the body
+        body_lr = {
+            "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+            if body_lr_factor_override.actor is None
+            else agent_lr["actor"] * body_lr_factor_override.actor,
+            "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+            if body_lr_factor_override.critic is None
+            else agent_lr["critic"] * body_lr_factor_override.critic,
+        }
 
         model_param_dict = []
 

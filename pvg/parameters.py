@@ -348,10 +348,9 @@ class SubParameters(BaseParameters, ABC):
 
 
 @dataclass
-class LrFactors(SubParameters, ABC):
-    def __init__(self, actor: float = 1.0, critic: float = 1.0):
-        self.actor = actor
-        self.critic = critic
+class LrFactors(SubParameters):
+    actor: float = 1.0
+    critic: float = 1.0
 
 
 @dataclass
@@ -360,9 +359,9 @@ class AgentParameters(SubParameters, ABC):
 
     Parameters
     ----------
-    agent_lr_factor : dict[str, float]
+    agent_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the whole agent (split across the actor and the critic) compared with the base learning rate. This allows updating the agents at different rates.
-    body_lr_factor : dict[str, float]
+    body_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the body part of the model (split across the actor and the critic) compared with with whole agent. This allows updating the body at a different rate to the rest of the
         model.
     update_schedule : AgentUpdateSchedule
@@ -401,8 +400,8 @@ class AgentParameters(SubParameters, ABC):
         used.
     """
 
-    agent_lr_factor: dict[str, float] = {"actor": 1.0, "critic": 1.0}
-    body_lr_factor: dict[str, float] = {"actor": 1.0, "critic": 1.0}
+    agent_lr_factor: Optional[LrFactors | dict] = None
+    body_lr_factor: Optional[LrFactors | dict] = None
     update_schedule: AgentUpdateSchedule = ConstantUpdateSchedule()
 
     use_manual_architecture: bool = False
@@ -519,11 +518,11 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         Whether to use pair-invariant pooling in the agents's global pooling layer. This
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
-    body_lr_factor : dict[str, float]
+    body_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the body part of the model. The final LR for the
         body is obtained by multiplying this factor by the agent LR factor and the base
         LR. This allows updating the body at a different rate to the rest of the model.
-    gnn_lr_factor : dict[str, float]
+    gnn_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the GNN part of the model (split across the actor and the critic). The final LR for the GNN is obtained by multiplying this factor by the body LR. This allows updating the GNN at a different rate to the rest of the model.
     """
 
@@ -556,8 +555,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
 
-    body_lr_factor: dict[str, float] = {"actor": 1.0, "critic": 1.0}
-    gnn_lr_factor: dict[str, float] = {"actor": 0.1, "critic": 0.1}
+    body_lr_factor: Optional[LrFactors | dict] = {"actor": 1.0, "critic": 1.0}
+    gnn_lr_factor: Optional[LrFactors | dict] = {"actor": 0.1, "critic": 0.1}
 
     @classmethod
     def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
@@ -761,7 +760,7 @@ class RlTrainerParameters(SubParameters):
         The discount factor.
     lmbda : float
         The GAE lambda parameter.
-    body_lr_factor : dict[str, float], optional
+    body_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the body part of the model (split across the actor and critic). If set this overrides the `body_lr_factor` parameter of each agent.
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
@@ -785,7 +784,7 @@ class RlTrainerParameters(SubParameters):
     lmbda: float = 0.95
 
     # Agents
-    body_lr_factor: Optional[dict[str, float]] = None
+    body_lr_factor: Optional[LrFactors | dict] = None
     use_shared_body: bool = True
 
     # Testing
@@ -903,7 +902,7 @@ class SoloAgentParameters(SubParameters):
         The batch size.
     learning_rate : float
         The learning rate.
-    body_lr_factor : dict[str, float], optional
+    body_lr_factor : Optional[LrFactors | dict] = None
         The learning rate factor for the body part of the model (split across the actor and the critic). If set this overrides the `body_lr_factor` parameter of each agent.
     """
 
@@ -912,7 +911,7 @@ class SoloAgentParameters(SubParameters):
     learning_rate: float = 0.001
 
     # Agents
-    body_lr_factor: Optional[dict[str, float]] = None
+    body_lr_factor: Optional[LrFactors | dict] = None
 
 
 @dataclass

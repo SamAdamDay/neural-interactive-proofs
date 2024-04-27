@@ -64,6 +64,7 @@ from pvg.parameters import (
     RandomAgentParameters,
     ScenarioType,
     InteractionProtocolType,
+    LrFactors,
 )
 from pvg.protocols import ProtocolHandler
 from pvg.utils.torch import (
@@ -2105,7 +2106,7 @@ class GraphIsomorphismAgent(Agent):
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[dict[str, float]] = None,
+        body_lr_factor_override: Optional[LrFactors | dict] = None,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -2117,7 +2118,7 @@ class GraphIsomorphismAgent(Agent):
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : dict[str, float], optional
+        body_lr_factor_override : Optional[LrFactors | dict] = None
             The learning rate factor for the body (for the actor and critic), which overrides the one set in the agent params.
 
         Returns
@@ -2130,53 +2131,58 @@ class GraphIsomorphismAgent(Agent):
         # Check for mistakes
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.agent_lr_factor["actor"]
-            != self._agent_params.agent_lr_factor["critic"]
+            and self._agent_params.agent_lr_factor.actor
+            != self._agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
                 "The agent learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.body_lr_factor["actor"]
-            != self._agent_params.body_lr_factor["critic"]
+            and self._agent_params.body_lr_factor.actor
+            != self._agent_params.body_lr_factor.critic
         ):
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.gnn_lr_factor["actor"]
-            != self._agent_params.gnn_lr_factor["critic"]
+            and self._agent_params.gnn_lr_factor.actor
+            != self._agent_params.gnn_lr_factor.critic
         ):
             raise ValueError(
                 "The GNN learning rate factor for the actor and critic must be the same if the body is shared."
             )
-        if body_lr_factor_override["actor"] != body_lr_factor_override["critic"]:
+        if body_lr_factor_override.actor != body_lr_factor_override.critic:
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if it is overridden."
             )
 
         # The learning rate of the whole agent
-        agent_lr = {}
-        for part in ["actor", "critic"]:
-            agent_lr[part] = self._agent_params.agent_lr_factor[part] * base_lr
+        agent_lr = {
+            "actor": self._agent_params.agent_lr_factor.actor * base_lr,
+            "critic": self._agent_params.agent_lr_factor.critic * base_lr,
+        }
 
-        # Determine the learning rate of the body.
-        body_lr = {}
-        for part in ["actor", "critic"]:
-            if body_lr_factor_override is None:
-                body_lr[part] = agent_lr[part] * self._agent_params.body_lr_factor[part]
-            else:
-                body_lr[part] = agent_lr[part] * body_lr_factor_override[part]
+        # Determine the learning rate of the body
+        body_lr = {
+            "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+            if body_lr_factor_override.actor is None
+            else agent_lr["actor"] * body_lr_factor_override.actor,
+            "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+            if body_lr_factor_override.critic is None
+            else agent_lr["critic"] * body_lr_factor_override.critic,
+        }
 
         # Determine the learning rate for the GNN encoder
-        gnn_lr = {}
-        for part in ["actor", "critic"]:
-            if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
-                gnn_lr[part] = body_lr[part] * self._agent_params.gnn_lr_factor[part]
-            else:
-                gnn_lr[part] = 0
+        gnn_lr = {
+            "actor": body_lr["actor"] * self._agent_params.gnn_lr_factor.actor
+            if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+            else 0,
+            "critic": body_lr["critic"] * self._agent_params.gnn_lr_factor.critic
+            if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+            else 0,
+        }
 
         model_param_dict = []
 
@@ -2195,7 +2201,6 @@ class GraphIsomorphismAgent(Agent):
                     lambda x: part in x and not x.startswith("gnn"),
                     body_lr[part],
                 )
-
             if self.policy_head is not None:
                 model_param_dict.append(
                     dict(params=self.policy_head.parameters(), lr=agent_lr["actor"])
