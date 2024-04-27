@@ -31,34 +31,13 @@ def test_prepare_run_experiment():
     """
 
     # Very basic agent parameters for each scenario
-    agent_params_dict = {
-        ScenarioType.GRAPH_ISOMORPHISM: GraphIsomorphismAgentParameters(
-            num_gnn_layers=1,
-            d_gnn=1,
-            d_gin_mlp=1,
-            num_heads=2,
-            num_transformer_layers=1,
-            d_transformer=2,
-            d_transformer_mlp=1,
-            d_node_selector=1,
-            num_node_selector_layers=1,
-            d_decider=1,
-            num_decider_layers=1,
-            d_value=1,
-            num_value_layers=1,
-            normalize_message_history=True,
-        ),
-        ScenarioType.IMAGE_CLASSIFICATION: ImageClassificationAgentParameters(
-            num_convs_per_group=1,
-            d_latent_pixel_selector=1,
-            num_latent_pixel_selector_layers=1,
-            d_decider=1,
-            num_decider_layers=1,
-            d_value=1,
-            num_value_layers=1,
-            normalize_message_history=True,
-        ),
-    }
+    basic_agent_params = {}
+    basic_agent_params[
+        ScenarioType.GRAPH_ISOMORPHISM
+    ] = GraphIsomorphismAgentParameters.construct_test_params()
+    basic_agent_params[
+        ScenarioType.IMAGE_CLASSIFICATION
+    ] = ImageClassificationAgentParameters.construct_test_params()
 
     # Very basic parameters for each trainer
     rl_params = RlTrainerParameters(
@@ -204,7 +183,7 @@ def test_prepare_run_experiment():
             if is_random and agent_name != "verifier":
                 agents_param[agent_name] = {"is_random": True}
             else:
-                agents_param[agent_name] = agent_params_dict[scenario_type]
+                agents_param[agent_name] = basic_agent_params[scenario_type]
         if manual_architecture is not None:
             for agent_name in manual_architecture:
                 agents_param[agent_name].use_manual_architecture = True
@@ -241,6 +220,3 @@ def test_prepare_run_experiment():
             ignore_cache=True,
             pin_memory=False,
         )
-
-
-test_prepare_run_experiment()

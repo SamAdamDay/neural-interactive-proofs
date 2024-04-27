@@ -293,21 +293,21 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
         num_batch_dims = len(tensordict.batch_size)
 
         if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
+            entropy = self.get_entropy_bonus(dist).squeeze(dim=-1)
             entropy_flat = flatten_batch_dims(entropy, num_batch_dims)
             td_out.set(
                 "entropy",
                 entropy_flat.mean(dim=0).sum().detach(),
-            )  # for logging
-            td_out.set(
-                "loss_entropy", -self.entropy_coef * entropy_flat.mean(dim=0).sum()
             )
+            loss_entropy_per_agent = (-self.entropy_coef * entropy_flat).mean(dim=0)
+            td_out.set("loss_entropy", loss_entropy_per_agent.sum())
+            td_out.set(("agents", "loss_entropy"), loss_entropy_per_agent)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
-            td_out.set(
-                "loss_critic",
-                flatten_batch_dims(loss_critic, num_batch_dims).mean(dim=0).sum(),
-            )
+            loss_critic_per_agent = flatten_batch_dims(
+                self.loss_critic(tensordict), num_batch_dims
+            ).mean(dim=0)
+            td_out.set("loss_critic", loss_critic_per_agent.sum())
+            td_out.set(("agents", "loss_critic"), loss_critic_per_agent)
 
     def backward(self, loss_vals: TensorDictBase):
         """Perform the backward pass for the loss.
@@ -379,12 +379,16 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
         # Compute the KL divergence for logging
         kl = -log_weight.mean(0)
 
+        loss_objective_per_agent = -flatten_batch_dims(gain, num_batch_dims).mean(dim=0)
+        loss_objective = loss_objective_per_agent.sum()
+
         td_out = TensorDict(
             {
-                "loss_objective": -flatten_batch_dims(gain, num_batch_dims)
-                .mean(dim=0)
-                .sum(),
-                "kl": kl.detach().mean(),
+                "loss_objective": loss_objective,
+                "kl_divergence": kl.detach().mean(),
+                "agents": {
+                    "loss_objective": loss_objective_per_agent,
+                },
             },
             [],
         )
@@ -415,7 +419,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
         kl = -log_weight.mean(0)
         if self.beta.shape == torch.Size([]):
             self.beta = self.beta * torch.ones_like(kl)
-        kl_penalty = (self.beta * kl).sum()
+        kl_penalty = self.beta * kl
 
         # Update KL penalty terms
         for i in range(len(kl)):
@@ -424,10 +428,16 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
             elif kl[i] < self.dtarg / 1.5:
                 self.beta[i].data *= self.decrement
 
+        loss_objective_per_agent = -neg_loss.mean(dim=0) + kl_penalty
+        loss_objective = loss_objective_per_agent.sum()
+
         td_out = TensorDict(
             {
-                "loss_objective": -neg_loss.mean(dim=0).sum() + kl_penalty,
-                "kl": kl.detach().mean(),
+                "loss_objective": loss_objective,
+                "kl_divergence": kl.detach().mean(),
+                "agents": {
+                    "loss_objective": loss_objective_per_agent,
+                },
             },
             [],
         )
@@ -602,13 +612,16 @@ class SpgLoss(ClipPPOLossImproved):
             # mean across samples because the score multiplicands have already been
             # averaged across samples
 
+        loss_objective_per_agent = torch.stack(
+            [-gains[i] for i in self.agent_indices], dim=-1
+        )
+
         # Return losses per agent and set of followers
         td_out = TensorDict(
             {
-                **{"sum_log_probs": log_prob_sum},
-                **{
-                    f"{self.names[i]}_loss_objectives": -gains[i]
-                    for i in self.agent_indices
+                "sum_log_probs": log_prob_sum,
+                "agents": {
+                    "loss_objective": loss_objective_per_agent,
                 },
             },
             [],
@@ -635,7 +648,7 @@ class SpgLoss(ClipPPOLossImproved):
         # Then compute objective gradients for all agents
         objective_loss_grads = {}
         for i in self.agent_indices:
-            loss_vals[f"{self.names[i]}_loss_objectives"].sum().backward(
+            loss_vals.get(("agents", "loss_objective"))[..., i].sum().backward(
                 retain_graph=True
             )
             objective_loss_grads[i] = self.get_actor_params(grads=True)
@@ -700,8 +713,8 @@ class SpgLoss(ClipPPOLossImproved):
             ihvps = {
                 i: {
                     j: ihvp(
-                        loss_vals[f"{self.names[j]}_loss_objectives"][j],
-                        loss_vals[f"{self.names[i]}_loss_objectives"][j],
+                        loss_vals.get(("agents", "loss_objective"))[..., j, j],
+                        loss_vals.get(("agents", "loss_objective"))[..., i, i],
                         actor_params[j],
                         actor_params[i],
                         self.ihvp["variant"],
@@ -938,7 +951,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         # Compute the weighting used in the loss, which is either the reward-to-go or
         # the advantage, depending on whether a critic is used
         if self.loss_weighting_type == "reward_to_go":
-            loss_weighting = -tensordict.get(("agents", "reward_to_go"))
+            loss_weighting = tensordict.get(("agents", "reward_to_go"))
         else:
             loss_weighting = self._get_advantage(tensordict)
 
@@ -948,12 +961,26 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
             log_prob = log_prob.unsqueeze(-1)
 
         # Compute the loss
-        loss_actor = -log_prob * loss_weighting.detach()
-        loss_actor = loss_actor.mean()
-        td_out = TensorDict({"loss_actor": loss_actor}, [])
+        loss_actor_per_agent = -log_prob * loss_weighting.detach()
+        loss_actor_per_agent = loss_actor_per_agent.mean(dim=0)
+        td_out = TensorDict(
+            {
+                "loss_actor": loss_actor_per_agent.sum(),
+                "agents": {
+                    "loss_actor": loss_actor_per_agent,
+                },
+            },
+            [],
+        )
 
         if self.critic_network is not None:
-            td_out.set("loss_value", self.loss_critic(tensordict).mean())
+            critic_loss_per_agent = self.loss_critic(tensordict).mean(dim=0)
+            td_out.set("loss_critic", critic_loss_per_agent.sum())
+            td_out.set(("agents", "loss_value"), self.loss_critic(tensordict).mean())
+
+        if self.loss_weighting_type == "reward_to_go":
+            td_out.set("reward_to_go", loss_weighting.mean(dim=0).sum())
+            td_out.set(("agents", "reward_to_go"), loss_weighting.mean(dim=0))
 
         return td_out
 

@@ -48,11 +48,13 @@ Create a parameters object using a dictionary for the ppo parameters
 ... )
 """
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field
+import dataclasses
 from abc import ABC
-from typing import Optional, ClassVar, Iterable, NamedTuple
+from typing import Optional, ClassVar, NamedTuple, Union
+from types import UnionType
+import typing
 from enum import auto as enum_auto
-from itertools import product
 
 try:
     from enum import StrEnum
@@ -299,7 +301,7 @@ class BaseParameters(ABC):
 
         # Add all dataclass fields to the dictionary
         params_dict = {}
-        for field in fields(self):
+        for field in dataclasses.fields(self):
             value = getattr(self, field.name)
             if isinstance(value, StrEnum):
                 value = value.value
@@ -311,11 +313,38 @@ class BaseParameters(ABC):
 
         return params_dict
 
+    @classmethod
+    def construct_test_params(cls) -> "BaseParameters":
+        """Construct a set of basic parameters for testing."""
+        raise NotImplementedError
 
+    def __post_init__(self):
+        # Replace all Nones and all dictionaries with SubParameters objects
+        for param in dataclasses.fields(self):
+            param_value = getattr(self, param.name)
+            if not isinstance(param_value, dict) and param_value is not None:
+                continue
+            origin_type = typing.get_origin(param.type)
+            if origin_type is not Union and origin_type is not UnionType:
+                continue
+            for union_element in typing.get_args(param.type):
+                try:
+                    if issubclass(union_element, SubParameters):
+                        param_class = union_element
+                        break
+                except TypeError:
+                    continue
+            else:
+                continue
+            if param_value is None:
+                setattr(self, param.name, param_class())
+            else:
+                setattr(self, param.name, param_class(**param_value))
+
+
+@dataclass
 class SubParameters(BaseParameters, ABC):
     """Base class for sub-parameters objects."""
-
-    pass
 
 
 @dataclass
@@ -415,7 +444,7 @@ class AgentParameters(SubParameters, ABC):
             The W&B config dictionary for this agent (e.g.
             `wandb_run.config["agents"][agent_name]`).
         """
-        for field in fields(self):
+        for field in dataclasses.fields(self):
             if field.name in self.LOAD_PRESERVED_PARAMETERS:
                 continue
             if field.name in wandb_config:
@@ -530,6 +559,24 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     body_lr_factor: dict[str, float] = {"actor": 1.0, "critic": 1.0}
     gnn_lr_factor: dict[str, float] = {"actor": 0.1, "critic": 0.1}
 
+    @classmethod
+    def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
+        return cls(
+            num_gnn_layers=1,
+            d_gnn=1,
+            d_gin_mlp=1,
+            num_heads=2,
+            num_transformer_layers=1,
+            d_transformer=2,
+            d_transformer_mlp=1,
+            d_node_selector=1,
+            num_node_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+        )
+
 
 @dataclass
 class ImageClassificationAgentParameters(AgentParameters):
@@ -583,6 +630,18 @@ class ImageClassificationAgentParameters(AgentParameters):
     num_value_layers: int = 2
     include_round_in_value: bool = True
 
+    @classmethod
+    def construct_test_params(cls) -> "ImageClassificationAgentParameters":
+        return cls(
+            num_convs_per_group=1,
+            d_latent_pixel_selector=1,
+            num_latent_pixel_selector_layers=1,
+            d_decider=1,
+            num_decider_layers=1,
+            d_value=1,
+            num_value_layers=1,
+        )
+
 
 class AgentsParameters(dict[str, AgentParameters]):
     """Parameters which specify the agents in the experiment.
@@ -598,17 +657,79 @@ class AgentsParameters(dict[str, AgentParameters]):
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
 
-        Turns sub-parameters into dictionaries.
+        Turns sub-parameters into dictionaries and adds the combined agents update
+        schedule representation.
 
         Returns
         -------
         params_dict : dict
             A dictionary of the parameters.
         """
+
         params_dict = {}
+
         for param_name, param in self.items():
             params_dict[param_name] = param.to_dict()
+
+        params_dict["agents_update_repr"] = self._agents_update_repr()
+
         return params_dict
+
+    def _agents_update_repr(self) -> str:
+        """Return a string representation of the combined agents update schedule.
+
+        Returns
+        -------
+        agents_update_repr : str
+            A string representation of the combined agents update schedule.
+        """
+
+        # If all agents have the constant update schedule, return "Standard"
+        for agent_params in self.values():
+            if not isinstance(agent_params.update_schedule, ConstantUpdateSchedule):
+                break
+        else:
+            return "Standard"
+
+        # If all agents have an alternating update schedule with the same properties,
+        # return a string representation of the alternating update schedule
+        period = None
+        first_agent_num_rounds = None
+        first_agent_name = None
+        second_agent_name = None
+        for agent_name, agent_params in self.items():
+            update_schedule = agent_params.update_schedule
+            if not isinstance(update_schedule, AlternatingPeriodicUpdateSchedule):
+                break
+            if period is not None and period != update_schedule.period:
+                break
+            period = update_schedule.period
+            if (
+                first_agent_num_rounds is not None
+                and first_agent_num_rounds != update_schedule.first_agent_num_rounds
+            ):
+                break
+            first_agent_num_rounds = update_schedule.first_agent_num_rounds
+            if update_schedule.first_agent:
+                if first_agent_name is not None:
+                    break
+                first_agent_name = agent_name
+            else:
+                if second_agent_name is not None:
+                    break
+                second_agent_name = agent_name
+        else:
+            return (
+                f"Alternating({period}, {first_agent_num_rounds}, "
+                f"{first_agent_name!r}, {second_agent_name!r})"
+            )
+
+        # Otherwise, return "Custom" with the update schedules of all agents
+        agents_update_repr = "Custom("
+        for agent_name, agent_params in self.items():
+            agents_update_repr += f"{agent_name!r}: {agent_params.update_schedule}, "
+        agents_update_repr = agents_update_repr[:-2] + ")"
+        return agents_update_repr
 
 
 @dataclass
@@ -888,6 +1009,8 @@ class LongProtocolParameters(SubParameters, ABC):
     )
 
     def __post_init__(self):
+        super().__post_init__()
+
         # Convert the scheduler to an enum type
         if not isinstance(
             self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
@@ -1051,82 +1174,17 @@ class Parameters(BaseParameters):
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
             )
-            if self.image_classification is None:
-                self.image_classification = ImageClassificationParameters()
-            elif isinstance(self.image_classification, dict):
-                self.image_classification = ImageClassificationParameters(
-                    **self.image_classification
-                )
-
-        # Add common RL parameters if they are not provided
-        if (
-            self.trainer == TrainerType.VANILLA_PPO
-            or self.trainer == TrainerType.SPG
-            or self.trainer == TrainerType.REINFORCE
-        ):
-            if self.rl is None:
-                self.rl = RlTrainerParameters()
-            elif isinstance(self.rl, dict):
-                self.rl = RlTrainerParameters(**self.rl)
-
-        # Add common PPO parameters if they are not provided
-        if self.trainer == TrainerType.VANILLA_PPO or self.trainer == TrainerType.SPG:
-            if self.ppo is None:
-                self.ppo = CommonPpoParameters()
-            elif isinstance(self.ppo, dict):
-                self.ppo = CommonPpoParameters(**self.ppo)
 
         # Add PPO parameters for specific variants to the appropriate class
-        if self.trainer == TrainerType.VANILLA_PPO:
-            if self.vanilla_ppo is None:
-                self.vanilla_ppo = VanillaPpoParameters()
-            elif isinstance(self.vanilla_ppo, dict):
-                self.vanilla_ppo = VanillaPpoParameters(**self.vanilla_ppo)
-        elif self.trainer == TrainerType.SPG:
+        if self.trainer == TrainerType.SPG:
             if self.spg is None:
                 self.spg = SpgParameters(
                     stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[
                         self.interaction_protocol
                     ]
                 )
-            elif isinstance(self.spg, dict):
-                self.spg = SpgParameters(**self.spg)
-        elif self.trainer == TrainerType.REINFORCE:
-            if self.reinforce is None:
-                self.reinforce = ReinforceParameters()
-            elif isinstance(self.reinforce, dict):
-                self.reinforce = ReinforceParameters(**self.reinforce)
 
-        # Convert solo agent parameters to SoloAgentParameters
-        if self.trainer == TrainerType.SOLO_AGENT or self.pretrain_agents:
-            if self.solo_agent is None:
-                self.solo_agent = SoloAgentParameters()
-            elif isinstance(self.solo_agent, dict):
-                self.solo_agent = SoloAgentParameters(**self.solo_agent)
-
-        # Add common interaction protocol parameters if they are not provided
-        if self.protocol_common is None:
-            self.protocol_common = CommonProtocolParameters()
-        elif isinstance(self.protocol_common, dict):
-            self.protocol_common = CommonProtocolParameters(**self.protocol_common)
-
-        # Convert PVG and debate protocol parameters to the appropriate class
-        if self.interaction_protocol == InteractionProtocolType.PVG:
-            if self.pvg_protocol is None:
-                self.pvg_protocol = PvgProtocolParameters()
-            elif isinstance(self.pvg_protocol, dict):
-                self.pvg_protocol = PvgProtocolParameters(**self.pvg_protocol)
-        elif self.interaction_protocol == InteractionProtocolType.DEBATE:
-            if self.debate_protocol is None:
-                self.debate_protocol = DebateProtocolParameters()
-            elif isinstance(self.debate_protocol, dict):
-                self.debate_protocol = DebateProtocolParameters(**self.debate_protocol)
-
-        # Convert dataset options to DatasetParameters
-        if self.dataset_options is None:
-            self.dataset_options = DatasetParameters()
-        elif isinstance(self.dataset_options, dict):
-            self.dataset_options = DatasetParameters(**self.dataset_options)
+        super().__post_init__()
 
     def _process_agents_params(
         self,

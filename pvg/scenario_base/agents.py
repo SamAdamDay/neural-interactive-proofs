@@ -9,7 +9,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Iterable, Callable
+from typing import Optional, Any, Iterable, Callable, ClassVar
 from dataclasses import dataclass, fields, InitVar
 from functools import partial
 import re
@@ -378,8 +378,11 @@ class CombinedValueHead(CombinedAgentPart, ABC):
 
 
 @dataclass
-class Agent:
-    """A class which holds all the parts of an agent for an experiment.
+class Agent(ABC):
+    """A base class for holding all the parts of an agent for an experiment.
+
+    Subclasses should define the `message_logits_key` class variable, which is the key
+    in the output of the policy head which contains the logits for the message.
 
     Parameters
     ----------
@@ -409,6 +412,8 @@ class Agent:
     policy_head: Optional[AgentPolicyHead] = None
     value_head: Optional[AgentValueHead] = None
     solo_head: Optional[SoloAgentHead] = None
+
+    message_logits_key: ClassVar[str]
 
     def __post_init__(
         self,
@@ -509,43 +514,54 @@ class Agent:
         else:
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
-    def _body_param_regex(self, part) -> str:
+    def _body_param_regex(self, part: str) -> str:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         if self.params.functionalize_modules:
-            if self.params.rl.use_shared_body:
-                return f"{part}_network_params.module_0_{self.agent_name}"
+            if use_single_body and use_critic:
+                return f"actor_network_params.module_0_{self.agent_name}"
+            else:
+                if part == "actor":
+                    return f"actor_network_params.module_0_module_0_{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network_params.module_0_{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
+        else:
+            if use_single_body and use_critic:
+                return f"actor_network.module.0.{self.agent_name}"
+            else:
+                if part == "actor":
+                    return f"actor_network.module.0.module.0.{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network.module.0.{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
+
+    def _non_body_param_regex(self, part: str) -> str:
+        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        nums = {"actor": "1-9", "critic": "0-9"}
+        if self.params.functionalize_modules:
+            if use_single_body and use_critic:
+                return f"{part}_network_params.module_[{nums[part]}]_{self.agent_name}"
             else:
                 if part == "actor":
                     return (
-                        f"(actor_network_params.module_0_module_[0-9]_{self.agent_name}"
+                        f"actor_network_params.module_0_module_[1-9]_{self.agent_name}"
                     )
                 elif part == "critic":
-                    return f"(critic_network_params.module_0_{self.agent_name}"
+                    return f"critic_network_params.module_[1-9]_{self.agent_name}"
                 else:
                     raise ValueError(f"Unknown part: {part}")
         else:
-            if self.params.rl.use_shared_body:
-                return f"{part}_network.module.0.{self.agent_name}"
-            else:
-                if part == "actor":
-                    return f"(actor_network.module.0.module.[0-9].{self.agent_name}"
-                elif part == "critic":
-                    return f"(critic_network.module.0.{self.agent_name}"
-                else:
-                    raise ValueError(f"Unknown part: {part}")
-
-    def _non_body_param_regex(self, part) -> str:
-        nums = {"actor": "1-9", "critic": "0-9"}
-
-        if self.params.functionalize_modules:
-            if self.params.rl.use_shared_body:
-                return f"{part}_network_params.module_[{nums[part]}]_{self.agent_name}"
-            else:
-                return f"{part}_network_params.module_[1-9]_{self.agent_name}"
-        else:
-            if self.params.rl.use_shared_body:
+            if use_single_body and use_critic:
                 return f"{part}_network.module.[{nums[part]}].{self.agent_name}"
             else:
-                return f"{part}_network.module.[1-9].{self.agent_name}"
+                if part == "actor":
+                    return f"actor_network.module.0.module.[1-9].{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network.module.[1-9].{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:

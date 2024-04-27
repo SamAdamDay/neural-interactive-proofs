@@ -35,7 +35,7 @@ def run(cmd_args: Namespace):
     # Create the parameters object
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.REINFORCE,
+        trainer=TrainerType.VANILLA_PPO,
         dataset="eru10000",
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(
@@ -87,6 +87,7 @@ def run(cmd_args: Namespace):
         wandb_entity=cmd_args.wandb_entity,
         run_id=run_id,
         allow_auto_generated_run_id=True,
+        print_wandb_run_url=True,
     )
 
 

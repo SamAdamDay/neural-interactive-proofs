@@ -78,7 +78,7 @@ class SoloAgentTrainer(Trainer):
 
         # Get the agent models, for convenience. When using a separate body for the
         # policy and value networks, we use the policy body.
-        if self.params.rl.use_shared_body or not as_pretraining:
+        if self.use_single_body or not as_pretraining:
             agent_models = {
                 name: TensorDictSequential(agent.body, agent.solo_head)
                 for name, agent in agents.items()
@@ -155,15 +155,15 @@ class SoloAgentTrainer(Trainer):
                 if self.settings.test_run:
                     break
 
-            # Log to W&B if using
-            if self.settings.wandb_run is not None and not as_pretraining:
+            # Log run statistics
+            if not as_pretraining:
                 to_log = {}
                 for agent_name in agents_params:
                     train_loss = total_loss[agent_name] / len(train_dataloader)
                     train_accuracy = total_accuracy[agent_name] / len(train_dataloader)
                     to_log[f"{agent_name}.train_loss"] = train_loss
                     to_log[f"{agent_name}.train_accuracy"] = train_accuracy
-                self.settings.wandb_run.log(to_log, step=epoch)
+                self.settings.stat_logger.log(to_log, step=epoch)
 
             # If we're in test mode, exit after one iteration
             if self.settings.test_run:
@@ -199,13 +199,12 @@ class SoloAgentTrainer(Trainer):
             if self.settings.test_run:
                 break
 
-        # Record the final results with W&B if using
-        if self.settings.wandb_run is not None:
-            prefix = "pretrain_" if as_pretraining else ""
-            to_log = {}
-            for agent_name in agents_params:
-                test_loss = total_loss[agent_name] / len(test_loader)
-                test_accuracy = total_accuracy[agent_name] / len(test_loader)
-                to_log[f"{agent_name}.{prefix}test_loss"] = test_loss
-                to_log[f"{agent_name}.{prefix}test_accuracy"] = test_accuracy
-            self.settings.wandb_run.log(to_log)
+        # Record the final results
+        prefix = "pretrain_" if as_pretraining else ""
+        to_log = {}
+        for agent_name in agents_params:
+            test_loss = total_loss[agent_name] / len(test_loader)
+            test_accuracy = total_accuracy[agent_name] / len(test_loader)
+            to_log[f"{agent_name}.{prefix}test_loss"] = test_loss
+            to_log[f"{agent_name}.{prefix}test_accuracy"] = test_accuracy
+        self.settings.stat_logger.log(to_log)
