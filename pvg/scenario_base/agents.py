@@ -517,7 +517,7 @@ class Agent(ABC):
     def _body_param_regex(self, part: str) -> str:
         use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         if self.params.functionalize_modules:
-            if use_single_body and use_critic:
+            if use_single_body and use_critic and part == "actor":
                 return f"actor_network_params.module_0_{self.agent_name}"
             else:
                 if part == "actor":
@@ -527,7 +527,7 @@ class Agent(ABC):
                 else:
                     raise ValueError(f"Unknown part: {part}")
         else:
-            if use_single_body and use_critic:
+            if use_single_body and use_critic and part == "actor":
                 return f"actor_network.module.0.{self.agent_name}"
             else:
                 if part == "actor":
@@ -652,7 +652,7 @@ class Agent(ABC):
             for part in ["actor", "critic"]:
                 self._append_filtered_params(
                     model_param_dict,
-                    list(self._body_parameters.items()),
+                    self._body_named_parameters,
                     lambda name: re.match(self._body_param_regex(part), name),
                     body_lr[part],
                 )

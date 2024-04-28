@@ -2145,14 +2145,15 @@ class GraphIsomorphismAgent(Agent):
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if the body is shared."
             )
-        if (
-            self.params.rl.use_shared_body
-            and self._agent_params.gnn_lr_factor.actor
-            != self._agent_params.gnn_lr_factor.critic
-        ):
-            raise ValueError(
-                "The GNN learning rate factor for the actor and critic must be the same if the body is shared."
-            )
+        if hasattr(self._agent_params, "gnn_lr_factor"):
+            if (
+                self.params.rl.use_shared_body
+                and self._agent_params.gnn_lr_factor.actor
+                != self._agent_params.gnn_lr_factor.critic
+            ):
+                raise ValueError(
+                    "The GNN learning rate factor for the actor and critic must be the same if the body is shared."
+                )
         if body_lr_factor_override.actor != body_lr_factor_override.critic:
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if it is overridden."

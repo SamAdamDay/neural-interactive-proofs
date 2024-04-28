@@ -348,7 +348,15 @@ class SubParameters(BaseParameters, ABC):
 
 
 @dataclass
-class LrFactors(SubParameters):
+class LrFactors(SubParameters, ABC):
+    """
+    Class representing learning rate factors for the actor and critic models.
+
+    Attributes:
+        actor (float): The learning rate factor for the actor model.
+        critic (float): The learning rate factor for the critic model.
+    """
+
     actor: float = 1.0
     critic: float = 1.0
 
@@ -555,8 +563,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
 
-    body_lr_factor: Optional[LrFactors | dict] = {"actor": 1.0, "critic": 1.0}
-    gnn_lr_factor: Optional[LrFactors | dict] = {"actor": 0.1, "critic": 0.1}
+    body_lr_factor: Optional[LrFactors | dict] = None
+    gnn_lr_factor: Optional[LrFactors | dict] = None
 
     @classmethod
     def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
