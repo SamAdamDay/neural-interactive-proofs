@@ -26,7 +26,7 @@ from einops import repeat
 
 from jaxtyping import Float, Int
 
-from pvg.parameters import Parameters
+from pvg.parameters import Parameters, LrFactors
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
 from pvg.utils.params import check_if_critic_and_single_body
@@ -514,57 +514,54 @@ class Agent(ABC):
         else:
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
-    @property
-    def _body_param_regex(self) -> str:
+    def _body_param_regex(self, part: str) -> str:
         use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         if self.params.functionalize_modules:
-            if use_single_body and use_critic:
+            if use_single_body and use_critic and part == "actor":
                 return f"actor_network_params.module_0_{self.agent_name}"
             else:
-                return (
-                    f"(actor_network_params.module_0_module_0"
-                    f"|critic_network_params.module_0)"
-                    f"_{self.agent_name}"
-                )
+                if part == "actor":
+                    return f"actor_network_params.module_0_module_0_{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network_params.module_0_{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
         else:
-            if use_single_body and use_critic:
+            if use_single_body and use_critic and part == "actor":
                 return f"actor_network.module.0.{self.agent_name}"
             else:
-                return (
-                    f"(actor_network.module.0.module.0"
-                    f"|critic_network.module.0)"
-                    f".{self.agent_name}"
-                )
+                if part == "actor":
+                    return f"actor_network.module.0.module.0.{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network.module.0.{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
 
-    @property
-    def _non_body_param_regex(self) -> str:
+    def _non_body_param_regex(self, part: str) -> str:
         use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        nums = {"actor": "1-9", "critic": "0-9"}
         if self.params.functionalize_modules:
             if use_single_body and use_critic:
-                return (
-                    f"(actor_network_params.module_[1-9]|"
-                    f"critic_network_params.module_[0-9])"
-                    f"_{self.agent_name}"
-                )
+                return f"{part}_network_params.module_[{nums[part]}]_{self.agent_name}"
             else:
-                return (
-                    f"(actor_network_params.module_0_module_[1-9]|"
-                    f"critic_network_params.module_[1-9])"
-                    f"_{self.agent_name}"
-                )
+                if part == "actor":
+                    return (
+                        f"actor_network_params.module_0_module_[1-9]_{self.agent_name}"
+                    )
+                elif part == "critic":
+                    return f"critic_network_params.module_[1-9]_{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
         else:
             if use_single_body and use_critic:
-                return (
-                    f"(actor_network.module.[1-9]|"
-                    f"critic_network.module.[0-9])"
-                    f".{self.agent_name}"
-                )
+                return f"{part}_network.module.[{nums[part]}].{self.agent_name}"
             else:
-                return (
-                    f"(actor_network.module.0.module.[1-9]|"
-                    f"critic_network.module.[1-9])"
-                    f".{self.agent_name}"
-                )
+                if part == "actor":
+                    return f"actor_network.module.0.module.[1-9].{self.agent_name}"
+                elif part == "critic":
+                    return f"critic_network.module.[1-9].{self.agent_name}"
+                else:
+                    raise ValueError(f"Unknown part: {part}")
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
@@ -588,7 +585,7 @@ class Agent(ABC):
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[float] = None,
+        body_lr_factor_override: bool = False,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -600,9 +597,8 @@ class Agent(ABC):
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : float, optional
-            The learning rate factor for the body, which overrides the one set in the
-            agent params.
+        body_lr_factor_override : bool
+            If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
 
         Returns
         -------
@@ -611,32 +607,62 @@ class Agent(ABC):
             iterable of dictionaries with the keys `params` and `lr`.
         """
 
-        # The learning rate of the whole agent
-        agent_lr = self._agent_params.agent_lr_factor * base_lr
+        # Check for mistakes
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.agent_lr_factor.actor
+            != self._agent_params.agent_lr_factor.critic
+        ):
+            raise ValueError(
+                "The agent learning rate factor for the actor and critic must be the same if the body is shared."
+            )
+        if (
+            self.params.rl.use_shared_body
+            and self._agent_params.body_lr_factor.actor
+            != self._agent_params.body_lr_factor.critic
+        ):
+            raise ValueError(
+                "The body learning rate factor for the actor and critic must be the same if the body is shared."
+            )
 
-        # Determine the learning rate of the body.
-        if body_lr_factor_override is None:
-            body_lr = agent_lr * self._agent_params.body_lr_factor
-        else:
-            body_lr = agent_lr * body_lr_factor_override
+        # The learning rate of the whole agent
+        agent_lr = {
+            "actor": self._agent_params.agent_lr_factor.actor * base_lr,
+            "critic": self._agent_params.agent_lr_factor.critic * base_lr,
+        }
+
+        # Determine the learning rate of the body
+        body_lr = {
+            "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+            if not body_lr_factor_override
+            else agent_lr["actor"],
+            "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+            if not body_lr_factor_override
+            else agent_lr["critic"],
+        }
 
         model_param_dict = []
 
         # If named_parameters is not given, use the parameters of all the agent parts.
-        # In this case, we don't need to filter by name
         if named_parameters is None:
-            model_param_dict.append(dict(params=self._body_parameters, lr=body_lr))
+            for part in ["actor", "critic"]:
+                self._append_filtered_params(
+                    model_param_dict,
+                    self._body_named_parameters,
+                    lambda name: re.match(self._body_param_regex(part), name),
+                    body_lr[part],
+                )
             if self.policy_head is not None:
                 model_param_dict.append(
-                    dict(params=self.policy_head.parameters(), lr=agent_lr)
+                    dict(params=self.policy_head.parameters(), lr=agent_lr["actor"])
                 )
             if self.value_head is not None:
                 model_param_dict.append(
-                    dict(params=self.value_head.parameters(), lr=agent_lr)
+                    dict(params=self.value_head.parameters(), lr=agent_lr["critic"])
                 )
             if self.solo_head is not None:
                 model_param_dict.append(
-                    dict(params=self.solo_head.parameters(), lr=agent_lr)
+                    dict(params=self.solo_head.parameters(), lr=agent_lr["actor"])
                 )
             return model_param_dict
 
@@ -645,20 +671,22 @@ class Agent(ABC):
         named_parameters = list(named_parameters)
 
         # Set the learning rate for the body parameters
-        self._append_filtered_params(
-            model_param_dict,
-            named_parameters,
-            lambda name: re.match(self._body_param_regex, name),
-            body_lr,
-        )
+        for part in ["actor", "critic"]:
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                lambda name: re.match(self._body_param_regex(part), name),
+                body_lr[part],
+            )
 
         # Set the learning rate for the non-body parameters
-        self._append_filtered_params(
-            model_param_dict,
-            named_parameters,
-            lambda name: re.match(self._non_body_param_regex, name),
-            agent_lr,
-        )
+        for part in ["actor", "critic"]:
+            self._append_filtered_params(
+                model_param_dict,
+                named_parameters,
+                lambda name: re.match(self._non_body_param_regex(part), name),
+                agent_lr[part],
+            )
 
         return model_param_dict
 

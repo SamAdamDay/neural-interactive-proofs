@@ -39,7 +39,7 @@ param_grid = dict(
     batch_size=[256],
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
-    body_lr_factor=[1.0],
+    no_body_lr_factor=[True],
     prover_convs_per_group=[4],
     prover_num_decider_layers=[3],
     verifier_convs_per_group=[1],
@@ -88,7 +88,7 @@ def experiment_fn(
             num_epochs=combo["num_epochs"],
             batch_size=combo["batch_size"],
             learning_rate=combo["learning_rate"],
-            body_lr_factor=combo["body_lr_factor"],
+            body_lr_factor_override=combo["no_body_lr_factor"],
         ),
         image_classification=ImageClassificationParameters(
             num_conv_groups=combo["num_conv_groups"],

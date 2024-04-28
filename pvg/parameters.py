@@ -348,17 +348,29 @@ class SubParameters(BaseParameters, ABC):
 
 
 @dataclass
+class LrFactors(SubParameters, ABC):
+    """
+    Class representing learning rate factors for the actor and critic models.
+
+    Attributes:
+        actor (float): The learning rate factor for the actor model.
+        critic (float): The learning rate factor for the critic model.
+    """
+
+    actor: float = 1.0
+    critic: float = 1.0
+
+
+@dataclass
 class AgentParameters(SubParameters, ABC):
     """Base class for sub-parameters objects which define agents
 
     Parameters
     ----------
-    agent_lr_factor : float
-        The learning rate factor for the whole agent compared with the base learning
-        rate. This allows updating the agents at different rates.
-    body_lr_factor : float
-        The learning rate factor for the body part of the model compared with with whole
-        agent. This allows updating the body at a different rate to the rest of the
+    agent_lr_factor : [LrFactors | dict], optional
+        The learning rate factor for the whole agent (split across the actor and the critic) compared with the base learning rate. This allows updating the agents at different rates.
+    body_lr_factor : [LrFactors | dict], optional
+        The learning rate factor for the body part of the model (split across the actor and the critic) compared with with whole agent. This allows updating the body at a different rate to the rest of the
         model.
     update_schedule : AgentUpdateSchedule
         The schedule for updating the agent weights when doing multi-agent training.
@@ -368,7 +380,7 @@ class AgentParameters(SubParameters, ABC):
         hand-specified (non-learned) algorithm designed to maximise reward. This
         algorithm can be different depending on the environment. This is useful to test
         if the other agents can learn to work with a fixed optimum agent. It usually
-        makes sense to set `agent_lr_factor` to 0 in this case.
+        makes sense to set `agent_lr_factor` to {"actor": 0, "critic": 0} in this case.
     normalize_message_history : bool
         Whether to normalise the message history before passing it through the GNN
         encoder. Message histories are normalised to have zero mean and unit variance
@@ -396,8 +408,8 @@ class AgentParameters(SubParameters, ABC):
         used.
     """
 
-    agent_lr_factor: float = 1.0
-    body_lr_factor: float = 1.0
+    agent_lr_factor: Optional[LrFactors | dict] = None
+    body_lr_factor: Optional[LrFactors | dict] = None
     update_schedule: AgentUpdateSchedule = ConstantUpdateSchedule()
 
     use_manual_architecture: bool = False
@@ -514,14 +526,12 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         Whether to use pair-invariant pooling in the agents's global pooling layer. This
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
-    body_lr_factor : float
+    body_lr_factor : [LrFactors | dict], optional
         The learning rate factor for the body part of the model. The final LR for the
         body is obtained by multiplying this factor by the agent LR factor and the base
         LR. This allows updating the body at a different rate to the rest of the model.
-    gnn_lr_factor : float
-        The learning rate factor for the GNN part of the model. The final LR for the GNN
-        is obtained by multiplying this factor by the body LR. This allows updating the
-        GNN at a different rate to the rest of the model.
+    gnn_lr_factor : [LrFactors | dict], optional
+        The learning rate factor for the GNN part of the model (split across the actor and the critic). The final LR for the GNN is obtained by multiplying this factor by the body LR. This allows updating the GNN at a different rate to the rest of the model.
     """
 
     activation_function: ActivationType = ActivationType.TANH
@@ -553,8 +563,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     noise_sigma: float = 0.0
     use_pair_invariant_pooling: bool = True
 
-    body_lr_factor: float = 1.0
-    gnn_lr_factor: float = 0.1
+    body_lr_factor: Optional[LrFactors | dict] = None
+    gnn_lr_factor: Optional[LrFactors | dict] = None
 
     @classmethod
     def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
@@ -758,9 +768,6 @@ class RlTrainerParameters(SubParameters):
         The discount factor.
     lmbda : float
         The GAE lambda parameter.
-    body_lr_factor : float, optional
-        The learning rate factor for the body part of the model. If set this overrides
-        the `body_lr_factor` parameter of each agent.
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
@@ -783,7 +790,7 @@ class RlTrainerParameters(SubParameters):
     lmbda: float = 0.95
 
     # Agents
-    body_lr_factor: Optional[float] = None
+    body_lr_factor: Optional[LrFactors | dict] = None
     use_shared_body: bool = True
 
     # Testing
@@ -901,9 +908,8 @@ class SoloAgentParameters(SubParameters):
         The batch size.
     learning_rate : float
         The learning rate.
-    body_lr_factor : float, optional
-        The learning rate factor for the body part of the model. If set this overrides
-        the `body_lr_factor` parameter of each agent.
+    body_lr_factor_override : bool
+        If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
     """
 
     num_epochs: int = 100
@@ -911,7 +917,7 @@ class SoloAgentParameters(SubParameters):
     learning_rate: float = 0.001
 
     # Agents
-    body_lr_factor: Optional[float] = None
+    body_lr_factor_override: bool = False
 
 
 @dataclass

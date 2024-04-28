@@ -70,10 +70,14 @@ def test_gi_ppo_train_optimizer_groups():
             rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
             ),
             functionalize_modules=False,
@@ -82,13 +86,17 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=0.1, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
             ),
             functionalize_modules=False,
@@ -97,13 +105,17 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=0.1, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
             ),
             functionalize_modules=False,
@@ -112,13 +124,17 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.01),
+            rl=RlTrainerParameters(lr=3.0),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=0.1, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
             ),
             functionalize_modules=False,
@@ -127,13 +143,17 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=0.1
+                    basic_agent_params,
+                    body_lr_factor={"actor": 0.1, "critic": 0.1},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
             ),
             functionalize_modules=False,
@@ -142,43 +162,17 @@ def test_gi_ppo_train_optimizer_groups():
             ScenarioType.GRAPH_ISOMORPHISM,
             TrainerType.VANILLA_PPO,
             "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
+            rl=RlTrainerParameters(lr=3.0),
             agents=AgentsParameters(
                 prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=0.1, gnn_lr_factor=0.1
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
                 ),
                 verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=0.1),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=0.1
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=1.0
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params, body_lr_factor=1.0, gnn_lr_factor=0.1
+                    basic_agent_params,
+                    body_lr_factor={"actor": 1.0, "critic": 1.0},
+                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
                 ),
             ),
             functionalize_modules=False,
@@ -210,13 +204,6 @@ def test_gi_ppo_train_optimizer_groups():
             rest=3.0,
         ),
         dict(
-            prover_gnn=0.03,
-            prover_body=0.03,
-            verifier_gnn=0.03,
-            verifier_body=0.03,
-            rest=3.0,
-        ),
-        dict(
             prover_gnn=0.3,
             prover_body=3.0,
             verifier_gnn=3.0,
@@ -228,13 +215,6 @@ def test_gi_ppo_train_optimizer_groups():
             prover_body=0.3,
             verifier_gnn=3.0,
             verifier_body=3.0,
-            rest=3.0,
-        ),
-        dict(
-            prover_gnn=0.03,
-            prover_body=0.3,
-            verifier_gnn=0.3,
-            verifier_body=0.3,
             rest=3.0,
         ),
         dict(

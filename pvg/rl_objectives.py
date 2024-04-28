@@ -22,7 +22,7 @@ from tensordict.nn.distributions import CompositeDistribution
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
-from pvg.parameters import SpgVariant
+from pvg.parameters import SpgVariant, LrFactors
 from pvg.utils.maths import dot_td, ihvp, compute_sos_update
 from pvg.utils.torch import flatten_batch_dims
 
@@ -465,7 +465,7 @@ class SpgLoss(ClipPPOLossImproved):
         ihvp: dict,
         additional_lola_term: bool,
         sos_params: NamedTuple,
-        agent_lr_factors: list[float],
+        agent_lr_factors: list[Optional[LrFactors | dict]],
         lr: float,
         clip_epsilon,
         entropy_coef,
@@ -775,7 +775,7 @@ class SpgLoss(ClipPPOLossImproved):
                         # For LOLA and POLA we need to multiply the gradients by the
                         # learning rate of the follower agent
                         else:
-                            lr_coefficient = self.agent_lr_factors[j] * self.lr
+                            lr_coefficient = self.agent_lr_factors[j].actor * self.lr
                             if (
                                 self.additional_lola_term
                                 or self.variant == SpgVariant.SOS

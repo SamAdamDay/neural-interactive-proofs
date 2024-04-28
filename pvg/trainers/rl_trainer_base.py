@@ -344,7 +344,6 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             param_dict = agent.get_param_dicts(
                 base_lr=self.params.rl.lr,
                 named_parameters=loss_module.named_parameters(),
-                body_lr_factor_override=self.params.rl.body_lr_factor,
             )
             all_param_dicts.extend(param_dict)
             param_group_collections[agent_name] = param_dict

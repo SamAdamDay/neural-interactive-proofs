@@ -73,7 +73,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
 
         Returns
         -------
-        loss_module : ClipPPOLossMultipleActions
+        loss_module : ReinforceLossImproved
             The loss module.
         gae : GAE | None
             The generalized advantage estimator, if using advantage and critic, None
