@@ -2106,7 +2106,7 @@ class GraphIsomorphismAgent(Agent):
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,
-        body_lr_factor_override: Optional[LrFactors | dict] = None,
+        body_lr_factor_override: bool = False,
     ) -> Iterable[dict[str, Any]]:
         """Get the Torch parameters of the agent, and their learning rates.
 
@@ -2118,8 +2118,8 @@ class GraphIsomorphismAgent(Agent):
             The named parameters of the loss module, usually obtained by
             `loss_module.named_parameters()`. If not given, the parameters of all the
             agent parts are used.
-        body_lr_factor_override : Optional[LrFactors | dict] = None
-            The learning rate factor for the body (for the actor and critic), which overrides the one set in the agent params.
+        body_lr_factor_override : bool
+            If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
 
         Returns
         -------
@@ -2154,10 +2154,6 @@ class GraphIsomorphismAgent(Agent):
                 raise ValueError(
                     "The GNN learning rate factor for the actor and critic must be the same if the body is shared."
                 )
-        if body_lr_factor_override.actor != body_lr_factor_override.critic:
-            raise ValueError(
-                "The body learning rate factor for the actor and critic must be the same if it is overridden."
-            )
 
         # The learning rate of the whole agent
         agent_lr = {
@@ -2168,11 +2164,11 @@ class GraphIsomorphismAgent(Agent):
         # Determine the learning rate of the body
         body_lr = {
             "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
-            if body_lr_factor_override.actor is None
-            else agent_lr["actor"] * body_lr_factor_override.actor,
+            if not body_lr_factor_override
+            else agent_lr["actor"],
             "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
-            if body_lr_factor_override.critic is None
-            else agent_lr["critic"] * body_lr_factor_override.critic,
+            if not body_lr_factor_override
+            else agent_lr["critic"],
         }
 
         # Determine the learning rate for the GNN encoder

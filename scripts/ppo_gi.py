@@ -59,12 +59,12 @@ param_grid = dict(
     prover_num_layers=[5],
     prover_num_value_layers=[2],
     prover_dim_value_layers=[16],
-    prover_lr_factor=[1.0],
+    prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_manual_architecture=[False],
     verifier_num_layers=[2],
     verifier_num_value_layers=[2],
     verifier_dim_value_layers=[16],
-    verifier_lr_factor=[1.0],
+    verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     verifier_manual_architecture=[False],
     num_transformer_layers=[1],
     num_transformer_heads=[4],
@@ -131,11 +131,11 @@ def experiment_fn(
             period, combo["update_spec"][0], first_agent=False
         )
     if combo["prover_manual_architecture"]:
-        prover_lr_factor = 0.0
+        prover_lr_factor = {"actor": 0.0, "critic": 0.0}
     else:
         prover_lr_factor = combo["prover_lr_factor"]
     if combo["verifier_manual_architecture"]:
-        verifier_lr_factor = 0.0
+        verifier_lr_factor = {"actor": 0.0, "critic": 0.0}
     else:
         verifier_lr_factor = combo["verifier_lr_factor"]
     if combo["random_prover"]:
@@ -152,6 +152,7 @@ def experiment_fn(
             normalize_message_history=combo["normalize_message_history"],
             use_manual_architecture=combo["prover_manual_architecture"],
             use_dual_gnn=combo["use_dual_gnn"],
+            body_lr_factor=combo["body_lr_factor"],
             gnn_lr_factor=combo["gnn_lr_factor"],
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
@@ -173,6 +174,7 @@ def experiment_fn(
                 normalize_message_history=combo["normalize_message_history"],
                 use_manual_architecture=combo["verifier_manual_architecture"],
                 use_dual_gnn=combo["use_dual_gnn"],
+                body_lr_factor=combo["body_lr_factor"],
                 gnn_lr_factor=combo["gnn_lr_factor"],
                 include_round_in_decider=combo["include_round_in_decider"],
                 use_batch_norm=combo["use_batch_norm"],
@@ -185,7 +187,6 @@ def experiment_fn(
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
-            body_lr_factor=combo["body_lr_factor"],
             lr=combo["lr"],
             max_grad_norm=combo["max_grad_norm"],
             use_shared_body=combo["use_shared_body"],

@@ -367,9 +367,9 @@ class AgentParameters(SubParameters, ABC):
 
     Parameters
     ----------
-    agent_lr_factor : Optional[LrFactors | dict] = None
+    agent_lr_factor : [LrFactors | dict], optional
         The learning rate factor for the whole agent (split across the actor and the critic) compared with the base learning rate. This allows updating the agents at different rates.
-    body_lr_factor : Optional[LrFactors | dict] = None
+    body_lr_factor : [LrFactors | dict], optional
         The learning rate factor for the body part of the model (split across the actor and the critic) compared with with whole agent. This allows updating the body at a different rate to the rest of the
         model.
     update_schedule : AgentUpdateSchedule
@@ -526,11 +526,11 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         Whether to use pair-invariant pooling in the agents's global pooling layer. This
         makes the agents's graph-level representations invariant to the order of the
         graphs in the pair.
-    body_lr_factor : Optional[LrFactors | dict] = None
+    body_lr_factor : [LrFactors | dict], optional
         The learning rate factor for the body part of the model. The final LR for the
         body is obtained by multiplying this factor by the agent LR factor and the base
         LR. This allows updating the body at a different rate to the rest of the model.
-    gnn_lr_factor : Optional[LrFactors | dict] = None
+    gnn_lr_factor : [LrFactors | dict], optional
         The learning rate factor for the GNN part of the model (split across the actor and the critic). The final LR for the GNN is obtained by multiplying this factor by the body LR. This allows updating the GNN at a different rate to the rest of the model.
     """
 
@@ -768,8 +768,6 @@ class RlTrainerParameters(SubParameters):
         The discount factor.
     lmbda : float
         The GAE lambda parameter.
-    body_lr_factor : Optional[LrFactors | dict] = None
-        The learning rate factor for the body part of the model (split across the actor and critic). If set this overrides the `body_lr_factor` parameter of each agent.
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
@@ -910,8 +908,8 @@ class SoloAgentParameters(SubParameters):
         The batch size.
     learning_rate : float
         The learning rate.
-    body_lr_factor : Optional[LrFactors | dict] = None
-        The learning rate factor for the body part of the model (split across the actor and the critic). If set this overrides the `body_lr_factor` parameter of each agent.
+    body_lr_factor_override : bool
+        If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
     """
 
     num_epochs: int = 100
@@ -919,7 +917,7 @@ class SoloAgentParameters(SubParameters):
     learning_rate: float = 0.001
 
     # Agents
-    body_lr_factor: Optional[LrFactors | dict] = None
+    body_lr_factor_override: bool = False
 
 
 @dataclass
