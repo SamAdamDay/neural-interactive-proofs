@@ -1,5 +1,3 @@
-from itertools import product
-import re
 import dataclasses
 
 import pytest
@@ -17,6 +15,7 @@ from pvg import (
     ImageClassificationAgentParameters,
     RlTrainerParameters,
     ExperimentSettings,
+    LrFactors,
 )
 from pvg.trainers import build_trainer
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
@@ -61,121 +60,96 @@ def test_gi_ppo_train_optimizer_groups():
 
     basic_agent_params = GraphIsomorphismAgentParameters.construct_test_params()
 
+    def construct_test_params(
+        lr: float = 3.0,
+        use_shared_body: bool = True,
+        prover_body_lr_factor: float = 1.0,
+        prover_gnn_lr_factor: float = 1.0,
+        verifier_body_lr_factor: float = 1.0,
+        verifier_gnn_lr_factor: float = 1.0,
+        prover_actor_body_lr_factor: float = 1.0,
+        prover_critic_body_lr_factor: float = 1.0,
+        prover_actor_gnn_lr_factor: float = 1.0,
+        prover_critic_gnn_lr_factor: float = 1.0,
+        verifier_actor_body_lr_factor: float = 1.0,
+        verifier_critic_body_lr_factor: float = 1.0,
+        verifier_actor_gnn_lr_factor: float = 1.0,
+        verifier_critic_gnn_lr_factor: float = 1.0,
+    ) -> Parameters:
+        """Construct parameters using the given learning rates and factors."""
+
+        # If we're using the shared body, we copy the body learning rates to the GNN
+        # learning rates to the actor and critic
+        if use_shared_body:
+            prover_actor_body_lr_factor = prover_body_lr_factor
+            prover_critic_body_lr_factor = prover_body_lr_factor
+            prover_actor_gnn_lr_factor = prover_gnn_lr_factor
+            prover_critic_gnn_lr_factor = prover_gnn_lr_factor
+            verifier_actor_body_lr_factor = verifier_body_lr_factor
+            verifier_critic_body_lr_factor = verifier_body_lr_factor
+            verifier_actor_gnn_lr_factor = verifier_gnn_lr_factor
+            verifier_critic_gnn_lr_factor = verifier_gnn_lr_factor
+
+        return Parameters(
+            ScenarioType.GRAPH_ISOMORPHISM,
+            TrainerType.VANILLA_PPO,
+            "test",
+            rl=RlTrainerParameters(lr=lr, use_shared_body=use_shared_body),
+            agents=AgentsParameters(
+                prover=dataclasses.replace(
+                    basic_agent_params,
+                    body_lr_factor=LrFactors(
+                        actor=prover_actor_body_lr_factor,
+                        critic=prover_critic_body_lr_factor,
+                    ),
+                    gnn_lr_factor=LrFactors(
+                        actor=prover_actor_gnn_lr_factor,
+                        critic=prover_critic_gnn_lr_factor,
+                    ),
+                ),
+                verifier=dataclasses.replace(
+                    basic_agent_params,
+                    body_lr_factor=LrFactors(
+                        actor=verifier_actor_body_lr_factor,
+                        critic=verifier_critic_body_lr_factor,
+                    ),
+                    gnn_lr_factor=LrFactors(
+                        actor=verifier_actor_gnn_lr_factor,
+                        critic=verifier_critic_gnn_lr_factor,
+                    ),
+                ),
+            ),
+            functionalize_modules=False,
+        )
+
     # Define the the different parameter options to test
     params_list = [
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0, body_lr_factor=None),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-            ),
-            functionalize_modules=False,
+        construct_test_params(),
+        construct_test_params(prover_body_lr_factor=0.1),
+        construct_test_params(verifier_body_lr_factor=0.1),
+        construct_test_params(prover_gnn_lr_factor=0.1),
+        construct_test_params(prover_body_lr_factor=0.1, prover_gnn_lr_factor=0.1),
+        construct_test_params(verifier_gnn_lr_factor=0.1),
+        construct_test_params(use_shared_body=False),
+        construct_test_params(use_shared_body=False, prover_actor_body_lr_factor=0.1),
+        construct_test_params(use_shared_body=False, prover_critic_body_lr_factor=0.1),
+        construct_test_params(
+            use_shared_body=False,
+            prover_actor_body_lr_factor=0.1,
+            prover_actor_gnn_lr_factor=0.1,
+            prover_critic_body_lr_factor=10.0,
+            prover_critic_gnn_lr_factor=10.0,
         ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 0.1, "critic": 0.1},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 0.1, "critic": 0.1},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 0.1, "critic": 0.1},
-                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-            ),
-            functionalize_modules=False,
-        ),
-        Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=3.0),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 1.0, "critic": 1.0},
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor={"actor": 1.0, "critic": 1.0},
-                    gnn_lr_factor={"actor": 0.1, "critic": 0.1},
-                ),
-            ),
-            functionalize_modules=False,
+        construct_test_params(
+            use_shared_body=False,
+            prover_actor_body_lr_factor=0.1,
+            prover_actor_gnn_lr_factor=0.1,
+            prover_critic_body_lr_factor=10.0,
+            prover_critic_gnn_lr_factor=10.0,
+            verifier_actor_body_lr_factor=0.01,
+            verifier_actor_gnn_lr_factor=0.01,
+            verifier_critic_body_lr_factor=100.0,
+            verifier_critic_gnn_lr_factor=100.0,
         ),
     ]
 
@@ -224,11 +198,65 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_body=3.0,
             rest=3.0,
         ),
+        dict(
+            prover_actor_gnn=3.0,
+            prover_critic_gnn=3.0,
+            prover_actor_body=3.0,
+            prover_critic_body=3.0,
+            verifier_actor_gnn=3.0,
+            verifier_critic_gnn=3.0,
+            verifier_actor_body=3.0,
+            verifier_critic_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_actor_gnn=0.3,
+            prover_critic_gnn=3.0,
+            prover_actor_body=0.3,
+            prover_critic_body=3.0,
+            verifier_actor_gnn=3.0,
+            verifier_critic_gnn=3.0,
+            verifier_actor_body=3.0,
+            verifier_critic_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_actor_gnn=3.0,
+            prover_critic_gnn=0.3,
+            prover_actor_body=3.0,
+            prover_critic_body=0.3,
+            verifier_actor_gnn=3.0,
+            verifier_critic_gnn=3.0,
+            verifier_actor_body=3.0,
+            verifier_critic_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_actor_gnn=0.03,
+            prover_critic_gnn=300.0,
+            prover_actor_body=0.3,
+            prover_critic_body=30.0,
+            verifier_actor_gnn=3.0,
+            verifier_critic_gnn=3.0,
+            verifier_actor_body=3.0,
+            verifier_critic_body=3.0,
+            rest=3.0,
+        ),
+        dict(
+            prover_actor_gnn=0.03,
+            prover_critic_gnn=300.0,
+            prover_actor_body=0.3,
+            prover_critic_body=30.0,
+            verifier_actor_gnn=0.0003,
+            verifier_critic_gnn=30000.0,
+            verifier_actor_body=0.03,
+            verifier_critic_body=300.0,
+            rest=3.0,
+        ),
     ]
 
-    for use_shared_body, (i, params) in product([True, False], enumerate(params_list)):
+    for i, params in enumerate(params_list):
         # Create the experiment settings and scenario instance to pass to the trainer
-        params.rl.use_shared_body = use_shared_body
         settings = ExperimentSettings(device="cpu", test_run=True)
         scenario_instance = build_scenario_instance(params, settings)
 
@@ -240,7 +268,7 @@ def test_gi_ppo_train_optimizer_groups():
 
         def get_network_part(param_name: str) -> str:
             """Determine which part of the network the parameter is in."""
-            if use_shared_body:
+            if params.rl.use_shared_body:
                 if param_name.startswith("actor_network.module.0.prover.gnn"):
                     return "prover_gnn"
                 if param_name.startswith("actor_network.module.0.verifier.gnn"):
@@ -251,24 +279,24 @@ def test_gi_ppo_train_optimizer_groups():
                     return "verifier_body"
                 return "rest"
             else:
-                if re.match(
-                    "actor_network.module.0.module.0.prover.gnn", param_name
-                ) or param_name.startswith("critic_network.module.0.prover.gnn"):
-                    return "prover_gnn"
-                if re.match(
-                    "actor_network.module.0.module.0.verifier.gnn",
-                    param_name,
-                ) or param_name.startswith("critic_network.module.0.verifier.gnn"):
-                    return "verifier_gnn"
-                if re.match(
-                    "actor_network.module.0.module.0.prover", param_name
-                ) or param_name.startswith("critic_network.module.0.prover"):
-                    return "prover_body"
-                if re.match(
-                    "actor_network.module.0.module.0.verifier",
-                    param_name,
-                ) or param_name.startswith("critic_network.module.0.verifier"):
-                    return "verifier_body"
+                if param_name.startswith("actor_network.module.0.module.0.prover.gnn"):
+                    return "prover_actor_gnn"
+                if param_name.startswith("critic_network.module.0.prover.gnn"):
+                    return "prover_critic_gnn"
+                if param_name.startswith(
+                    "actor_network.module.0.module.0.verifier.gnn"
+                ):
+                    return "verifier_actor_gnn"
+                if param_name.startswith("critic_network.module.0.verifier.gnn"):
+                    return "verifier_critic_gnn"
+                if param_name.startswith("actor_network.module.0.module.0.prover"):
+                    return "prover_actor_body"
+                if param_name.startswith("critic_network.module.0.prover"):
+                    return "prover_critic_body"
+                if param_name.startswith("actor_network.module.0.module.0.verifier"):
+                    return "verifier_actor_body"
+                if param_name.startswith("critic_network.module.0.verifier"):
+                    return "verifier_critic_body"
                 return "rest"
 
         # Run through all the loss module parameters and make sure they are in the
