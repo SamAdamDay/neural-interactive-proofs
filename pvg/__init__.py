@@ -1,5 +1,6 @@
 from .parameters import (
     Parameters,
+    LrFactors,
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
