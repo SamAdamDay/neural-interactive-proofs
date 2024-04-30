@@ -1,9 +1,9 @@
 -r requirements.txt
 flake8==7.0.0
-black==23.12.1
-pytest==7.4.4
-pre-commit==3.6.0
+black==24.4.2
+pytest==8.2.0
+pre-commit==3.7.0
 tensorboard==2.16.2
 torch_tb_profiler==0.4.3
 HolisticTraceAnalysis==0.2.0
-libtmux==0.36.0
+libtmux==0.37.0

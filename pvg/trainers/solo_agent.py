@@ -4,6 +4,7 @@ This is useful for ensuring that the agents are able to learn the task in isolat
 """
 
 import logging
+from contextlib import ExitStack
 
 import numpy as np
 
@@ -15,7 +16,8 @@ from torch.optim import Adam, Optimizer
 from tensordict import TensorDict
 from tensordict.nn import TensorDictSequential
 
-from pvg.scenario_base.data import DataLoader
+from pvg.scenario_base.data import DataLoader, Dataset
+from pvg.scenario_base.agents import Agent
 from pvg.trainers.base import Trainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
@@ -89,8 +91,59 @@ class SoloAgentTrainer(Trainer):
                 for name, agent in agents.items()
             }
 
-        # Create the optimizers, specifying the learning rates for the different parts of
-        # the agent
+        # Run the training loop in the appropriate context
+        with ExitStack() as stack:
+            self._build_train_context(stack)
+            self._run_train_loop(
+                train_dataset,
+                agents_params,
+                agents,
+                agent_models,
+                as_pretraining,
+                torch_generator,
+            )
+
+        # Run the testing loop in the appropriate context
+        with ExitStack() as stack:
+            self._build_train_context(stack)
+            self._run_test_loop(
+                test_dataset,
+                agents_params,
+                agents,
+                agent_models,
+                as_pretraining,
+                logger,
+            )
+
+    def _run_train_loop(
+        self,
+        train_dataset: Dataset,
+        agents_params: AgentsParameters,
+        agents: dict[str, Agent],
+        agent_models: dict[str, TensorDictSequential],
+        as_pretraining: bool,
+        torch_generator: torch.Generator,
+    ):
+        """Run the training loop.
+
+        Parameters
+        ----------
+        train_dataset : Dataset
+            The dataset to train on.
+        agents_params : AgentsParameters
+            The parameters of the agents.
+        agents : dict[str, Agent]
+            A dictionary of the classes which hold the agent components.
+        agent_models : dict[str, TensorDictSequential]
+            A dictionary of the actual models we're training.
+        as_pretraining : bool
+            Whether we're training the agents as a pretraining step.
+        torch_generator : torch.Generator
+            The random number generator to use.
+        """
+
+        # Create the optimizers, specifying the learning rates for the different parts
+        # of the agent
         optimizers: dict[str, Optimizer] = {}
         for agent_name, agent in agents.items():
             model_param_dict = agent.get_param_dicts(
@@ -105,11 +158,6 @@ class SoloAgentTrainer(Trainer):
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
             generator=torch_generator,
-        )
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=self.params.solo_agent.batch_size,
-            shuffle=False,
         )
 
         # Create a progress bar
@@ -174,6 +222,39 @@ class SoloAgentTrainer(Trainer):
 
         # Close the progress bar
         pbar.close()
+
+    def _run_test_loop(
+        self,
+        test_dataset: Dataset,
+        agents_params: AgentsParameters,
+        agents: dict[str, Agent],
+        agent_models: dict[str, TensorDictSequential],
+        as_pretraining: bool,
+        logger: logging.Logger,
+    ):
+        """Run the testing loop.
+
+        Parameters
+        ----------
+        test_dataset : Dataset
+            The dataset to test on.
+        agents_params : AgentsParameters
+            The parameters of the agents.
+        agents : dict[str, Agent]
+            A dictionary of the classes which hold the agent components.
+        agent_models : dict[str, TensorDictSequential]
+            A dictionary of the actual models we're testing.
+        as_pretraining : bool
+            Whether we're testing the agents as a pretraining step.
+        logger : logging.Logger
+            The logger to use.
+        """
+
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=self.params.solo_agent.batch_size,
+            shuffle=False,
+        )
 
         total_loss = {agent_name: 0 for agent_name in agents_params}
         total_accuracy = {agent_name: 0 for agent_name in agents_params}

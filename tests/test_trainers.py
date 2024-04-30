@@ -327,12 +327,12 @@ def test_loss_parameters_in_optimizer():
 
     # Construct basic agent parameters for each scenario
     basic_agent_params = {}
-    basic_agent_params[
-        ScenarioType.GRAPH_ISOMORPHISM
-    ] = GraphIsomorphismAgentParameters.construct_test_params()
-    basic_agent_params[
-        ScenarioType.IMAGE_CLASSIFICATION
-    ] = ImageClassificationAgentParameters.construct_test_params()
+    basic_agent_params[ScenarioType.GRAPH_ISOMORPHISM] = (
+        GraphIsomorphismAgentParameters.construct_test_params()
+    )
+    basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
+        ImageClassificationAgentParameters.construct_test_params()
+    )
 
     param_specs = [
         {

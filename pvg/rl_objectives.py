@@ -304,7 +304,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
             td_out.set(("agents", "loss_entropy"), loss_entropy_per_agent)
         if self.critic_coef:
             loss_critic_per_agent = flatten_batch_dims(
-                self.loss_critic(tensordict), num_batch_dims
+                self._loss_critic(tensordict), num_batch_dims
             ).mean(dim=0)
             td_out.set("loss_critic", loss_critic_per_agent.sum())
             td_out.set(("agents", "loss_critic"), loss_critic_per_agent)
@@ -323,6 +323,14 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
             + loss_vals["loss_entropy"]
         )
         loss_value.backward()
+
+    def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        """Convenience method for getting the critic loss without the clip fraction
+
+        TorchRL's `loss_critic` method returns a tuple with the critic loss and the
+        clip fraction. This method returns only the critic loss.
+        """
+        return self.loss_critic(tensordict)[0]
 
 
 class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
@@ -974,9 +982,9 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         )
 
         if self.critic_network is not None:
-            critic_loss_per_agent = self.loss_critic(tensordict).mean(dim=0)
+            critic_loss_per_agent = self._loss_critic(tensordict).mean(dim=0)
             td_out.set("loss_critic", critic_loss_per_agent.sum())
-            td_out.set(("agents", "loss_value"), self.loss_critic(tensordict).mean())
+            td_out.set(("agents", "loss_value"), self._loss_critic(tensordict).mean())
 
         if self.loss_weighting_type == "reward_to_go":
             td_out.set("reward_to_go", loss_weighting.mean(dim=0).sum())
@@ -997,3 +1005,11 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         else:
             loss_value = loss_vals["loss_actor"]
         loss_value.backward()
+
+    def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        """Convenience method for getting the critic loss without the clip fraction
+
+        TorchRL's `loss_critic` method returns a tuple with the critic loss and the
+        clip fraction. This method returns only the critic loss.
+        """
+        return self.loss_critic(tensordict)[0]

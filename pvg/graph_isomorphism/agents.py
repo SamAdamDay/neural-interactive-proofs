@@ -2163,22 +2163,30 @@ class GraphIsomorphismAgent(Agent):
 
         # Determine the learning rate of the body
         body_lr = {
-            "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
-            if not body_lr_factor_override
-            else agent_lr["actor"],
-            "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
-            if not body_lr_factor_override
-            else agent_lr["critic"],
+            "actor": (
+                agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+                if not body_lr_factor_override
+                else agent_lr["actor"]
+            ),
+            "critic": (
+                agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+                if not body_lr_factor_override
+                else agent_lr["critic"]
+            ),
         }
 
         # Determine the learning rate for the GNN encoder
         gnn_lr = {
-            "actor": body_lr["actor"] * self._agent_params.gnn_lr_factor.actor
-            if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
-            else 0,
-            "critic": body_lr["critic"] * self._agent_params.gnn_lr_factor.critic
-            if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
-            else 0,
+            "actor": (
+                body_lr["actor"] * self._agent_params.gnn_lr_factor.actor
+                if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+                else 0
+            ),
+            "critic": (
+                body_lr["critic"] * self._agent_params.gnn_lr_factor.critic
+                if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+                else 0
+            ),
         }
 
         model_param_dict = []

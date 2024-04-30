@@ -64,7 +64,7 @@ class ExperimentSettings:
         wandb_run.
     """
 
-    device: TorchDevice = "cpu"
+    device: TorchDevice = torch.device("cpu")
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
@@ -81,5 +81,8 @@ class ExperimentSettings:
     test_run: bool = False
 
     def __post_init__(self):
+        if isinstance(self.device, str):
+            self.device = torch.device(self.device)
+
         if self.test_run and self.wandb_run is not None:
             raise ValueError("test_run cannot be True if wandb_run is not None.")

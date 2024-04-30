@@ -32,12 +32,12 @@ def test_prepare_run_experiment():
 
     # Very basic agent parameters for each scenario
     basic_agent_params = {}
-    basic_agent_params[
-        ScenarioType.GRAPH_ISOMORPHISM
-    ] = GraphIsomorphismAgentParameters.construct_test_params()
-    basic_agent_params[
-        ScenarioType.IMAGE_CLASSIFICATION
-    ] = ImageClassificationAgentParameters.construct_test_params()
+    basic_agent_params[ScenarioType.GRAPH_ISOMORPHISM] = (
+        GraphIsomorphismAgentParameters.construct_test_params()
+    )
+    basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
+        ImageClassificationAgentParameters.construct_test_params()
+    )
 
     # Very basic parameters for each trainer
     rl_params = RlTrainerParameters(
