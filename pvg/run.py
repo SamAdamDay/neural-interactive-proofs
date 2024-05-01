@@ -46,6 +46,7 @@ def run_experiment(
     num_dataset_threads: int = 8,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
+    enable_efficient_attention: bool = False,
     test_run: bool = False,
 ):
     """Build and run an experiment.
@@ -90,6 +91,11 @@ def run_experiment(
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but
         requires that the dataset fits on the device. This makes `pin_memory` redundant.
+    enable_efficient_attention: bool, default=False
+        Whether to enable the ' Memory-Efficient Attention' backend for the scaled
+        dot-product attention. There may be a bug in this implementation which causes
+        NaNs to appear in the backward pass. See
+        https://github.com/pytorch/pytorch/issues/119320 for more information.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -131,6 +137,7 @@ def run_experiment(
         num_dataset_threads=num_dataset_threads,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
+        enable_efficient_attention=enable_efficient_attention,
         test_run=test_run,
     )
 
@@ -141,13 +148,22 @@ def run_experiment(
     trainer = build_trainer(params, scenario_instance, settings)
 
     # Suppress warnings about a batching rule not being implemented by PyTorch for
-    # aten::_scaled_dot_product_efficient_attention. We can't do anything about this
+    # aten::_scaled_dot_product_efficient_attention and
+    # aten::_scaled_dot_product_attention_math. We can't do anything about this
     if not sys.warnoptions and not test_run:
         warnings.filterwarnings(
             "ignore",
             message=(
                 "There is a performance drop because we have not yet implemented "
                 "the batching rule for aten::_scaled_dot_product_efficient_attention"
+            ),
+            category=UserWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=(
+                "There is a performance drop because we have not yet implemented "
+                "the batching rule for aten::_scaled_dot_product_attention_math"
             ),
             category=UserWarning,
         )

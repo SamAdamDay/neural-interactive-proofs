@@ -237,6 +237,7 @@ def experiment_fn(
         params,
         device=device,
         dataset_on_device=cmd_args.dataset_on_device,
+        enable_efficient_attention=cmd_args.enable_efficient_attention,
         logger=logger,
         tqdm_func=tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
@@ -284,6 +285,13 @@ if __name__ == "__main__":
         dest="dataset_on_device",
         default=True,
         help="Don't store the whole dataset on the device.",
+    )
+
+    experiment.parser.add_argument(
+        "--enable-efficient-attention",
+        action="store_true",
+        default=False,
+        help="Enable efficient attention scaled dot product backend (may be buggy).",
     )
 
     experiment.run()

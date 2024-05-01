@@ -76,7 +76,19 @@ class Trainer(ABC):
         if self.settings.device.type == "cpu":
             add_context_manager(sdpa_kernel(SDPBackend.MATH))
 
-        # Otherwise we enable all backends.
+        # When running on the GPU we enable all backends, except when we want to disable
+        # the efficient attention.
+        elif not self.settings.enable_efficient_attention:
+            add_context_manager(
+                sdpa_kernel(
+                    [
+                        SDPBackend.MATH,
+                        SDPBackend.CUDNN_ATTENTION,
+                        SDPBackend.FLASH_ATTENTION,
+                    ]
+                )
+            )
+
         else:
             add_context_manager(
                 sdpa_kernel(
@@ -114,17 +126,30 @@ class Trainer(ABC):
         def add_context_manager(context_manager):
             context_managers.append(stack.enter_context(context_manager))
 
-        # All backends are enabled for testing.
-        add_context_manager(
-            sdpa_kernel(
-                [
-                    SDPBackend.MATH,
-                    SDPBackend.CUDNN_ATTENTION,
-                    SDPBackend.EFFICIENT_ATTENTION,
-                    SDPBackend.FLASH_ATTENTION,
-                ]
+        # When testing we enable all backends, except when we want to disable the
+        # efficient attention.
+        if not self.settings.enable_efficient_attention:
+            add_context_manager(
+                sdpa_kernel(
+                    [
+                        SDPBackend.MATH,
+                        SDPBackend.CUDNN_ATTENTION,
+                        SDPBackend.FLASH_ATTENTION,
+                    ]
+                )
             )
-        )
+
+        else:
+            add_context_manager(
+                sdpa_kernel(
+                    [
+                        SDPBackend.MATH,
+                        SDPBackend.CUDNN_ATTENTION,
+                        SDPBackend.EFFICIENT_ATTENTION,
+                        SDPBackend.FLASH_ATTENTION,
+                    ]
+                )
+            )
 
         # We don't need gradients for testing.
         add_context_manager(torch.no_grad())

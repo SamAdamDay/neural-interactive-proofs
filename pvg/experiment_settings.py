@@ -57,6 +57,11 @@ class ExperimentSettings:
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but
         requires that the dataset fits on the device. This makes `pin_memory` redundant.
+    enable_efficient_attention: bool, default=False
+        Whether to enable the 'Memory-Efficient Attention' backend for the scaled
+        dot-product attention. There may be a bug in this implementation which causes
+        NaNs to appear in the backward pass. See
+        https://github.com/pytorch/pytorch/issues/119320 for more information.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -78,6 +83,7 @@ class ExperimentSettings:
     num_dataset_threads: int = 8
     pin_memory: bool = True
     dataset_on_device: bool = False
+    enable_efficient_attention: bool = False
     test_run: bool = False
 
     def __post_init__(self):
