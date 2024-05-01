@@ -1,6 +1,5 @@
 """PyTorch distributions"""
 
-
 from torch.distributions import Categorical
 
 from tensordict import TensorDict, TensorDictBase

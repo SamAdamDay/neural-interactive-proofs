@@ -633,12 +633,16 @@ class Agent(ABC):
 
         # Determine the learning rate of the body
         body_lr = {
-            "actor": agent_lr["actor"] * self._agent_params.body_lr_factor.actor
-            if not body_lr_factor_override
-            else agent_lr["actor"],
-            "critic": agent_lr["critic"] * self._agent_params.body_lr_factor.critic
-            if not body_lr_factor_override
-            else agent_lr["critic"],
+            "actor": (
+                agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+                if not body_lr_factor_override
+                else agent_lr["actor"]
+            ),
+            "critic": (
+                agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+                if not body_lr_factor_override
+                else agent_lr["critic"]
+            ),
         }
 
         model_param_dict = []

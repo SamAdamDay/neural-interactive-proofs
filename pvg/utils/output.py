@@ -1,4 +1,5 @@
 """Utilities related to outputting things to the user."""
+
 from typing import Iterable
 
 
