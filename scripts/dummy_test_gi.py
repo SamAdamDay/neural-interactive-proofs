@@ -17,6 +17,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     PpoLossType,
+    Guess,
     run_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
@@ -43,12 +44,14 @@ def run(cmd_args: Namespace):
                 num_transformer_layers=1,
                 normalize_message_history=True,
                 use_manual_architecture=False,
+                agent_lr_factor={"actor": 0.0, "critic": 1.0},
             ),
             prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 num_transformer_layers=1,
                 normalize_message_history=True,
                 use_manual_architecture=False,
+                agent_lr_factor={"actor": 1.0, "critic": 1.0},
             ),
         ),
         rl=RlTrainerParameters(
@@ -56,10 +59,11 @@ def run(cmd_args: Namespace):
             num_epochs=1,
             minibatch_size=4,
             frames_per_batch=16,
-            use_shared_body=True,
+            use_shared_body=False,
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,
+            normalize_advantage=True,
         ),
         reinforce=ReinforceParameters(
             use_advantage_and_critic=False,
@@ -69,6 +73,7 @@ def run(cmd_args: Namespace):
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
+            # force_guess=Guess.Y
         ),
         pretrain_agents=False,
     )

@@ -15,9 +15,10 @@ from torch import Tensor
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
+from typing import Optional
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import Parameters, InteractionProtocolType
+from pvg.parameters import Parameters, InteractionProtocolType, Guess
 
 
 class ProtocolHandler(ABC):
@@ -172,6 +173,14 @@ class ProtocolHandler(ABC):
 
         # If the verifier has made a guess we terminate the episode
         verifier_index = (..., self.agent_names.index("verifier"))
+
+        if self.params.pvg_protocol.force_guess == Guess.ONE:
+            decision[verifier_index] = torch.ones_like(decision[verifier_index])
+        elif self.params.pvg_protocol.force_guess == Guess.ZERO:
+            decision[verifier_index] = torch.zeros_like(decision[verifier_index])
+        elif self.params.pvg_protocol.force_guess == Guess.Y:
+            decision[verifier_index] = env_td["y"].squeeze()
+
         verifier_decision_made = verifier_turn_mask & (decision[verifier_index] != 2)
         verifier_decision_made = verifier_decision_made & (
             round >= self.min_message_rounds

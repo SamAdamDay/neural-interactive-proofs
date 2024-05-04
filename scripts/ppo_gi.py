@@ -20,6 +20,7 @@ from pvg import (
     ActivationType,
     SpgVariant,
     IhvpVariant,
+    Guess,
     CommonProtocolParameters,
     PvgProtocolParameters,
     ConstantUpdateSchedule,

@@ -24,6 +24,7 @@ from pvg import (
     PvgProtocolParameters,
     SpgVariant,
     IhvpVariant,
+    Guess,
     run_experiment,
     prepare_experiment,
 )

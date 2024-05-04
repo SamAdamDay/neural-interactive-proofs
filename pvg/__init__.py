@@ -23,6 +23,7 @@ from .parameters import (
     BinarificationMethodType,
     SpgVariant,
     IhvpVariant,
+    Guess,
     InteractionProtocolType,
     MinMessageRoundsSchedulerType,
     AgentUpdateSchedule,
