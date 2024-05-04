@@ -88,6 +88,14 @@ class IhvpVariant(StrEnum):
     NYSTROM = enum_auto()
 
 
+class Guess(StrEnum):
+    """Enum for the possible guesses of the verifier in binary cases."""
+
+    ZERO = enum_auto()
+    ONE = enum_auto()
+    Y = enum_auto()
+
+
 class TrainerType(StrEnum):
     """Enum for the RL trainer to use."""
 
@@ -980,6 +988,9 @@ class CommonProtocolParameters(SubParameters):
     shared_reward : bool
         Whether to use a shared reward function, where the prover gets the same reward
         as the verifier. This overrides `prover_reward`.
+    force_guess: Guess, optional
+        The guess to force the verifier to make. If not provided, the
+        verifier makes a guess using its policy.
     """
 
     prover_reward: float = 1.0
@@ -988,10 +999,11 @@ class CommonProtocolParameters(SubParameters):
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
     shared_reward: bool = False
+    force_guess: Optional[Guess] = None
 
 
 @dataclass
-class LongProtocolParameters(SubParameters, ABC):
+class LongProtocolParameters(CommonProtocolParameters, ABC):
     """Additional parameters for interaction protocols with multiple rounds.
 
     Parameters
