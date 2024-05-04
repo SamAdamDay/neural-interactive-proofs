@@ -8,7 +8,7 @@ ENV TZ=Europe/London
 RUN apt update
 
 # Install pip so that we can install PyTorch
-RUN DEBIAN_FRONTEND=noninteractive apt install -y python3.10 python3-pip
+RUN DEBIAN_FRONTEND=noninteractive apt install -y python3.11 python3-pip
 
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
