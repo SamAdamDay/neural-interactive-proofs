@@ -1003,7 +1003,7 @@ class CommonProtocolParameters(SubParameters):
 
 
 @dataclass
-class LongProtocolParameters(CommonProtocolParameters, ABC):
+class LongProtocolParameters(SubParameters, ABC):
     """Additional parameters for interaction protocols with multiple rounds.
 
     Parameters
