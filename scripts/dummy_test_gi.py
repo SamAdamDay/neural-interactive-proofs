@@ -44,7 +44,7 @@ def run(cmd_args: Namespace):
                 num_transformer_layers=1,
                 normalize_message_history=True,
                 use_manual_architecture=False,
-                agent_lr_factor={"actor": 0.0, "critic": 1.0},
+                agent_lr_factor={"actor": 1.0, "critic": 1.0},
             ),
             prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
@@ -70,10 +70,10 @@ def run(cmd_args: Namespace):
         ),
         protocol_common=CommonProtocolParameters(
             shared_reward=False,
+            force_guess=None,
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
-            # force_guess=Guess.Y
         ),
         pretrain_agents=False,
     )
