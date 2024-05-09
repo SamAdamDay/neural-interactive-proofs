@@ -327,7 +327,7 @@ class Environment(EnvBase, ABC):
         """
 
         # If no tensordict is given, we're starting afresh
-        if env_td is None:
+        if env_td is None or not "done" in env_td.keys():
             observation_zeros = self.observation_spec.zero()
             state_zeros = self.state_spec.zero()
             done_zeros = self.done_spec.zero()

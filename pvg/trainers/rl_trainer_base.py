@@ -18,7 +18,12 @@ from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs.transforms import Transform
+from torchrl.envs import TransformedEnv
+from torchrl.envs.transforms import (
+    Transform,
+    ObservationNorm,
+    Compose as ComposeTransform,
+)
 
 from pvg.parameters import (
     Parameters,
@@ -109,6 +114,27 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         self.train_environment = self.scenario_instance.train_environment
         self.test_environment = self.scenario_instance.test_environment
+
+        # Add the observation normalization transforms if requested
+        if self.params.rl.normalize_observations:
+            self.train_environment = TransformedEnv(self.train_environment)
+            self.test_environment = TransformedEnv(self.test_environment)
+
+            # Add normalization transforms for each of "x" and "message", and initialize
+            # the statistics by running the environments with random actions
+            if self.settings.test_run:
+                num_normalization_steps = 1
+            else:
+                num_normalization_steps = self.params.rl.num_normalization_steps
+            for env in [self.train_environment, self.test_environment]:
+                for key, size in zip(["x", "message"], [4, 3]):
+                    transform = ObservationNorm(in_keys=[key])
+                    env.append_transform(transform)
+                    transform.init_stats(
+                        num_normalization_steps,
+                        cat_dim=-size,
+                        reduce_dim=list(range(-size - 1, 0)),
+                    )
 
     def train(self):
         """Train the agents."""

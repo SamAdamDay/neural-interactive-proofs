@@ -81,7 +81,7 @@ class ExperimentSettings:
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
-    pin_memory: bool = True
+    pin_memory: bool = False
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
     test_run: bool = False

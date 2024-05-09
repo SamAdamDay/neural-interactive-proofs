@@ -36,6 +36,9 @@ class AdjacencyMatrixBox(Box):
     def __init__(self, max_num_nodes: int):
         self.max_num_nodes = max_num_nodes
 
+    def clone(self) -> "AdjacencyMatrixBox":
+        return AdjacencyMatrixBox(self.max_num_nodes)
+
 
 class AdjacencyMatrixSpec(TensorSpec):
     """A specification of the space of adjacency matrices.
@@ -174,6 +177,14 @@ class AdjacencyMatrixSpec(TensorSpec):
         else:
             raise ValueError(f"Invalid destination {dest}")
         return self
+
+    def clone(self) -> "AdjacencyMatrixSpec":
+        return AdjacencyMatrixSpec(
+            self.max_num_nodes,
+            self.shape,
+            self.device,
+            self.dtype,
+        )
 
 
 @register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Environment)

@@ -42,14 +42,12 @@ def run(cmd_args: Namespace):
             verifier=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 num_transformer_layers=1,
-                normalize_message_history=True,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
             ),
             prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 num_transformer_layers=1,
-                normalize_message_history=True,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
             ),

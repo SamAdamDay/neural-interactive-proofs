@@ -73,7 +73,7 @@ param_grid = dict(
     ihvp_rho=[0.1],
     shared_reward=[False],
     normalize_advantage=[True],
-    normalize_message_history=[True],
+    normalize_observations=[True],
     min_message_rounds=[0],
     max_message_rounds=[8],
     seed=[8144, 820, 4173, 3992],
@@ -113,7 +113,6 @@ def experiment_fn(
             activation_function=combo["activation_function"],
             agent_lr_factor=combo["prover_lr_factor"],
             body_lr_factor=combo["body_lr_factor"],
-            normalize_message_history=combo["normalize_message_history"],
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -126,7 +125,6 @@ def experiment_fn(
                 activation_function=combo["activation_function"],
                 body_lr_factor=combo["body_lr_factor"],
                 agent_lr_factor=combo["verifier_lr_factor"],
-                normalize_message_history=combo["normalize_message_history"],
             ),
             prover=prover_params,
         ),
@@ -134,6 +132,7 @@ def experiment_fn(
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
+            normalize_observations=combo["normalize_observations"],
             lr=combo["lr"],
             gamma=combo["gamma"],
             lmbda=combo["lmbda"],
