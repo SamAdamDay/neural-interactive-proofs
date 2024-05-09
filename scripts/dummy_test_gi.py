@@ -44,7 +44,8 @@ def run(cmd_args: Namespace):
                 num_transformer_layers=1,
                 normalize_message_history=True,
                 use_manual_architecture=False,
-                agent_lr_factor={"actor": 0.0, "critic": 1.0},
+                agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                ortho_init=False,
             ),
             prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
@@ -52,14 +53,17 @@ def run(cmd_args: Namespace):
                 normalize_message_history=True,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                ortho_init=False,
             ),
         ),
         rl=RlTrainerParameters(
             num_iterations=100,
             num_epochs=1,
+            lr=1,
+            anneal_lr=True,
             minibatch_size=4,
             frames_per_batch=16,
-            use_shared_body=False,
+            use_shared_body=True,
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,

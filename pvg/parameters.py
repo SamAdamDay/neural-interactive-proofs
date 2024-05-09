@@ -414,6 +414,8 @@ class AgentParameters(SubParameters, ABC):
     checkpoint_version: str
         The version of the checkpoint to load. If not provided, the latest version is
         used.
+    ortho_init: bool or float, optional
+        Whether to use orthogonal initialisation for the weights of the various networks with gain ``float`` (and biases initiliased to 0). If ``True``, the gain is set to 1.0. If not provided or ``False``, orthogonal initialisation is not used. Defaults to ``True``.
     """
 
     agent_lr_factor: Optional[LrFactors | dict] = None
@@ -429,6 +431,8 @@ class AgentParameters(SubParameters, ABC):
     checkpoint_project: str = WANDB_PROJECT
     checkpoint_run_id: Optional[str] = None
     checkpoint_version: str = "latest"
+
+    ortho_init: Optional[bool | float] = True
 
     # The parameters which are preserved when loading from W&B config
     LOAD_PRESERVED_PARAMETERS: ClassVar[list[str]] = [
@@ -770,6 +774,8 @@ class RlTrainerParameters(SubParameters):
         The size of the minibatches in each optimization step.
     lr : float
         The learning rate.
+    anneal_lr : bool
+        Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
     gamma : float
@@ -780,6 +786,11 @@ class RlTrainerParameters(SubParameters):
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
         The number of iterations to run the test for.
+    loss_critic_type : str
+        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+    clip_value : float or bool, optional
+        If a ``float`` is provided, it will be used to compute a clipped
+        version of the value prediction with respect to the input tensordict value estimate and use it to calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and preventing large updates. However, it will have no impact if the value estimate was done by the current version of the value estimator. If instead ``True`` is provided, the ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no clipping will be performed. Defaults to ``False``.
     """
 
     # Sampling
@@ -791,7 +802,10 @@ class RlTrainerParameters(SubParameters):
     num_epochs: int = 4
     minibatch_size: int = 64
     lr: float = 0.003
+    anneal_lr: bool = False
     max_grad_norm: float = 1.0
+    loss_critic_type: str = "smooth_l1"
+    clip_value: Optional[float | bool] = False
 
     # Reinforcement learning
     gamma: float = 0.9

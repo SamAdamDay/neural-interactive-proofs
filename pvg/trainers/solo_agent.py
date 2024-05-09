@@ -150,7 +150,7 @@ class SoloAgentTrainer(Trainer):
                 base_lr=self.params.solo_agent.learning_rate,
                 body_lr_factor_override=self.params.solo_agent.body_lr_factor_override,
             )
-            optimizers[agent_name] = Adam(model_param_dict)
+            optimizers[agent_name] = Adam(model_param_dict,eps=1e-5)
 
         # Create the data loaders
         train_dataloader = DataLoader(

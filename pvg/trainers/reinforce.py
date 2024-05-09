@@ -91,6 +91,8 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             loss_weighting_type=loss_weighting_type,
             gamma=self.params.rl.gamma,
             functional=self.params.functionalize_modules,
+            loss_critic_type=self.params.rl.loss_critic_type,
+            clip_value=self.params.rl.clip_value,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

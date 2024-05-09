@@ -66,6 +66,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
             entropy_coef=self.params.ppo.entropy_eps,
             normalize_advantage=self.params.ppo.normalize_advantage,
             functional=self.params.functionalize_modules,
+            loss_critic_type=self.params.rl.loss_critic_type,
+            clip_value=self.params.rl.clip_value,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

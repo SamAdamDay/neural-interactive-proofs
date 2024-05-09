@@ -352,7 +352,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         if len(all_param_dicts) == 0:
             optimizer = DummyOptimizer()
         else:
-            optimizer = torch.optim.Adam(all_param_dicts)
+            optimizer = torch.optim.Adam(all_param_dicts,eps=1e-5)
 
         param_group_freezer = ParamGroupFreezer(
             optimizer,
@@ -394,7 +394,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         round = tensordict_data.get(("next", "round"))
         done = tensordict_data.get(("next", "done"))
         reward = tensordict_data.get(("next", "agents", "reward"))
+        advantage = tensordict_data.get(("advantage"))
         value = tensordict_data.get(("agents", "value"), None)
+        value_target = tensordict_data.get(("agents", "value_target"), None)
         decision_logits = tensordict_data.get(("agents", "decision_logits"))
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]
@@ -415,22 +417,43 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 mean_reward * mean_episode_length
             )
 
+            # Compute the mean advantage
+            if advantage is not None:
+                log_stats[f"{agent_name}.{prefix}mean_advantage"] = (
+                    advantage[..., i].mean().item()
+                )
+
             # Compute the mean agent value
             if value is not None:
                 log_stats[f"{agent_name}.{prefix}mean_value"] = (
                     value[..., i].mean().item()
                 )
 
-            # Compute the agent decision entropy mean and standard deviation
+            # Compute the mean agent value target
+            if value_target is not None:
+                log_stats[f"{agent_name}.{prefix}mean_value_target"] = (
+                    value_target[..., i].mean().item()
+                )
+
+            # Compute the residual critic variance
+            if value is not None and value_target is not None:
+                log_stats[f"{agent_name}.{prefix}residual_critic_variance"] = (
+                    (value_target[..., i] - value[..., i]).var().item() / value_target[..., i].var().item()
+                )
+
+            # Compute the (normalised) agent decision entropy mean and standard deviation
+            max_decision_ent = - np.log(1 / decision_logits.shape[-1])
+            decision_logit_entropy = logit_entropy(decision_logits[..., i]) / max_decision_ent
             log_stats[f"{agent_name}.{prefix}mean_decision_entropy"] = (
-                logit_entropy(decision_logits[..., i]).mean().item()
+                decision_logit_entropy.mean().item()
             )
             log_stats[f"{agent_name}.{prefix}std_decision_entropy"] = (
-                logit_entropy(decision_logits[..., i]).std().item()
+                decision_logit_entropy.std().item()
             )
 
-            # Compute the agent message entropy mean and standard deviation
-            message_logit_entropy = logit_entropy(message_logits[..., i])
+            # Compute the (normalised) agent message entropy mean and standard deviation
+            max_message_ent = - np.log(1 / message_logits.shape[-1])
+            message_logit_entropy = logit_entropy(message_logits[..., i]) / max_message_ent
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
             )
@@ -522,6 +545,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Step the profiler if it's being used
             if self.settings.profiler is not None:
                 self.settings.profiler.step()
+
+            # Update the learning rate if annealing is enabled
+            if self.params.rl.anneal_lr:   
+                if iteration == 0:
+                    for pg in self.optimizer.param_groups:
+                        pg["original_lr"] = pg["lr"]
+                for pg in self.optimizer.param_groups:
+                    pg["lr"] = (1 - (iteration / self.params.rl.num_iterations)) * pg["original_lr"]
 
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule
