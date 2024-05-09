@@ -335,22 +335,6 @@ class TwoProverProtocol(PvgProtocol, ABC):
     agent_names = ["prover0", "prover1", "verifier"]
     prover_names = ["prover0", "prover1"]
 
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... num_agents"],
-    ):
-        protocol_params = self.params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
-
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
 class DebateProtocol(TwoProverProtocol):
@@ -388,6 +372,22 @@ class DebateProtocol(TwoProverProtocol):
             A boolean mask indicating which agents are active in the given round.
         """
         return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... num_agents"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        if protocol_params.shared_reward:
+            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        else:
+            for prover_num in range(2):
+                reward[..., prover_num] = (
+                    verifier_decision_made & (verifier_decision == prover_num)
+                ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
@@ -429,3 +429,19 @@ class MerlinArthurProtocol(TwoProverProtocol):
             ],
             dim=-1,
         )
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... num_agents"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        if protocol_params.shared_reward:
+            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        else:
+            for prover_num in range(2):
+                reward[..., prover_num] = (
+                    verifier_decision_made & (verifier_decision == prover_num)
+                ).float() * protocol_params.prover_reward

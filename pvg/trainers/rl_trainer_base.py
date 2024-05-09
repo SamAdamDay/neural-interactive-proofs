@@ -396,7 +396,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         reward = tensordict_data.get(("next", "agents", "reward"))
         advantage = tensordict_data.get(("advantage"))
         value = tensordict_data.get(("agents", "value"), None)
-        value_target = tensordict_data.get(("agents", "value_target"), None)
+        value_target = tensordict_data.get(("value_target"))
         decision_logits = tensordict_data.get(("agents", "decision_logits"))
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]
@@ -439,12 +439,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             if value is not None and value_target is not None:
                 log_stats[f"{agent_name}.{prefix}residual_critic_variance"] = (
                     value_target[..., i] - value[..., i]
-                ).var().item() / value_target[..., i].var().item()
+                ).var().item() / max(value_target[..., i].var().item(), 1e-6)
 
             # Compute the (normalised) agent decision entropy mean and standard deviation
             max_decision_ent = -np.log(1 / decision_logits.shape[-1])
             decision_logit_entropy = (
-                logit_entropy(decision_logits[..., i]) / max_decision_ent
+                logit_entropy(decision_logits[..., i, :]) / max_decision_ent
             )
             log_stats[f"{agent_name}.{prefix}mean_decision_entropy"] = (
                 decision_logit_entropy.mean().item()
@@ -456,7 +456,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the (normalised) agent message entropy mean and standard deviation
             max_message_ent = -np.log(1 / message_logits.shape[-1])
             message_logit_entropy = (
-                logit_entropy(message_logits[..., i]) / max_message_ent
+                logit_entropy(message_logits[..., i, :]) / max_message_ent
             )
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
@@ -466,7 +466,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the maximum message probability mean and standard deviation
-            message_probs = torch.softmax(message_logits[..., i], dim=-1)
+            message_probs = torch.softmax(message_logits[..., i, :], dim=-1)
             max_message_probs = message_probs.max(dim=-1).values
             log_stats[f"{agent_name}.{prefix}mean_max_message_prob"] = (
                 max_message_probs.mean().item()
@@ -554,10 +554,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             if self.params.rl.anneal_lr:
                 if iteration == 0:
                     for pg in self.optimizer.param_groups:
-                        pg["original_lr"] = pg["lr"]
+                        pg["_original_lr"] = pg["lr"]
                 for pg in self.optimizer.param_groups:
                     pg["lr"] = (1 - (iteration / self.params.rl.num_iterations)) * pg[
-                        "original_lr"
+                        "_original_lr"
                     ]
 
             # Freeze and unfreeze the parameters of the agents according to the update

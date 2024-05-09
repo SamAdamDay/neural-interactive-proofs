@@ -578,13 +578,18 @@ class SpgLoss(ClipPPOLossImproved):
 
     # Define the (variants of the) SPG loss @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+
         tensordict = tensordict.clone(False)
-
         num_batch_dims = len(tensordict.batch_size)
-
         advantage = self._get_advantage(tensordict)
-
         log_prob, log_weight, dist = self._log_weight(tensordict)
+
+        # TODO we don't take a mean across samples (because the score multiplicands
+        # have already been averaged across samples), which I believe is correct in
+        # theory, but might need changed in practice
+        log_prob_sum = log_prob.sum()
+
+        gains = {}
 
         # Use vanilla A2C losses for SPG and LOLA and SOS
         if (
@@ -593,16 +598,10 @@ class SpgLoss(ClipPPOLossImproved):
             or self.variant == SpgVariant.SOS
         ):
             probs = log_prob.exp()
-            gains = {}
             for i in self.agent_indices:
                 gains[i] = flatten_batch_dims(
                     (probs * advantage[..., i].unsqueeze(dim=-1)), num_batch_dims
                 ).mean(dim=0)
-
-            log_prob_sum = log_prob.sum()
-            # TODO we don't take a mean across samples (because the score multiplicands
-            # have already been averaged across samples), which I believe is correct in
-            # theory, but might need changed in practice
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
         elif (
@@ -619,8 +618,8 @@ class SpgLoss(ClipPPOLossImproved):
                     torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
                 ).mean(dim=0)
 
-            log_prob_sum = log_weight.sum()
-            # TODO maybe this should be log_prob.sum(), also note that we don't take a
+            # log_prob_sum = log_weight.sum()
+            # TODO maybe this should be log_weight.sum(), also note that we don't take a
             # mean across samples because the score multiplicands have already been
             # averaged across samples
 

@@ -890,7 +890,7 @@ class SpgParameters(SubParameters):
         The damping factor to use in the IHVP approximation.
     """
 
-    variant: SpgVariant = SpgVariant.SPG
+    variant: SpgVariant = SpgVariant.PSOS
     stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
     additional_lola_term: bool = True
     sos_params: NamedTuple = SosParams(
