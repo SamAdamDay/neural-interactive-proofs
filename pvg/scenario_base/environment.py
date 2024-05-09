@@ -348,7 +348,11 @@ class Environment(EnvBase, ABC):
                 shuffle=True,
                 generator=self.rng,
                 pin_memory=self.settings.pin_memory,
-                pin_memory_device=str(self.device) if self.settings.pin_memory else "",
+                pin_memory_device=(
+                    str(self.device)
+                    if self.settings.pin_memory and str(self.device) != "cpu"
+                    else ""
+                ),
             )
             self.data_cycler = VariableDataCycler(
                 dataloader, device=self.device, non_blocking=self.settings.pin_memory
