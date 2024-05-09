@@ -53,7 +53,8 @@ class ExperimentSettings:
         The number of threads to use for saving the memory-mapped tensordict.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
-        GPU with `non_blocking=True`. This can speed up training.
+        GPU with `non_blocking=True`. This can speed up training. When the device if the
+        CPU this setting doesn't do anything and is set to False.
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but
         requires that the dataset fits on the device. This makes `pin_memory` redundant.
@@ -81,7 +82,7 @@ class ExperimentSettings:
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
-    pin_memory: bool = False
+    pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
     test_run: bool = False
@@ -89,6 +90,9 @@ class ExperimentSettings:
     def __post_init__(self):
         if isinstance(self.device, str):
             self.device = torch.device(self.device)
+
+        if self.device.type == "cpu":
+            self.pin_memory = False
 
         if self.test_run and self.wandb_run is not None:
             raise ValueError("test_run cannot be True if wandb_run is not None.")
