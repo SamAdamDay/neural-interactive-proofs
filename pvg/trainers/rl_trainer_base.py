@@ -342,7 +342,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         all_param_dicts = []
         param_group_collections = {}
         for agent_name, agent in self.scenario_instance.agents.items():
-            param_dict = agent.get_param_dicts(
+            param_dict = agent.get_model_parameter_dicts(
                 base_lr=self.params.rl.lr,
                 named_parameters=loss_module.named_parameters(),
             )
@@ -352,7 +352,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         if len(all_param_dicts) == 0:
             optimizer = DummyOptimizer()
         else:
-            optimizer = torch.optim.Adam(all_param_dicts,eps=1e-5)
+            optimizer = torch.optim.Adam(all_param_dicts, eps=1e-5)
 
         param_group_freezer = ParamGroupFreezer(
             optimizer,
@@ -438,12 +438,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the residual critic variance
             if value is not None and value_target is not None:
                 log_stats[f"{agent_name}.{prefix}residual_critic_variance"] = (
-                    (value_target[..., i] - value[..., i]).var().item() / value_target[..., i].var().item()
-                )
+                    value_target[..., i] - value[..., i]
+                ).var().item() / value_target[..., i].var().item()
 
             # Compute the (normalised) agent decision entropy mean and standard deviation
-            max_decision_ent = - np.log(1 / decision_logits.shape[-1])
-            decision_logit_entropy = logit_entropy(decision_logits[..., i]) / max_decision_ent
+            max_decision_ent = -np.log(1 / decision_logits.shape[-1])
+            decision_logit_entropy = (
+                logit_entropy(decision_logits[..., i]) / max_decision_ent
+            )
             log_stats[f"{agent_name}.{prefix}mean_decision_entropy"] = (
                 decision_logit_entropy.mean().item()
             )
@@ -452,8 +454,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the (normalised) agent message entropy mean and standard deviation
-            max_message_ent = - np.log(1 / message_logits.shape[-1])
-            message_logit_entropy = logit_entropy(message_logits[..., i]) / max_message_ent
+            max_message_ent = -np.log(1 / message_logits.shape[-1])
+            message_logit_entropy = (
+                logit_entropy(message_logits[..., i]) / max_message_ent
+            )
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
             )
@@ -547,12 +551,14 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 self.settings.profiler.step()
 
             # Update the learning rate if annealing is enabled
-            if self.params.rl.anneal_lr:   
+            if self.params.rl.anneal_lr:
                 if iteration == 0:
                     for pg in self.optimizer.param_groups:
                         pg["original_lr"] = pg["lr"]
                 for pg in self.optimizer.param_groups:
-                    pg["lr"] = (1 - (iteration / self.params.rl.num_iterations)) * pg["original_lr"]
+                    pg["lr"] = (1 - (iteration / self.params.rl.num_iterations)) * pg[
+                        "original_lr"
+                    ]
 
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule

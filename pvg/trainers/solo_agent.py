@@ -146,11 +146,11 @@ class SoloAgentTrainer(Trainer):
         # of the agent
         optimizers: dict[str, Optimizer] = {}
         for agent_name, agent in agents.items():
-            model_param_dict = agent.get_param_dicts(
+            model_param_dict = agent.get_model_parameter_dicts(
                 base_lr=self.params.solo_agent.learning_rate,
                 body_lr_factor_override=self.params.solo_agent.body_lr_factor_override,
             )
-            optimizers[agent_name] = Adam(model_param_dict,eps=1e-5)
+            optimizers[agent_name] = Adam(model_param_dict, eps=1e-5)
 
         # Create the data loaders
         train_dataloader = DataLoader(

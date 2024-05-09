@@ -74,10 +74,10 @@ def run(cmd_args: Namespace):
         ),
         protocol_common=CommonProtocolParameters(
             shared_reward=False,
+            force_guess=None,
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
-            # force_guess=Guess.Y
         ),
         pretrain_agents=False,
     )
