@@ -989,8 +989,8 @@ class CommonProtocolParameters(SubParameters):
         Whether to use a shared reward function, where the prover gets the same reward
         as the verifier. This overrides `prover_reward`.
     force_guess: Guess, optional
-        The guess to force the verifier to make. If not provided, the
-        verifier makes a guess using its policy.
+        The guess to force the verifier to make. If not provided, the verifier makes a
+        guess using its policy.
     """
 
     prover_reward: float = 1.0
@@ -1003,7 +1003,7 @@ class CommonProtocolParameters(SubParameters):
 
 
 @dataclass
-class LongProtocolParameters(CommonProtocolParameters, ABC):
+class LongProtocolParameters(SubParameters, ABC):
     """Additional parameters for interaction protocols with multiple rounds.
 
     Parameters

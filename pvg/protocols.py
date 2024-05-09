@@ -174,11 +174,11 @@ class ProtocolHandler(ABC):
         # If the verifier has made a guess we terminate the episode
         verifier_index = (..., self.agent_names.index("verifier"))
 
-        if self.params.pvg_protocol.force_guess == Guess.ONE:
+        if self.params.protocol_common.force_guess == Guess.ONE:
             decision[verifier_index] = torch.ones_like(decision[verifier_index])
-        elif self.params.pvg_protocol.force_guess == Guess.ZERO:
+        elif self.params.protocol_common.force_guess == Guess.ZERO:
             decision[verifier_index] = torch.zeros_like(decision[verifier_index])
-        elif self.params.pvg_protocol.force_guess == Guess.Y:
+        elif self.params.protocol_common.force_guess == Guess.Y:
             decision[verifier_index] = env_td["y"].squeeze()
 
         verifier_decision_made = verifier_turn_mask & (decision[verifier_index] != 2)
