@@ -2102,7 +2102,7 @@ class GraphIsomorphismAgent(Agent):
 
     message_logits_key: ClassVar[str] = "node_selected_logits"
 
-    def get_param_dicts(
+    def get_model_parameter_dicts(
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,

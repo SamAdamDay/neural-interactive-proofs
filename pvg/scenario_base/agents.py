@@ -581,7 +581,7 @@ class Agent(ABC):
             )
         return self.body.parameters()
 
-    def get_param_dicts(
+    def get_model_parameter_dicts(
         self,
         base_lr: float,
         named_parameters: Optional[Iterable[tuple[str, TorchParameter]]] = None,

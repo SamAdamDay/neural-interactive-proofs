@@ -342,7 +342,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         all_param_dicts = []
         param_group_collections = {}
         for agent_name, agent in self.scenario_instance.agents.items():
-            param_dict = agent.get_param_dicts(
+            param_dict = agent.get_model_parameter_dicts(
                 base_lr=self.params.rl.lr,
                 named_parameters=loss_module.named_parameters(),
             )
