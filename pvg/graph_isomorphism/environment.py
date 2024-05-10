@@ -36,6 +36,9 @@ class AdjacencyMatrixBox(Box):
     def __init__(self, max_num_nodes: int):
         self.max_num_nodes = max_num_nodes
 
+    def clone(self) -> "AdjacencyMatrixBox":
+        return AdjacencyMatrixBox(self.max_num_nodes)
+
 
 class AdjacencyMatrixSpec(TensorSpec):
     """A specification of the space of adjacency matrices.
@@ -175,6 +178,14 @@ class AdjacencyMatrixSpec(TensorSpec):
             raise ValueError(f"Invalid destination {dest}")
         return self
 
+    def clone(self) -> "AdjacencyMatrixSpec":
+        return AdjacencyMatrixSpec(
+            self.max_num_nodes,
+            self.shape,
+            self.device,
+            self.dtype,
+        )
+
 
 @register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Environment)
 class GraphIsomorphismEnvironment(Environment):
@@ -204,6 +215,15 @@ class GraphIsomorphismEnvironment(Environment):
         if self._max_num_nodes is None:
             self._max_num_nodes = self.dataset["x"].shape[-2]
         return self._max_num_nodes
+
+    @property
+    def _message_history_shape(self) -> tuple:
+        return (
+            self.num_envs,
+            2,
+            self.max_num_nodes,
+            self.protocol_handler.max_message_rounds,
+        )
 
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
@@ -236,17 +256,6 @@ class GraphIsomorphismEnvironment(Environment):
                 self.max_num_nodes,
             ),
             dtype=torch.bool,
-            device=self.device,
-        )
-        base_observation_spec["x"] = DiscreteTensorSpec(
-            self.protocol_handler.max_message_rounds,
-            shape=(
-                self.num_envs,
-                2,
-                self.max_num_nodes,
-                self.protocol_handler.max_message_rounds,
-            ),
-            dtype=torch.float,
             device=self.device,
         )
         base_observation_spec["message"] = DiscreteTensorSpec(
@@ -284,7 +293,7 @@ class GraphIsomorphismEnvironment(Environment):
         )
         return base_action_spec
 
-    def _compute_x_and_message(
+    def _compute_message_history(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
@@ -308,7 +317,9 @@ class GraphIsomorphismEnvironment(Environment):
         """
 
         # Extract the tensors from the dict
-        x: Float[Tensor, "... graph node message_round"] = env_td["x"]
+        message_history: Float[Tensor, "... graph node message_round"] = env_td[
+            "message_history"
+        ]
         round: Int[Tensor, "..."] = env_td["round"]
         node_selected: Int[Tensor, "... agent"] = env_td["agents", "node_selected"]
 
@@ -328,10 +339,12 @@ class GraphIsomorphismEnvironment(Environment):
 
         # Insert the message into the message history at the current round
         round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
-        x.masked_scatter_(round_mask[..., None, None, :], message)
+        message_history = message_history.masked_scatter(
+            round_mask[..., None, None, :], message
+        )
 
         # Add the message history and next message to the next tensordict
-        next_td["x"] = x
+        next_td["message_history"] = message_history
         next_td["message"] = message
 
         return next_td
@@ -362,6 +375,9 @@ class GraphIsomorphismEnvironment(Environment):
         env_td["adjacency"][mask] = data_batch["adjacency"]
         env_td["node_mask"][mask] = data_batch["node_mask"]
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
+        env_td["message_history"][mask] = torch.zeros_like(
+            env_td["message_history"][mask]
+        )
         env_td["x"][mask] = torch.zeros_like(env_td["x"][mask])
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0

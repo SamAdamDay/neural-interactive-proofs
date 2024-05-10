@@ -108,6 +108,9 @@ def test_graph_isomorphism_environment_step():
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
+            message_history=torch.zeros(
+                batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
+            ),
             x=torch.zeros(
                 batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
             ),
@@ -129,7 +132,7 @@ def test_graph_isomorphism_environment_step():
     )
 
     # Define the expected output.
-    expected_x = torch.zeros(
+    expected_message_history = torch.zeros(
         batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
     )
     expected_message = torch.zeros(batch_size, 2, 8, dtype=torch.float32)
@@ -139,12 +142,13 @@ def test_graph_isomorphism_environment_step():
         message = env_td["agents", "node_selected"][i, agent_index]
         expected_message[i] = F.one_hot(message, 2 * max_num_nodes).view(2, 8)
         graph_id = message // max_num_nodes
-        expected_x[i, graph_id, message % max_num_nodes, round] = 1
+        expected_message_history[i, graph_id, message % max_num_nodes, round] = 1
     expected_next = TensorDict(
         dict(
             adjacency=env_td["adjacency"],
             node_mask=env_td["node_mask"],
-            x=expected_x,
+            message_history=expected_message_history,
+            x=expected_message_history,
             round=env_td["round"] + 1,
             done=torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool),
             message=expected_message,
@@ -177,7 +181,7 @@ def test_graph_isomorphism_environment_step():
     # Check that the output is as expected.
     assert_close(next["adjacency"], expected_next["adjacency"])
     assert_close(next["node_mask"], expected_next["node_mask"])
-    assert_close(next["x"], expected_next["x"])
+    assert_close(next["message_history"], expected_next["message_history"])
     assert_close(next["round"], expected_next["round"])
     assert_close(next["done"], expected_next["done"])
     assert_close(next["message"], expected_next["message"])
