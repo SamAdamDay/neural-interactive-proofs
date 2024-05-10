@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 import torch
-from torch import Tensor
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -17,11 +16,9 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs import EnvBase
 
-from jaxtyping import Float, Int, Bool
-
 from pvg.scenario_base import DataLoader, Dataset
 from pvg.protocols import ProtocolHandler
-from pvg.parameters import Parameters, InteractionProtocolType, AGENT_NAMES
+from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
 
@@ -107,6 +104,19 @@ class Environment(EnvBase, ABC):
         self.reward_spec = self._get_reward_spec()
         self.done_spec = self._get_done_spec()
 
+    @property
+    @abstractmethod
+    def _message_history_shape(self) -> tuple:
+        """Get the shape of the message history and 'x' tensors
+
+        This is used to make the specification for these.
+
+        Returns
+        -------
+        message_history_shape: tuple
+            The common shape of the message history and 'x' tensors.
+        """
+
     @abstractmethod
     def _get_observation_spec(self) -> TensorSpec:
         """Get the specification of the agent observations.
@@ -143,6 +153,17 @@ class Environment(EnvBase, ABC):
                 3,
                 shape=(self.num_envs,),
                 dtype=self._int_dtype,
+                device=self.device,
+            ),
+            x=UnboundedContinuousTensorSpec(
+                shape=self._message_history_shape,
+                dtype=torch.float,
+                device=self.device,
+            ),
+            message_history=BinaryDiscreteTensorSpec(
+                self._message_history_shape[-1],
+                shape=self._message_history_shape,
+                dtype=torch.float,
                 device=self.device,
             ),
             shape=(self.num_envs,),
@@ -268,11 +289,20 @@ class Environment(EnvBase, ABC):
 
         # The observations are passed through unchanged
         for key in self.observation_spec.keys():
-            if key not in ["x", "message", "round", "decision_restriction"]:
+            if key not in [
+                "x",
+                "message_history",
+                "message",
+                "round",
+                "decision_restriction",
+            ]:
                 next_td[key] = env_td[key]
 
         # Compute the message history and next message
-        next_td = self._compute_x_and_message(env_td, next_td)
+        next_td = self._compute_message_history(env_td, next_td)
+
+        # Clone the message history to the 'x' feature tensor
+        next_td["x"] = next_td["message_history"].clone()
 
         # Compute the done signal and reward
         done, reward = self.protocol_handler.step_interaction_protocol(env_td)
@@ -286,12 +316,12 @@ class Environment(EnvBase, ABC):
         return next_td
 
     @abstractmethod
-    def _compute_x_and_message(
+    def _compute_message_history(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
     ) -> TensorDictBase:
-        """Compute the message history and next message.
+        """Compute the new message history and next message.
 
         Used in the `_step` method of the environment.
 

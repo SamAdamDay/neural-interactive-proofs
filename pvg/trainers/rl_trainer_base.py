@@ -117,6 +117,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Add the observation normalization transforms if requested
         if self.params.rl.normalize_observations:
+
+            # Set the seed before computing the normalization statistics
+            torch.manual_seed(self.params.seed)
+            np.random.seed(self.params.seed)
+
             self.train_environment = TransformedEnv(self.train_environment)
             self.test_environment = TransformedEnv(self.test_environment)
 
@@ -126,15 +131,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 num_normalization_steps = 1
             else:
                 num_normalization_steps = self.params.rl.num_normalization_steps
+            pbar = self.settings.tqdm_func(total=4, desc="Computing norm stats")
             for env in [self.train_environment, self.test_environment]:
                 for key, size in zip(["x", "message"], [4, 3]):
-                    transform = ObservationNorm(in_keys=[key])
+                    transform = ObservationNorm(in_keys=[key], standard_normal=True)
                     env.append_transform(transform)
                     transform.init_stats(
                         num_normalization_steps,
                         cat_dim=-size,
                         reduce_dim=list(range(-size - 1, 0)),
                     )
+                    pbar.update(1)
+            pbar.close()
 
     def train(self):
         """Train the agents."""
