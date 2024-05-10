@@ -394,9 +394,9 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         round = tensordict_data.get(("next", "round"))
         done = tensordict_data.get(("next", "done"))
         reward = tensordict_data.get(("next", "agents", "reward"))
-        advantage = tensordict_data.get(("advantage"))
+        advantage = tensordict_data.get(("advantage")) if train else None
         value = tensordict_data.get(("agents", "value"), None)
-        value_target = tensordict_data.get(("value_target"))
+        value_target = tensordict_data.get(("value_target")) if train else None
         decision_logits = tensordict_data.get(("agents", "decision_logits"))
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]

@@ -41,8 +41,8 @@ param_grid = dict(
     num_iterations=[1000],
     num_epochs=[10],
     minibatch_size=[256],
-    frames_per_batch=[2025, 1005],
-    gamma=[1.0, 0.95],
+    frames_per_batch=[2025],
+    gamma=[1.0],
     lmbda=[0.0, 0.95],
     ppo_loss_type=[PpoLossType.CLIP],
     clip_epsilon=[0.2],
@@ -82,7 +82,7 @@ param_grid = dict(
     use_batch_norm=[False, True],
     random_prover=[False],
     use_shared_body=[False],
-    pretrain_agents=[True],
+    pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
     spg_variant=[SpgVariant.SPG],
     stackelberg_sequence=[(("verifier",), ("prover",))],
@@ -100,7 +100,8 @@ param_grid = dict(
     verifier_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[(15, 35)],
-    seed=[8144, 820, 4173, 3992],
+    # seed=[8144, 820, 4173, 3992],
+    seed=[8144]
 )
 
 
