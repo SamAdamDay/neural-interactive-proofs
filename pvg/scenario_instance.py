@@ -248,9 +248,11 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
         if agent_params.ortho_init:
             for name in agent_dict:
                 for module in agent_dict[name].modules():
-                    if hasattr(module, 'weight'):
+                    if hasattr(module, "weight"):
                         if module.weight.dim() >= 2:
-                            torch.nn.init.orthogonal_(module.weight, gain=float(agent_params.ortho_init))
+                            torch.nn.init.orthogonal_(
+                                module.weight, gain=float(agent_params.ortho_init)
+                            )
                         torch.nn.init.constant_(module.bias, 0.0)
 
         agents[agent_name] = scenario_classes[Agent](
