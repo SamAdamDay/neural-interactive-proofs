@@ -38,7 +38,7 @@ def test_graph_isomorphism_combined_agents():
         num_decider_layers=1,
         d_value=1,
         num_value_layers=1,
-        normalize_message_history=True,
+        normalize_message_history=False,
     )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,

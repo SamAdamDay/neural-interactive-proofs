@@ -76,6 +76,15 @@ class ImageClassificationEnvironment(Environment):
     def latent_num_channels(self):
         return 2**self.num_conv_groups * self.initial_num_channels
 
+    @property
+    def _message_history_shape(self) -> tuple:
+        return (
+            self.num_envs,
+            self.protocol_handler.max_message_rounds,
+            self.latent_height,
+            self.latent_width,
+        )
+
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
 
@@ -94,17 +103,6 @@ class ImageClassificationEnvironment(Environment):
                 self.dataset_num_channels,
                 self.image_height,
                 self.image_width,
-            ),
-            dtype=torch.float,
-            device=self.device,
-        )
-        base_observation_spec["x"] = DiscreteTensorSpec(
-            self.latent_height,
-            shape=(
-                self.num_envs,
-                self.protocol_handler.max_message_rounds,
-                self.latent_height,
-                self.latent_width,
             ),
             dtype=torch.float,
             device=self.device,
@@ -142,7 +140,7 @@ class ImageClassificationEnvironment(Environment):
         )
         return base_action_spec
 
-    def _compute_x_and_message(
+    def _compute_message_history(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
@@ -166,7 +164,9 @@ class ImageClassificationEnvironment(Environment):
         """
 
         # Extract the tensors from the dict
-        x: Float[Tensor, "... round latent_height latent_width"] = env_td["x"]
+        message_history: Float[Tensor, "... round latent_height latent_width"] = env_td[
+            "message_history"
+        ]
         round: Int[Tensor, "..."] = env_td["round"]
         latent_pixel_selected: Int[Tensor, "... agent"] = env_td[
             "agents", "latent_pixel_selected"
@@ -192,10 +192,12 @@ class ImageClassificationEnvironment(Environment):
 
         # Insert the message into the message history at the current round
         round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
-        x.masked_scatter_(round_mask[..., :, None, None], message)
+        message_history = message_history.masked_scatter(
+            round_mask[..., :, None, None], message
+        )
 
         # Add the message history and next message to the next tensordict
-        next_td["x"] = x
+        next_td["message_history"] = message_history
         next_td["message"] = message
 
         return next_td
@@ -225,6 +227,9 @@ class ImageClassificationEnvironment(Environment):
 
         env_td["image"][mask] = data_batch["image"]
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
+        env_td["message_history"][mask] = torch.zeros_like(
+            env_td["message_history"][mask]
+        )
         env_td["x"][mask] = torch.zeros_like(env_td["x"][mask])
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0

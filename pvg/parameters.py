@@ -424,7 +424,7 @@ class AgentParameters(SubParameters, ABC):
 
     use_manual_architecture: bool = False
 
-    normalize_message_history: bool = True
+    normalize_message_history: bool = False
 
     load_checkpoint_and_parameters: bool = False
     checkpoint_entity: str = WANDB_ENTITY
@@ -778,6 +778,12 @@ class RlTrainerParameters(SubParameters):
         Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
+    normalize_observations : bool
+        Whether to normalise the observations in the environment.
+    num_normalization_steps : int
+        The number of steps to use to calculate the mean and standard deviation of the
+        observations for normalisation. The environment is run for this many steps in
+        total with random actions.
     gamma : float
         The discount factor.
     lmbda : float
@@ -806,6 +812,8 @@ class RlTrainerParameters(SubParameters):
     max_grad_norm: float = 1.0
     loss_critic_type: str = "smooth_l1"
     clip_value: Optional[float | bool] = False
+    normalize_observations: bool = True
+    num_normalization_steps: int = 1000
 
     # Reinforcement learning
     gamma: float = 0.9

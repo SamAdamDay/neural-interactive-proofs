@@ -101,7 +101,7 @@ param_grid = dict(
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[(15, 35)],
     # seed=[8144, 820, 4173, 3992],
-    seed=[8144]
+    seed=[8144],
 )
 
 
@@ -159,7 +159,6 @@ def experiment_fn(
             num_heads=combo["num_transformer_heads"],
             num_value_layers=combo["prover_num_value_layers"],
             d_value=combo["prover_dim_value_layers"],
-            normalize_message_history=combo["normalize_message_history"],
             use_manual_architecture=combo["prover_manual_architecture"],
             use_dual_gnn=combo["use_dual_gnn"],
             body_lr_factor=combo["body_lr_factor"],
@@ -182,7 +181,6 @@ def experiment_fn(
                 num_heads=combo["num_transformer_heads"],
                 num_value_layers=combo["verifier_num_value_layers"],
                 d_value=combo["verifier_dim_value_layers"],
-                normalize_message_history=combo["normalize_message_history"],
                 use_manual_architecture=combo["verifier_manual_architecture"],
                 use_dual_gnn=combo["use_dual_gnn"],
                 body_lr_factor=combo["body_lr_factor"],
@@ -202,6 +200,7 @@ def experiment_fn(
             lr=combo["lr"],
             anneal_lr=combo["anneal_lr"],
             max_grad_norm=combo["max_grad_norm"],
+            normalize_observations=combo["normalize_observations"],
             use_shared_body=combo["use_shared_body"],
             gamma=combo["gamma"],
             lmbda=combo["lmbda"],
