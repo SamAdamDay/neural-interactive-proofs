@@ -115,6 +115,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         self.train_environment = self.scenario_instance.train_environment
         self.test_environment = self.scenario_instance.test_environment
 
+        # Update clip value to be a float or None
+        if self.params.rl.clip_value == True:
+            self.params.rl.clip_value = self.params.ppo.clip_epsilon
+        elif self.params.rl.clip_value == False:
+            self.params.rl.clip_value = None
+
         # Add the observation normalization transforms if requested
         if self.params.rl.normalize_observations:
 
@@ -428,9 +434,17 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         round = tensordict_data.get(("next", "round"))
         done = tensordict_data.get(("next", "done"))
         reward = tensordict_data.get(("next", "agents", "reward"))
-        advantage = tensordict_data.get(("advantage")) if train else None
+        advantage = (
+            tensordict_data.get(("advantage"))
+            if "advantage" in tensordict_data
+            else None
+        )
         value = tensordict_data.get(("agents", "value"), None)
-        value_target = tensordict_data.get(("value_target")) if train else None
+        value_target = (
+            tensordict_data.get(("value_target"))
+            if "value_target" in tensordict_data
+            else None
+        )
         decision_logits = tensordict_data.get(("agents", "decision_logits"))
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]

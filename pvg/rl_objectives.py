@@ -482,6 +482,7 @@ class SpgLoss(ClipPPOLossImproved):
         clip_value,
         functional: bool = True,
     ):
+
         super().__init__(
             actor=actor,
             critic=critic,
@@ -863,6 +864,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         comes with a little cost. Defaults to ``True``.
     normalize_advantage : bool, default=True
         Whether to normalise the advantage. Defaults to ``True``.
+    clip_value (float, optional): If provided, it will be used to compute a clipped version of      the value prediction with respect to the input tensordict value estimate and use it to calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and preventing large updates. However, it will have no impact if the value estimate was done by the current version of the value estimator. Defaults to ``None``.
     """
 
     def __init__(
@@ -879,6 +881,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         separate_losses: bool = False,
         functional: bool = True,
         normalize_advantage: bool = True,
+        clip_value: Optional[float] = None,
     ) -> None:
         if actor_network is None:
             raise TypeError("Missing positional argument actor_network.")
@@ -914,6 +917,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         self.loss_weighting_type = loss_weighting_type
         self._functional = functional
         self.normalize_advantage = normalize_advantage
+        self.clip_value = clip_value
 
         # A hacky way to all the grandparent class's __init__ method
         super(ReinforceLoss, self).__init__()

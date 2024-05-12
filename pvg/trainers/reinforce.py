@@ -80,7 +80,6 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             otherwise.
         """
 
-        # Construct the loss module
         if self.params.reinforce.use_advantage_and_critic:
             loss_weighting_type = "advantage"
         else:
