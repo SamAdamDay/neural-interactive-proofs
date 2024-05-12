@@ -156,13 +156,15 @@ class InteractionProtocolType(StrEnum):
         The Debate protocol.
     MERLIN_ARTHUR
         The Merlin-Arthur classifier protocol.
+    MNIP
+        The multi-prover NIP protocol.
     """
 
     PVG = enum_auto()
     ABSTRACT_DECISION_PROBLEM = enum_auto()
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
-    MARKET_MAKING = enum_auto()  # TODO
+    MNIP = enum_auto()
 
 
 class MinMessageRoundsSchedulerType(StrEnum):
@@ -280,7 +282,7 @@ AGENT_NAMES = {
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
-    InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
+    InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
@@ -288,7 +290,7 @@ DEFAULT_STACKELBERG_SEQUENCE = {
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
-    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
+    InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
 }
 
 
@@ -1064,12 +1066,32 @@ class PvgProtocolParameters(LongProtocolParameters):
         change over time. TODO: not currently implemented.
     """
 
-    verifier_first: bool = True
+    verifier_first: bool = (
+        True  # TODO I think we probably always want this? Might be good to deprecate
+    )
 
 
 @dataclass
 class DebateProtocolParameters(LongProtocolParameters):
     """Additional parameters for the debate interaction protocol.
+
+    Parameters
+    ----------
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+
+@dataclass
+class MnipProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the MNIP interaction protocol.
 
     Parameters
     ----------
@@ -1173,6 +1195,7 @@ class Parameters(BaseParameters):
     protocol_common: Optional[CommonProtocolParameters | dict] = None
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
+    mnip_protocol: Optional[MnipProtocolParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums

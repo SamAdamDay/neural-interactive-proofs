@@ -328,12 +328,12 @@ class AdpProtocol(PvgProtocol):
 class TwoProverProtocol(PvgProtocol, ABC):
     """Base class for protocols with two provers.
 
-    The first prover tries to convince the verifier that the label is 0, and the second
-    tries to convince them that the label is 1.
+    The provers answer the verifier's questions and try to either convince the prover of different (if "adversarial") or the same (if not) answers.
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
     prover_names = ["prover0", "prover1"]
+    adversarial: bool
 
     def _include_prover_rewards(
         self,
@@ -345,11 +345,15 @@ class TwoProverProtocol(PvgProtocol, ABC):
 
         if protocol_params.shared_reward:
             reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
+        elif self.adversarial:
             for prover_num in range(2):
                 reward[..., prover_num] = (
                     verifier_decision_made & (verifier_decision == prover_num)
                 ).float() * protocol_params.prover_reward
+        else:
+            reward[..., 0] = reward[..., 1] = (
+                verifier_decision_made & (verifier_decision == 1)
+            ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
@@ -361,6 +365,8 @@ class DebateProtocol(TwoProverProtocol):
     params : Parameters
         The parameters of the experiment.
     """
+
+    adversarial = True
 
     @property
     def max_message_rounds(self) -> int:
@@ -402,6 +408,7 @@ class MerlinArthurProtocol(TwoProverProtocol):
 
     max_message_rounds = 2
     min_message_rounds = 2
+    adversarial = True
 
     def get_active_agents_mask(
         self, round: Int[Tensor, "..."]
@@ -429,3 +436,43 @@ class MerlinArthurProtocol(TwoProverProtocol):
             ],
             dim=-1,
         )
+
+
+@register_protocol_handler(InteractionProtocolType.DEBATE)
+class MnipProtocol(TwoProverProtocol):
+    """Implementation of the MNIP protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    """
+
+    adversarial = False
+
+    @property
+    def max_message_rounds(self) -> int:
+        return self.params.mnip_protocol.max_message_rounds
+
+    @property
+    def min_message_rounds(self) -> int:
+        return self.params.mnip_protocol.min_message_rounds
+
+    def get_active_agents_mask(
+        self, round: Int[Tensor, "..."]
+    ) -> Bool[Tensor, "... 3"]:
+        """Get a boolean mask indicating which agents are active in a given round.
+
+        The two provers play simultaneously, and the verifier plays after them.
+
+        Parameters
+        ----------
+        round : Int[Tensor, "..."]
+            The round of the protocol.
+
+        Returns
+        -------
+        active_agents : Bool[Tensor, "... 2"]
+            A boolean mask indicating which agents are active in the given round.
+        """
+        return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)

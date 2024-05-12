@@ -16,6 +16,7 @@ from .parameters import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    MnipProtocolParameters,
     ScenarioType,
     TrainerType,
     PpoLossType,
