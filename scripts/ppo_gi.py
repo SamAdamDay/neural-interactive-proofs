@@ -43,7 +43,7 @@ param_grid = dict(
     minibatch_size=[256],
     frames_per_batch=[2048],
     gamma=[0.95],
-    lmbda=[10.95],
+    lmbda=[0.95],
     ppo_loss_type=[PpoLossType.CLIP],
     clip_epsilon=[0.2],
     kl_target=[0.01],
@@ -51,7 +51,7 @@ param_grid = dict(
     kl_decrement=[0.5],
     kl_increment=[2.0],
     critic_coef=[1.0],
-    loss_critic_type=["smooth_l1", "l2", "l1"],
+    loss_critic_type=["smooth_l1"],
     clip_value=[False],
     entropy_eps=[0.001],
     lr=[0.0003],
@@ -60,7 +60,7 @@ param_grid = dict(
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     gnn_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     use_dual_gnn=[False],
-    ortho_init=[False, True],
+    ortho_init=[True],
     prover_num_layers=[5],
     prover_num_value_layers=[2],
     prover_dim_value_layers=[16],
@@ -90,13 +90,13 @@ param_grid = dict(
     verifier_terminated_penalty=[-1.0],
     verifier_no_guess_reward=[0.05],
     normalize_advantage=[True],
-    normalize_message_history=[True],
+    normalize_observations=[True],
     min_message_rounds=[2],
     max_message_rounds=[8],
     verifier_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[(15, 35)],
-    seed=[8144],
+    seed=[8144, 820, 4173, 3992],
 )
 
 
