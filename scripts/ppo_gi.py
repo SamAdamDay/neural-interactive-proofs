@@ -51,12 +51,16 @@ param_grid = dict(
     kl_decrement=[0.5],
     kl_increment=[2.0],
     critic_coef=[1.0],
+    loss_critic_type=["smooth_l1"],
+    clip_value=[False],
     entropy_eps=[0.001],
     lr=[0.0003],
+    anneal_lr=[False],
     max_grad_norm=[0.5],
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     gnn_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     use_dual_gnn=[False],
+    ortho_init=[True],
     prover_num_layers=[5],
     prover_num_value_layers=[2],
     prover_dim_value_layers=[16],
@@ -91,7 +95,7 @@ param_grid = dict(
     max_message_rounds=[8],
     verifier_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
-    update_spec=[(25, 25)],
+    update_spec=[(15, 35)],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -156,6 +160,7 @@ def experiment_fn(
             gnn_lr_factor=combo["gnn_lr_factor"],
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
+            ortho_init=combo["ortho_init"],
             update_schedule=prover_update_schedule,
         )
     params = Parameters(
@@ -177,6 +182,7 @@ def experiment_fn(
                 gnn_lr_factor=combo["gnn_lr_factor"],
                 include_round_in_decider=combo["include_round_in_decider"],
                 use_batch_norm=combo["use_batch_norm"],
+                ortho_init=combo["ortho_init"],
                 update_schedule=verifier_update_schedule,
             ),
             prover=prover_params,
@@ -187,11 +193,13 @@ def experiment_fn(
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
             lr=combo["lr"],
+            anneal_lr=combo["anneal_lr"],
             max_grad_norm=combo["max_grad_norm"],
             normalize_observations=combo["normalize_observations"],
             use_shared_body=combo["use_shared_body"],
             gamma=combo["gamma"],
             lmbda=combo["lmbda"],
+            loss_critic_type=combo["loss_critic_type"],
         ),
         ppo=CommonPpoParameters(
             loss_type=combo["ppo_loss_type"],

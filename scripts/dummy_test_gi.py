@@ -16,7 +16,9 @@ from pvg import (
     TrainerType,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    SpgParameters,
     PpoLossType,
+    SpgVariant,
     Guess,
     run_experiment,
 )
@@ -44,21 +46,33 @@ def run(cmd_args: Namespace):
                 num_transformer_layers=1,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                ortho_init=False,
             ),
             prover=GraphIsomorphismAgentParameters(
                 num_gnn_layers=1,
                 num_transformer_layers=1,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                ortho_init=False,
             ),
         ),
         rl=RlTrainerParameters(
             num_iterations=100,
             num_epochs=1,
+            lr=0.001,
+            anneal_lr=True,
             minibatch_size=4,
             frames_per_batch=16,
             use_shared_body=False,
             num_normalization_steps=10,
+        ),
+        spg=SpgParameters(
+            variant=SpgVariant.PSOS,
+            # stackelberg_sequence=combo["stackelberg_sequence"],
+            # ihvp_variant=combo["ihvp_variant"],
+            # ihvp_num_iterations=combo["ihvp_num_iterations"],
+            # ihvp_rank=combo["ihvp_rank"],
+            # ihvp_rho=combo["ihvp_rho"],
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,
@@ -68,7 +82,7 @@ def run(cmd_args: Namespace):
             use_advantage_and_critic=False,
         ),
         protocol_common=CommonProtocolParameters(
-            shared_reward=False,
+            shared_reward=True,
             force_guess=None,
         ),
         pvg_protocol=PvgProtocolParameters(

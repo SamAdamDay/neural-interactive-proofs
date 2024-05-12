@@ -478,8 +478,11 @@ class SpgLoss(ClipPPOLossImproved):
         clip_epsilon,
         entropy_coef,
         normalize_advantage,
+        loss_critic_type,
+        clip_value,
         functional: bool = True,
     ):
+
         super().__init__(
             actor=actor,
             critic=critic,
@@ -487,6 +490,8 @@ class SpgLoss(ClipPPOLossImproved):
             entropy_coef=entropy_coef,
             normalize_advantage=normalize_advantage,
             functional=functional,
+            loss_critic_type=loss_critic_type,
+            clip_value=clip_value,
         )
         self.variant = variant
         self.stackelberg_sequence = stackelberg_sequence
@@ -574,13 +579,18 @@ class SpgLoss(ClipPPOLossImproved):
 
     # Define the (variants of the) SPG loss @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+
         tensordict = tensordict.clone(False)
-
         num_batch_dims = len(tensordict.batch_size)
-
         advantage = self._get_advantage(tensordict)
-
         log_prob, log_weight, dist = self._log_weight(tensordict)
+
+        # TODO we don't take a mean across samples (because the score multiplicands
+        # have already been averaged across samples), which I believe is correct in
+        # theory, but might need changed in practice
+        log_prob_sum = log_prob.sum()
+
+        gains = {}
 
         # Use vanilla A2C losses for SPG and LOLA and SOS
         if (
@@ -589,16 +599,10 @@ class SpgLoss(ClipPPOLossImproved):
             or self.variant == SpgVariant.SOS
         ):
             probs = log_prob.exp()
-            gains = {}
             for i in self.agent_indices:
                 gains[i] = flatten_batch_dims(
                     (probs * advantage[..., i].unsqueeze(dim=-1)), num_batch_dims
                 ).mean(dim=0)
-
-            log_prob_sum = log_prob.sum()
-            # TODO we don't take a mean across samples (because the score multiplicands
-            # have already been averaged across samples), which I believe is correct in
-            # theory, but might need changed in practice
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
         elif (
@@ -615,8 +619,8 @@ class SpgLoss(ClipPPOLossImproved):
                     torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
                 ).mean(dim=0)
 
-            log_prob_sum = log_weight.sum()
-            # TODO maybe this should be log_prob.sum(), also note that we don't take a
+            # log_prob_sum = log_weight.sum()
+            # TODO maybe this should be log_weight.sum(), also note that we don't take a
             # mean across samples because the score multiplicands have already been
             # averaged across samples
 
@@ -860,6 +864,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         comes with a little cost. Defaults to ``True``.
     normalize_advantage : bool, default=True
         Whether to normalise the advantage. Defaults to ``True``.
+    clip_value (float, optional): If provided, it will be used to compute a clipped version of      the value prediction with respect to the input tensordict value estimate and use it to calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and preventing large updates. However, it will have no impact if the value estimate was done by the current version of the value estimator. Defaults to ``None``.
     """
 
     def __init__(
@@ -876,6 +881,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         separate_losses: bool = False,
         functional: bool = True,
         normalize_advantage: bool = True,
+        clip_value: Optional[float] = None,
     ) -> None:
         if actor_network is None:
             raise TypeError("Missing positional argument actor_network.")
@@ -911,6 +917,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         self.loss_weighting_type = loss_weighting_type
         self._functional = functional
         self.normalize_advantage = normalize_advantage
+        self.clip_value = clip_value
 
         # A hacky way to all the grandparent class's __init__ method
         super(ReinforceLoss, self).__init__()

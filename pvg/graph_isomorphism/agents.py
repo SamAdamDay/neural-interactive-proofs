@@ -1950,7 +1950,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
                 input_td, hooks=hooks
             )
 
-            # Make sure the provers only selects nodes in the opposite graph to the most
+            # Make sure the provers only select nodes in the opposite graph to the most
             # recent message
             if agent_name in self.protocol_handler.prover_names:
                 message: Tensor = head_output["message"]
