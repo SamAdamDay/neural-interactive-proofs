@@ -259,11 +259,10 @@ if __name__ == "__main__":
     )
 
     experiment.parser.add_argument(
-        "--no-dataset-on-device",
-        action="store_false",
+        "--dataset-on-device",
+        action="store_true",
         dest="dataset_on_device",
-        default=True,
-        help="Don't store the whole dataset on the device.",
+        help="Store the whole dataset on the device (needs more GPU memory).",
     )
 
     experiment.parser.add_argument(
