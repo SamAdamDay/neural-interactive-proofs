@@ -200,6 +200,7 @@ def experiment_fn(
             gamma=combo["gamma"],
             lmbda=combo["lmbda"],
             loss_critic_type=combo["loss_critic_type"],
+            clip_value=combo["clip_value"],
         ),
         ppo=CommonPpoParameters(
             loss_type=combo["ppo_loss_type"],
@@ -264,7 +265,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
     )
     prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
