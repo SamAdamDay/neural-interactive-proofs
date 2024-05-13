@@ -89,7 +89,7 @@ param_grid = dict(
     min_message_rounds=[2],
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
-    update_spec=[(15, 35)],
+    update_spec=[(25, 25)],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -259,11 +259,10 @@ if __name__ == "__main__":
     )
 
     experiment.parser.add_argument(
-        "--no-dataset-on-device",
-        action="store_false",
+        "--dataset-on-device",
+        action="store_true",
         dest="dataset_on_device",
-        default=True,
-        help="Don't store the whole dataset on the device.",
+        help="Store the whole dataset on the device (needs more GPU memory).",
     )
 
     experiment.parser.add_argument(
