@@ -18,10 +18,13 @@ from pvg import (
     SpgParameters,
     ScenarioType,
     TrainerType,
+    PpoLossType,
     ActivationType,
     BinarificationMethodType,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    ConstantUpdateSchedule,
+    AlternatingPeriodicUpdateSchedule,
     SpgVariant,
     IhvpVariant,
     Guess,
@@ -33,19 +36,28 @@ from pvg.utils.experiments import (
     SequentialHyperparameterExperiment,
 )
 
-MULTIPROCESS = False
+MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
     dataset_name=["svhn"],
-    num_iterations=[1000],
-    num_epochs=[1],
-    minibatch_size=[2],
-    gamma=[0.9],
+    num_iterations=[5000],
+    num_epochs=[10],
+    minibatch_size=[256],
+    gamma=[0.95],
     lmbda=[0.95],
+    ppo_loss_type=[PpoLossType.CLIP],
     clip_epsilon=[0.2],
+    kl_target=[0.01],
+    kl_beta=[1.0],
+    kl_decrement=[0.5],
+    kl_increment=[2.0],
+    critic_coef=[1.0],
+    loss_critic_type=["smooth_l1"],
+    clip_value=[False],
     entropy_eps=[0.001],
-    lr=[0.003],
+    lr=[0.0003],
+    anneal_lr=[False],
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_convs_per_group=[1],
     prover_num_decider_layers=[1],
@@ -74,8 +86,10 @@ param_grid = dict(
     shared_reward=[False],
     normalize_advantage=[True],
     normalize_observations=[True],
-    min_message_rounds=[0],
+    min_message_rounds=[2],
     max_message_rounds=[8],
+    # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
+    update_spec=[(15, 35)],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -104,6 +118,17 @@ def experiment_fn(
         pretrain_agents = combo["pretrain_agents"]
 
     # Create the parameters object
+    if combo["update_spec"] is None:
+        verifier_update_schedule = ConstantUpdateSchedule()
+        prover_update_schedule = ConstantUpdateSchedule()
+    else:
+        period = combo["update_spec"][0] + combo["update_spec"][1]
+        verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
+            period, combo["update_spec"][0], first_agent=True
+        )
+        prover_update_schedule = AlternatingPeriodicUpdateSchedule(
+            period, combo["update_spec"][0], first_agent=False
+        )
     if combo["random_prover"]:
         prover_params = RandomAgentParameters()
     else:
@@ -113,6 +138,7 @@ def experiment_fn(
             activation_function=combo["activation_function"],
             agent_lr_factor=combo["prover_lr_factor"],
             body_lr_factor=combo["body_lr_factor"],
+            update_schedule=prover_update_schedule,
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -125,6 +151,7 @@ def experiment_fn(
                 activation_function=combo["activation_function"],
                 body_lr_factor=combo["body_lr_factor"],
                 agent_lr_factor=combo["verifier_lr_factor"],
+                update_schedule=verifier_update_schedule,
             ),
             prover=prover_params,
         ),
@@ -136,9 +163,17 @@ def experiment_fn(
             lr=combo["lr"],
             gamma=combo["gamma"],
             lmbda=combo["lmbda"],
+            anneal_lr=combo["anneal_lr"],
+            clip_value=combo["clip_value"],
         ),
         ppo=CommonPpoParameters(
+            loss_type=combo["ppo_loss_type"],
             clip_epsilon=combo["clip_epsilon"],
+            kl_target=combo["kl_target"],
+            kl_beta=combo["kl_beta"],
+            kl_decrement=combo["kl_decrement"],
+            kl_increment=combo["kl_increment"],
+            critic_coef=combo["critic_coef"],
             entropy_eps=combo["entropy_eps"],
             normalize_advantage=combo["normalize_advantage"],
         ),
@@ -180,6 +215,8 @@ def experiment_fn(
     run_experiment(
         params,
         device=device,
+        dataset_on_device=cmd_args.dataset_on_device,
+        enable_efficient_attention=cmd_args.enable_efficient_attention,
         logger=logger,
         tqdm_func=tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
@@ -198,7 +235,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.VANILLA_PPO,
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
     )
     prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
@@ -220,4 +257,20 @@ if __name__ == "__main__":
         experiment_name="PPO_IC",
         **extra_args,
     )
+
+    experiment.parser.add_argument(
+        "--no-dataset-on-device",
+        action="store_false",
+        dest="dataset_on_device",
+        default=True,
+        help="Don't store the whole dataset on the device.",
+    )
+
+    experiment.parser.add_argument(
+        "--enable-efficient-attention",
+        action="store_true",
+        default=False,
+        help="Enable efficient attention scaled dot product backend (may be buggy).",
+    )
+
     experiment.run()

@@ -48,7 +48,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 normalize_advantage=self.params.ppo.normalize_advantage,
                 functional=self.params.functionalize_modules,
                 loss_critic_type=self.params.rl.loss_critic_type,
-                clip_value=self.params.rl.clip_value,
+                clip_value=self.clip_value,
             )
         elif self.params.ppo.loss_type == PpoLossType.KL_PENALTY:
             loss_module = KLPENPPOLossImproved(
@@ -63,7 +63,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 normalize_advantage=self.params.ppo.normalize_advantage,
                 functional=self.params.functionalize_modules,
                 loss_critic_type=self.params.rl.loss_critic_type,
-                clip_value=self.params.rl.clip_value,
+                clip_value=self.clip_value,
             )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

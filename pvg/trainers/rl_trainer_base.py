@@ -116,10 +116,11 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         self.test_environment = self.scenario_instance.test_environment
 
         # Update clip value to be a float or None
-        if self.params.rl.clip_value == True:
-            self.params.rl.clip_value = self.params.ppo.clip_epsilon
-        elif self.params.rl.clip_value == False:
-            self.params.rl.clip_value = None
+        self.clip_value = self.params.rl.clip_value
+        if self.clip_value == True:
+            self.clip_value = self.params.ppo.clip_epsilon
+        elif self.clip_value == False:
+            self.clip_value = None
 
         # Add the observation normalization transforms if requested
         if self.params.rl.normalize_observations:
