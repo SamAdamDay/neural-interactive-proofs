@@ -246,9 +246,9 @@ def build_protocol_handler(
     return PROTOCOL_HANDLER_REGISTRY[params.interaction_protocol](params)
 
 
-@register_protocol_handler(InteractionProtocolType.PVG)
-class PvgProtocol(ProtocolHandler):
-    """Handler for the PVG protocol.
+@register_protocol_handler(InteractionProtocolType.NIP)
+class NipProtocol(ProtocolHandler):
+    """Handler for the NIP protocol.
 
     Parameters
     ----------
@@ -311,7 +311,7 @@ class PvgProtocol(ProtocolHandler):
 
 
 @register_protocol_handler(InteractionProtocolType.ABSTRACT_DECISION_PROBLEM)
-class AdpProtocol(PvgProtocol):
+class AdpProtocol(NipProtocol):
     """Implementation of the Abstract Decision Problem protocol.
 
     Parameters
@@ -325,7 +325,7 @@ class AdpProtocol(PvgProtocol):
     min_message_rounds = 2
 
 
-class TwoProverProtocol(PvgProtocol, ABC):
+class TwoProverProtocol(NipProtocol, ABC):
     """Base class for protocols with two provers.
 
     The provers answer the verifier's questions and try to either convince the prover of different (if "adversarial") or the same (if not) answers.
@@ -452,11 +452,11 @@ class MnipProtocol(TwoProverProtocol):
 
     @property
     def max_message_rounds(self) -> int:
-        return self.params.mnip_protocol.max_message_rounds
+        return self.params.mpvg_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
-        return self.params.mnip_protocol.min_message_rounds
+        return self.params.mpvg_protocol.min_message_rounds
 
     def get_active_agents_mask(
         self, round: Int[Tensor, "..."]

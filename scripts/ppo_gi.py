@@ -22,7 +22,7 @@ from pvg import (
     IhvpVariant,
     Guess,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     run_experiment,
@@ -217,7 +217,7 @@ def experiment_fn(
             verifier_terminated_penalty=combo["verifier_terminated_penalty"],
             verifier_no_guess_reward=combo["verifier_no_guess_reward"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        pvg_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
             verifier_first=combo["verifier_first"],

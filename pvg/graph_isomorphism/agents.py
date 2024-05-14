@@ -297,10 +297,10 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         )
 
         if self._agent_params.use_manual_architecture:
-            if params.interaction_protocol != InteractionProtocolType.PVG:
+            if params.interaction_protocol != InteractionProtocolType.NIP:
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
-                    "the PVG interaction protocol."
+                    "the NIP interaction protocol."
                 )
 
             # Build the encoder going from the gnn output to the representation space
@@ -1174,10 +1174,10 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         super().__init__(params, agent_name, protocol_handler, device=device)
 
         if self._agent_params.use_manual_architecture:
-            if params.interaction_protocol != InteractionProtocolType.PVG:
+            if params.interaction_protocol != InteractionProtocolType.NIP:
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
-                    "the PVG interaction protocol."
+                    "the NIP interaction protocol."
                 )
         else:
             # Build the node selector module

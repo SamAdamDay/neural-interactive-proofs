@@ -99,7 +99,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         "dataset_options",
         "pvg_protocol",
         "debate_protocol",
-        "mnip_protocol",
+        "mpvg_protocol",
     ]
 
     policy_operator: TensorDictModuleBase

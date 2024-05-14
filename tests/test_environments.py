@@ -14,7 +14,7 @@ from pvg.parameters import (
     GraphIsomorphismAgentParameters,
     RlTrainerParameters,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -68,7 +68,7 @@ def test_graph_isomorphism_environment_step():
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        pvg_protocol=NipProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
             verifier_first=False,

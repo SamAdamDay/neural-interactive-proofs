@@ -14,7 +14,7 @@ from .parameters import (
     ImageClassificationParameters,
     DatasetParameters,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     DebateProtocolParameters,
     MnipProtocolParameters,
     ScenarioType,

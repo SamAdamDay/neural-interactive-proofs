@@ -12,7 +12,7 @@ from pvg.parameters import (
     ScenarioType,
     TrainerType,
     RlTrainerParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
 )
 from pvg.run import run_experiment, prepare_experiment
 from pvg.timing.timeables import TrainingTimeable, register_timeable
@@ -120,7 +120,7 @@ class RunTimeable(TrainingTimeable, ABC):
                     default_minibatch_size = field.default
                 elif field.name == "frames_per_batch":
                     default_frames_per_batch = field.default
-            for field in fields(PvgProtocolParameters):
+            for field in fields(NipProtocolParameters):
                 if field.name == "max_message_rounds":
                     max_message_rounds = field.default
             frames_per_batch = (

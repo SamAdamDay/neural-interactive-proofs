@@ -15,7 +15,7 @@ from pvg import (
     ScenarioType,
     TrainerType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     PpoLossType,
     Guess,
     run_experiment,
@@ -71,7 +71,7 @@ def run(cmd_args: Namespace):
             shared_reward=False,
             force_guess=None,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        pvg_protocol=NipProtocolParameters(
             min_message_rounds=0,
         ),
         pretrain_agents=False,

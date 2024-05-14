@@ -148,7 +148,7 @@ class InteractionProtocolType(StrEnum):
 
     Enums
     -----
-    PVG
+    NIP
         The full Prover-Verifier Game protocol.
     ABSTRACT_DECISION_PROBLEM
         The Abstract Decision Problem protocol.
@@ -160,7 +160,7 @@ class InteractionProtocolType(StrEnum):
         The multi-prover NIP protocol.
     """
 
-    PVG = enum_auto()
+    NIP = enum_auto()
     ABSTRACT_DECISION_PROBLEM = enum_auto()
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
@@ -278,7 +278,7 @@ class AlternatingPeriodicUpdateSchedule(ContiguousPeriodicUpdateSchedule):
 
 # The agent names required for each protocol
 AGENT_NAMES = {
-    InteractionProtocolType.PVG: ("verifier", "prover"),
+    InteractionProtocolType.NIP: ("verifier", "prover"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
@@ -286,7 +286,7 @@ AGENT_NAMES = {
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
-    InteractionProtocolType.PVG: (("verifier",), ("prover",)),
+    InteractionProtocolType.NIP: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
@@ -1048,13 +1048,13 @@ class LongProtocolParameters(SubParameters, ABC):
 
 
 @dataclass
-class PvgProtocolParameters(LongProtocolParameters):
-    """Additional parameters for the PVG interaction protocol.
+class NipProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the NIP interaction protocol.
 
     Parameters
     ----------
     verifier_first : bool
-        Whether the verifier goes first in the PVG protocol.
+        Whether the verifier goes first in the NIP protocol.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -1167,7 +1167,7 @@ class Parameters(BaseParameters):
     trainer: TrainerType
     dataset: str
 
-    interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.NIP
 
     seed: int = 6198
 
@@ -1193,9 +1193,9 @@ class Parameters(BaseParameters):
     dataset_options: Optional[DatasetParameters | dict] = None
 
     protocol_common: Optional[CommonProtocolParameters | dict] = None
-    pvg_protocol: Optional[PvgProtocolParameters | dict] = None
+    pvg_protocol: Optional[NipProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
-    mnip_protocol: Optional[MnipProtocolParameters | dict] = None
+    mpvg_protocol: Optional[MnipProtocolParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums
