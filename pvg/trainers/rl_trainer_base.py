@@ -97,9 +97,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         "solo_agent",
         "image_classification",
         "dataset_options",
-        "pvg_protocol",
+        "nip_protocol",
         "debate_protocol",
-        "mpvg_protocol",
+        "zknip_protocol",
+        "mnip_protocol",
     ]
 
     policy_operator: TensorDictModuleBase

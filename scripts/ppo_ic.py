@@ -163,7 +163,7 @@ def experiment_fn(
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
         ),
-        pvg_protocol=NipProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),

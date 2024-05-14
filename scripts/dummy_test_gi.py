@@ -14,8 +14,10 @@ from pvg import (
     ReinforceParameters,
     ScenarioType,
     TrainerType,
+    InteractionProtocolType,
     CommonProtocolParameters,
     NipProtocolParameters,
+    ZknipProtocolParameters,
     PpoLossType,
     Guess,
     run_experiment,
@@ -37,6 +39,7 @@ def run(cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
+        interaction_protocol=InteractionProtocolType.ZKNIP,
         dataset="eru10000",
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(
@@ -71,7 +74,7 @@ def run(cmd_args: Namespace):
             shared_reward=False,
             force_guess=None,
         ),
-        pvg_protocol=NipProtocolParameters(
+        zknip_protocol=ZknipProtocolParameters(
             min_message_rounds=0,
         ),
         pretrain_agents=False,

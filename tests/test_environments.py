@@ -68,10 +68,9 @@ def test_graph_isomorphism_environment_step():
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
         ),
-        pvg_protocol=NipProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
-            verifier_first=False,
         ),
         # agents=AgentsParameters(
         #     prover0=GraphIsomorphismAgentParameters(),

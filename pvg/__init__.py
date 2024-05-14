@@ -15,6 +15,7 @@ from .parameters import (
     DatasetParameters,
     CommonProtocolParameters,
     NipProtocolParameters,
+    ZknipProtocolParameters,
     DebateProtocolParameters,
     MnipProtocolParameters,
     ScenarioType,

@@ -240,6 +240,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         - "ignore_message" (...), optional: Whether to ignore any values in "message".
           For example, in the first round the there is no message, and the "message"
           field is set to a dummy value.
+        - "y": The label.
 
     Output:
         - "graph_level_repr" (... 2 d_representation): The output graph-level
@@ -920,6 +921,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         d_hidden: int,
         d_out: int,
         num_layers: int,
+        include_label: bool = False,
         out_key: str = "node_level_mlp_output",
     ) -> TensorDictModule:
         """Builds an MLP which acts on the node-level representations.
@@ -950,6 +952,12 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         node_level_mlp : TensorDictModule
             The node-level MLP.
         """
+        if include_label:
+            d_in += 1
+            in_keys = ("node_level_repr", "y")
+        else:
+            in_keys = ("node_level_repr",)
+
         layers = []
 
         # The layers of the MLP
@@ -966,7 +974,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         # Make the layers into a sequential module and wrap it in a TensorDictModule
         sequential = Sequential(*layers)
         tensor_dict_sequential = TensorDictModule(
-            sequential, in_keys=("node_level_repr",), out_keys=(out_key,)
+            sequential, in_keys=in_keys, out_keys=(out_key,)
         )
 
         tensor_dict_sequential = tensor_dict_sequential.to(self.device)
@@ -980,6 +988,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         d_out: int,
         num_layers: int,
         include_round: bool = False,
+        include_label: bool = False,
         out_key: str = "graph_level_mlp_output",
         squeeze: bool = False,
     ) -> TensorDictSequential:
@@ -1007,6 +1016,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             The number of hidden layers in the MLP.
         include_round : bool, default=False
             Whether to include the round number as a (one-hot encoded) input to the MLP.
+        include_label : bool, default=False
+            Whether to include the label  to the MLP.
         out_key : str, default="graph_level_mlp_output"
             The tensordict key to use for the output of the MLP.
         squeeze : bool, default=False
@@ -1024,6 +1035,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         updated_d_in = 2 * d_in
         if include_round:
             updated_d_in += self.protocol_handler.max_message_rounds + 1
+        if include_label:
+            updated_d_in += 1
         mlp_layers.append(Linear(updated_d_in, d_hidden))
         mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
@@ -1070,12 +1083,33 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
                 ),
             )
 
+        # TODO LH check this actually makes sense
+        if include_label:
+            # Add the y value as an input to the MLP
+            td_sequential_layers.append(
+                TensorDictModule(
+                    Linear(1, 1),
+                    in_keys=("y"),
+                    out_keys=("y_linear",),
+                )
+            )
+            td_sequential_layers.append(
+                TensorDictCat(
+                    in_keys=("graph_level_mlp_input", "y_linear"),
+                    out_key="graph_level_mlp_input",
+                    dim=-1,
+                ),
+            )
+
         td_sequential_layers.append(mlp)
 
         return TensorDictSequential(*td_sequential_layers).to(self.device)
 
     def _build_decider(
-        self, d_out: int = 3, include_round: Optional[bool] = None
+        self,
+        d_out: int = 3,
+        include_round: Optional[bool] = None,
+        include_label: Optional[bool] = None,
     ) -> TensorDictModule:
         """Builds the module which produces a graph-pair level output.
 
@@ -1091,6 +1125,8 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         include_round : bool, optional
             Whether to include the round number as a (one-hot encoded) input to the MLP.
             If not given, the value from the agent parameters is used.
+        include_label : bool, optional
+            Whether to include the label as an input to the MLP.
 
         Returns
         -------
@@ -1107,6 +1143,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
             d_out=d_out,
             num_layers=self._agent_params.num_decider_layers,
             include_round=include_round,
+            include_label=include_label,
             out_key="decision_logits",
         )
 
@@ -1151,13 +1188,29 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     @property
     def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_decider:
-            return ("graph_level_repr", "node_level_repr", "message", "round")
+
+        # Check for silly mistakes
+        if self.agent_name == "simulator" and self.decider is None:
+            raise ValueError("The simulator agent must have a decider.")
+
+        if self.agent_name == "simulator":
+            if self.decider is not None and self._agent_params.include_round_in_decider:
+                return ("graph_level_repr", "node_level_repr", "message", "round", "y")
+            else:
+                return ("graph_level_repr", "node_level_repr", "message", "y")
         else:
-            return ("graph_level_repr", "node_level_repr", "message")
+            if self.decider is not None and self._agent_params.include_round_in_decider:
+                return ("graph_level_repr", "node_level_repr", "message", "round")
+            else:
+                return ("graph_level_repr", "node_level_repr", "message")
 
     @property
     def out_keys(self):
+
+        # Check for silly mistakes
+        if self.agent_name == "simulator" and self.decider is None:
+            raise ValueError("The simulator agent must have a decider.")
+
         if self.decider is None:
             return ("node_selected_logits",)
         else:
@@ -1181,16 +1234,30 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
                 )
         else:
             # Build the node selector module
-            self.node_selector = self._build_node_selector()
+            self.node_selector = self._build_node_selector(
+                include_label=(agent_name == "simulator")
+            )
 
             # Build the decider module if necessary
-            if agent_name == "verifier":
-                self.decider = self._build_decider()
+            if "verifier" in agent_name or "simulator" in agent_name:
+                self.decider = self._build_decider(
+                    include_label=(agent_name == "simulator")
+                )
             else:
                 self.decider = None
 
-    def _build_node_selector(self) -> TensorDictModule:
+    def _build_node_selector(
+        self, include_label: Optional[bool] = None
+    ) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
+
+        Parameters
+        ----------
+        include_label : bool, optional
+            Whether to include the node label in the selection process.
+            If set to `True`, the node label will be considered when selecting the node.
+            If set to `False`, only the node representation will be considered.
+            If not provided, the default behavior will be used.
 
         Returns
         -------
@@ -1202,6 +1269,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             d_hidden=self._agent_params.d_node_selector,
             d_out=1,
             num_layers=self._agent_params.num_node_selector_layers,
+            include_label=include_label,
             out_key="node_selected_logits",
         )
 
@@ -1225,6 +1293,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               node-level representations.
             - "message" (...): The most recent message from the other agent.
             - "round" (optional) (...): The current round number.
+            - "y" (optional) (...): The correct label.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -1463,7 +1532,7 @@ class GraphIsomorphismRandomAgentPolicyHead(
         super().__init__(params, agent_name, protocol_handler, device=device)
 
         # Determine if we should output a decision too
-        self.decider = agent_name == "verifier"
+        self.decider = "verifier" in agent_name or "simulator" in agent_name
 
     def forward(
         self,
@@ -1559,10 +1628,16 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     @property
     def in_keys(self):
-        if self._agent_params.include_round_in_value:
-            return ("graph_level_repr", "round")
+        if self.agent_name == "simulator":
+            if self._agent_params.include_round_in_value:
+                return ("graph_level_repr", "round", "y")
+            else:
+                return ("graph_level_repr", "y")
         else:
-            return "graph_level_repr"
+            if self._agent_params.include_round_in_value:
+                return ("graph_level_repr", "round")
+            else:
+                return "graph_level_repr"
 
     def __init__(
         self,
@@ -1590,6 +1665,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
             d_out=1,
             num_layers=self._agent_params.num_value_layers,
             include_round=self._agent_params.include_round_in_value,
+            include_label=(self.agent_name == "simulator"),
             out_key="value",
             squeeze=True,
         )
@@ -1744,7 +1820,9 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     ):
         super().__init__(params, agent_name, protocol_handler, device=device)
 
-        self.decider = self._build_decider(d_out=2, include_round=False)
+        self.decider = self._build_decider(
+            d_out=2, include_round=False, include_label=False
+        )
 
     def forward(
         self,
@@ -1818,6 +1896,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         data: TensorDictBase,
         hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
+
         round: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
@@ -1903,6 +1982,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         "message",
         "ignore_message",
         "decision_restriction",
+        "y",
     )
     out_keys = (
         ("agents", "node_selected_logits"),
@@ -1933,19 +2013,36 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self._agent_names):
-            input_td = TensorDict(
-                dict(
-                    node_level_repr=head_output["agents", "node_level_repr"][
-                        ..., i, :, :, :
-                    ],
-                    graph_level_repr=head_output["agents", "graph_level_repr"][
-                        ..., i, :, :
-                    ],
-                    message=head_output["message"],
-                    round=head_output["round"],
-                ),
-                batch_size=head_output.batch_size,
-            )
+            if agent_name != "simulator":
+                input_td = TensorDict(
+                    dict(
+                        node_level_repr=head_output["agents", "node_level_repr"][
+                            ..., i, :, :, :
+                        ],
+                        graph_level_repr=head_output["agents", "graph_level_repr"][
+                            ..., i, :, :
+                        ],
+                        message=head_output["message"],
+                        round=head_output["round"],
+                    ),
+                    batch_size=head_output.batch_size,
+                )
+            else:
+                input_td = TensorDict(
+                    dict(
+                        node_level_repr=head_output["agents", "node_level_repr"][
+                            ..., i, :, :, :
+                        ],
+                        graph_level_repr=head_output["agents", "graph_level_repr"][
+                            ..., i, :, :
+                        ],
+                        message=head_output["message"],
+                        round=head_output["round"],
+                        y=head_output["y"],
+                    ),
+                    batch_size=head_output.batch_size,
+                )
+
             policy_outputs[agent_name] = self.policy_heads[agent_name](
                 input_td, hooks=hooks
             )
@@ -2034,7 +2131,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
         The agent value heads to combine.
     """
 
-    in_keys = (("agents", "graph_level_repr"), "round")
+    in_keys = (("agents", "graph_level_repr"), "round", "y")
     out_keys = (("agents", "value"),)
 
     def forward(
@@ -2064,18 +2161,33 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
         # Run the value heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self._agent_names):
-            input_td = TensorDict(
-                dict(
-                    node_level_repr=head_output["agents", "node_level_repr"][
-                        ..., i, :, :, :
-                    ],
-                    graph_level_repr=head_output["agents", "graph_level_repr"][
-                        ..., i, :, :
-                    ],
-                    round=head_output["round"],
-                ),
-                batch_size=head_output.batch_size,
-            )
+            if agent_name != "simulator":
+                input_td = TensorDict(
+                    dict(
+                        node_level_repr=head_output["agents", "node_level_repr"][
+                            ..., i, :, :, :
+                        ],
+                        graph_level_repr=head_output["agents", "graph_level_repr"][
+                            ..., i, :, :
+                        ],
+                        round=head_output["round"],
+                    ),
+                    batch_size=head_output.batch_size,
+                )
+            else:
+                input_td = TensorDict(
+                    dict(
+                        node_level_repr=head_output["agents", "node_level_repr"][
+                            ..., i, :, :, :
+                        ],
+                        graph_level_repr=head_output["agents", "graph_level_repr"][
+                            ..., i, :, :
+                        ],
+                        round=head_output["round"],
+                        y=head_output["y"],
+                    ),
+                    batch_size=head_output.batch_size,
+                )
             value_outputs[agent_name] = self.value_heads[agent_name](
                 input_td, hooks=hooks
             )

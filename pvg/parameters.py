@@ -149,7 +149,7 @@ class InteractionProtocolType(StrEnum):
     Enums
     -----
     NIP
-        The full Prover-Verifier Game protocol.
+        The full Neural Interactive Proof protocol.
     ABSTRACT_DECISION_PROBLEM
         The Abstract Decision Problem protocol.
     DEBATE
@@ -158,6 +158,8 @@ class InteractionProtocolType(StrEnum):
         The Merlin-Arthur classifier protocol.
     MNIP
         The multi-prover NIP protocol.
+    ZKNIP
+        The zero-knowledge NIP protocol.
     """
 
     NIP = enum_auto()
@@ -165,6 +167,7 @@ class InteractionProtocolType(StrEnum):
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
     MNIP = enum_auto()
+    ZKNIP = enum_auto()
 
 
 class MinMessageRoundsSchedulerType(StrEnum):
@@ -283,6 +286,7 @@ AGENT_NAMES = {
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
+    InteractionProtocolType.ZKNIP: ("verifier0", "prover", "verifier1", "simulator"),
 }
 
 DEFAULT_STACKELBERG_SEQUENCE = {
@@ -291,6 +295,11 @@ DEFAULT_STACKELBERG_SEQUENCE = {
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.ZKNIP: (
+        ("verifier0",),
+        ("prover",),
+        ("verifier1", "simulator"),
+    ),
 }
 
 
@@ -1005,6 +1014,7 @@ class CommonProtocolParameters(SubParameters):
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
+    simulator_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
@@ -1053,8 +1063,6 @@ class NipProtocolParameters(LongProtocolParameters):
 
     Parameters
     ----------
-    verifier_first : bool
-        Whether the verifier goes first in the NIP protocol.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -1066,9 +1074,27 @@ class NipProtocolParameters(LongProtocolParameters):
         change over time. TODO: not currently implemented.
     """
 
-    verifier_first: bool = (
-        True  # TODO I think we probably always want this? Might be good to deprecate
-    )
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.NIP
+
+
+@dataclass
+class ZknipProtocolParameters(NipProtocolParameters):
+    """Additional parameters for the ZKNIP interaction protocol.
+
+    Parameters
+    ----------
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.ZKNIP
 
 
 @dataclass
@@ -1088,6 +1114,8 @@ class DebateProtocolParameters(LongProtocolParameters):
         change over time. TODO: not currently implemented.
     """
 
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.DEBATE
+
 
 @dataclass
 class MnipProtocolParameters(LongProtocolParameters):
@@ -1105,6 +1133,8 @@ class MnipProtocolParameters(LongProtocolParameters):
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
     """
+
+    interaction_protocol: InteractionProtocolType = InteractionProtocolType.MNIP
 
 
 @dataclass
@@ -1193,9 +1223,10 @@ class Parameters(BaseParameters):
     dataset_options: Optional[DatasetParameters | dict] = None
 
     protocol_common: Optional[CommonProtocolParameters | dict] = None
-    pvg_protocol: Optional[NipProtocolParameters | dict] = None
+    nip_protocol: Optional[NipProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
-    mpvg_protocol: Optional[MnipProtocolParameters | dict] = None
+    mnip_protocol: Optional[MnipProtocolParameters | dict] = None
+    zknip_protocol: Optional[ZknipProtocolParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums
@@ -1253,16 +1284,22 @@ class Parameters(BaseParameters):
         protocol_params_class : type[ProtocolParameters]
             The class of the interaction protocol parameters for the scenario.
         """
-
-        # If no agent parameters are provided, use the default parameters for the
-        # protocol and scenario
-        if self.agents is None:
-            self.agents = AgentsParameters(
-                **{
-                    name: agent_params_class()
-                    for name in AGENT_NAMES[self.interaction_protocol]
-                }
-            )
+        # Update or add the agent parameters as necessary (based on the idea that all verifiers and provers are the same)
+        updated_agents = AgentsParameters()
+        for name in AGENT_NAMES[self.interaction_protocol]:
+            if "verifier" in name or "simulator" in name:
+                if "verifier" in self.agents:
+                    updated_agents[name] = self.agents["verifier"]
+                else:
+                    updated_agents[name] = agent_params_class()
+            elif "prover" in name:
+                if "prover" in self.agents:
+                    updated_agents[name] = self.agents["prover"]
+                else:
+                    updated_agents[name] = agent_params_class()
+            else:
+                raise ValueError(f"Unrecognised agent name: {name}")
+        self.agents = updated_agents
 
         if not isinstance(self.agents, dict):
             raise ValueError(

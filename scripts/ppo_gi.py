@@ -89,7 +89,6 @@ param_grid = dict(
     normalize_observations=[True],
     min_message_rounds=[2],
     max_message_rounds=[8],
-    verifier_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[(25, 25)],
     seed=[8144, 820, 4173, 3992],
@@ -217,10 +216,9 @@ def experiment_fn(
             verifier_terminated_penalty=combo["verifier_terminated_penalty"],
             verifier_no_guess_reward=combo["verifier_no_guess_reward"],
         ),
-        pvg_protocol=NipProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
-            verifier_first=combo["verifier_first"],
         ),
         pretrain_agents=pretrain_agents,
         d_representation=combo["d_representation"],

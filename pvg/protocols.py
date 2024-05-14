@@ -60,6 +60,39 @@ class ProtocolHandler(ABC):
 
     @property
     @abstractmethod
+    def verifier_names(self) -> list[str]:
+        """The names of the verifiers in the protocol.
+
+        Returns
+        -------
+        verifier_names : list[str]
+            The names of the verifiers in the protocol.
+        """
+
+    @property
+    @abstractmethod
+    def conversations(self) -> list[list[str]]:
+        """The set of conversations that the different agents are engaging in.
+
+        Returns
+        -------
+        conversations : list[list[str]]
+            The set of conversations that the different agents are engaging in.
+        """
+
+    @property
+    def zk(self) -> bool:
+        """Whether the protocol is zero-knowledge or not.
+
+        Returns
+        -------
+        zk : bool
+            Whether the protocol is zero-knowledge or not. Default is False.
+        """
+        return False
+
+    @property
+    @abstractmethod
     def max_message_rounds(self) -> int:
         """The maximum number of rounds in the protocol.
 
@@ -79,6 +112,7 @@ class ProtocolHandler(ABC):
         min_message_rounds : int
             The minimum number of rounds in the protocol.
         """
+        return self.params.nip_protocol.min_message_rounds
 
     @abstractmethod
     def get_active_agents_mask(
@@ -217,6 +251,8 @@ class ProtocolHandler(ABC):
             verifier_decision_made, decision[verifier_index], reward
         )
 
+        # TODO LH revisit
+
         return done, reward
 
 
@@ -246,6 +282,63 @@ def build_protocol_handler(
     return PROTOCOL_HANDLER_REGISTRY[params.interaction_protocol](params)
 
 
+class ZkProtocol(ProtocolHandler, ABC):
+    """Base class for zero-knowledge protocols.
+
+    Introduces a second verifier and a simulator. The simulator tries to mimic the interaction between the second verifier and the prover, and the second verifier tries to prevent this. The prover tries to make sure the simulator can succeed (which implies that it is not `leaking` knowledge).
+    """
+
+    zk = True
+
+    def _include_simulator_rewards(
+        self,
+        verifier_a_probs: Float[Tensor, "..."],
+        simulator_probs: Float[Tensor, "..."],
+        reward: Float[Tensor, "... num_agents"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        # Simulator reward
+        reward[..., -1] = (
+            1 - abs(verifier_a_probs - simulator_probs).mean(dim=-1)
+        ) * protocol_params.simulator_reward
+
+        # Adversarial verifier reward
+        reward[..., -2] = -reward[..., -1]
+
+
+class TwoProverProtocol(ProtocolHandler, ABC):
+    """Base class for protocols with two provers.
+
+    The provers answer the verifier's questions and try to either convince the prover of different (if "adversarial") or the same (if not) answers.
+    """
+
+    agent_names = ["prover0", "prover1", "verifier"]
+    prover_names = ["prover0", "prover1"]
+    verifier_names = ["verifier"]
+    adversarial: bool
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... num_agents"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        if protocol_params.shared_reward:
+            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        elif self.adversarial:
+            for prover_num in range(2):
+                reward[..., prover_num] = (
+                    verifier_decision_made & (verifier_decision == prover_num)
+                ).float() * protocol_params.prover_reward
+        else:
+            reward[..., 0] = reward[..., 1] = (
+                verifier_decision_made & (verifier_decision == 1)
+            ).float() * protocol_params.prover_reward
+
+
 @register_protocol_handler(InteractionProtocolType.NIP)
 class NipProtocol(ProtocolHandler):
     """Handler for the NIP protocol.
@@ -257,21 +350,19 @@ class NipProtocol(ProtocolHandler):
     """
 
     prover_names = ["prover"]
-
-    @property
-    def agent_names(self) -> list[str]:
-        if self.params.pvg_protocol.verifier_first:
-            return ["verifier", "prover"]
-        else:
-            return ["prover", "verifier"]
+    verifier_names = ["verifier"]
+    agent_names = ["verifier", "prover"]
+    conversations = [
+        ["verifier", "prover"],
+    ]
 
     @property
     def max_message_rounds(self) -> int:
-        return self.params.pvg_protocol.max_message_rounds
+        return self.params.nip_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
-        return self.params.pvg_protocol.min_message_rounds
+        return self.params.nip_protocol.min_message_rounds
 
     def get_active_agents_mask(
         self, round: Int[Tensor, "..."]
@@ -323,37 +414,9 @@ class AdpProtocol(NipProtocol):
     agent_names = ["prover", "verifier"]
     max_message_rounds = 2
     min_message_rounds = 2
-
-
-class TwoProverProtocol(NipProtocol, ABC):
-    """Base class for protocols with two provers.
-
-    The provers answer the verifier's questions and try to either convince the prover of different (if "adversarial") or the same (if not) answers.
-    """
-
-    agent_names = ["prover0", "prover1", "verifier"]
-    prover_names = ["prover0", "prover1"]
-    adversarial: bool
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... num_agents"],
-    ):
-        protocol_params = self.params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        elif self.adversarial:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
-        else:
-            reward[..., 0] = reward[..., 1] = (
-                verifier_decision_made & (verifier_decision == 1)
-            ).float() * protocol_params.prover_reward
+    conversations = [
+        ["prover", "verifier"],
+    ]
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
@@ -367,6 +430,9 @@ class DebateProtocol(TwoProverProtocol):
     """
 
     adversarial = True
+    conversations = [
+        ["prover0", "prover1", "verifier"],
+    ]
 
     @property
     def max_message_rounds(self) -> int:
@@ -409,6 +475,9 @@ class MerlinArthurProtocol(TwoProverProtocol):
     max_message_rounds = 2
     min_message_rounds = 2
     adversarial = True
+    conversations = [
+        ["prover0", "prover1", "verifier"],
+    ]
 
     def get_active_agents_mask(
         self, round: Int[Tensor, "..."]
@@ -438,7 +507,7 @@ class MerlinArthurProtocol(TwoProverProtocol):
         )
 
 
-@register_protocol_handler(InteractionProtocolType.DEBATE)
+@register_protocol_handler(InteractionProtocolType.MNIP)
 class MnipProtocol(TwoProverProtocol):
     """Implementation of the MNIP protocol.
 
@@ -449,14 +518,15 @@ class MnipProtocol(TwoProverProtocol):
     """
 
     adversarial = False
+    conversations = [["prover0", "verifier"], ["prover1", "verifier"]]
 
     @property
     def max_message_rounds(self) -> int:
-        return self.params.mpvg_protocol.max_message_rounds
+        return self.params.mnip_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
-        return self.params.mpvg_protocol.min_message_rounds
+        return self.params.mnip_protocol.min_message_rounds
 
     def get_active_agents_mask(
         self, round: Int[Tensor, "..."]
@@ -476,3 +546,26 @@ class MnipProtocol(TwoProverProtocol):
             A boolean mask indicating which agents are active in the given round.
         """
         return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)
+
+
+@register_protocol_handler(InteractionProtocolType.ZKNIP)
+class ZknipProtocol(NipProtocol, ZkProtocol):
+    """Implementation of the ZKNIP protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    """
+
+    verifier_names = ["verifier0", "verifier1"]
+    agent_names = ["verifier0", "prover", "verifier1", "simulator"]
+    conversations = [["verifier0", "prover"], ["verifier1", "prover"], ["simulator"]]
+
+    @property
+    def max_message_rounds(self) -> int:
+        return self.params.zknip_protocol.max_message_rounds
+
+    @property
+    def min_message_rounds(self) -> int:
+        return self.params.zknip_protocol.min_message_rounds
