@@ -171,7 +171,6 @@ class ProtocolHandler(ABC):
         # Get the mask of the batch items where it is the verifier's turn
         verifier_turn_mask = self.get_verifier_turn_mask(round)
 
-        # If the verifier has made a guess we terminate the episode
         verifier_index = (..., self.agent_names.index("verifier"))
 
         if self.params.protocol_common.force_guess == Guess.ONE:
@@ -181,6 +180,7 @@ class ProtocolHandler(ABC):
         elif self.params.protocol_common.force_guess == Guess.Y:
             decision[verifier_index] = env_td["y"].squeeze()
 
+        # If the verifier has made a guess we terminate the episode
         verifier_decision_made = verifier_turn_mask & (decision[verifier_index] != 2)
         verifier_decision_made = verifier_decision_made & (
             round >= self.min_message_rounds

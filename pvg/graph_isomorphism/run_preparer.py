@@ -10,7 +10,7 @@ from pvg.graph_isomorphism.data import GraphIsomorphismDataset
 
 @register_run_preparer(ScenarioType.GRAPH_ISOMORPHISM)
 class GraphIsomorphismRunPreparer(RunPreparer):
-    """Prepare for doing an image classification run.
+    """Prepare for doing an graph isomorphism run.
 
     Downloads and processes the data for the run.
 

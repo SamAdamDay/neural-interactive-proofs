@@ -306,7 +306,7 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
         Parameters
         ----------
         decision_restriction : Int[Tensor, "..."]
-            The restrictions on the agents' decisions. The possible values are:#
+            The restrictions on the agents' decisions. The possible values are:
 
                 - 0: The verifier can decide anything.
                 - 1: The verifier can only decide to continue interacting.

@@ -31,7 +31,6 @@ class Environment(EnvBase, ABC):
 
     - `_get_observation_spec`: The specification of the agent observations.
     - `_get_action_spec`: The specification of the agent actions.
-    - `_get_state_spec` (optional): The specification of the states space.
     - `_get_reward_spec` (optional): The specification of the agent rewards.
     - `_get_done_spec` (optional): The specification of the agent done signals.
     - `_step`: Perform a step in the environment.
@@ -100,7 +99,6 @@ class Environment(EnvBase, ABC):
         # Create environment specs
         self.observation_spec = self._get_observation_spec()
         self.action_spec = self._get_action_spec()
-        self.state_spec = self._get_state_spec()
         self.reward_spec = self._get_reward_spec()
         self.done_spec = self._get_done_spec()
 
@@ -160,6 +158,12 @@ class Environment(EnvBase, ABC):
                 dtype=torch.float,
                 device=self.device,
             ),
+            y=BinaryDiscreteTensorSpec(
+                1,
+                shape=(self.num_envs, 1),
+                dtype=torch.long,
+                device=self.device,
+            ),
             message_history=BinaryDiscreteTensorSpec(
                 self._message_history_shape[-1],
                 shape=self._message_history_shape,
@@ -196,27 +200,6 @@ class Environment(EnvBase, ABC):
             device=self.device,
         )
 
-    def _get_state_spec(self) -> TensorSpec:
-        """Get the specification of the states space.
-
-        Defaults to the true label.
-
-        Returns
-        -------
-        state_spec : TensorSpec
-            The state specification.
-        """
-        return CompositeSpec(
-            y=BinaryDiscreteTensorSpec(
-                1,
-                shape=(self.num_envs, 1),
-                dtype=torch.long,
-                device=self.device,
-            ),
-            shape=(self.num_envs,),
-            device=self.device,
-        )
-
     def _get_reward_spec(self) -> TensorSpec:
         """Get the specification of the agent rewards.
 
@@ -229,7 +212,7 @@ class Environment(EnvBase, ABC):
             agents=CompositeSpec(
                 reward=UnboundedContinuousTensorSpec(
                     shape=(self.num_envs, self.num_agents),
-                    device=self.device,  # TODO Ask Sam about this
+                    device=self.device,
                 ),
                 shape=(self.num_envs,),
                 device=self.device,
@@ -359,7 +342,6 @@ class Environment(EnvBase, ABC):
         # If no tensordict is given, we're starting afresh
         if env_td is None or not "done" in env_td.keys():
             observation_zeros = self.observation_spec.zero()
-            state_zeros = self.state_spec.zero()
             done_zeros = self.done_spec.zero()
             env_td = observation_zeros.update(state_zeros).update(done_zeros)
             new_mask = torch.ones(
