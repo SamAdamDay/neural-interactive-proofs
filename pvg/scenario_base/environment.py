@@ -69,6 +69,8 @@ class Environment(EnvBase, ABC):
         self.train = train
 
         self.num_agents = len(protocol_handler.agent_names)
+        self.conversations = ["<->".join(c) for c in protocol_handler.conversations]
+        self.num_conversations = len(self.conversations)
 
         # Create a random number generator
         self.rng = torch.Generator()
@@ -101,8 +103,6 @@ class Environment(EnvBase, ABC):
         self.observation_spec = self._get_observation_spec()
         self.action_spec = self._get_action_spec()
         self.reward_spec = self._get_reward_spec()
-        self.state_spec = self._get_state_spec()
-        self.done_spec = self._get_done_spec()
 
     @property
     @abstractmethod
@@ -372,7 +372,6 @@ class Environment(EnvBase, ABC):
             new_mask = torch.ones(
                 *self.batch_size, dtype=torch.bool, device=self.device
             )
-
         else:
             new_mask = env_td["done"]
             env_td = env_td.clone()

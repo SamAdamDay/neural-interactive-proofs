@@ -114,9 +114,18 @@ class ProtocolHandler(ABC):
         """
         return self.params.nip_protocol.min_message_rounds
 
-    @abstractmethod
+    @property
+    def verifier_starts(self) -> bool:
+        """Checks if the verifier starts the protocol.
+
+        Returns
+        -------
+        bool
+            True if the verifier starts the protocol, False otherwise.
+        """
+
     def get_active_agents_mask(
-        self, round: Int[Tensor, "..."]
+        self, round: Int[Tensor, "..."], conversation: str
     ) -> Bool[Tensor, "... num_agents"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
@@ -130,9 +139,31 @@ class ProtocolHandler(ABC):
         active_agents : Bool[Tensor, "... num_agents"]
             A boolean mask indicating which agents are active in the given round.
         """
+        m = [torch.zeros_like(round, dtype=torch.bool) for _ in self.agent_names]
+        if conversation == "simulator":
+            m[self.agent_names.index("simulator")] = torch.ones_like(
+                round, dtype=torch.bool
+            )
+        else:
+            agents = conversation.split("<->")
+            for a in agents:
+                if "verifier" in a:
+                    m[self.agent_names.index(a)] = round % 2 == 1 - int(
+                        self.verifier_starts
+                    )
+                elif "prover" in a:
+                    m[self.agent_names.index(a)] = round % 2 == int(
+                        self.verifier_starts
+                    )
+                else:
+                    raise ValueError(f"Unknown agent: {a}")
 
-    def get_verifier_turn_mask(self, round: Int[Tensor, "..."]) -> Bool[Tensor, "..."]:
-        """Get a boolean mask indicating whether it's the verifier's turn.
+        return torch.stack(m, dim=-1)
+
+    def get_agent_turn_mask(
+        self, name: str, round: Int[Tensor, "..."], conversation: str
+    ) -> Bool[Tensor, "..."]:
+        """Get a boolean mask indicating whether it's the named agent's turn.
 
         Parameters
         ----------
@@ -141,12 +172,12 @@ class ProtocolHandler(ABC):
 
         Returns
         -------
-        verifier_turn : Bool[Tensor, "..."]
-            A boolean mask indicating whether it is the verifier's turn in the given
+        agent_turn : Bool[Tensor, "..."]
+            A boolean mask indicating whether it is the named agent's turn in the given
             round.
         """
-        return self.get_active_agents_mask(round)[
-            ..., self.agent_names.index("verifier")
+        return self.get_active_agents_mask(round, conversation)[
+            ..., self.agent_names.index(name)
         ]
 
     @abstractmethod
@@ -355,6 +386,7 @@ class NipProtocol(ProtocolHandler):
     conversations = [
         ["verifier", "prover"],
     ]
+    verifier_starts = True
 
     @property
     def max_message_rounds(self) -> int:
@@ -363,25 +395,6 @@ class NipProtocol(ProtocolHandler):
     @property
     def min_message_rounds(self) -> int:
         return self.params.nip_protocol.min_message_rounds
-
-    def get_active_agents_mask(
-        self, round: Int[Tensor, "..."]
-    ) -> Bool[Tensor, "... 2"]:
-        """Get a boolean mask indicating which agents are active in a given round.
-
-        The agents are active in alternating rounds.
-
-        Parameters
-        ----------
-        round : Int[Tensor, "..."]
-            The round of the protocol.
-
-        Returns
-        -------
-        active_agents : Bool[Tensor, "... 2"]
-            A boolean mask indicating which agents are active in the given round.
-        """
-        return torch.stack([round % 2 == 0, round % 2 == 1], dim=-1)
 
     def _include_prover_rewards(
         self,
@@ -417,6 +430,7 @@ class AdpProtocol(NipProtocol):
     conversations = [
         ["prover", "verifier"],
     ]
+    verifier_starts = False
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
@@ -433,6 +447,7 @@ class DebateProtocol(TwoProverProtocol):
     conversations = [
         ["prover0", "prover1", "verifier"],
     ]
+    verifier_starts = False
 
     @property
     def max_message_rounds(self) -> int:
@@ -441,25 +456,6 @@ class DebateProtocol(TwoProverProtocol):
     @property
     def min_message_rounds(self) -> int:
         return self.params.debate_protocol.min_message_rounds
-
-    def get_active_agents_mask(
-        self, round: Int[Tensor, "..."]
-    ) -> Bool[Tensor, "... 3"]:
-        """Get a boolean mask indicating which agents are active in a given round.
-
-        The two provers play simultaneously, and the verifier plays after them.
-
-        Parameters
-        ----------
-        round : Int[Tensor, "..."]
-            The round of the protocol.
-
-        Returns
-        -------
-        active_agents : Bool[Tensor, "... 2"]
-            A boolean mask indicating which agents are active in the given round.
-        """
-        return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)
 
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
@@ -478,9 +474,10 @@ class MerlinArthurProtocol(TwoProverProtocol):
     conversations = [
         ["prover0", "prover1", "verifier"],
     ]
+    verifier_starts = False
 
     def get_active_agents_mask(
-        self, round: Int[Tensor, "..."]
+        self, round: Int[Tensor, "..."], conversation: str
     ) -> Bool[Tensor, "... 3"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
@@ -496,15 +493,18 @@ class MerlinArthurProtocol(TwoProverProtocol):
         active_agents : Bool[Tensor, "... 2"]
             A boolean mask indicating which agents are active in the given round.
         """
-        prover1_first = torch.randint_like(round, 2).bool()
-        return torch.stack(
-            [
-                (round % 2 == 0) & prover1_first,
-                (round % 2 == 0) & ~prover1_first,
-                round % 2 == 1,
-            ],
-            dim=-1,
-        )
+        m = [torch.zeros_like(round, dtype=torch.bool) for _ in self.agent_names]
+        if conversation == "simulator":
+            m[self.agent_names.index("simulator")] = torch.ones_like(
+                round, dtype=torch.bool
+            )
+        else:
+            m["verifier"] = round % 2 == 1
+            prover0_first = torch.randint_like(round, 2).bool()
+            m["prover0"] = (round % 2 == 0) & prover0_first
+            m["prover1"] = (round % 2 == 0) & ~prover0_first
+
+        return torch.stack(m, dim=-1)
 
 
 @register_protocol_handler(InteractionProtocolType.MNIP)
@@ -519,6 +519,7 @@ class MnipProtocol(TwoProverProtocol):
 
     adversarial = False
     conversations = [["prover0", "verifier"], ["prover1", "verifier"]]
+    verifier_starts = True
 
     @property
     def max_message_rounds(self) -> int:

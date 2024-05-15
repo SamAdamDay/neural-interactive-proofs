@@ -846,9 +846,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
         # Build the decider module if necessary
         if "verifier" in agent_name or agent_name == "simulator":
-            self.decider = self._build_decider(
-                include_label=(agent_name == "simulator")
-            )
+            self.decider = self._build_decider()
         else:
             self.decider = None
 
@@ -1184,9 +1182,7 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
     ):
         super().__init__(params, agent_name, protocol_handler, device=device)
 
-        self.decider = self._build_decider(
-            d_out=2, include_round=False, include_label=False
-        )
+        self.decider = self._build_decider(d_out=2, include_round=False)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
         """Runs the solo agent head on the given body output.
