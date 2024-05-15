@@ -260,7 +260,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("x", "adjacency", "message", "node_mask", "ignore_message")
+    in_keys = ("x", "adjacency", "message", "node_mask", "ignore_message", "y")
     out_keys = ("graph_level_repr", "node_level_repr")
 
     @property
@@ -676,8 +676,14 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # Concatenate everything together
         # (..., 2 + 2 * node, channel * d_gnn + 3)
         if self.agent_name == "simulator":
+            # Turn the input label into a feature and add to the input
+            missing_dims = transformer_input.shape[-2] - 1
+            ys = torch.cat(
+                [torch.zeros(*data["y"].shape[:-1], missing_dims), data["y"]], dim=-1
+            )
+            ys = rearrange(ys, "... y -> ... y 1")
             transformer_input = torch.cat(
-                (transformer_input, pooled_feature, message_feature, data["y"]), dim=-1
+                (transformer_input, pooled_feature, message_feature, ys), dim=-1
             )
         else:
             transformer_input = torch.cat(
