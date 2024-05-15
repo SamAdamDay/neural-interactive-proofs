@@ -268,6 +268,12 @@ class GraphIsomorphismEnvironment(Environment):
             dtype=torch.float,
             device=self.device,
         )
+
+        # full_observation_spec = CompositeSpec()
+        # for c in self.protocol_handler.conversations:
+        #     k = "<->".join(c)
+        #     full_observation_spec[k] = base_observation_spec
+
         return base_observation_spec
 
     def _get_action_spec(self) -> CompositeSpec:

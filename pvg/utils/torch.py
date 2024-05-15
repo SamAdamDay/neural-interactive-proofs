@@ -442,6 +442,39 @@ class TensorDictCat(TensorDictModuleBase):
         )
 
 
+class TensorDictExpand(TensorDictModuleBase):
+    """Expand the dims of a TensorDict entry.
+
+    Parameters
+    ----------
+    in_keys : NestedKey
+        The key whose entries to expand.
+    out_key : NestedKey
+        The key whose entries to expand.
+    target : int, default=0
+        The key whose dimensions we wish to expand to.
+    """
+
+    def __init__(self, in_key: NestedKey, out_key: NestedKey, target: NestedKey):
+        super().__init__()
+        self.in_keys = (in_key,)
+        self.out_keys = (out_key,)
+        self.target = target
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+
+        dims = tensordict[self.target].size()[1:-1]
+        for i in range(len(dims)):
+            tensordict[self.in_keys[0]] = tensordict[self.in_keys[0]].unsqueeze(i + 1)
+        return tensordict.update(
+            {
+                self.out_keys[0]: tensordict[self.in_keys[0]].expand(
+                    *([-1] + list(dims) + [-1])
+                )
+            }
+        )
+
+
 class ParallelTensorDictModule(TensorDictModuleBase):
     """Apply a module to each key of a TensorDict.
 

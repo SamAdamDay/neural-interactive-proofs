@@ -76,6 +76,7 @@ from pvg.utils.torch import (
     BatchNorm1dSimulateBatchDims,
     OneHot,
     TensorDictCat,
+    TensorDictExpand,
     NormalizeOneHotMessageHistory,
     Print,
     TensorDictPrint,
@@ -240,7 +241,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         - "ignore_message" (...), optional: Whether to ignore any values in "message".
           For example, in the first round the there is no message, and the "message"
           field is set to a dummy value.
-        - "y": The label.
 
     Output:
         - "graph_level_repr" (... 2 d_representation): The output graph-level
@@ -954,32 +954,55 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         """
         if include_label:
             d_in += 1
-            in_keys = ("node_level_repr", "y")
-        else:
-            in_keys = ("node_level_repr",)
 
-        layers = []
+        mlp_layers = []
 
         # The layers of the MLP
-        layers.append(Linear(d_in, d_hidden))
-        layers.append(self.activation_function())
+        mlp_layers.append(Linear(d_in, d_hidden))
+        mlp_layers.append(self.activation_function())
         for _ in range(num_layers - 2):
-            layers.append(Linear(d_hidden, d_hidden))
-            layers.append(self.activation_function())
-        layers.append(Linear(d_hidden, d_out))
+            mlp_layers.append(Linear(d_hidden, d_hidden))
+            mlp_layers.append(self.activation_function())
+        mlp_layers.append(Linear(d_hidden, d_out))
 
         # Concatenate the pair and node dimensions
-        layers.append(Rearrange("batch pair node d_out -> batch (pair node) d_out"))
+        mlp_layers.append(Rearrange("batch pair node d_out -> batch (pair node) d_out"))
 
         # Make the layers into a sequential module and wrap it in a TensorDictModule
-        sequential = Sequential(*layers)
-        tensor_dict_sequential = TensorDictModule(
-            sequential, in_keys=in_keys, out_keys=(out_key,)
-        )
+        mlp = Sequential(*mlp_layers)
+        mlp = TensorDictModule(mlp, in_keys=("node_level_repr",), out_keys=(out_key,))
 
-        tensor_dict_sequential = tensor_dict_sequential.to(self.device)
+        # The final module includes one or two more things before the MLP
+        td_sequential_layers = []
 
-        return tensor_dict_sequential
+        # TODO LH check this actually makes sense
+        if include_label:
+            # Add the y value as an input to the MLP
+            td_sequential_layers.append(
+                TensorDictModule(
+                    Linear(1, 1),
+                    in_keys=("y"),
+                    out_keys=("y_linear",),
+                )
+            )
+            td_sequential_layers.append(
+                TensorDictExpand(
+                    in_key="y_linear",
+                    out_key="y_linear",
+                    target="node_level_repr",
+                ),
+            )
+            td_sequential_layers.append(
+                TensorDictCat(
+                    in_keys=("node_level_repr", "y_linear"),
+                    out_key="node_level_repr",
+                    dim=-1,
+                ),
+            )
+
+        td_sequential_layers.append(mlp)
+
+        return TensorDictSequential(*td_sequential_layers).to(self.device)
 
     def _build_graph_level_mlp(
         self,
@@ -2013,35 +2036,21 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
         for i, agent_name in enumerate(self._agent_names):
-            if agent_name != "simulator":
-                input_td = TensorDict(
-                    dict(
-                        node_level_repr=head_output["agents", "node_level_repr"][
-                            ..., i, :, :, :
-                        ],
-                        graph_level_repr=head_output["agents", "graph_level_repr"][
-                            ..., i, :, :
-                        ],
-                        message=head_output["message"],
-                        round=head_output["round"],
-                    ),
-                    batch_size=head_output.batch_size,
-                )
-            else:
-                input_td = TensorDict(
-                    dict(
-                        node_level_repr=head_output["agents", "node_level_repr"][
-                            ..., i, :, :, :
-                        ],
-                        graph_level_repr=head_output["agents", "graph_level_repr"][
-                            ..., i, :, :
-                        ],
-                        message=head_output["message"],
-                        round=head_output["round"],
-                        y=head_output["y"],
-                    ),
-                    batch_size=head_output.batch_size,
-                )
+            input_td = TensorDict(
+                dict(
+                    node_level_repr=head_output["agents", "node_level_repr"][
+                        ..., i, :, :, :
+                    ],
+                    graph_level_repr=head_output["agents", "graph_level_repr"][
+                        ..., i, :, :
+                    ],
+                    message=head_output["message"],
+                    round=head_output["round"],
+                ),
+                batch_size=head_output.batch_size,
+            )
+            if agent_name == "simulator":
+                input_td["y"] = head_output["y"].float()
 
             policy_outputs[agent_name] = self.policy_heads[agent_name](
                 input_td, hooks=hooks
