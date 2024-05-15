@@ -59,7 +59,7 @@ def run(cmd_args: Namespace):
             num_iterations=100,
             num_epochs=1,
             minibatch_size=8,
-            frames_per_batch=24,
+            frames_per_batch=56,
             use_shared_body=False,
             num_normalization_steps=10,
             normalize_observations=False,

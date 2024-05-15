@@ -97,7 +97,7 @@ class Environment(EnvBase, ABC):
                     f"{steps_per_env_per_iteration} and {params.rl.frames_per_batch} "
                 )
         self.num_envs = params.rl.frames_per_batch // steps_per_env_per_iteration
-        self.batch_size = (self.num_envs,)
+        self.batch_size = (self.num_conversations, self.num_envs)
 
         # Create environment specs
         self.observation_spec = self._get_observation_spec()
@@ -145,34 +145,34 @@ class Environment(EnvBase, ABC):
         return CompositeSpec(
             round=DiscreteTensorSpec(
                 self.protocol_handler.max_message_rounds,
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 dtype=torch.long,
                 device=self.device,
             ),
             decision_restriction=DiscreteTensorSpec(
                 3,
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 dtype=self._int_dtype,
                 device=self.device,
             ),
             x=UnboundedContinuousTensorSpec(
-                shape=self._message_history_shape,
+                shape=self._message_history_shape,  # TODO LH check
                 dtype=torch.float,
                 device=self.device,
             ),
             y=BinaryDiscreteTensorSpec(
                 1,
-                shape=(self.num_envs, 1),  # TODO: LH check this (the 1)
+                shape=(*self.batch_size, 1),  # TODO: LH check this (the 1)
                 dtype=torch.long,
                 device=self.device,
             ),
             message_history=BinaryDiscreteTensorSpec(
-                self._message_history_shape[-1],
+                self._message_history_shape[-1],  # TODO: LH check this
                 shape=self._message_history_shape,
                 dtype=torch.float,
                 device=self.device,
             ),
-            shape=(self.num_envs,),
+            shape=self.batch_size,
             device=self.device,
         )
 
@@ -191,14 +191,14 @@ class Environment(EnvBase, ABC):
             agents=CompositeSpec(
                 decision=DiscreteTensorSpec(
                     3,
-                    shape=(self.num_envs, self.num_agents),
+                    shape=(*self.batch_size, self.num_agents),
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 device=self.device,
             ),
-            shape=(self.num_envs,),
+            shape=self.batch_size,
             device=self.device,
         )
 
@@ -215,11 +215,11 @@ class Environment(EnvBase, ABC):
         return CompositeSpec(
             y=BinaryDiscreteTensorSpec(
                 1,
-                shape=(self.num_envs, 1),
+                shape=(*self.batch_size, 1),
                 dtype=torch.long,
                 device=self.device,
             ),
-            shape=(self.num_envs,),
+            shape=(*self.batch_size,),
             device=self.device,
         )
 
@@ -234,13 +234,13 @@ class Environment(EnvBase, ABC):
         return CompositeSpec(
             agents=CompositeSpec(
                 reward=UnboundedContinuousTensorSpec(
-                    shape=(self.num_envs, self.num_agents),
+                    shape=(*self.batch_size, self.num_agents),
                     device=self.device,
                 ),
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 device=self.device,
             ),
-            shape=(self.num_envs,),
+            shape=self.batch_size,
             device=self.device,
         )
 
@@ -255,17 +255,17 @@ class Environment(EnvBase, ABC):
         return CompositeSpec(
             done=BinaryDiscreteTensorSpec(
                 self.num_envs,
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 dtype=torch.bool,
                 device=self.device,
             ),
             terminated=BinaryDiscreteTensorSpec(
                 self.num_envs,
-                shape=(self.num_envs,),
+                shape=self.batch_size,
                 dtype=torch.bool,
                 device=self.device,
             ),
-            shape=(self.num_envs,),
+            shape=self.batch_size,
             device=self.device,
         )
 
@@ -380,7 +380,7 @@ class Environment(EnvBase, ABC):
         if self.data_cycler is None:
             dataloader = DataLoader(
                 self.dataset,
-                batch_size=self.num_envs,
+                batch_size=self.num_envs,  # TODO LH maybe we want to keep this like so
                 shuffle=True,
                 generator=self.rng,
                 pin_memory=self.settings.pin_memory,

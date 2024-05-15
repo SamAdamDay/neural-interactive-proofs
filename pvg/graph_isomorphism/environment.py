@@ -219,7 +219,7 @@ class GraphIsomorphismEnvironment(Environment):
     @property
     def _message_history_shape(self) -> tuple:
         return (
-            self.num_envs,
+            *self.batch_size,
             2,
             self.max_num_nodes,
             self.protocol_handler.max_message_rounds,
@@ -240,7 +240,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_observation_spec["adjacency"] = AdjacencyMatrixSpec(
             self.max_num_nodes,
             shape=(
-                self.num_envs,
+                *self.batch_size,
                 2,
                 self.max_num_nodes,
                 self.max_num_nodes,
@@ -251,7 +251,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_observation_spec["node_mask"] = BinaryDiscreteTensorSpec(
             self.max_num_nodes,
             shape=(
-                self.num_envs,
+                *self.batch_size,
                 2,
                 self.max_num_nodes,
             ),
@@ -261,7 +261,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_observation_spec["message"] = DiscreteTensorSpec(
             self.max_num_nodes,
             shape=(
-                self.num_envs,
+                *self.batch_size,
                 2,
                 self.max_num_nodes,
             ),
@@ -288,7 +288,7 @@ class GraphIsomorphismEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, self.num_agents),
+            shape=(*self.batch_size, self.num_agents),  # TODO LH check
             dtype=torch.long,
             device=self.device,
         )

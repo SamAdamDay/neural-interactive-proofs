@@ -1853,18 +1853,23 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
         for agent_name in self._agent_names:
+            cs = [
+                c
+                for c in range(len(self.protocol_handler.conversations))
+                if agent_name in self.protocol_handler.conversations[c]
+            ]
             # Build the input dict for the agent body
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
-                    input_dict[key] = round == 0
+                    input_dict[key] = round[cs, :] == 0
                 else:
                     if key == "message" and "message" not in data.keys():
                         continue
-                    input_dict[key] = data[key]
+                    input_dict[key] = data[key][cs, :]
             input_td = TensorDict(
                 input_dict,
-                batch_size=data.batch_size,
+                batch_size=torch.Size([len(cs), *data.batch_size[1:]]),
             )
 
             # Run the agent body

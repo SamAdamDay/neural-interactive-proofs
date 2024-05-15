@@ -79,7 +79,7 @@ class ImageClassificationEnvironment(Environment):
     @property
     def _message_history_shape(self) -> tuple:
         return (
-            self.num_envs,
+            *self.batch_size,
             self.protocol_handler.max_message_rounds,
             self.latent_height,
             self.latent_width,
@@ -99,7 +99,7 @@ class ImageClassificationEnvironment(Environment):
         base_observation_spec = super()._get_observation_spec()
         base_observation_spec["image"] = UnboundedContinuousTensorSpec(
             shape=(
-                self.num_envs,
+                *self.batch_size,
                 self.dataset_num_channels,
                 self.image_height,
                 self.image_width,
@@ -110,7 +110,7 @@ class ImageClassificationEnvironment(Environment):
         base_observation_spec["message"] = DiscreteTensorSpec(
             self.latent_width,
             shape=(
-                self.num_envs,
+                *self.batch_size,
                 self.latent_height,
                 self.latent_width,
             ),
@@ -134,7 +134,7 @@ class ImageClassificationEnvironment(Environment):
         base_action_spec = super()._get_action_spec()
         base_action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
             self.latent_height * self.latent_width,
-            shape=(self.num_envs, self.num_agents),
+            shape=(*self.batch_size, self.num_agents),
             dtype=torch.long,
             device=self.device,
         )
