@@ -145,7 +145,7 @@ class ProtocolHandler(ABC):
         """
 
     def get_active_agents_mask(
-        self, round: Int[Tensor, "..."], c: int
+        self, round: Int[Tensor, "..."], conversation_index: int
     ) -> Bool[Tensor, "... num_agents"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
@@ -161,7 +161,7 @@ class ProtocolHandler(ABC):
         active_agents : Bool[Tensor, "... num_agents"]
             A boolean mask indicating which agents are active in the given round.
         """
-        conversation = self.conversations[c]
+        conversation = self.conversations[conversation_index]
         m = [torch.zeros_like(round, dtype=torch.bool) for _ in self.agent_names]
         if conversation == ["simulator"]:
             m[self.agent_names.index("simulator")] = torch.ones_like(
@@ -183,7 +183,7 @@ class ProtocolHandler(ABC):
         return torch.stack(m, dim=-1)
 
     def get_agent_turn_mask(
-        self, name: str, round: Int[Tensor, "..."], conversation: str
+        self, name: str, round: Int[Tensor, "..."], conversation_index: int
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating whether it's the named agent's turn.
 
@@ -198,7 +198,7 @@ class ProtocolHandler(ABC):
             A boolean mask indicating whether it is the named agent's turn in the given
             round.
         """
-        return self.get_active_agents_mask(round, conversation)[
+        return self.get_active_agents_mask(round, conversation_index)[
             ..., self.agent_names.index(name)
         ]
 
@@ -253,66 +253,80 @@ class ProtocolHandler(ABC):
         for c in range(self.num_conversations):
 
             # TODO LH from here
-
             conversation = self.conversations[c]
+            if "simulator" not in conversation:
 
-            y: Int[Tensor, "... 1"] = env_td["y"]
-            round: Int[Tensor, "..."] = env_td["round"]
-            decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
-            done: Bool[Tensor, "..."] = env_td["done"]
+                verifier_name = None
+                for agent in conversation:
+                    if "verifier" in agent:
+                        if verifier_name is None:
+                            verifier_name = agent
+                        else:
+                            raise ValueError(
+                                f"Multiple verifiers in conversation {conversation}."
+                            )
+                if verifier_name is None:
+                    raise ValueError(f"No verifier in conversation {conversation}.")
 
-            # Get the mask of the batch items where it is the verifier's turn
-            verifier_turn_mask = self.get_verifier_turn_mask(round)
+                y: Int[Tensor, "... 1"] = env_td[c]["y"]
+                round: Int[Tensor, "..."] = env_td[c]["round"]
+                decision: Int[Tensor, "... agent"] = env_td[c]["agents", "decision"]
+                done: Bool[Tensor, "..."] = env_td["done"]
 
-            verifier_index = (..., self.agent_names.index("verifier"))
+                # Get the mask of the batch items where it is the verifier's turn
+                verifier_turn_mask = self.get_agent_turn_mask(verifier_name, round, c)
 
-            if self.params.protocol_common.force_guess == Guess.ONE:
-                decision[verifier_index] = torch.ones_like(decision[verifier_index])
-            elif self.params.protocol_common.force_guess == Guess.ZERO:
-                decision[verifier_index] = torch.zeros_like(decision[verifier_index])
-            elif self.params.protocol_common.force_guess == Guess.Y:
-                decision[verifier_index] = env_td["y"].squeeze()
+                verifier_index = (..., self.agent_names.index(verifier_name))
 
-            # If the verifier has made a guess we terminate the episode
-            verifier_decision_made = verifier_turn_mask & (
-                decision[verifier_index] != 2
-            )
-            verifier_decision_made = verifier_decision_made & (
-                round >= self.min_message_rounds
-            )
-            done = done | verifier_decision_made
+                if self.params.protocol_common.force_guess == Guess.ONE:
+                    decision[verifier_index] = torch.ones_like(decision[verifier_index])
+                elif self.params.protocol_common.force_guess == Guess.ZERO:
+                    decision[verifier_index] = torch.zeros_like(
+                        decision[verifier_index]
+                    )
+                elif self.params.protocol_common.force_guess == Guess.Y:
+                    decision[verifier_index] = env_td[c]["y"].squeeze()
 
-            # Compute the reward for the verifier when they make a guess
-            reward = torch.empty(
-                (*done.shape, len(self.agent_names)),
-                dtype=torch.float,
-                device=done.device,
-            )
-            reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
-            reward[verifier_index][
-                verifier_decision_made & (decision[verifier_index] == y.squeeze())
-            ] = protocol_params.verifier_reward
-            reward[verifier_index][
-                verifier_decision_made & (decision[verifier_index] != y.squeeze())
-            ] = protocol_params.verifier_incorrect_penalty
+                # If the verifier has made a guess we terminate the episode
+                verifier_decision_made = verifier_turn_mask & (
+                    decision[verifier_index] != 2
+                )
+                verifier_decision_made = verifier_decision_made & (
+                    round >= self.min_message_rounds
+                )
+                done = done | verifier_decision_made
 
-            # If we reach the end of the episode and the verifier has not made a guess,
-            # terminate it with a negative reward for the verifier
-            done = done | (round >= self.max_message_rounds - 1)
-            reward[verifier_index][
-                (round >= self.max_message_rounds - 1) & ~verifier_decision_made
-            ] = protocol_params.verifier_terminated_penalty
+                # Compute the reward for the verifier when they make a guess
+                reward = torch.zeros(
+                    (*done.shape, len(self.agent_names)),
+                    dtype=torch.float,
+                    device=done.device,
+                )
+                reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
+                reward[verifier_index][
+                    verifier_decision_made & (decision[verifier_index] == y.squeeze())
+                ] = protocol_params.verifier_reward
+                reward[verifier_index][
+                    verifier_decision_made & (decision[verifier_index] != y.squeeze())
+                ] = protocol_params.verifier_incorrect_penalty
 
-            # If the verifier has not made a guess and it's their turn, given them a small
-            # reward for continuing
-            reward[verifier_index][
-                verifier_turn_mask & ~done
-            ] = protocol_params.verifier_no_guess_reward
+                # If we reach the end of the episode and the verifier has not made a guess,
+                # terminate it with a negative reward for the verifier
+                done = done | (round >= self.max_message_rounds - 1)
+                reward[verifier_index][
+                    (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+                ] = protocol_params.verifier_terminated_penalty
 
-            # Compute the rewards for the provers and add them
-            self._include_prover_rewards(
-                verifier_decision_made, decision[verifier_index], reward
-            )
+                # If the verifier has not made a guess and it's their turn, given them a small
+                # reward for continuing
+                reward[verifier_index][
+                    verifier_turn_mask & ~done
+                ] = protocol_params.verifier_no_guess_reward
+
+                # Compute the rewards for the provers and add them
+                self._include_prover_rewards(
+                    verifier_decision_made, decision[verifier_index], reward
+                )
 
             # TODO LH revisit
 
