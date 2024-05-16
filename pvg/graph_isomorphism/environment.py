@@ -274,7 +274,7 @@ class GraphIsomorphismEnvironment(Environment):
     def _get_action_spec(self) -> CompositeSpec:
         """Get the specification of the agent actions.
 
-        Each action space has shape (batch_size, num_agents). Each agent chooses both a
+        Each action space has shape (*batch_size, num_agents). Each agent chooses both a
         node and a decision: reject, accept or continue (represented as 0, 1 or 2). The
         node is is a number between 0 and 2 * max_num_nodes - 1. If it is less than
         max_num_nodes, it is a node in the first graph, otherwise it is a node in the
@@ -317,36 +317,48 @@ class GraphIsomorphismEnvironment(Environment):
             The updated 'next' tensordict.
         """
 
-        # Extract the tensors from the dict
-        message_history: Float[Tensor, "... graph node message_round"] = env_td[
-            "message_history"
-        ]
-        round: Int[Tensor, "..."] = env_td["round"]
-        node_selected: Int[Tensor, "... agent"] = env_td["agents", "node_selected"]
+        message_histories = []
+        messages = []
 
-        # Compute index of the agent whose turn it is.
-        # (... agent)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
+        for c in range(self.num_conversations):
 
-        # Sum up the messages from the agents whose turn it is. If two agents select the
-        # same node, the message will be 2.
-        # (... 2 max_num_nodes)
-        message = F.one_hot(node_selected, 2 * self.max_num_nodes).float()
-        message = torch.where(
-            active_agents_mask[..., None], message, torch.zeros_like(message)
-        )
-        message = message.sum(dim=-2)
-        message = message.view(*message.shape[:-1], 2, self.max_num_nodes)
+            # Extract the tensors from the dict
+            message_history: Float[Tensor, "... graph node message_round"] = env_td[c][
+                "message_history"
+            ]
+            round: Int[Tensor, "..."] = env_td[c]["round"]
+            node_selected: Int[Tensor, "... agent"] = env_td[c][
+                "agents", "node_selected"
+            ]
 
-        # Insert the message into the message history at the current round
-        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
-        message_history = message_history.masked_scatter(
-            round_mask[..., None, None, :], message
-        )
+            # Compute index of the agent whose turn it is.
+            # (... agent)
+            active_agents_mask = self.protocol_handler.get_active_agents_mask(round, c)
 
-        # Add the message history and next message to the next tensordict
-        next_td["message_history"] = message_history
-        next_td["message"] = message
+            # Sum up the messages from the agents whose turn it is. If two agents select the
+            # same node, the message will be 2.
+            # (... 2 max_num_nodes)
+            message = F.one_hot(node_selected, 2 * self.max_num_nodes).float()
+            message = torch.where(
+                active_agents_mask[..., None], message, torch.zeros_like(message)
+            )
+            message = message.sum(dim=-2)
+            message = message.view(*message.shape[:-1], 2, self.max_num_nodes)
+
+            # Insert the message into the message history at the current round
+            round_mask = F.one_hot(
+                round, self.protocol_handler.max_message_rounds
+            ).bool()
+            message_history = message_history.masked_scatter(
+                round_mask[..., None, None, :], message
+            )
+
+            # Add the message history and next message to the next tensordict
+            message_histories.append(message_history)
+            messages.append(message)
+
+        next_td["message_history"] = torch.stack(message_histories, dim=0)
+        next_td["message"] = torch.stack(messages, dim=0)
 
         return next_td
 

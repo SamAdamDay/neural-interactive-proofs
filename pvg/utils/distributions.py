@@ -71,8 +71,8 @@ class CompositeCategoricalDistribution(CompositeDistribution):
 
                     # Make sure all the categorical parameters have the same batch size
                     if batch_size is None:
-                        batch_size = param_value.shape[0]
-                    elif batch_size != param_value.shape[0]:
+                        batch_size = param_value.shape[:2]
+                    elif batch_size != param_value.shape[:2]:
                         raise ValueError(
                             "All categorical parameters must have the same batch size."
                         )

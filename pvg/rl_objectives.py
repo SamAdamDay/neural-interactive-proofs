@@ -188,10 +188,10 @@ class Objective(LossModule, ABC):
             if action.requires_grad:
                 raise RuntimeError(f"tensordict stored {key} requires grad.")
             if actions_batch_size is None:
-                actions_batch_size = action.shape[0]
-            elif actions_batch_size != action.shape[0]:
+                actions_batch_size = action.shape[:2]
+            elif actions_batch_size != action.shape[:2]:
                 raise RuntimeError(
-                    f"tensordict stored {key} has batch size {action.shape[0]} "
+                    f"tensordict stored {key} has batch size {action.shape[:2]} "
                     f"but expected {actions_batch_size}."
                 )
 

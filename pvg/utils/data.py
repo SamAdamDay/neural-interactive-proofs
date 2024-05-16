@@ -202,3 +202,13 @@ def nested_dict_keys_stringified(data: dict, separator=".") -> list[str]:
 
     keys_tuple = nested_dict_keys(data)
     return [separator.join(key) for key in keys_tuple]
+
+
+def pad_missing_conversations(tensor: torch.Tensor, indices: list[int], dim: int):
+
+    if tensor.shape[0] == 1:
+        return tensor.expand(dim, *tensor.shape[1:])
+    else:
+        z = torch.zeros(dim, *tensor.shape[1:])
+        z[indices] = tensor
+        return z

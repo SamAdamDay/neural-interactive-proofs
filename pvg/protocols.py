@@ -81,6 +81,27 @@ class ProtocolHandler(ABC):
         """
 
     @property
+    def num_conversations(self) -> int:
+        """Returns the number of conversations that the different agents are engaging in.
+
+        Returns
+        -------
+        int
+            The number of conversations that the different agents are engaging in.
+        """
+        return len(self.conversations)
+
+    def get_conversation_indices(self, name: str) -> list[int]:
+        """Returns the number of conversations that the different agents are engaging in.
+
+        Returns
+        -------
+        int
+            The number of conversations that the different agents are engaging in.
+        """
+        return [i for i, conv in enumerate(self.conversations) if name in conv]
+
+    @property
     def zk(self) -> bool:
         """Whether the protocol is zero-knowledge or not.
 
@@ -112,7 +133,6 @@ class ProtocolHandler(ABC):
         min_message_rounds : int
             The minimum number of rounds in the protocol.
         """
-        return self.params.nip_protocol.min_message_rounds
 
     @property
     def verifier_starts(self) -> bool:
@@ -125,7 +145,7 @@ class ProtocolHandler(ABC):
         """
 
     def get_active_agents_mask(
-        self, round: Int[Tensor, "..."], conversation: str
+        self, round: Int[Tensor, "..."], c: int
     ) -> Bool[Tensor, "... num_agents"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
@@ -133,30 +153,32 @@ class ProtocolHandler(ABC):
         ----------
         round : Int[Tensor, "..."]
             The round of the protocol.
+        c : int
+            The conversation index.
 
         Returns
         -------
         active_agents : Bool[Tensor, "... num_agents"]
             A boolean mask indicating which agents are active in the given round.
         """
+        conversation = self.conversations[c]
         m = [torch.zeros_like(round, dtype=torch.bool) for _ in self.agent_names]
-        if conversation == "simulator":
+        if conversation == ["simulator"]:
             m[self.agent_names.index("simulator")] = torch.ones_like(
                 round, dtype=torch.bool
             )
         else:
-            agents = conversation.split("<->")
-            for a in agents:
-                if "verifier" in a:
-                    m[self.agent_names.index(a)] = round % 2 == 1 - int(
+            for agent in conversation:
+                if "verifier" in agent:
+                    m[self.agent_names.index(agent)] = round % 2 == 1 - int(
                         self.verifier_starts
                     )
-                elif "prover" in a:
-                    m[self.agent_names.index(a)] = round % 2 == int(
+                elif "prover" in agent:
+                    m[self.agent_names.index(agent)] = round % 2 == int(
                         self.verifier_starts
                     )
                 else:
-                    raise ValueError(f"Unknown agent: {a}")
+                    raise ValueError(f"Unknown agent: {agent}")
 
         return torch.stack(m, dim=-1)
 
@@ -228,61 +250,71 @@ class ProtocolHandler(ABC):
 
         protocol_params = self.params.protocol_common
 
-        y: Int[Tensor, "... 1"] = env_td["y"]
-        round: Int[Tensor, "..."] = env_td["round"]
-        decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
-        done: Bool[Tensor, "..."] = env_td["done"]
+        for c in range(self.num_conversations):
 
-        # Get the mask of the batch items where it is the verifier's turn
-        verifier_turn_mask = self.get_verifier_turn_mask(round)
+            # TODO LH from here
 
-        verifier_index = (..., self.agent_names.index("verifier"))
+            conversation = self.conversations[c]
 
-        if self.params.protocol_common.force_guess == Guess.ONE:
-            decision[verifier_index] = torch.ones_like(decision[verifier_index])
-        elif self.params.protocol_common.force_guess == Guess.ZERO:
-            decision[verifier_index] = torch.zeros_like(decision[verifier_index])
-        elif self.params.protocol_common.force_guess == Guess.Y:
-            decision[verifier_index] = env_td["y"].squeeze()
+            y: Int[Tensor, "... 1"] = env_td["y"]
+            round: Int[Tensor, "..."] = env_td["round"]
+            decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
+            done: Bool[Tensor, "..."] = env_td["done"]
 
-        # If the verifier has made a guess we terminate the episode
-        verifier_decision_made = verifier_turn_mask & (decision[verifier_index] != 2)
-        verifier_decision_made = verifier_decision_made & (
-            round >= self.min_message_rounds
-        )
-        done = done | verifier_decision_made
+            # Get the mask of the batch items where it is the verifier's turn
+            verifier_turn_mask = self.get_verifier_turn_mask(round)
 
-        # Compute the reward for the verifier when they make a guess
-        reward = torch.empty(
-            (*done.shape, len(self.agent_names)), dtype=torch.float, device=done.device
-        )
-        reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
-        reward[verifier_index][
-            verifier_decision_made & (decision[verifier_index] == y.squeeze())
-        ] = protocol_params.verifier_reward
-        reward[verifier_index][
-            verifier_decision_made & (decision[verifier_index] != y.squeeze())
-        ] = protocol_params.verifier_incorrect_penalty
+            verifier_index = (..., self.agent_names.index("verifier"))
 
-        # If we reach the end of the episode and the verifier has not made a guess,
-        # terminate it with a negative reward for the verifier
-        done = done | (round >= self.max_message_rounds - 1)
-        reward[verifier_index][
-            (round >= self.max_message_rounds - 1) & ~verifier_decision_made
-        ] = protocol_params.verifier_terminated_penalty
+            if self.params.protocol_common.force_guess == Guess.ONE:
+                decision[verifier_index] = torch.ones_like(decision[verifier_index])
+            elif self.params.protocol_common.force_guess == Guess.ZERO:
+                decision[verifier_index] = torch.zeros_like(decision[verifier_index])
+            elif self.params.protocol_common.force_guess == Guess.Y:
+                decision[verifier_index] = env_td["y"].squeeze()
 
-        # If the verifier has not made a guess and it's their turn, given them a small
-        # reward for continuing
-        reward[verifier_index][
-            verifier_turn_mask & ~done
-        ] = protocol_params.verifier_no_guess_reward
+            # If the verifier has made a guess we terminate the episode
+            verifier_decision_made = verifier_turn_mask & (
+                decision[verifier_index] != 2
+            )
+            verifier_decision_made = verifier_decision_made & (
+                round >= self.min_message_rounds
+            )
+            done = done | verifier_decision_made
 
-        # Compute the rewards for the provers and add them
-        self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_index], reward
-        )
+            # Compute the reward for the verifier when they make a guess
+            reward = torch.empty(
+                (*done.shape, len(self.agent_names)),
+                dtype=torch.float,
+                device=done.device,
+            )
+            reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
+            reward[verifier_index][
+                verifier_decision_made & (decision[verifier_index] == y.squeeze())
+            ] = protocol_params.verifier_reward
+            reward[verifier_index][
+                verifier_decision_made & (decision[verifier_index] != y.squeeze())
+            ] = protocol_params.verifier_incorrect_penalty
 
-        # TODO LH revisit
+            # If we reach the end of the episode and the verifier has not made a guess,
+            # terminate it with a negative reward for the verifier
+            done = done | (round >= self.max_message_rounds - 1)
+            reward[verifier_index][
+                (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+            ] = protocol_params.verifier_terminated_penalty
+
+            # If the verifier has not made a guess and it's their turn, given them a small
+            # reward for continuing
+            reward[verifier_index][
+                verifier_turn_mask & ~done
+            ] = protocol_params.verifier_no_guess_reward
+
+            # Compute the rewards for the provers and add them
+            self._include_prover_rewards(
+                verifier_decision_made, decision[verifier_index], reward
+            )
+
+            # TODO LH revisit
 
         return done, reward
 
@@ -477,32 +509,33 @@ class MerlinArthurProtocol(TwoProverProtocol):
     verifier_starts = False
 
     def get_active_agents_mask(
-        self, round: Int[Tensor, "..."], conversation: str
-    ) -> Bool[Tensor, "... 3"]:
+        self, round: Int[Tensor, "..."], c: int
+    ) -> Bool[Tensor, "... num_agents"]:
         """Get a boolean mask indicating which agents are active in a given round.
-
-        A random one of the two provers goes first, and the verifier goes second.
 
         Parameters
         ----------
         round : Int[Tensor, "..."]
             The round of the protocol.
+        c : int
+            The conversation index.
 
         Returns
         -------
-        active_agents : Bool[Tensor, "... 2"]
+        active_agents : Bool[Tensor, "... num_agents"]
             A boolean mask indicating which agents are active in the given round.
         """
+        conversation = self.conversations[c]
         m = [torch.zeros_like(round, dtype=torch.bool) for _ in self.agent_names]
-        if conversation == "simulator":
+        if conversation == ["simulator"]:
             m[self.agent_names.index("simulator")] = torch.ones_like(
                 round, dtype=torch.bool
             )
         else:
-            m["verifier"] = round % 2 == 1
+            m[self.agent_names.index("verifier")] = round % 2 == 1
             prover0_first = torch.randint_like(round, 2).bool()
-            m["prover0"] = (round % 2 == 0) & prover0_first
-            m["prover1"] = (round % 2 == 0) & ~prover0_first
+            m[self.agent_names.index("prover0")] = (round % 2 == 0) & prover0_first
+            m[self.agent_names.index("prover1")] = (round % 2 == 0) & ~prover0_first
 
         return torch.stack(m, dim=-1)
 
@@ -546,7 +579,8 @@ class MnipProtocol(TwoProverProtocol):
         active_agents : Bool[Tensor, "... 2"]
             A boolean mask indicating which agents are active in the given round.
         """
-        return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)
+        pass
+        # return torch.stack([round % 2 == 0, round % 2 == 0, round % 2 == 1], dim=-1)
 
 
 @register_protocol_handler(InteractionProtocolType.ZKNIP)

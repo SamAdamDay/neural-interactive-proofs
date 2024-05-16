@@ -81,6 +81,7 @@ from pvg.utils.torch import (
     TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
+from pvg.utils.data import pad_missing_conversations
 
 GI_SCENARIO = ScenarioType.GRAPH_ISOMORPHISM
 
@@ -977,7 +978,7 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         layers.append(Linear(d_hidden, d_out))
 
         # Concatenate the pair and node dimensions
-        layers.append(Rearrange("batch pair node d_out -> batch (pair node) d_out"))
+        layers.append(Rearrange("... pair node d_out -> ... (pair node) d_out"))
 
         # Make the layers into a sequential module and wrap it in a TensorDictModule
         sequential = Sequential(*layers)
@@ -1839,7 +1840,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         The agent bodies to combine.
     """
 
-    in_keys = ("round", "x", "adjacency", "message", "node_mask")
+    in_keys = ("round", "x", "adjacency", "message", "node_mask", "y")
     out_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
 
     def forward(
@@ -1852,24 +1853,21 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
+        cs = {}
         for agent_name in self._agent_names:
-            cs = [
-                c
-                for c in range(len(self.protocol_handler.conversations))
-                if agent_name in self.protocol_handler.conversations[c]
-            ]
+            cs[agent_name] = self.protocol_handler.get_conversation_indices(agent_name)
             # Build the input dict for the agent body
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
-                    input_dict[key] = round[cs, :] == 0
+                    input_dict[key] = round[cs[agent_name], :] == 0
                 else:
                     if key == "message" and "message" not in data.keys():
                         continue
-                    input_dict[key] = data[key][cs, :]
+                    input_dict[key] = data[key][cs[agent_name], :]
             input_td = TensorDict(
                 input_dict,
-                batch_size=torch.Size([len(cs), *data.batch_size[1:]]),
+                batch_size=torch.Size([len(cs[agent_name]), *data.batch_size[1:]]),
             )
 
             # Run the agent body
@@ -1877,11 +1875,25 @@ class GraphIsomorphismCombinedBody(CombinedBody):
 
         # Stack the outputs
         node_level_repr = torch.stack(
-            [body_outputs[name]["node_level_repr"] for name in self._agent_names],
+            [
+                pad_missing_conversations(
+                    body_outputs[name]["node_level_repr"],
+                    cs[name],
+                    self.protocol_handler.num_conversations,
+                )
+                for name in self._agent_names
+            ],
             dim=-4,
         )
         graph_level_repr = torch.stack(
-            [body_outputs[name]["graph_level_repr"] for name in self._agent_names],
+            [
+                pad_missing_conversations(
+                    body_outputs[name]["graph_level_repr"],
+                    cs[name],
+                    self.protocol_handler.num_conversations,
+                )
+                for name in self._agent_names
+            ],
             dim=-3,
         )
 
@@ -1967,20 +1979,25 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
+        cs = {}
         for i, agent_name in enumerate(self._agent_names):
+            cs[agent_name] = self.protocol_handler.get_conversation_indices(agent_name)
             input_td = TensorDict(
                 dict(
                     node_level_repr=head_output["agents", "node_level_repr"][
-                        ..., i, :, :, :
+                        cs[agent_name], ..., i, :, :, :
                     ],
                     graph_level_repr=head_output["agents", "graph_level_repr"][
-                        ..., i, :, :
+                        cs[agent_name], ..., i, :, :
                     ],
-                    message=head_output["message"],
-                    round=head_output["round"],
+                    message=head_output["message"][cs[agent_name]],
+                    round=head_output["round"][cs[agent_name]],
                 ),
-                batch_size=head_output.batch_size,
+                batch_size=torch.Size(
+                    [len(cs[agent_name]), *head_output.batch_size[1:]]
+                ),
             )
+
             policy_outputs[agent_name] = self.policy_heads[agent_name](
                 input_td, hooks=hooks
             )
@@ -1988,7 +2005,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
             # Make sure the provers only selects nodes in the opposite graph to the most
             # recent message
             if agent_name in self.protocol_handler.prover_names:
-                message: Tensor = head_output["message"]
+                message: Tensor = head_output["message"][cs[agent_name]]
                 max_num_nodes = head_output["agents", "node_level_repr"].shape[-2]
                 other_graph = (message[..., 0, :].max(dim=-1)[0] > 0).long()
                 node_ok_mask = F.one_hot(other_graph, num_classes=2)
@@ -2007,13 +2024,24 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         # Stack the outputs
         node_selected_logits = torch.stack(
             [
-                policy_outputs[name]["node_selected_logits"]
+                pad_missing_conversations(
+                    policy_outputs[name]["node_selected_logits"],
+                    cs[name],
+                    self.protocol_handler.num_conversations,
+                )
                 for name in self._agent_names
             ],
             dim=-2,
         )
         decision_logits = torch.stack(
-            [policy_outputs[name]["decision_logits"] for name in self._agent_names],
+            [
+                pad_missing_conversations(
+                    policy_outputs[name]["decision_logits"],
+                    cs[name],
+                    self.protocol_handler.num_conversations,
+                )
+                for name in self._agent_names
+            ],
             dim=-2,
         )
 
