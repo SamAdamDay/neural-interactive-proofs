@@ -9,6 +9,7 @@ below.
 import sys
 import warnings
 from typing import Optional
+from dataclasses import dataclass
 
 import torch
 
@@ -18,7 +19,6 @@ from tqdm import tqdm
 
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import build_run_preparer
 from pvg.scenario_instance import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
@@ -47,6 +47,7 @@ def run_experiment(
     pin_memory: bool = True,
     dataset_on_device: bool = False,
     enable_efficient_attention: bool = False,
+    global_tqdm_step_fn: callable = lambda: ...,
     test_run: bool = False,
 ):
     """Build and run an experiment.
@@ -96,6 +97,10 @@ def run_experiment(
         dot-product attention. There may be a bug in this implementation which causes
         NaNs to appear in the backward pass. See
         https://github.com/pytorch/pytorch/issues/119320 for more information.
+    global_tqdm_step_fn : Callable, default=lambda: ...
+        A function to step the global tqdm progress bar. This is used when there are
+        multiple processes running in parallel and each process needs to update the
+        global progress bar.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -138,6 +143,7 @@ def run_experiment(
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
         enable_efficient_attention=enable_efficient_attention,
+        global_tqdm_step_fn=global_tqdm_step_fn,
         test_run=test_run,
     )
 
@@ -176,6 +182,19 @@ def run_experiment(
         wandb_run.finish()
 
 
+@dataclass
+class PreparedExperimentInfo:
+    """Information about an experiment that has been prepared using `prepare_experiment`
+
+    Parameters
+    ----------
+    total_num_iterations : int
+        The total number of training iterations.
+    """
+
+    total_num_iterations: int
+
+
 def prepare_experiment(
     params: Parameters,
     profiler: Optional[torch.profiler.profile] = None,
@@ -204,9 +223,12 @@ def prepare_experiment(
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
         the experiment runs without errors.
-    """
 
-    protocol_handler = build_protocol_handler(params)
+    Returns
+    -------
+    prepared_experiment_info : PreparedExperimentInfo
+        Information about the prepared experiment.
+    """
 
     settings = ExperimentSettings(
         device="cpu",
@@ -218,5 +240,16 @@ def prepare_experiment(
         test_run=test_run,
     )
 
-    run_preparer = build_run_preparer(params, settings, protocol_handler)
-    run_preparer.prepare_run()
+    # Build the scenario components of the experiment.
+    scenario_instance = build_scenario_instance(params, settings)
+
+    # Build the trainer.
+    trainer = build_trainer(params, scenario_instance, settings)
+
+    # Get the total number of training iterations.
+    total_num_iterations = trainer.get_total_num_iterations()
+
+    del scenario_instance
+    del trainer
+
+    return PreparedExperimentInfo(total_num_iterations=total_num_iterations)

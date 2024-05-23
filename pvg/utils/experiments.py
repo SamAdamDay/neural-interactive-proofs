@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 import logging
 from functools import partial
 import multiprocessing
+from dataclasses import dataclass
 
 from sklearn.model_selection import ParameterGrid
 
@@ -38,6 +39,7 @@ from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
 
+from pvg.run import PreparedExperimentInfo
 from pvg.constants import (
     WANDB_ENTITY,
     WANDB_PROJECT,
@@ -114,6 +116,32 @@ class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
         )
 
 
+@dataclass
+class ExperimentFunctionArguments:
+    """Arguments to the function which runs a single experiment
+
+    Parameters
+    ----------
+    combo : dict
+        A single combination of hyperparameters.
+    run_id : str
+        A unique identifier for the run.
+    cmd_args : Namespace
+        The command line arguments.
+    tqdm_func : callable
+        A function used to create a tqdm progress bar.
+    child_logger_adapter : logging.Logger
+        The logger adapter to use for logging.
+    """
+
+    combo: dict
+    run_id: str
+    cmd_args: Namespace
+    tqdm_func: callable
+    child_logger_adapter: logging.Logger
+    global_tqdm_step_fn: callable = lambda: ...
+
+
 class HyperparameterExperiment(ABC):
     """A base class to run an experiment over a grid of hyperparameters.
 
@@ -123,12 +151,12 @@ class HyperparameterExperiment(ABC):
     def __init__(
         self,
         param_grid: dict,
-        experiment_fn: Callable[
-            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
-        ],
+        experiment_fn: Callable[[ExperimentFunctionArguments], None],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
-        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
+        run_preparer_fn: Optional[
+            Callable[[dict, Namespace], PreparedExperimentInfo]
+        ] = None,
         arg_parser_description: str = "Run hyperparameter experiments",
     ):
         if run_id_fn is None:
@@ -285,15 +313,10 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
     ----------
     param_grid : dict
         A dictionary mapping hyperparameter names to lists of values to try.
-    experiment_fn : Callable[[dict, str, Namespace, Callable, logging.LoggerAdapter],
-    None]
+    experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
-        experiment. It should take the form:
-            experiment_fn(combo, run_id, cmd_args, tqdm_func, child_logger_adapter)
-        where `combo` is a single combination of hyperparameters, `run_id` is a unique
-        identifier for the run, `cmd_args` is the command line arguments, `tqdm_func` is
-        a function used to create a tqdm progress bar, and `child_logger_adapter` is a
-        logger adapter to use for logging.
+        experiment. The arguments are specified in the `ExperimentFunctionArguments`
+        dataclass.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
@@ -301,9 +324,10 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
-    run_preparer_fn : Callable[[dict, Namespace], None], optional
+    run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
-        for it. This is optional. It should take the form:
+        for it. It should return a `PreparedExperimentInfo` instance. This is optional.
+        It should take the form:
             run_preparer_fn(combo, cmd_args)
         where `combo` is a single combination of hyperparameters and `cmd_args` is the
         command line arguments.
@@ -320,7 +344,9 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter], None
         ],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
-        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
+        run_preparer_fn: Optional[
+            Callable[[dict, Namespace], PreparedExperimentInfo]
+        ] = None,
         experiment_name: str = "EXPERIMENT",
         output_width: int = 70,
     ):
@@ -393,11 +419,13 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
 
         # Run the experiment
         self.experiment_fn(
-            combo,
-            run_id,
-            cmd_args,
-            tqdm_func,
-            child_logger_adapter,
+            ExperimentFunctionArguments(
+                combo=combo,
+                run_id=run_id,
+                cmd_args=cmd_args,
+                tqdm_func=tqdm_func,
+                child_logger_adapter=child_logger_adapter,
+            )
         )
 
         return True
@@ -474,15 +502,10 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
     ----------
     param_grid : dict
         A dictionary mapping hyperparameter names to lists of values to try.
-    experiment_fn : Callable[[dict, str, Namespace, Callable, logging.LoggerAdapter],
-    None]
+    experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
-        experiment. It should take the form:
-            experiment_fn(combo, run_id, cmd_args, tqdm_func, child_logger_adapter)
-        where `combo` is a single combination of hyperparameters, `run_id` is a unique
-        identifier for the run, `cmd_args` is the command line arguments, `tqdm_func` is
-        a function used to create a tqdm progress bar, and `child_logger_adapter` is a
-        logger adapter to use for logging.
+        experiment. The arguments are specified in the `ExperimentFunctionArguments`
+        dataclass.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
@@ -490,9 +513,10 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn(combo_index, cmd_args)
         where `combo_index` is the index of the combination in the ParameterGrid and
         `cmd_args` is the command line arguments.
-    run_preparer_fn : Callable[[dict, Namespace], None], optional
+    run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
-        for it. This is optional. It should take the form:
+        for it. It should return a `PreparedExperimentInfo` instance. This is optional.
+        It should take the form:
             run_preparer_fn(combo, cmd_args)
         where `combo` is a single combination of hyperparameters and `cmd_args` is the
         command line arguments.
@@ -505,11 +529,11 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
     def __init__(
         self,
         param_grid: dict,
-        experiment_fn: Callable[
-            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
-        ],
+        experiment_fn: Callable[[ExperimentFunctionArguments], None],
         run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
-        run_preparer_fn: Optional[Callable[[dict, Namespace], None]] = None,
+        run_preparer_fn: Optional[
+            Callable[[dict, Namespace], PreparedExperimentInfo]
+        ] = None,
         experiment_name: str = "EXPERIMENT",
         default_num_workers: int = 1,
     ):
@@ -554,9 +578,31 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         combo_index: int,
         cmd_args: Namespace,
         base_logger: logging.Logger,
+        fine_grained_global_tqdm: bool,
         tqdm_func: Callable,
         global_tqdm: tqdm,
     ) -> bool:
+        """The task function which runs on a single worker.
+
+        Parameters
+        ----------
+        combinations : list[dict]
+            The list of combinations of hyperparameters.
+        combo_index : int
+            The index of the current combination.
+        cmd_args : Namespace
+            The command line arguments.
+        base_logger : logging.Logger
+            The base logger.
+        fine_grained_global_tqdm : bool
+            Whether to update the global progress bar after each iteration. If False,
+            the global progress bar is only updated after each experiment is finished.
+        tqdm_func : Callable
+            The tqdm function to use in the experiment to create new progress bars. This
+            argument is provided by `tqdm_multiprocess`.
+        global_tqdm : tqdm
+            The global progress bar. This argument is provided by `tqdm_multiprocess`.
+        """
         info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
@@ -567,8 +613,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         child_logger.setLevel(self.experiment_log_level)
         child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
 
-        # The tqdm function to use. Set the leave argument to False because tqdm because
-        # otherwise tqdm doesn't display multiple progress bars properly due to a bug
+        # The tqdm function to use. Set the leave argument to False because otherwise
+        # tqdm doesn't display multiple progress bars properly due to a bug
         # https://github.com/tqdm/tqdm/issues/1496
         tqdm_func = partial(
             tqdm_func,
@@ -576,17 +622,28 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
         )
 
+        if fine_grained_global_tqdm:
+            global_tqdm_step_fn = lambda: global_tqdm.update(1)
+        else:
+            global_tqdm_step_fn = lambda: ...
+
         # Run the experiment
         self.experiment_fn(
-            combinations[combo_index],
-            run_id,
-            cmd_args,
-            tqdm_func,
-            child_logger_adapter,
+            ExperimentFunctionArguments(
+                combo=combinations[combo_index],
+                run_id=run_id,
+                cmd_args=cmd_args,
+                tqdm_func=tqdm_func,
+                child_logger_adapter=child_logger_adapter,
+                global_tqdm_step_fn=global_tqdm_step_fn,
+            )
         )
 
-        # Update the global progress bar and log that this run is finished
-        global_tqdm.update(1)
+        # Update the global progress bar if we're not doing it after each iteration
+        if not fine_grained_global_tqdm:
+            global_tqdm.update(1)
+
+        # Log that this run is finished
         base_logger.info(f"{info_prefix}{run_id} finished")
 
         return True
@@ -598,14 +655,29 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         # Get all configurations of hyperparameters, and turn this into a list of tasks
         combinations = list(ParameterGrid(self.param_grid))
 
-        # Prepare the runs
+        # Prepare the runs and compute the total number of iterations
         if self.run_preparer_fn is not None:
+            total_iterations = 0
             for combo in combinations:
-                self.run_preparer_fn(combo, cmd_args)
+                info = self.run_preparer_fn(combo, cmd_args)
+                total_iterations += info.total_num_iterations
+            fine_grained_global_tqdm = True
+        else:
+            total_iterations = len(combinations)
+            fine_grained_global_tqdm = False
 
         # Create a list of tasks
         tasks = [
-            (self._task_fn, (combinations, combo_index, cmd_args, base_logger))
+            (
+                self._task_fn,
+                (
+                    combinations,
+                    combo_index,
+                    cmd_args,
+                    base_logger,
+                    fine_grained_global_tqdm,
+                ),
+            )
             for combo_index in range(len(combinations))
         ]
         tasks = tasks[cmd_args.num_skip :]
@@ -615,6 +687,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             cmd_args.num_workers, max_tasks_per_child=cmd_args.max_tasks_per_child
         )
 
-        with tqdm(total=len(combinations), dynamic_ncols=True) as global_progress:
+        with tqdm(total=total_iterations, dynamic_ncols=True) as global_progress:
             global_progress.set_description("Total progress")
             pool.map(global_progress, tasks, lambda x: None, lambda x: None)

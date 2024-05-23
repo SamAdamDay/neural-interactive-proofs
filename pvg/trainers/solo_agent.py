@@ -18,7 +18,7 @@ from tensordict.nn import TensorDictSequential
 
 from pvg.scenario_base.data import DataLoader, Dataset
 from pvg.scenario_base.agents import Agent
-from pvg.trainers.base import Trainer
+from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
 
@@ -115,6 +115,7 @@ class SoloAgentTrainer(Trainer):
                 logger,
             )
 
+    @attach_progress_bar(lambda self: self.params.solo_agent.num_epochs)
     def _run_train_loop(
         self,
         train_dataset: Dataset,
@@ -123,6 +124,7 @@ class SoloAgentTrainer(Trainer):
         agent_models: dict[str, TensorDictSequential],
         as_pretraining: bool,
         torch_generator: torch.Generator,
+        iteration_context: IterationContext,
     ):
         """Run the training loop.
 
@@ -140,6 +142,8 @@ class SoloAgentTrainer(Trainer):
             Whether we're training the agents as a pretraining step.
         torch_generator : torch.Generator
             The random number generator to use.
+        iteration_context : IterationContext
+            The context to use for the training loop, which handles the progress bar.
         """
 
         # Create the optimizers, specifying the learning rates for the different parts
@@ -160,11 +164,9 @@ class SoloAgentTrainer(Trainer):
             generator=torch_generator,
         )
 
-        # Create a progress bar
+        # Set the progress bar description
         desc = "Pretraining" if as_pretraining else "Training"
-        pbar = self.settings.tqdm_func(
-            total=self.params.solo_agent.num_epochs, desc=desc
-        )
+        iteration_context.set_description(desc)
 
         # Train the agents
         for epoch in range(self.params.solo_agent.num_epochs):
@@ -218,10 +220,7 @@ class SoloAgentTrainer(Trainer):
                 break
 
             # Update the progress bar
-            pbar.update(1)
-
-        # Close the progress bar
-        pbar.close()
+            iteration_context.step()
 
     def _run_test_loop(
         self,

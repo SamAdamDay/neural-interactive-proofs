@@ -19,11 +19,7 @@ from torchrl.modules import ProbabilisticActor, ActorValueOperator
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import TransformedEnv
-from torchrl.envs.transforms import (
-    Transform,
-    ObservationNorm,
-    Compose as ComposeTransform,
-)
+from torchrl.envs.transforms import Transform, ObservationNorm
 
 from pvg.parameters import (
     Parameters,
@@ -32,7 +28,7 @@ from pvg.parameters import (
     ContiguousPeriodicUpdateSchedule,
 )
 from pvg.experiment_settings import ExperimentSettings
-from pvg.trainers.base import Trainer
+from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
 from pvg.trainers.solo_agent import SoloAgentTrainer
 from pvg.model_cache import (
     cached_models_exist,
@@ -122,37 +118,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         elif self.clip_value == False:
             self.clip_value = None
 
-        # Add the observation normalization transforms if requested
-        if self.params.rl.normalize_observations:
-
-            # Set the seed before computing the normalization statistics
-            torch.manual_seed(self.params.seed)
-            np.random.seed(self.params.seed)
-
-            self.train_environment = TransformedEnv(self.train_environment)
-            self.test_environment = TransformedEnv(self.test_environment)
-
-            # Add normalization transforms for each of "x" and "message", and initialize
-            # the statistics by running the environments with random actions
-            if self.settings.test_run:
-                num_normalization_steps = 1
-            else:
-                num_normalization_steps = self.params.rl.num_normalization_steps
-            pbar = self.settings.tqdm_func(total=4, desc="Computing norm stats")
-            for env in [self.train_environment, self.test_environment]:
-                for key, size in zip(["x", "message"], [4, 3]):
-                    transform = ObservationNorm(in_keys=[key], standard_normal=True)
-                    env.append_transform(transform)
-                    transform.init_stats(
-                        num_normalization_steps,
-                        cat_dim=-size,
-                        reduce_dim=list(range(-size - 1, 0)),
-                    )
-                    pbar.update(1)
-            pbar.close()
-
     def train(self):
         """Train the agents."""
+
+        # Add the observation normalization transforms if requested
+        if self.params.rl.normalize_observations:
+            self._add_normalization_transforms()
 
         # Pretrain the agents first in isolation if requested
         if self.params.pretrain_agents:
@@ -172,6 +143,35 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         # Run the training loop
         self._train_and_test()
+
+    def _add_normalization_transforms(self):
+        """Add observation normalization transforms to the environments."""
+
+        # Set the seed before computing the normalization statistics
+        torch.manual_seed(self.params.seed)
+        np.random.seed(self.params.seed)
+
+        self.train_environment = TransformedEnv(self.train_environment)
+        self.test_environment = TransformedEnv(self.test_environment)
+
+        # Add normalization transforms for each of "x" and "message", and initialize
+        # the statistics by running the environments with random actions
+        if self.settings.test_run:
+            num_normalization_steps = 1
+        else:
+            num_normalization_steps = self.params.rl.num_normalization_steps
+        pbar = self.settings.tqdm_func(total=4, desc="Computing norm stats")
+        for env in [self.train_environment, self.test_environment]:
+            for key, size in zip(["x", "message"], [4, 3]):
+                transform = ObservationNorm(in_keys=[key], standard_normal=True)
+                env.append_transform(transform)
+                transform.init_stats(
+                    num_normalization_steps,
+                    cat_dim=-size,
+                    reduce_dim=list(range(-size - 1, 0)),
+                )
+                pbar.update(1)
+        pbar.close()
 
     def _pretrain_agents(self):
         """Pretrain the agent bodies in isolation.
@@ -575,17 +575,24 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self._build_test_context(stack)
             self._run_test_loop()
 
-    def _run_train_loop(self):
+    @attach_progress_bar(lambda self: self.params.rl.num_iterations)
+    def _run_train_loop(self, iteration_context: IterationContext):
+        """Run the training loop.
+
+        Parameters
+        ----------
+        iteration_context : IterationContext
+            The context used during training. This controls the progress bar.
+        """
+
         agents = self.scenario_instance.agents
 
         # Create the artifact logger, which will log things are various stages to W&B
         if self.settings.wandb_run is not None:
             artifact_logger = ArtifactLogger(self.settings, agents)
 
-        # Create a progress bar
-        pbar = self.settings.tqdm_func(
-            total=self.params.rl.num_iterations, desc="Training"
-        )
+        # Add a description to the progress bar
+        iteration_context.set_description("Training")
 
         # Create the update schedule iterators
         update_schedule_iterators = [
@@ -676,10 +683,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                 break
 
             # Update the progress bar
-            pbar.update(1)
-
-        # Close the progress bar
-        pbar.close()
+            iteration_context.step()
 
     def _train_on_replay_buffer(self) -> TensorDict:
         """Train the agents on data in the replay buffer.
@@ -741,11 +745,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
 
         return mean_loss_vals
 
-    def _run_test_loop(self):
-        # Create a progress bar
-        pbar = self.settings.tqdm_func(
-            total=self.params.rl.num_test_iterations, desc="Testing"
-        )
+    @attach_progress_bar(lambda self: self.params.rl.num_test_iterations)
+    def _run_test_loop(self, iteration_context: IterationContext):
+        """Run the test loop.
+
+        Parameters
+        ----------
+        iteration_context : IterationContext
+            The context used during testing. This controls the progress bar.
+        """
+
+        # Add a description to the progress bar
+        iteration_context.set_description("Testing")
 
         # Run the test loop
         with torch.no_grad():
@@ -780,10 +791,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
                     break
 
                 # Update the progress bar
-                pbar.update(1)
+                iteration_context.step()
 
             to_log = self._get_log_stats(tensordict_data, train=False)
             self.settings.stat_logger.log(to_log)
-
-        # Close the progress bar
-        pbar.close()
