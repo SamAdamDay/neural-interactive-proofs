@@ -2,10 +2,14 @@
 
 from abc import ABC, abstractmethod
 from contextlib import ExitStack
-from typing import ContextManager
+from typing import ContextManager, Callable, Optional
+import functools
+import inspect
 
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
+
+from tqdm import tqdm
 
 from pvg.parameters import Parameters
 from pvg.scenario_instance import ScenarioInstance
@@ -155,3 +159,124 @@ class Trainer(ABC):
         add_context_manager(torch.no_grad())
 
         return context_managers
+
+    def get_total_num_iterations(self) -> int:
+        """Get the total number of iterations that the trainer will run for.
+
+        This is the sum of the number of iterations declared by methods decorated with
+        `attach_progress_bar`.
+
+        Returns
+        -------
+        total_iterations : int
+            The total number of iterations.
+        """
+        total_iterations = 0
+        for _, method in inspect.getmembers(self, predicate=inspect.ismethod):
+            if hasattr(method, "_num_iterations_func"):
+                total_iterations += method._num_iterations_func(self)
+        return total_iterations
+
+
+class IterationContext:
+    """Context manager for methods that run for a certain number of iterations.
+
+    This context manager should be used in conjunction with the `attach_progress_bar`
+    decorator. It manages the progress bar and ensures that the correct number of
+    iterations are run.
+
+    Parameters
+    ----------
+    trainer : Trainer
+        The trainer instance that the method is called on.
+    num_iterations : int
+        The number of iterations that the method should run for.
+    """
+
+    def __init__(self, trainer: Trainer, num_iterations: int):
+        self.trainer = trainer
+        self.num_iterations = num_iterations
+        self.progress_bar: Optional[tqdm] = None
+
+    def __enter__(self):
+        self.progress_bar = self.trainer.settings.tqdm_func(total=self.num_iterations)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.progress_bar.close()
+
+    def set_description(self, description: str):
+        """Set the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            The description to set.
+        """
+        self.progress_bar.set_description(description)
+
+    def step(self):
+        """Step the progress bar by one iteration."""
+        self.progress_bar.update(1)
+        self.trainer.settings.global_tqdm_step_fn()
+
+
+def attach_progress_bar(
+    num_iterations_func: Callable[[Trainer], int]
+) -> Callable[[Callable], Callable]:
+    """Decorator to attach a progress bar to a Trainer method.
+
+    Decorate a method of a `Trainer` subclass with this decorator to have it run with a
+    progress bar and declare the number of iterations that it runs for.
+
+    The supplied function should take a Trainer instance as input and return the number
+    of iterations.
+
+    The intention is that once a `Trainer` subclass is instantiated, the number of
+    iterations can be determined using `num_iterations_func`.
+
+    This decorator wraps the decorated method in an `IterationContext` and assigns the
+    `iteration_context` keyword argument to this context. This allows the method to
+    interact with the progress bar and access the number of iterations.
+
+    Note
+    ----
+    The number of iterations must be calculable as soon as the Trainer subclass is
+    instantiated, so it should not depend on any other state.
+
+    Parameters
+    ----------
+    num_iterations_func : Callable[[Trainer], int]
+        A function that takes a Trainer instance as input and returns the number of
+        iterations which the decorated method will run for.
+
+    Returns
+    -------
+    decorator : Callable[[Callable], Callable]
+        The decorator to apply to the method of a Trainer subclass.
+
+    Example
+    -------
+    >>> class MyTrainer(Trainer):
+    ...     @attach_progress_bar(lambda self: self.params.num_iterations)
+    ...     def train(self, iteration_context: IterationContext):
+    ...         for i in range(iteration_context.num_iterations):
+    ...             iteration_context.step()
+    """
+
+    def decorator(method: Callable) -> Callable:
+        @functools.wraps(method)
+        def wrapper(trainer: Trainer, *args, **kwargs):
+            num_iterations = num_iterations_func(trainer)
+            with IterationContext(trainer, num_iterations) as iteration_context:
+                return method(
+                    trainer, iteration_context=iteration_context, *args, **kwargs
+                )
+
+        # Attach the number of iterations function to the wrapper so that it can be
+        # accessed later.
+        wrapper._num_iterations_func = num_iterations_func
+
+        return wrapper
+
+    return decorator

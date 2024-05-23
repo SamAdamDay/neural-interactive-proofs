@@ -34,6 +34,7 @@ from pvg import (
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
+    ExperimentFunctionArguments,
 )
 
 MULTIPROCESS = True
@@ -94,21 +95,7 @@ param_grid = dict(
 )
 
 
-def experiment_fn(
-    combo: dict,
-    run_id: str,
-    cmd_args: Namespace,
-    tqdm_func: callable,
-    logger: logging.Logger,
-):
-    logger.info(f"Starting run {run_id}")
-    logger.debug(f"Combo: {combo}")
-
-    device = torch.device(f"cuda:{cmd_args.gpu_num}")
-
-    # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
-    if logger.level > logging.DEBUG:
-        os.environ["WANDB_SILENT"] = "true"
+def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
 
     # Set the pretrain_agents flag. This can be forced to False with the --no-pretrain
     # flag.
@@ -206,10 +193,29 @@ def experiment_fn(
         seed=combo["seed"],
     )
 
+    return params
+
+
+def experiment_fn(arguments: ExperimentFunctionArguments):
+    combo = arguments.combo
+    cmd_args = arguments.cmd_args
+    logger = arguments.child_logger_adapter
+
+    logger.info(f"Starting run {arguments.run_id}")
+    logger.debug(f"Combo: {combo}")
+
+    device = torch.device(f"cuda:{cmd_args.gpu_num}")
+
+    # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
+    if logger.level > logging.DEBUG:
+        os.environ["WANDB_SILENT"] = "true"
+
     if cmd_args.use_wandb:
         wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
     else:
         wandb_tags = []
+
+    params = _construct_params(combo, cmd_args)
 
     # Train and test the agents
     run_experiment(
@@ -218,13 +224,14 @@ def experiment_fn(
         dataset_on_device=cmd_args.dataset_on_device,
         enable_efficient_attention=cmd_args.enable_efficient_attention,
         logger=logger,
-        tqdm_func=tqdm_func,
+        tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
         wandb_project=cmd_args.wandb_project,
         wandb_entity=cmd_args.wandb_entity,
-        run_id=run_id,
+        run_id=arguments.run_id,
         wandb_tags=wandb_tags,
+        global_tqdm_step_fn=arguments.global_tqdm_step_fn,
     )
 
 
@@ -233,12 +240,8 @@ def run_id_fn(combo_index: int, cmd_args: Namespace):
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace):
-    params = Parameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=combo["trainer"],
-        dataset=combo["dataset_name"],
-    )
-    prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    params = _construct_params(combo, cmd_args)
+    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 
 
 if __name__ == "__main__":

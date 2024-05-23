@@ -21,6 +21,7 @@ from pvg import (
     SpgVariant,
     Guess,
     run_experiment,
+    prepare_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
@@ -91,6 +92,10 @@ def run(cmd_args: Namespace):
         pretrain_agents=False,
     )
 
+    # Prepare the experiment if necessary
+    if cmd_args.prepare_experiment:
+        prepare_experiment(params)
+
     # Train and test the agents
     if cmd_args.use_wandb and cmd_args.run_id != "" and cmd_args.run_id is not None:
         run_id = cmd_args.run_id
@@ -137,6 +142,11 @@ if __name__ == "__main__":
         type=str,
         help="The name of the W&B entity to use",
         default=WANDB_ENTITY,
+    )
+    parser.add_argument(
+        "--prepare-experiment",
+        action="store_true",
+        help="Whether to prepare the experiment before running it",
     )
     args = parser.parse_args()
 

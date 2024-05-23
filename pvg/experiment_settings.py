@@ -63,6 +63,10 @@ class ExperimentSettings:
         dot-product attention. There may be a bug in this implementation which causes
         NaNs to appear in the backward pass. See
         https://github.com/pytorch/pytorch/issues/119320 for more information.
+    global_tqdm_step_fn : Callable, default=lambda: ...
+        A function to step the global tqdm progress bar. This is used when there are
+        multiple processes running in parallel and each process needs to update the
+        global progress bar.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -85,6 +89,7 @@ class ExperimentSettings:
     pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
+    global_tqdm_step_fn: callable = lambda: ...
     test_run: bool = False
 
     def __post_init__(self):

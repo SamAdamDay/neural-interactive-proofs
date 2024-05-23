@@ -1,7 +1,5 @@
 """Utilities related to outputting things to the user."""
 
-from typing import Iterable
-
 
 class DummyTqdm:
     """A dummy tqdm class, to avoid printing progress bars.
@@ -31,4 +29,7 @@ class DummyTqdm:
         pass
 
     def close(self):
+        pass
+
+    def set_description(self, *args):
         pass

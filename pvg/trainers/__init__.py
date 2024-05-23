@@ -7,7 +7,7 @@ from pvg.parameters import Parameters
 from pvg.scenario_instance import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 
-from .base import Trainer
+from .base import Trainer, IterationContext, attach_progress_bar
 from .rl_trainer_base import ReinforcementLearningTrainer
 from .vanilla_ppo import VanillaPpoTrainer
 from .solo_agent import SoloAgentTrainer
