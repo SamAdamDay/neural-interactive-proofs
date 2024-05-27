@@ -45,6 +45,7 @@ param_grid = dict(
     num_iterations=[5000],
     num_epochs=[10],
     minibatch_size=[256],
+    frames_per_batch=[1024],
     gamma=[0.95],
     lmbda=[0.95],
     ppo_loss_type=[PpoLossType.CLIP],
@@ -60,14 +61,14 @@ param_grid = dict(
     lr=[0.0003],
     anneal_lr=[False],
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    prover_convs_per_group=[1],
-    prover_num_decider_layers=[1],
+    prover_convs_per_group=[4],
+    prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     verifier_convs_per_group=[1],
-    verifier_num_decider_layers=[1],
+    verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     num_conv_groups=[1],
-    initial_num_channels=[1],
+    initial_num_channels=[16],
     random_prover=[False],
     pretrain_agents=[False],
     binarification_method=[BinarificationMethodType.MERGE],
@@ -90,7 +91,7 @@ param_grid = dict(
     min_message_rounds=[2],
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
-    update_spec=[(25, 25)],
+    update_spec=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -143,6 +144,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             prover=prover_params,
         ),
         rl=RlTrainerParameters(
+            frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
             num_epochs=combo["num_epochs"],
             minibatch_size=combo["minibatch_size"],
