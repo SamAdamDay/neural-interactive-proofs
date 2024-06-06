@@ -79,7 +79,7 @@ param_grid = dict(
     use_batch_norm=[False],
     random_prover=[False],
     use_shared_body=[False],
-    pretrain_agents=[True],
+    pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
     spg_variant=[SpgVariant.SPG],
     stackelberg_sequence=[(("verifier",), ("prover",))],
@@ -96,7 +96,7 @@ param_grid = dict(
     max_message_rounds=[8],
     verifier_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
-    update_spec=[(25, 25)],
+    update_spec=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
