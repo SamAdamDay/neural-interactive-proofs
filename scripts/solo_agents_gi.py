@@ -51,22 +51,8 @@ param_grid = dict(
 )
 
 
-def experiment_fn(arguments: ExperimentFunctionArguments):
-    combo = arguments.combo
-    cmd_args = arguments.cmd_args
-    logger = arguments.child_logger_adapter
-
-    logger.info(f"Starting run {arguments.run_id}")
-    logger.debug(f"Combo: {combo}")
-
-    device = torch.device(f"cuda:{cmd_args.gpu_num}")
-
-    # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
-    if logger.level > logging.DEBUG:
-        os.environ["WANDB_SILENT"] = "true"
-
-    # Create the parameters object
-    params = Parameters(
+def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+    return Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
@@ -92,10 +78,27 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         seed=combo["seed"],
     )
 
+
+def experiment_fn(arguments: ExperimentFunctionArguments):
+    combo = arguments.combo
+    cmd_args = arguments.cmd_args
+    logger = arguments.child_logger_adapter
+
+    logger.info(f"Starting run {arguments.run_id}")
+    logger.debug(f"Combo: {combo}")
+
+    device = torch.device(f"cuda:{cmd_args.gpu_num}")
+
+    # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
+    if logger.level > logging.DEBUG:
+        os.environ["WANDB_SILENT"] = "true"
+
     if cmd_args.use_wandb:
         wandb_tags = [cmd_args.tag] if cmd_args.tag != "" else []
     else:
         wandb_tags = []
+
+    params = _construct_params(combo, cmd_args)
 
     # Train and test the agents
     run_experiment(
@@ -118,11 +121,7 @@ def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.SOLO_AGENT,
-        dataset=combo["dataset_name"],
-    )
+    params = _construct_params(combo, cmd_args)
     return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 
 
