@@ -30,6 +30,7 @@ from pvg import (
     Guess,
     run_experiment,
     prepare_experiment,
+    PreparedExperimentInfo,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
@@ -223,9 +224,9 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     run_experiment(
         params,
         device=device,
+        logger=logger,
         dataset_on_device=cmd_args.dataset_on_device,
         enable_efficient_attention=cmd_args.enable_efficient_attention,
-        logger=logger,
         tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
@@ -237,11 +238,11 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     )
 
 
-def run_id_fn(combo_index: int, cmd_args: Namespace):
+def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
     return f"ppo_ic_{cmd_args.run_infix}_{combo_index}"
 
 
-def run_preparer_fn(combo: dict, cmd_args: Namespace):
+def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     params = _construct_params(combo, cmd_args)
     return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 
