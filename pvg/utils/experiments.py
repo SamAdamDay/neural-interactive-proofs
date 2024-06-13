@@ -687,6 +687,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             cmd_args.num_workers, max_tasks_per_child=cmd_args.max_tasks_per_child
         )
 
-        with tqdm(total=total_iterations, dynamic_ncols=True) as global_progress:
+        with tqdm(
+            total=total_iterations, dynamic_ncols=True, miniters=1, smoothing=0.1
+        ) as global_progress:
             global_progress.set_description("Total progress")
             pool.map(global_progress, tasks, lambda x: None, lambda x: None)
