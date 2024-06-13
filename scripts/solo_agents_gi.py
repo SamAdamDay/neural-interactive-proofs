@@ -24,12 +24,13 @@ from pvg import (
     TrainerType,
     run_experiment,
     prepare_experiment,
+    PreparedExperimentInfo,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
+    ExperimentFunctionArguments,
 )
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 MULTIPROCESS = True
 TEST_SIZE = 0.2
@@ -50,14 +51,12 @@ param_grid = dict(
 )
 
 
-def experiment_fn(
-    combo: dict,
-    run_id: str,
-    cmd_args: Namespace,
-    tqdm_func: Callable,
-    logger: logging.Logger,
-):
-    logger.info(f"Starting run {run_id}")
+def experiment_fn(arguments: ExperimentFunctionArguments):
+    combo = arguments.combo
+    cmd_args = arguments.cmd_args
+    logger = arguments.child_logger_adapter
+
+    logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
 
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
@@ -103,27 +102,28 @@ def experiment_fn(
         params,
         device=device,
         logger=logger,
-        tqdm_func=tqdm_func,
+        tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
         wandb_project=cmd_args.wandb_project,
         wandb_entity=cmd_args.wandb_entity,
-        run_id=run_id,
+        run_id=arguments.run_id,
         wandb_tags=wandb_tags,
+        global_tqdm_step_fn=arguments.global_tqdm_step_fn,
     )
 
 
-def run_id_fn(combo_index: int, cmd_args: Namespace):
+def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
     return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
 
 
-def run_preparer_fn(combo: dict, cmd_args: Namespace):
+def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
     )
-    prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 
 
 if __name__ == "__main__":

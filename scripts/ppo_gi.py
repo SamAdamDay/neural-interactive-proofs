@@ -27,6 +27,7 @@ from pvg import (
     AlternatingPeriodicUpdateSchedule,
     run_experiment,
     prepare_experiment,
+    PreparedExperimentInfo,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
@@ -265,11 +266,11 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     )
 
 
-def run_id_fn(combo_index: int, cmd_args: Namespace):
+def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
     return f"ppo_gi_{cmd_args.run_infix}_{combo_index}"
 
 
-def run_preparer_fn(combo: dict, cmd_args: Namespace):
+def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     params = _construct_params(combo, cmd_args)
     return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 

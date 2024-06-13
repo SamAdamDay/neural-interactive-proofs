@@ -23,12 +23,13 @@ from pvg import (
     BinarificationMethodType,
     run_experiment,
     prepare_experiment,
+    PreparedExperimentInfo,
 )
 from pvg.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
+    ExperimentFunctionArguments,
 )
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 
 MULTIPROCESS = True
 TEST_SIZE = 0.2
@@ -36,16 +37,16 @@ TEST_SIZE = 0.2
 param_grid = dict(
     dataset_name=["svhn"],
     num_epochs=[50],
-    batch_size=[256],
+    batch_size=[2],
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
     no_body_lr_factor=[True],
-    prover_convs_per_group=[4],
-    prover_num_decider_layers=[3],
+    prover_convs_per_group=[1],
+    prover_num_decider_layers=[1],
     verifier_convs_per_group=[1],
-    verifier_num_decider_layers=[2],
+    verifier_num_decider_layers=[1],
     num_conv_groups=[1],
-    initial_num_channels=[16],
+    initial_num_channels=[1],
     binarification_method=[BinarificationMethodType.MERGE],
     binarification_seed=[None],
     selected_classes=[None],
@@ -53,14 +54,12 @@ param_grid = dict(
 )
 
 
-def experiment_fn(
-    combo: dict,
-    run_id: str,
-    cmd_args: Namespace,
-    tqdm_func: Callable,
-    logger: logging.Logger,
-):
-    logger.info(f"Starting run {run_id}")
+def experiment_fn(arguments: ExperimentFunctionArguments):
+    combo = arguments.combo
+    cmd_args = arguments.cmd_args
+    logger = arguments.child_logger_adapter
+
+    logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
 
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
@@ -112,27 +111,29 @@ def experiment_fn(
         params,
         device=device,
         logger=logger,
-        tqdm_func=tqdm_func,
+        dataset_on_device=cmd_args.dataset_on_device,
+        tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
         wandb_project=cmd_args.wandb_project,
         wandb_entity=cmd_args.wandb_entity,
-        run_id=run_id,
+        run_id=arguments.run_id,
         wandb_tags=wandb_tags,
+        global_tqdm_step_fn=arguments.global_tqdm_step_fn,
     )
 
 
-def run_id_fn(combo_index: int, cmd_args: Namespace):
+def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
     return f"test_solo_ic_agents_{cmd_args.run_infix}_{combo_index}"
 
 
-def run_preparer_fn(combo: dict, cmd_args: Namespace):
+def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
     )
-    prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
 
 
 if __name__ == "__main__":
@@ -151,4 +152,12 @@ if __name__ == "__main__":
         experiment_name="TEST_SOLO_IC_AGENTS",
         **extra_args,
     )
+
+    experiment.parser.add_argument(
+        "--dataset-on-device",
+        action="store_true",
+        dest="dataset_on_device",
+        help="Store the whole dataset on the device (needs more GPU memory).",
+    )
+
     experiment.run()
