@@ -74,7 +74,7 @@ from pvg.utils.torch import (
     TensorDictPrint,
 )
 from pvg.utils.types import TorchDevice
-from pvg.image_classification.data import IMAGE_DATASETS
+from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 
 
 IC_SCENARIO = ScenarioType.IMAGE_CLASSIFICATION
@@ -115,9 +115,9 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         self.initial_num_channels = (
             self.params.image_classification.initial_num_channels
         )
-        self.dataset_num_channels = IMAGE_DATASETS[params.dataset].num_channels
-        self.image_width = IMAGE_DATASETS[params.dataset].width
-        self.image_height = IMAGE_DATASETS[params.dataset].height
+        self.dataset_num_channels = DATASET_WRAPPER_CLASSES[params.dataset].num_channels
+        self.image_width = DATASET_WRAPPER_CLASSES[params.dataset].width
+        self.image_height = DATASET_WRAPPER_CLASSES[params.dataset].height
         self.latent_width = self.image_width // 2**self.num_conv_groups
         self.latent_height = self.image_height // 2**self.num_conv_groups
         self.latent_num_channels = 2**self.num_conv_groups * self.initial_num_channels

@@ -1,11 +1,11 @@
 import os
-from dataclasses import dataclass
 from typing import Optional
+from abc import ABC
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader
 
-import torchvision
 from torchvision.datasets import (
     VisionDataset,
     MNIST,
@@ -27,26 +27,122 @@ from pvg.scenario_base import Dataset
 from pvg.constants import IC_DATA_DIR
 
 
-class TestDataset(FakeData):
-    """A fake dataset for testing."""
+class TorchVisionDatasetWrapper(ABC):
+    """A wrapper for TorchVision datasets, implementing a common interface.
+
+    Derived classes should defined the class attributes below.
+
+    Class attributes
+    ----------------
+    data_class : type[VisionDataset]
+        The TorchVision dataset class.
+    num_channels : int
+        The number of channels of the images in the dataset.
+    width : int
+        The width of the images in the dataset.
+    height : int
+        The height of the images in the dataset.
+    selected_classes : tuple[int, int]
+        When selecting two classes from the original dataset, the default two to select.
+    binarification_seed : int
+        The seed used when doing a randomised binarification.
+    """
+
+    num_channels: int
+    width: int
+    height: int
+    selected_classes: tuple[int, int] = (0, 1)
+    binarification_seed: int = 0
 
     def __init__(
         self,
-        root=None,
-        train=None,
-        transform=None,
-        target_transform=None,
-        download=None,
+        root: str | Path,
+        train: bool = True,
+        transform: Optional[callable] = None,
+        target_transform: Optional[callable] = None,
+        download: bool = False,
+    ):
+        pass
+
+
+DATASET_WRAPPER_CLASSES: dict[str, type[TorchVisionDatasetWrapper]] = {}
+
+
+def register_dataset_wrapper_class(dataset_name: str) -> callable:
+    """Decorator to register a dataset wrapper class."""
+
+    def decorator(
+        wrapper_class: type[TorchVisionDatasetWrapper],
+    ) -> type[TorchVisionDatasetWrapper]:
+        DATASET_WRAPPER_CLASSES[dataset_name] = wrapper_class
+        return wrapper_class
+
+    return decorator
+
+
+@register_dataset_wrapper_class("test")
+class TestDataset(FakeData, TorchVisionDatasetWrapper):
+    """A fake dataset for testing."""
+
+    num_channels = 1
+    width = 28
+    height = 28
+
+    def __init__(
+        self,
+        root: str | Path,
+        train: bool = True,
+        transform: Optional[callable] = None,
+        target_transform: Optional[callable] = None,
+        download: bool = False,
     ):
         super().__init__(
-            image_size=(1, 28, 28),
+            image_size=(self.num_channels, self.width, self.height),
             num_classes=2,
             transform=transform,
             target_transform=target_transform,
         )
 
 
-class SVHNTrainParameter(SVHN):
+@register_dataset_wrapper_class("mnist")
+class MnistDatasetWrapper(MNIST, TorchVisionDatasetWrapper):
+    num_channels = 1
+    width = 28
+    height = 28
+
+
+@register_dataset_wrapper_class("fashion_mnist")
+class FashionMnistDatasetWrapper(FashionMNIST, MnistDatasetWrapper):
+    pass
+
+
+@register_dataset_wrapper_class("kmnist")
+class KmnistDatasetWrapper(KMNIST, MnistDatasetWrapper):
+    pass
+
+
+@register_dataset_wrapper_class("cifar10")
+class Cifar10DatasetWrapper(CIFAR10, TorchVisionDatasetWrapper):
+    num_channels = 3
+    width = 32
+    height = 32
+    selected_classes = (3, 5)
+
+
+@register_dataset_wrapper_class("cifar100")
+class Cifar100DatasetWrapper(CIFAR100, TorchVisionDatasetWrapper):
+    num_channels = 3
+    width = 32
+    height = 32
+
+
+@register_dataset_wrapper_class("svhn")
+class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
+    num_channels = 3
+    width = 32
+    height = 32
+    binarification_seed = 2
+
     def __init__(
         self,
         root: str,
@@ -65,82 +161,6 @@ class SVHNTrainParameter(SVHN):
         )
 
 
-@dataclass
-class TorchVisionDatasetProperties:
-    """Details of a TorchVision image dataset.
-
-    Parameters
-    ----------
-    data_class : type[VisionDataset]
-        The TorchVision dataset class.
-    num_channels : int
-        The number of channels of the images in the dataset.
-    width : int
-        The width of the images in the dataset.
-    height : int
-        The height of the images in the dataset.
-    selected_classes : tuple[int, int]
-        When selecting two classes from the original dataset, the default two to select.
-    binarification_seed : int
-        The seed used when doing a randomised binarification.
-    """
-
-    data_class: type[VisionDataset]
-    num_channels: int
-    width: int
-    height: int
-    selected_classes: tuple[int, int] = (0, 1)
-    binarification_seed: int = 0
-
-
-IMAGE_DATASETS: dict[str, TorchVisionDatasetProperties] = dict(
-    test=TorchVisionDatasetProperties(
-        data_class=TestDataset,
-        num_channels=1,
-        width=28,
-        height=28,
-    ),
-    mnist=TorchVisionDatasetProperties(
-        data_class=MNIST,
-        num_channels=1,
-        width=28,
-        height=28,
-    ),
-    fashion_mnist=TorchVisionDatasetProperties(
-        data_class=FashionMNIST,
-        num_channels=1,
-        width=28,
-        height=28,
-    ),
-    cifar10=TorchVisionDatasetProperties(
-        data_class=CIFAR10,
-        num_channels=3,
-        width=32,
-        height=32,
-        selected_classes=(3, 5),
-    ),
-    cifar100=TorchVisionDatasetProperties(
-        data_class=CIFAR100,
-        num_channels=3,
-        width=32,
-        height=32,
-    ),
-    kmnist=TorchVisionDatasetProperties(
-        data_class=KMNIST,
-        num_channels=1,
-        width=28,
-        height=28,
-    ),
-    svhn=TorchVisionDatasetProperties(
-        data_class=SVHNTrainParameter,
-        num_channels=3,
-        width=32,
-        height=32,
-        binarification_seed=2,
-    ),
-)
-
-
 @register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
 class ImageClassificationDataset(Dataset):
     """A dataset for the image classification task.
@@ -154,7 +174,7 @@ class ImageClassificationDataset(Dataset):
 
     def _build_tensor_dict(self) -> TensorDict:
         # Load the dataset
-        dataset_class = IMAGE_DATASETS[self.params.dataset].data_class
+        dataset_class = DATASET_WRAPPER_CLASSES[self.params.dataset]
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -283,7 +303,7 @@ class ImageClassificationDataset(Dataset):
         if self.params.dataset_options.binarification_seed is not None:
             return self.params.dataset_options.binarification_seed
         else:
-            return IMAGE_DATASETS[self.params.dataset].binarification_seed
+            return DATASET_WRAPPER_CLASSES[self.params.dataset].binarification_seed
 
     @property
     def selected_classes(self) -> tuple[int, int]:
@@ -291,4 +311,4 @@ class ImageClassificationDataset(Dataset):
         if self.params.dataset_options.selected_classes is not None:
             return self.params.dataset_options.selected_classes
         else:
-            return IMAGE_DATASETS[self.params.dataset].selected_classes
+            return DATASET_WRAPPER_CLASSES[self.params.dataset].selected_classes

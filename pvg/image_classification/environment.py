@@ -21,7 +21,7 @@ from jaxtyping import Float, Int
 from pvg.parameters import ScenarioType
 from pvg.scenario_base import Environment
 from pvg.scenario_instance import register_scenario_class
-from pvg.image_classification.data import IMAGE_DATASETS
+from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 
 
 @register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Environment)
@@ -55,15 +55,15 @@ class ImageClassificationEnvironment(Environment):
 
     @property
     def dataset_num_channels(self):
-        return IMAGE_DATASETS[self.params.dataset].num_channels
+        return DATASET_WRAPPER_CLASSES[self.params.dataset].num_channels
 
     @property
     def image_width(self):
-        return IMAGE_DATASETS[self.params.dataset].width
+        return DATASET_WRAPPER_CLASSES[self.params.dataset].width
 
     @property
     def image_height(self):
-        return IMAGE_DATASETS[self.params.dataset].height
+        return DATASET_WRAPPER_CLASSES[self.params.dataset].height
 
     @property
     def latent_width(self):
