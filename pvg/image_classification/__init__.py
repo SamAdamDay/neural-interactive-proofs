@@ -1,8 +1,7 @@
 """All components for the image classification task."""
 
 from .data import (
-    IMAGE_DATASETS,
-    TorchVisionDatasetProperties,
+    DATASET_WRAPPER_CLASSES,
     ImageClassificationDataset,
 )
 from .agents import (
