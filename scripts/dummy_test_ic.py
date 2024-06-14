@@ -20,6 +20,7 @@ from pvg import (
     PpoLossType,
     SpgVariant,
     Guess,
+    ImageClassificationParameters,
     run_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
@@ -39,7 +40,7 @@ def run(cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.VANILLA_PPO,
-        dataset="svhn",
+        dataset="mnist",
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
                 d_latent_pixel_selector=1,
@@ -47,6 +48,7 @@ def run(cmd_args: Namespace):
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                num_convs_per_group=1,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
                 ortho_init=False,
@@ -57,10 +59,15 @@ def run(cmd_args: Namespace):
                 num_decider_layers=1,
                 d_value=1,
                 num_value_layers=1,
+                num_convs_per_group=1,
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
                 ortho_init=False,
             ),
+        ),
+        image_classification=ImageClassificationParameters(
+            num_conv_groups=1,
+            initial_num_channels=1,
         ),
         rl=RlTrainerParameters(
             num_iterations=100,
@@ -74,11 +81,6 @@ def run(cmd_args: Namespace):
         ),
         spg=SpgParameters(
             variant=SpgVariant.PSOS,
-            # stackelberg_sequence=combo["stackelberg_sequence"],
-            # ihvp_variant=combo["ihvp_variant"],
-            # ihvp_num_iterations=combo["ihvp_num_iterations"],
-            # ihvp_rank=combo["ihvp_rank"],
-            # ihvp_rho=combo["ihvp_rho"],
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,

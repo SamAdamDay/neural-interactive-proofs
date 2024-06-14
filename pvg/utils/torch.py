@@ -416,7 +416,7 @@ class TensorDictCat(TensorDictModuleBase):
 
     Parameters
     ----------
-    in_keys : NestedKey | Iterable[NestedKey]
+    in_keys : Iterable[NestedKey]
         The keys to concatenate.
     out_key : NestedKey
         The key of the concatenated tensor.
@@ -424,9 +424,7 @@ class TensorDictCat(TensorDictModuleBase):
         The dimension to concatenate over.
     """
 
-    def __init__(
-        self, in_keys: NestedKey | Iterable[NestedKey], out_key: NestedKey, dim=0
-    ):
+    def __init__(self, in_keys: Iterable[NestedKey], out_key: NestedKey, dim=0):
         super().__init__()
         self.in_keys = in_keys
         self.out_keys = (out_key,)
@@ -752,12 +750,15 @@ class TensorDictPrint(TensorDictModuleBase):
         The keys to print.
     name : str, default=None
         The name of the tensordict, which will be printed before the keys.
+    print_nan_proportion : bool, default=False
+        Whether to print the proportion of NaN values in the tensors.
     """
 
     def __init__(
         self,
         keys: NestedKey | Iterable[NestedKey],
         name: Optional[str] = None,
+        print_nan_proportion: bool = False,
     ):
         super().__init__()
         self.name = name
@@ -767,13 +768,16 @@ class TensorDictPrint(TensorDictModuleBase):
             keys = (keys,)
         self.in_keys = keys
         self.out_keys = keys
+        self.print_nan_proportion = print_nan_proportion
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.name is not None:
             print(f"{type(self).__name__} {self.name!r}:")
         for key in self.in_keys:
-            print(
-                f"{key}: ({tensordict[key].shape}), NaN proportion: "
-                f"{tensordict[key].isnan().float().mean()!s}"
-            )
+            to_print = f"{key}: ({tensordict[key].shape})"
+            if self.print_nan_proportion:
+                to_print += (
+                    f", NaN proportion: {tensordict[key].isnan().float().mean()!s}"
+                )
+            print(to_print)
         return tensordict
