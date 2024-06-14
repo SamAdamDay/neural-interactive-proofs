@@ -21,6 +21,7 @@ from .parameters import (
     PpoLossType,
     ActivationType,
     BinarificationMethodType,
+    ImageBuildingBlockType,
     SpgVariant,
     IhvpVariant,
     Guess,
