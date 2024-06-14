@@ -1,6 +1,7 @@
 """The image classification RL environment."""
 
 from typing import Optional
+from math import floor
 
 import torch
 from torch import Tensor
@@ -66,11 +67,17 @@ class ImageClassificationEnvironment(Environment):
 
     @property
     def latent_width(self):
-        return self.image_width // 2**self.num_conv_groups
+        latent_width = self.image_width
+        for _ in range(self.num_conv_groups):
+            latent_width = floor(latent_width / 2)
+        return latent_width
 
     @property
     def latent_height(self):
-        return self.image_height // 2**self.num_conv_groups
+        latent_height = self.image_height
+        for _ in range(self.num_conv_groups):
+            latent_height = floor(latent_height / 2)
+        return latent_height
 
     @property
     def latent_num_channels(self):

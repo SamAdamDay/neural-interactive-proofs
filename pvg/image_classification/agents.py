@@ -200,8 +200,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     def build_message_history_upsampler(self) -> TensorDictModule:
         """Build the module which upsamples the history and message.
 
-        The message history is upsampled to the size of the image, and the message is
-        upsampled to the twice the size of the latent pixel-level representations.
+        The message history is upsampled to the size of the image.
 
         Shapes
         ------
@@ -291,38 +290,25 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         cnn_encoder : TensorDictSequential
             The sequence of groups of convolutional layers.
         """
-        cnn_encoder = []
-        for i in range(self.num_conv_groups):
-            # Add the message as a new channel before the last group
-            if i == self.num_conv_groups - 1:
-                cnn_encoder.append(
-                    TensorDictCat(
-                        in_keys=("latent_pixel_level_repr", "message_image"),
-                        out_key="latent_pixel_level_repr",
-                        dim=-3,
-                    )
-                )
 
+        cnn_encoder = []
+
+        for group_index in range(self.num_conv_groups):
             # Add the convolutional layers
-            for j in range(self._agent_params.num_convs_per_group):
-                # Determine the number of input channels. In all groups except the last
-                # the number of input channels is the same as the number of output
-                # channels of the previous group. In the last group we add the message
-                # as a new channel.
-                if j == 0:
-                    if i == self.num_conv_groups - 1:
-                        in_channels = 2**i * self.initial_num_channels + 1
-                    else:
-                        in_channels = 2**i * self.initial_num_channels
+            for conv_index in range(self._agent_params.num_convs_per_group):
+                # Determine the number of input and output channels.
+                if conv_index == 0:
+                    in_channels = 2**group_index * self.initial_num_channels
                 else:
-                    in_channels = 2 ** (i + 1) * self.initial_num_channels
+                    in_channels = 2 ** (group_index + 1) * self.initial_num_channels
+                out_channels = 2 ** (group_index + 1) * self.initial_num_channels
 
                 # Add the convolutional layer and non-linearity
                 cnn_encoder.append(
                     TensorDictModule(
                         Conv2dSimulateBatchDims(
                             in_channels=in_channels,
-                            out_channels=2 ** (i + 1) * self.initial_num_channels,
+                            out_channels=out_channels,
                             kernel_size=self._agent_params.kernel_size,
                             stride=self._agent_params.stride,
                             padding="same",
@@ -356,11 +342,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+            - "latent_pixel_level_repr" : (... latent_num_channels+1 latent_height
             latent_width)
 
         Output:
-            - "image_level_repr" : (... latent_num_channels)
+            - "image_level_repr" : (... latent_num_channels+1)
 
         Returns
         -------
@@ -382,8 +368,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "image_level_repr" : (... latent_num_channels)
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+            - "image_level_repr" : (... latent_num_channels+1)
+            - "latent_pixel_level_repr" : (... latent_num_channels+1 latent_height
               latent_width)
 
         Output:
@@ -399,15 +385,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         return TensorDictSequential(
             TensorDictModule(
                 Rearrange(
-                    "... latent_num_channels latent_height latent_width -> "
-                    "... latent_height latent_width latent_num_channels"
+                    "... channel latent_height latent_width -> "
+                    "... latent_height latent_width channel"
                 ),
                 in_keys="latent_pixel_level_repr",
                 out_keys="latent_pixel_level_repr",
             ),
             ParallelTensorDictModule(
                 Linear(
-                    in_features=2**self.num_conv_groups * self.initial_num_channels,
+                    in_features=2**self.num_conv_groups * self.initial_num_channels + 1,
                     out_features=self.params.d_representation,
                 ),
                 in_keys=("image_level_repr", "latent_pixel_level_repr"),
@@ -426,8 +412,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             - "x" (... max_message_rounds latent_height latent_width): The message
               history
             - "image" (... num_channels height width): The image
-            - "message" (... latent_height latent_width), optional: The message most
-              recent message
+            - "message" (... latent_height latent_width), optional: The most recent
+              message
             - "ignore_message" (...), optional: Whether to ignore the message. For
               example, in the first round the there is no message, and the "message"
               field is set to a dummy value.
@@ -444,28 +430,24 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         if "message" in data.keys():
-            # Scale the message to size (... 1 2*latent_height 2*latent_width)
-            message_image = repeat(
+            # Add a channel dimension to the message
+            message = rearrange(
                 data["message"],
-                "... latent_height latent_width "
-                "-> ... 1 (latent_height 2) (latent_width 2)",
+                "... latent_height latent_width -> ... 1 latent_height latent_width",
             )
-
             # If the message is to be ignored, set it to zero
-            message_image = torch.where(
-                data["ignore_message"][..., None, None, None],
-                0,
-                message_image,
-            )
+            if "ignore_message" in data.keys():
+                message = torch.where(
+                    data["ignore_message"][..., None, None, None],
+                    0,
+                    message,
+                )
         else:
-            message_image = torch.zeros(
-                (*data.batch_size, 1, 2 * self.latent_height, 2 * self.latent_width),
+            message = torch.zeros(
+                (*data.batch_size, 1, self.latent_height, self.latent_width),
                 device=self.device,
                 dtype=torch.float,
             )
-
-        # Add the message image to the data tensor dict
-        data = data.update(dict(message_image=message_image))
 
         # Normalize the message history if necessary
         if self._agent_params.normalize_message_history:
@@ -481,6 +463,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         # Encode the image and message history using the CNN encoder
         data = self.cnn_encoder(data)
+
+        # Add the message to the latent pixel-level representations as a new channel
+        data["latent_pixel_level_repr"] = torch.cat(
+            (data["latent_pixel_level_repr"], message), dim=-3
+        )
 
         # Pool the latent pixel-level representations to obtain the image-level
         # representations
