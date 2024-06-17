@@ -21,6 +21,7 @@ from pvg import (
     ScenarioType,
     TrainerType,
     BinarificationMethodType,
+    ImageBuildingBlockType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -43,8 +44,10 @@ param_grid = dict(
     no_body_lr_factor=[True],
     prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
+    prover_block_type=[ImageBuildingBlockType.CONV2D],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
+    verifier_block_type=[ImageBuildingBlockType.CONV2D],
     num_block_groups=[1],
     initial_num_channels=[16],
     binarification_method=[BinarificationMethodType.MERGE],
@@ -63,10 +66,12 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             verifier=ImageClassificationAgentParameters(
                 num_blocks_per_group=combo["verifier_blocks_per_group"],
                 num_decider_layers=combo["verifier_num_decider_layers"],
+                building_block_type=combo["verifier_block_type"],
             ),
             prover=ImageClassificationAgentParameters(
                 num_blocks_per_group=combo["prover_blocks_per_group"],
                 num_decider_layers=combo["prover_num_decider_layers"],
+                building_block_type=combo["prover_block_type"],
             ),
         ),
         solo_agent=SoloAgentParameters(
