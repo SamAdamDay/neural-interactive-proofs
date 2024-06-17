@@ -54,6 +54,9 @@ RUN pip install --upgrade pip \
 # Apparently this is necessary to fully install primesieve
 RUN yes | pip uninstall primesieve && pip install --no-cache-dir primesieve
 
+# Download all the datasets used in the project
+RUN python scripts/download_all_datasets.py
+
 # Go back to the root
 WORKDIR /root
 
