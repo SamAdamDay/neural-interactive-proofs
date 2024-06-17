@@ -2,11 +2,16 @@
 
 from typing import Callable, Optional, Iterable
 from abc import abstractmethod
-from math import prod, nan
+from math import prod
 
 import torch
 from torch import Tensor
 import torch.nn as nn
+
+from torchvision.models.resnet import (
+    BasicBlock as BasicResNetBlock,
+    Bottleneck as BottleneckResNetBlock,
+)
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModuleBase
@@ -122,6 +127,30 @@ class MaxPool2dSimulateBatchDims(SimulateBatchDimsMixin, nn.MaxPool2d):
     """2D max pool layer with arbitrary batch dimensions.
 
     See `torch.nn.MaxPool2d` for documentation.
+
+    Assumes an input of shape (... channels height width).
+    """
+
+    feature_dims = 3
+
+
+class ResNetBasicBlockSimulateBatchDims(SimulateBatchDimsMixin, BasicResNetBlock):
+    """ResNet basic block with arbitrary batch dimensions.
+
+    See `torchvision.models.resnet.BasicBlock` for documentation.
+
+    Assumes an input of shape (... channels height width).
+    """
+
+    feature_dims = 3
+
+
+class ResNetBottleneckBlockSimulateBatchDims(
+    SimulateBatchDimsMixin, BottleneckResNetBlock
+):
+    """ResNet bottleneck block with arbitrary batch dimensions.
+
+    See `torchvision.models.resnet.Bottleneck` for documentation.
 
     Assumes an input of shape (... channels height width).
     """

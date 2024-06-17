@@ -21,6 +21,7 @@ from pvg import (
     ScenarioType,
     TrainerType,
     BinarificationMethodType,
+    ImageBuildingBlockType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -41,11 +42,13 @@ param_grid = dict(
     learning_rate=[0.001],
     learning_rate_scheduler=[None],
     no_body_lr_factor=[True],
-    prover_convs_per_group=[4],
+    prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
-    verifier_convs_per_group=[1],
+    prover_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
-    num_conv_groups=[1],
+    verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    num_block_groups=[1],
     initial_num_channels=[16],
     binarification_method=[BinarificationMethodType.MERGE],
     binarification_seed=[None],
@@ -61,12 +64,14 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
-                num_convs_per_group=combo["verifier_convs_per_group"],
+                num_blocks_per_group=combo["verifier_blocks_per_group"],
                 num_decider_layers=combo["verifier_num_decider_layers"],
+                building_block_type=combo["verifier_block_type"],
             ),
             prover=ImageClassificationAgentParameters(
-                num_convs_per_group=combo["prover_convs_per_group"],
+                num_blocks_per_group=combo["prover_blocks_per_group"],
                 num_decider_layers=combo["prover_num_decider_layers"],
+                building_block_type=combo["prover_block_type"],
             ),
         ),
         solo_agent=SoloAgentParameters(
@@ -76,7 +81,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             body_lr_factor_override=combo["no_body_lr_factor"],
         ),
         image_classification=ImageClassificationParameters(
-            num_conv_groups=combo["num_conv_groups"],
+            num_block_groups=combo["num_block_groups"],
             initial_num_channels=combo["initial_num_channels"],
         ),
         dataset_options=DatasetParameters(

@@ -46,8 +46,8 @@ class ImageClassificationEnvironment(Environment):
     _max_num_nodes: Optional[int] = None
 
     @property
-    def num_conv_groups(self):
-        return self.params.image_classification.num_conv_groups
+    def num_block_groups(self):
+        return self.params.image_classification.num_block_groups
 
     @property
     def initial_num_channels(self):
@@ -68,20 +68,20 @@ class ImageClassificationEnvironment(Environment):
     @property
     def latent_width(self):
         latent_width = self.image_width
-        for _ in range(self.num_conv_groups):
+        for _ in range(self.num_block_groups):
             latent_width = floor(latent_width / 2)
         return latent_width
 
     @property
     def latent_height(self):
         latent_height = self.image_height
-        for _ in range(self.num_conv_groups):
+        for _ in range(self.num_block_groups):
             latent_height = floor(latent_height / 2)
         return latent_height
 
     @property
     def latent_num_channels(self):
-        return 2**self.num_conv_groups * self.initial_num_channels
+        return 2**self.num_block_groups * self.initial_num_channels
 
     @property
     def _message_history_shape(self) -> tuple:

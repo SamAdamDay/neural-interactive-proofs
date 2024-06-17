@@ -244,7 +244,8 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                 agent_name=agent_name,
             )
 
-        # Initialize the relevant weights of the agent orthogonally (with zero bias) if specified
+        # Initialize the relevant weights of the agent orthogonally (with zero bias) if
+        # specified
         if agent_params.ortho_init:
             for name in agent_dict:
                 for module in agent_dict[name].modules():
@@ -253,6 +254,7 @@ def build_scenario_instance(params: Parameters, settings: ExperimentSettings):
                             torch.nn.init.orthogonal_(
                                 module.weight, gain=float(agent_params.ortho_init)
                             )
+                    if hasattr(module, "bias") and module.bias is not None:
                         torch.nn.init.constant_(module.bias, 0.0)
 
         agents[agent_name] = scenario_classes[Agent](

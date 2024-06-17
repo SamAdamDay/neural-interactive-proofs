@@ -191,6 +191,21 @@ class MinMessageRoundsSchedulerType(StrEnum):
     LINEAR_INCREASE_DECREASE = enum_auto()
 
 
+class ImageBuildingBlockType(StrEnum):
+    """Enum for the type of building block to use in the image classification network.
+
+    Enums
+    -----
+    CONV2D
+        A standard 2D convolutional layer.
+    RESIDUAL_BASIC
+        A basic residual block used in the ResNet architecture.
+    """
+
+    CONV2D = enum_auto()
+    RESIDUAL_BASIC = enum_auto()
+
+
 class AgentUpdateSchedule(ABC):
     """Base class for agent update schedules.
 
@@ -601,16 +616,22 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 class ImageClassificationAgentParameters(AgentParameters):
     """Additional parameters for agents in the image classification experiment.
 
+    An image classification network is composed of several groups of building blocks,
+    such as convolutional layers. Each group contains several building blocks.
+
     Parameters
     ----------
     activation_function : ActivationType
         The activation function to use.
-    num_convs_per_group : int
-        The number of convolutional layers in each group in the agents's CNN.
+    building_block_type : ImageBuildingBlockType
+        The type of building block to use in the agents's CNN (e.g. convolutional
+        layer).
+    num_blocks_per_group : int
+        The number of building blocks in each group in the agents's CNN.
     kernel_size : int
-        The kernel size of the convolutional layers in the agents's CNN.
+        The kernel size of the building blocks in the agents's CNN.
     stride : int
-        The stride of the convolutional layers in the agents's CNN.
+        The stride of the building blocks in the agents's CNN.
     d_latent_pixel_selector : int
         The dimension of the hidden layer in the agents's MLP which selects a latent
         pixel to send as a message.
@@ -634,7 +655,8 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     activation_function: ActivationType = ActivationType.TANH
 
-    num_convs_per_group: int = 2
+    building_block_type: ImageBuildingBlockType = ImageBuildingBlockType.CONV2D
+    num_blocks_per_group: int = 2
     kernel_size: int = 3
     stride: int = 1
 
@@ -652,7 +674,8 @@ class ImageClassificationAgentParameters(AgentParameters):
     @classmethod
     def construct_test_params(cls) -> "ImageClassificationAgentParameters":
         return cls(
-            num_convs_per_group=1,
+            building_block_type=ImageBuildingBlockType.CONV2D,
+            num_blocks_per_group=1,
             d_latent_pixel_selector=1,
             num_latent_pixel_selector_layers=1,
             d_decider=1,
@@ -962,13 +985,14 @@ class ImageClassificationParameters(SubParameters):
 
     Parameters
     ----------
-    num_conv_groups : int
-        The number of groups of convolutional layers in each agents's CNN.
+    num_block_groups : int
+        The number of groups of building blocks (e.g. convolutional layers) in each
+        agents's CNN.
     initial_num_channels : int
-        The number of channels in the first convolutional layer in each agents's CNN.
+        The number of channels in the first building block in each agents's CNN.
     """
 
-    num_conv_groups: int = 1
+    num_block_groups: int = 1
     initial_num_channels: int = 16
 
 

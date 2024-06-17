@@ -21,6 +21,7 @@ from pvg import (
     PpoLossType,
     ActivationType,
     BinarificationMethodType,
+    ImageBuildingBlockType,
     CommonProtocolParameters,
     PvgProtocolParameters,
     ConstantUpdateSchedule,
@@ -62,13 +63,15 @@ param_grid = dict(
     lr=[0.0003],
     anneal_lr=[False],
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    prover_convs_per_group=[4],
+    prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    verifier_convs_per_group=[1],
+    prover_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    num_conv_groups=[1],
+    verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    num_block_groups=[1],
     initial_num_channels=[16],
     random_prover=[False],
     pretrain_agents=[False],
@@ -122,12 +125,13 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         prover_params = RandomAgentParameters()
     else:
         prover_params = ImageClassificationAgentParameters(
-            num_convs_per_group=combo["prover_convs_per_group"],
+            num_blocks_per_group=combo["prover_blocks_per_group"],
             num_decider_layers=combo["prover_num_decider_layers"],
             activation_function=combo["activation_function"],
             agent_lr_factor=combo["prover_lr_factor"],
             body_lr_factor=combo["body_lr_factor"],
             update_schedule=prover_update_schedule,
+            building_block_type=combo["prover_block_type"],
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -135,12 +139,13 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
-                num_convs_per_group=combo["verifier_convs_per_group"],
+                num_blocks_per_group=combo["verifier_blocks_per_group"],
                 num_decider_layers=combo["verifier_num_decider_layers"],
                 activation_function=combo["activation_function"],
                 body_lr_factor=combo["body_lr_factor"],
                 agent_lr_factor=combo["verifier_lr_factor"],
                 update_schedule=verifier_update_schedule,
+                building_block_type=combo["verifier_block_type"],
             ),
             prover=prover_params,
         ),
@@ -168,7 +173,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             normalize_advantage=combo["normalize_advantage"],
         ),
         image_classification=ImageClassificationParameters(
-            num_conv_groups=combo["num_conv_groups"],
+            num_block_groups=combo["num_block_groups"],
             initial_num_channels=combo["initial_num_channels"],
         ),
         solo_agent=SoloAgentParameters(

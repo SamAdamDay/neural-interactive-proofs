@@ -6,14 +6,16 @@ The structure of all agent bodies is the same:
 
 - An encoder layer, which takes as input the image and the message history and outputs
   the initial pixel-level encodings.
-- A sequence of `num_conv_groups` groups of convolutional layers. 
+- A sequence of `num_block_groups` groups of building blocks (e.g. convolutional
+  layers). 
     + Each layer is followed by a non-linearity and each group by a max pooling layer. 
     + For each group we halve the output size and double the number of channels. 
-    + The number of convolutional layers in each group is given by the
-      `num_convs_per_group` parameter. 
-    + Before the last group we add the most recent message as a new channel.
+    + The number of building blocks in each group is given by the `num_blocks_per_group`
+      parameter. 
     + The output of the last group is the 'latent pixel-level' representations, which
       provides a representation for each latent pixel.
+- We add a channel to the latent pixel-level representations to represent the most
+  recent message.
 - A global pooling layer, which pools the latent pixel-level representations to obtain
   the image-level representations.
 - A representation encoder which takes as input the image-level and latent pixel-level
@@ -23,9 +25,10 @@ The structure of all agent bodies is the same:
 from abc import ABC
 from typing import Optional, ClassVar
 from dataclasses import dataclass
+from functools import partial
 
 import torch
-from torch.nn import Sequential, Linear
+from torch.nn import Sequential, Linear, Conv2d, BatchNorm2d
 from torch import Tensor
 
 from tensordict import TensorDictBase, TensorDict
@@ -58,6 +61,7 @@ from pvg.parameters import (
     ImageClassificationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
+    ImageBuildingBlockType,
 )
 from pvg.utils.torch import (
     ACTIVATION_CLASSES,
@@ -65,6 +69,8 @@ from pvg.utils.torch import (
     UpsampleSimulateBatchDims,
     MaxPool2dSimulateBatchDims,
     Conv2dSimulateBatchDims,
+    ResNetBasicBlockSimulateBatchDims,
+    ResNetBottleneckBlockSimulateBatchDims,
     TensorDictCat,
     ParallelTensorDictModule,
     TensorDictCloneKeys,
@@ -111,16 +117,16 @@ class ImageClassificationAgentPart(AgentPart, ABC):
         self.agent_index = protocol_handler.agent_names.index(agent_name)
 
         # Get some parameters
-        self.num_conv_groups = self.params.image_classification.num_conv_groups
+        self.num_block_groups = self.params.image_classification.num_block_groups
         self.initial_num_channels = (
             self.params.image_classification.initial_num_channels
         )
         self.dataset_num_channels = DATASET_WRAPPER_CLASSES[params.dataset].num_channels
         self.image_width = DATASET_WRAPPER_CLASSES[params.dataset].width
         self.image_height = DATASET_WRAPPER_CLASSES[params.dataset].height
-        self.latent_width = self.image_width // 2**self.num_conv_groups
-        self.latent_height = self.image_height // 2**self.num_conv_groups
-        self.latent_num_channels = 2**self.num_conv_groups * self.initial_num_channels
+        self.latent_width = self.image_width // 2**self.num_block_groups
+        self.latent_height = self.image_height // 2**self.num_block_groups
+        self.latent_num_channels = 2**self.num_block_groups * self.initial_num_channels
 
         if isinstance(self._agent_params, ImageClassificationAgentParameters):
             self.activation_function = ACTIVATION_CLASSES[
@@ -272,7 +278,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         )
 
     def build_cnn_encoder(self) -> TensorDictSequential:
-        """Build the the sequence of groups of convolutional layers.
+        """Build the the sequence of groups of building blocks.
 
         Shapes
         ------
@@ -283,19 +289,22 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             - "latent_pixel_level_repr" : (... latent_num_channels latent_height
             latent_width)
 
-        where `latent_num_channels = initial_num_channels * 2**num_conv_groups`
+        where `latent_num_channels = initial_num_channels * 2**num_block_groups`
 
         Returns
         -------
         cnn_encoder : TensorDictSequential
-            The sequence of groups of convolutional layers.
+            The sequence of groups of building blocks.
         """
+
+        stride = self._agent_params.stride
+        track_running_stats = self.params.functionalize_modules
 
         cnn_encoder = []
 
-        for group_index in range(self.num_conv_groups):
-            # Add the convolutional layers
-            for conv_index in range(self._agent_params.num_convs_per_group):
+        for group_index in range(self.num_block_groups):
+            # Add the building blocks
+            for conv_index in range(self._agent_params.num_blocks_per_group):
                 # Determine the number of input and output channels.
                 if conv_index == 0:
                     in_channels = 2**group_index * self.initial_num_channels
@@ -303,16 +312,48 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                     in_channels = 2 ** (group_index + 1) * self.initial_num_channels
                 out_channels = 2 ** (group_index + 1) * self.initial_num_channels
 
-                # Add the convolutional layer and non-linearity
-                cnn_encoder.append(
-                    TensorDictModule(
-                        Conv2dSimulateBatchDims(
+                # Create the appropriate building block
+                match self._agent_params.building_block_type:
+                    case ImageBuildingBlockType.CONV2D:
+                        building_block = Conv2dSimulateBatchDims(
                             in_channels=in_channels,
                             out_channels=out_channels,
                             kernel_size=self._agent_params.kernel_size,
-                            stride=self._agent_params.stride,
+                            stride=stride,
                             padding="same",
-                        ),
+                        )
+                    case ImageBuildingBlockType.RESIDUAL_BASIC:
+                        if stride != 1 or in_channels != out_channels:
+                            downsample = Sequential(
+                                Conv2d(
+                                    in_channels=in_channels,
+                                    out_channels=out_channels,
+                                    stride=stride,
+                                    kernel_size=1,
+                                    bias=False,
+                                ),
+                                BatchNorm2d(
+                                    out_channels,
+                                    track_running_stats=track_running_stats,
+                                ),
+                            )
+                        else:
+                            downsample = None
+                        building_block = ResNetBasicBlockSimulateBatchDims(
+                            inplanes=in_channels,
+                            planes=out_channels,
+                            stride=stride,
+                            downsample=downsample,
+                            norm_layer=partial(
+                                BatchNorm2d,
+                                track_running_stats=track_running_stats,
+                            ),
+                        )
+
+                # Add the building block and non-linearity
+                cnn_encoder.append(
+                    TensorDictModule(
+                        building_block,
                         in_keys="latent_pixel_level_repr",
                         out_keys="latent_pixel_level_repr",
                     )
@@ -393,7 +434,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             ),
             ParallelTensorDictModule(
                 Linear(
-                    in_features=2**self.num_conv_groups * self.initial_num_channels + 1,
+                    in_features=2**self.num_block_groups * self.initial_num_channels
+                    + 1,
                     out_features=self.params.d_representation,
                 ),
                 in_keys=("image_level_repr", "latent_pixel_level_repr"),
