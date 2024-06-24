@@ -56,7 +56,7 @@ def run(cmd_args: Namespace):
                 ortho_init=False,
             ),
             prover=ImageClassificationAgentParameters(
-                building_block_type=ImageBuildingBlockType.RESIDUAL_BASIC,
+                building_block_type=ImageBuildingBlockType.CONV2D,
                 d_latent_pixel_selector=1,
                 d_decider=1,
                 num_decider_layers=1,

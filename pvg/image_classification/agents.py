@@ -170,6 +170,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     in_keys = ("x", "image", "message", "ignore_message")
     out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
+    @property
+    def required_pretrained_models(self) -> list[str]:
+        if self._agent_params.include_pretrained_embeddings is not None:
+            return [self._agent_params.include_pretrained_embeddings]
+        else:
+            return []
+
     def __init__(
         self,
         params: Parameters,

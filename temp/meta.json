@@ -1,0 +1,1 @@
+{"a": {"device": "cpu", "shape": [5, 4], "dtype": "torch.float32"}, "shape": [5], "device": "cpu", "_type": "<class 'tensordict._td.TensorDict'>"}

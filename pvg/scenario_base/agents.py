@@ -122,6 +122,14 @@ class AgentPart(TensorDictModuleBase, ABC):
         """Move the agent to the given device."""
         pass
 
+    @property
+    def required_pretrained_models(self) -> Iterable[str]:
+        """The pretrained models used by the agent.
+
+        The embeddings of these models will be added to the dataset.
+        """
+        return []
+
 
 class DummyAgentPartMixin(AgentPart, ABC):
     """A mixin for agent parts which are dummy (e.g. random or constant).

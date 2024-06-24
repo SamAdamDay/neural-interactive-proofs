@@ -632,6 +632,8 @@ class ImageClassificationAgentParameters(AgentParameters):
         The kernel size of the building blocks in the agents's CNN.
     stride : int
         The stride of the building blocks in the agents's CNN.
+    include_pretrained_embeddings : str or None
+        If not None, specifies a pretrained model to load. The last-layer embeddings will be included in the model architecture.
     d_latent_pixel_selector : int
         The dimension of the hidden layer in the agents's MLP which selects a latent
         pixel to send as a message.
@@ -659,6 +661,8 @@ class ImageClassificationAgentParameters(AgentParameters):
     num_blocks_per_group: int = 2
     kernel_size: int = 3
     stride: int = 1
+
+    include_pretrained_embeddings: Optional[str] = None
 
     d_latent_pixel_selector: int = 16
     num_latent_pixel_selector_layers: int = 2

@@ -24,6 +24,11 @@ from tensordict.utils import _td_fields
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
+from pvg.utils.types import TorchDevice
+
+
+class CachedPretrainedEmbeddingsNotFound(Exception):
+    """Raised when the cached embeddings for a pretrained model are not found."""
 
 
 class Dataset(ABC):
@@ -86,8 +91,41 @@ class Dataset(ABC):
         else:
             # Load the memory-mapped tensordict
             self._tensor_dict = TensorDict.load_memmap(self.processed_dir)
-            if self.settings.dataset_on_device:
-                self._tensor_dict.to(self.settings.device)
+
+        if self.settings.dataset_on_device:
+            self._tensor_dict.to(self.settings.device)
+
+    @property
+    def device(self) -> TorchDevice:
+        return self._tensor_dict.device
+
+    def load_pretrained_embeddings(self, model_name: str):
+        """Load cached embeddings for a pretrained model.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Raises
+        ------
+        CachedPretrainedEmbeddingsNotFound
+            If the cached embeddings are not found.
+        """
+        # Need to use a separate tensordict because the other one is locked
+        ...
+
+    def add_pretrained_embeddings(self, model_name: str, embeddings: Tensor):
+        """Add pretrained embeddings to the dataset and cache them.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+        embeddings : Tensor
+            The embeddings to add to the dataset.
+        """
+        ...
 
     def _download(self):
         """Download the raw data."""

@@ -167,6 +167,14 @@ class ImageClassificationDataset(Dataset):
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
     by `params.image_classification.selected_classes`).
+
+    Shapes
+    ------
+    The dataset is a TensorDict with the following keys:
+        - "image" (dataset_size num_channels height width): The images in the dataset.
+        - "x" (dataset_size max_message_rounds height width): The pixel features, which
+          are all zeros.
+        - "y" (dataset_size): The labels of the images.
     """
 
     x_dtype = torch.float32
