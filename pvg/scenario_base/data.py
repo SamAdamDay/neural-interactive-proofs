@@ -18,17 +18,22 @@ from torch.utils.data.dataloader import (
     _MultiProcessingDataLoaderIter,
 )
 
-from tensordict import TensorDict
-from tensordict.utils import _td_fields
+from tensordict import TensorDict, MemoryMappedTensor
+from tensordict.utils import _td_fields, IndexType
 
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.types import TorchDevice
+from pvg.utils.data import is_nested_key
 
 
 class CachedPretrainedEmbeddingsNotFound(Exception):
     """Raised when the cached embeddings for a pretrained model are not found."""
+
+    def __init__(self, model_name: str):
+        super().__init__(f"Cached embeddings for model {model_name} not found")
+        self.model_name = model_name
 
 
 class Dataset(ABC):
@@ -57,7 +62,7 @@ class Dataset(ABC):
         Whether to load the training or test set.
     """
 
-    _tensor_dict: TensorDict
+    _main_data: TensorDict
 
     def __init__(
         self,
@@ -82,22 +87,28 @@ class Dataset(ABC):
             if os.path.isdir(self.processed_dir) and settings.ignore_cache:
                 shutil.rmtree(self.processed_dir)
 
-            # Create the tensordict and save it to disk as a memory-mapped file
-            self._tensor_dict = self._build_tensor_dict()
-            self._tensor_dict.memmap_(
+            # Create the tensordict of the dataset and save it to disk as a
+            # memory-mapped file
+            self._main_data = self._build_tensor_dict()
+            self._main_data.memmap_(
                 self.processed_dir, num_threads=settings.num_dataset_threads
             )
 
         else:
             # Load the memory-mapped tensordict
-            self._tensor_dict = TensorDict.load_memmap(self.processed_dir)
+            self._main_data = TensorDict.load_memmap(self.processed_dir)
 
         if self.settings.dataset_on_device:
-            self._tensor_dict.to(self.settings.device)
+            self._main_data.to(self.settings.device)
+
+        # Create a tensordict to store pretrained model embeddings
+        self._pretrained_embeddings = TensorDict(
+            {}, batch_size=self._main_data.batch_size, device=self._main_data.device
+        )
 
     @property
     def device(self) -> TorchDevice:
-        return self._tensor_dict.device
+        return self._main_data.device
 
     def load_pretrained_embeddings(self, model_name: str):
         """Load cached embeddings for a pretrained model.
@@ -112,10 +123,24 @@ class Dataset(ABC):
         CachedPretrainedEmbeddingsNotFound
             If the cached embeddings are not found.
         """
-        # Need to use a separate tensordict because the other one is locked
-        ...
 
-    def add_pretrained_embeddings(self, model_name: str, embeddings: Tensor):
+        if model_name in self._pretrained_embeddings.keys():
+            raise ValueError(
+                f"Pretrained embeddings for model {model_name} have already been loaded"
+            )
+
+        cache_path = os.path.join(self.pretrained_embeddings_dir, f"{model_name}.pt")
+
+        if not os.path.isfile(cache_path):
+            raise CachedPretrainedEmbeddingsNotFound(model_name)
+
+        self._pretrained_embeddings[model_name] = MemoryMappedTensor.from_filename(
+            cache_path
+        )
+
+    def add_pretrained_embeddings(
+        self, model_name: str, embeddings: Tensor, overwrite_cache: bool = False
+    ):
         """Add pretrained embeddings to the dataset and cache them.
 
         Parameters
@@ -124,8 +149,29 @@ class Dataset(ABC):
             The name of the pretrained model.
         embeddings : Tensor
             The embeddings to add to the dataset.
+        overwrite_cache : bool, default=False
+            Whether to overwrite the cached embeddings if they already exist.
         """
-        ...
+
+        if model_name in self._pretrained_embeddings.keys():
+            raise ValueError(
+                f"Pretrained embeddings for model {model_name} have already been loaded"
+            )
+
+        cache_path = os.path.join(self.pretrained_embeddings_dir, f"{model_name}.pt")
+
+        if os.path.isfile(cache_path) and not overwrite_cache:
+            raise ValueError(
+                f"Pretrained embeddings for model {model_name} already exist in the "
+                "cache and `overwrite_cache` is False."
+            )
+
+        # Save the embeddings to disk as a memory-mapped tensor
+        embeddings = MemoryMappedTensor.from_tensor(
+            embeddings, filename=cache_path, existsok=overwrite_cache
+        )
+
+        self._pretrained_embeddings[model_name] = embeddings
 
     def _download(self):
         """Download the raw data."""
@@ -135,39 +181,59 @@ class Dataset(ABC):
     @abstractmethod
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        pass
 
     @property
     @abstractmethod
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
-        pass
+
+    @property
+    def pretrained_embeddings_dir(self) -> str:
+        """The path to the directory containing cached pretrained model embeddings."""
+        raise NotImplementedError
 
     @abstractmethod
     def _build_tensor_dict(self) -> TensorDict:
         """Build the tensordict from the raw data."""
-        pass
 
-    def __getitem__(
-        self, index: Union[None, int, slice, str, Tensor, list[Any], tuple[Any, ...]]
-    ) -> TensorDict:
-        return self._tensor_dict.__getitem__(index)
+    def __getitem__(self, index: IndexType) -> TensorDict | Tensor:
 
-    def __getitems__(
-        self, index: Union[None, int, slice, str, Tensor, list[Any], tuple[Any, ...]]
-    ) -> TensorDict:
-        return self._tensor_dict.__getitems__(index)
+        # If the index is a nested key, we're trying to get an item of the tensordict.
+        # First try to get the item from the main data, and if it doesn't exist, try to
+        # get it from the pretrained embeddings.
+        if is_nested_key(index):
+            try:
+                return self._main_data.__getitem__(index)
+            except KeyError as e:
+                try:
+                    return self._pretrained_embeddings.__getitem__(index)
+                except KeyError:
+                    raise e
+
+        # Get the main data and clone the structure (but not the tensors). This is
+        # needed because the tensordict is memory-mapped and so locked.
+        data = self._main_data.__getitem__(index).clone(recurse=False)
+
+        # Add the pretrained embeddings if they exist, as a nested tensordict
+        if len(self._pretrained_embeddings.keys()) > 0:
+            pretrained_embeddings = self._pretrained_embeddings.__getitem__(index)
+            data.update(dict(pretrained_embeddings=pretrained_embeddings))
+
+        return data
+
+    # All of the logic for getting multiple items is performed in __getitem__
+    __getitems__ = __getitem__
 
     def __len__(self) -> int:
-        return len(self._tensor_dict)
+        return len(self._main_data)
 
     def __repr__(self) -> str:
         # Adapted from TensorDictBase.__repr__
-        fields = _td_fields(self._tensor_dict)
+        fields = _td_fields(self._main_data)
         field_str = indent(f"fields={{{fields}}}", 4 * " ")
-        batch_size_str = indent(f"batch_size={self._tensor_dict.batch_size}", 4 * " ")
-        device_str = indent(f"device={self._tensor_dict.device}", 4 * " ")
-        is_shared_str = indent(f"is_shared={self._tensor_dict.is_shared()}", 4 * " ")
+        batch_size_str = indent(f"batch_size={self._main_data.batch_size}", 4 * " ")
+        device_str = indent(f"device={self._main_data.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self._main_data.is_shared()}", 4 * " ")
         string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
         return f"{type(self).__name__}(\n{string})"
 

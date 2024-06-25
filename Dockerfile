@@ -10,6 +10,10 @@ RUN apt update
 # Install pip so that we can install PyTorch
 RUN DEBIAN_FRONTEND=noninteractive apt install -y python3.11 python3-pip
 
+# Set python 3.11 as the default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
 RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ python-dev-is-python3 libprimesieve-dev
@@ -43,6 +47,14 @@ COPY docker/bin/* /usr/local/bin/
 
 # Move to the repo directory
 WORKDIR /root/pvg-experiments
+
+# Download the source code for PyTorch Image Models (timm), so we can use the training
+# scripts
+RUN mkdir -p vendor
+RUN grep timm== requirements.txt \
+    | sed -E --expression='s#timm==(.*)#https://github.com/huggingface/pytorch-image-models/archive/refs/tags/v\1.tar.gz#' \
+    | xargs wget -qO- \
+    | tar -xzC /root/pvg-experiments/vendor
 
 # Install all the required packages
 RUN pip install --upgrade pip \

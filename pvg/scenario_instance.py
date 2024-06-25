@@ -179,7 +179,7 @@ def build_scenario_instance(
     )
 
     # Build the agents
-    agents = _build_agents(params, settings, protocol_handler)
+    agents = _build_agents(params, settings, protocol_handler, get_scenario_class)
 
     # Add pretrained embeddings to the datasets
     _add_pretrained_embeddings_to_datasets(
@@ -201,6 +201,8 @@ def build_scenario_instance(
             agents=agents,
             get_scenario_class=get_scenario_class,
         )
+    else:
+        additional_rl_components = {}
 
     return ScenarioInstance(
         train_dataset=train_dataset,
@@ -376,6 +378,8 @@ def _build_agents(
             # Make sure to finish the W&B run
             checkpoint_wandb_run.finish()
 
+    return agents
+
 
 def _add_pretrained_embeddings_to_datasets(
     params: Parameters,
@@ -421,7 +425,7 @@ def _add_pretrained_embeddings_to_datasets(
 
     for model_name in required_pretrained_models:
 
-        # Determine which datasets needs embeddings generated from them, by checking if
+        # Determine which datasets need embeddings generated from them, by checking if
         # the embeddings are already cached
         if settings.ignore_cache:
             datasets_to_generate = datasets
@@ -436,11 +440,17 @@ def _add_pretrained_embeddings_to_datasets(
         if len(datasets_to_generate) == 0:
             continue
 
+        # Load the pretrained model and generate the embeddings
         pretrained_model = build_pretrained_model(model_name, params, settings)
         embeddings = pretrained_model.generate_dataset_embeddings(datasets)
 
+        # Add the embeddings to the datasets
         for dataset_name, dataset in datasets_to_generate.items():
-            dataset.add_pretrained_embeddings(model_name, embeddings[dataset_name])
+            dataset.add_pretrained_embeddings(
+                model_name,
+                embeddings[dataset_name],
+                overwrite_cache=settings.ignore_cache,
+            )
 
 
 def _build_components_for_rl_trainer(
@@ -481,15 +491,17 @@ def _build_components_for_rl_trainer(
     # Check if we need a critic and if it shares a body with the actor
     use_critic, use_single_body = check_if_critic_and_single_body(params)
 
+    additional_rl_components = {}
+
     # Create the environments
-    train_environment = get_scenario_class(Environment)(
+    additional_rl_components["train_environment"] = get_scenario_class(Environment)(
         params=params,
         settings=settings,
         dataset=train_dataset,
         protocol_handler=protocol_handler,
         train=True,
     )
-    test_environment = get_scenario_class(Environment)(
+    additional_rl_components["test_environment"] = get_scenario_class(Environment)(
         params=params,
         settings=settings,
         dataset=test_dataset,
@@ -499,41 +511,41 @@ def _build_components_for_rl_trainer(
 
     # Create the combined agents
     if use_single_body:
-        combined_body = get_scenario_class(CombinedBody)(
+        additional_rl_components["combined_body"] = get_scenario_class(CombinedBody)(
             params,
             protocol_handler,
             {name: agents[name].body for name in params.agents},
         )
     else:
-        combined_policy_body = get_scenario_class(CombinedBody)(
+        additional_rl_components["combined_policy_body"] = get_scenario_class(
+            CombinedBody
+        )(
             params,
             protocol_handler,
             {name: agents[name].policy_body for name in params.agents},
         )
         if use_critic:
-            combined_value_body = get_scenario_class(CombinedBody)(
+            additional_rl_components["combined_value_body"] = get_scenario_class(
+                CombinedBody
+            )(
                 params,
                 protocol_handler,
                 {name: agents[name].value_body for name in params.agents},
             )
-    combined_policy_head = get_scenario_class(CombinedPolicyHead)(
+    additional_rl_components["combined_policy_head"] = get_scenario_class(
+        CombinedPolicyHead
+    )(
         params,
         protocol_handler,
         {name: agents[name].policy_head for name in params.agents},
     )
     if use_critic:
-        combined_value_head = get_scenario_class(CombinedValueHead)(
+        additional_rl_components["combined_value_head"] = get_scenario_class(
+            CombinedValueHead
+        )(
             params,
             protocol_handler,
             {name: agents[name].value_head for name in params.agents},
         )
 
-    return dict(
-        train_environment=train_environment,
-        test_environment=test_environment,
-        combined_body=combined_body,
-        combined_policy_body=combined_policy_body,
-        combined_value_body=combined_value_body,
-        combined_policy_head=combined_policy_head,
-        combined_value_head=combined_value_head,
-    )
+    return additional_rl_components

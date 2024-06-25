@@ -93,11 +93,16 @@ class PretrainedImageModel(PretrainedModel, ABC):
             )
 
             # Compute the embeddings for each batch of images
+            pbar = self.settings.tqdm_func(
+                total=4, desc=f"Generating embeddings for {self.name}, {dataset_name}"
+            )
             for idx, batch in enumerate(dataloader):
                 images = batch["image"].to(self.settings.device)
                 embeddings[dataset_name][idx * batch_size : (idx + 1) * batch_size] = (
                     self.forward(images).to("cpu")
                 )
+                pbar.update(1)
+            pbar.close()
 
         if delete_model:
             del self._model

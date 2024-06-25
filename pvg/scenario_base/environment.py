@@ -29,12 +29,14 @@ class Environment(EnvBase, ABC):
     To implement a new environment, subclass this class and implement the following
     attribute and methods:
 
+    - `_message_history_shape`: The shape of the message history and 'x' tensors.
     - `_get_observation_spec`: The specification of the agent observations.
     - `_get_action_spec`: The specification of the agent actions.
     - `_get_state_spec` (optional): The specification of the states space.
     - `_get_reward_spec` (optional): The specification of the agent rewards.
     - `_get_done_spec` (optional): The specification of the agent done signals.
     - `_step`: Perform a step in the environment.
+    - `_compute_message_history`: Compute the new message history and next message.
     - `_masked_reset`: Reset the environment for a subset of the episodes.
 
     Parameters

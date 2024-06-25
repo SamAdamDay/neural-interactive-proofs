@@ -1,12 +1,11 @@
 """Utilities for working with data."""
 
-from typing import Optional
+from typing import Optional, Any, Iterable
 
 import torch
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from pvg.scenario_base import DataLoader
 from pvg.utils.types import TorchDevice
 
 
@@ -22,17 +21,17 @@ class VariableDataCycler:
 
     Parameters
     ----------
-    dataloader : DataLoader
+    dataloader : Iterable
         The base dataloader to use. This dataloader will be cycled through.
-        device : TorchDevice, optional
-            The device to move the data to. If None, the data will not be moved.
-        non_blocking : bool, default=False
-            Whether to move the data to the device with `non_blocking=True`.
+    device : TorchDevice, optional
+        The device to move the data to. If None, the data will not be moved.
+    non_blocking : bool, default=False
+        Whether to move the data to the device with `non_blocking=True`.
     """
 
     def __init__(
         self,
-        dataloader: DataLoader,
+        dataloader: Iterable,
         device: Optional[TorchDevice] = None,
         non_blocking: bool = False,
     ):
@@ -202,3 +201,29 @@ def nested_dict_keys_stringified(data: dict, separator=".") -> list[str]:
 
     keys_tuple = nested_dict_keys(data)
     return [separator.join(key) for key in keys_tuple]
+
+
+def is_nested_key(index: Any) -> bool:
+    """Check whether an index is a nested key used in TensorDicts.
+
+    TensorDicts use nested keys to access values. A nested key is either a string or a
+    tuple of strings.
+
+    Parameters
+    ----------
+    index : Any
+        The index to check.
+
+    Returns
+    -------
+    is_nested_key : bool
+        Whether the index is a nested key.
+    """
+
+    if isinstance(index, str):
+        return True
+
+    if isinstance(index, tuple):
+        return all(isinstance(key, str) for key in index)
+
+    return False

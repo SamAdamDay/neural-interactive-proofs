@@ -148,6 +148,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         - "image" (... num_channels height width): The image
         - "message" (... latent_height latent_width), optional: The most recent message
         - "ignore_message" (...), optional: Whether to ignore the message
+        - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
+          optional: The embeddings of a pretrained model, if using.
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -167,8 +169,23 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("x", "image", "message", "ignore_message")
     out_keys = ("image_level_repr", "latent_pixel_level_repr")
+
+    @property
+    def in_keys(self):
+        if self._agent_params.include_pretrained_embeddings is None:
+            return ("x", "image", "message", "ignore_message")
+        else:
+            return (
+                "x",
+                "image",
+                "message",
+                "ignore_message",
+                (
+                    "pretrained_embeddings",
+                    self._agent_params.include_pretrained_embeddings,
+                ),
+            )
 
     @property
     def required_pretrained_models(self) -> list[str]:
@@ -236,6 +253,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             in_keys="x_normalized",
             out_keys="x_upsampled",
         )
+
+    def build_pretrained_encoding_scaler(self) -> TensorDictModule:
+        """Build the module which scales the pretrained embeddings.
+
+        The pretrained embeddings scaled to the latent pixel level size. This can be by
+        upsampling
+        """
 
     def build_initial_encoder(self) -> TensorDictSequential:
         """Build the initial encoding layer.
