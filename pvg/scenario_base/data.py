@@ -4,7 +4,6 @@ Dataloaders yield tensordicts.
 """
 
 from abc import ABC, abstractmethod
-from typing import Union, Any
 import shutil
 import os
 from textwrap import indent
@@ -13,7 +12,7 @@ import json
 
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader as TorchDataLoader
+from torch.utils.data import DataLoader as TorchDataLoader, Dataset as TorchDataset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
     _SingleProcessDataLoaderIter,
@@ -91,7 +90,7 @@ class Dataset(ABC):
 
             # Create the tensordict of the dataset and save it to disk as a
             # memory-mapped file
-            self._main_data = self._build_tensor_dict()
+            self._main_data = self.build_tensor_dict()
             self._main_data.memmap_(
                 self.processed_dir, num_threads=settings.num_dataset_threads
             )
@@ -322,8 +321,24 @@ class Dataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _build_tensor_dict(self) -> TensorDict:
+    def build_tensor_dict(self) -> TensorDict:
         """Build the tensordict from the raw data."""
+
+    def build_torch_dataset(
+        self,
+        **kwargs,
+    ) -> TorchDataset:
+        """Build the base PyTorch dataset, from which the tensordict is constructed.
+
+        The implementation of this method is optional, but is required for using
+        pretrained models because there we need direct access to the raw dataset.
+
+        Parameters
+        ----------
+        **kwargs
+            Additional keyword arguments to pass to the dataset class.
+        """
+        raise NotImplementedError
 
     def __getitem__(self, index: IndexType) -> TensorDict | Tensor:
 

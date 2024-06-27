@@ -8,14 +8,16 @@ agents in image classification tasks.
 """
 
 from abc import ABC
-from typing import Optional
+from typing import Optional, Any
 from math import ceil
 
 import torch
 from torch import Tensor
+from torch.utils.data.dataloader import default_collate
 
 import timm
 from timm.models import ResNet
+from timm.data import resolve_data_config, create_transform
 
 from jaxtyping import Float
 
@@ -33,7 +35,10 @@ from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedImageModel(PretrainedModel, ABC):
-    """Base class for pretrained image models
+    """Base class for pretrained image models using PyTorch Image Models (timm)
+
+    These models are hosted on Hugging Face and are loaded using the PyTorch Image
+    Models (timm) library.
 
     Derived classes should define the class attributes below.
 
@@ -46,8 +51,8 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
     Class attributes
     ----------------
-    name : str
-        The name of the model, which should uniquely identify it
+    base_model_name : str
+        The name of the base model in the timm library
     dataset : str
         The name of the dataset the model was trained for
     allow_other_datasets : bool, default=False
@@ -60,11 +65,27 @@ class PretrainedImageModel(PretrainedModel, ABC):
         The number of channels in the embeddings produced by the model.
     """
 
-    name: str
+    base_model_name: str
     dataset: str
     allow_other_datasets: bool = False
     embedding_downscale_factor: Optional[int] = None
     embedding_channels: int
+
+    @classproperty
+    def name(cls):
+        return f"{HF_PRETRAINED_MODELS_USER}/{cls.base_model_name}_{cls.dataset}"
+
+    @classproperty
+    def timm_uri(cls):
+        return f"hf_hub:{cls.name}"
+
+    def load_model(self):
+        self._model = timm.create_model(self.timm_uri, pretrained=True)
+
+    def forward(
+        self, x: Float[Tensor, "batch 3 width height"]
+    ) -> Float[Tensor, "batch embedding_channels embedding_width embedding_height"]:
+        return self._model.forward_features(x)
 
     @torch.no_grad()
     def generate_dataset_embeddings(
@@ -81,7 +102,8 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
         Returns
         -------
-
+        embeddings : dict[str, Tensor]
+            The embeddings for each dataset
         """
 
         self.load_model()
@@ -94,7 +116,13 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
         for dataset_name, dataset in datasets.items():
 
-            dataloader = DataLoader(dataset, batch_size=batch_size)
+            # Load the base PyTorch dataset (expected by timm) with the tranforms
+            transform = self.get_transform()
+            torch_dataset = dataset.build_torch_dataset(transform=transform)
+
+            dataloader = DataLoader(
+                torch_dataset, batch_size=batch_size, collate_fn=default_collate
+            )
             embeddings[dataset_name] = torch.empty(
                 len(dataset),
                 self.embedding_channels,
@@ -107,9 +135,11 @@ class PretrainedImageModel(PretrainedModel, ABC):
                 total=len(dataloader),
                 desc=f"Generating embeddings for {self.name}, {dataset_name}",
             )
-            for idx, batch in enumerate(dataloader):
-                images = batch["image"].to(self.settings.device)
-                batch_embeddings = self.forward(images).to("cpu")
+            for idx, (image, y) in enumerate(dataloader):
+                image = image.to(self.settings.device)
+                batch_embeddings = self.forward(image)
+                batch_embeddings = batch_embeddings.mean(dim=(-1, -2), keepdim=True)
+                batch_embeddings = batch_embeddings.to("cpu")
                 embeddings[dataset_name][
                     idx * batch_size : (idx + 1) * batch_size
                 ] = batch_embeddings
@@ -120,6 +150,29 @@ class PretrainedImageModel(PretrainedModel, ABC):
             del self._model
 
         return embeddings
+
+    def get_transform(self) -> Any | None:
+        """Get the transform to apply to images before passing them to the model
+
+        Returns
+        -------
+        transform : torchvision transform or None
+            The transform to apply to images before passing them to the model
+        """
+
+        # Get the timm data configuration from the pretrained model
+        data_cfg = resolve_data_config(model=self._model)
+
+        return create_transform(
+            input_size=data_cfg["input_size"],
+            is_training=False,
+            use_prefetcher=False,
+            interpolation=data_cfg["interpolation"],
+            mean=data_cfg["mean"],
+            std=data_cfg["std"],
+            crop_pct=data_cfg["crop_pct"],
+            crop_mode=data_cfg["crop_mode"],
+        )
 
     @classproperty
     def embedding_width(cls) -> int:
@@ -157,33 +210,13 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
 
 class Resnet18PretrainedModel(PretrainedImageModel, ABC):
-    """Base class for Resnet18 models
-
-    These models are hosted on Hugging Face.
-
-    They are loaded using the PyTorch Image Models (timm) library.
-    """
+    """Base class for Resnet18 models"""
 
     embedding_downscale_factor = 32
     embedding_channels = 512
+    base_model_name = "resnet18"
 
     _model: ResNet
-
-    @classproperty
-    def name(cls):
-        return f"{HF_PRETRAINED_MODELS_USER}/resnet18_{cls.dataset}"
-
-    @classproperty
-    def timm_uri(cls):
-        return f"hf_hub:{cls.name}"
-
-    def load_model(self):
-        self._model = timm.create_model(self.timm_uri, pretrained=True)
-
-    def forward(
-        self, x: Float[Tensor, "batch 3 width height"]
-    ) -> Float[Tensor, "batch embedding_channels embedding_width embedding_height"]:
-        return self._model.forward_features(x)
 
 
 @register_pretrained_model_class

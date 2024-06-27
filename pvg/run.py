@@ -200,6 +200,7 @@ def prepare_experiment(
     profiler: Optional[torch.profiler.profile] = None,
     ignore_cache: bool = False,
     num_dataset_threads: int = 8,
+    device: Optional[TorchDevice] = None,
     test_run: bool = False,
 ):
     """Prepare for running an experiment.
@@ -219,6 +220,9 @@ def prepare_experiment(
         rebuilt from the raw data.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    device : TorchDevice, optional
+        The device to use for training. If None, the GPU is used if available, otherwise
+        the CPU is used.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that
@@ -230,8 +234,11 @@ def prepare_experiment(
         Information about the prepared experiment.
     """
 
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
     settings = ExperimentSettings(
-        device="cpu",
+        device=device,
         wandb_run=None,
         logger=None,
         profiler=profiler,

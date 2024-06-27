@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Any
 from abc import ABC
 from pathlib import Path
 
@@ -180,18 +180,23 @@ class ImageClassificationDataset(Dataset):
     x_dtype = torch.float32
     y_dtype = torch.int64
 
-    def _build_tensor_dict(self) -> TensorDict:
-        # Load the dataset
+    def build_torch_dataset(
+        self, *, transform: Optional[Any]
+    ) -> TorchVisionDatasetWrapper:
         dataset_class = DATASET_WRAPPER_CLASSES[self.params.dataset]
+        return dataset_class(
+            root=self.raw_dir, train=self.train, transform=transform, download=True
+        )
+
+    def build_tensor_dict(self) -> TensorDict:
+        # Load the dataset
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
                 transforms.Normalize((0.5,), (0.5,)),
             ]
         )
-        torch_dataset = dataset_class(
-            root=self.raw_dir, train=self.train, transform=transform, download=True
-        )
+        torch_dataset = self.build_torch_dataset(transform=transform)
 
         # Get the whole dataset as a single batch
         full_dataset_loader = TorchDataLoader(

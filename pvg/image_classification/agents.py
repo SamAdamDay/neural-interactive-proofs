@@ -238,6 +238,19 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         self.global_pooling = self.build_global_pooling().to(device)
         self.final_encoder = self.build_final_encoder().to(device)
 
+        self.encoder = TensorDictSequential(
+            TensorDictModule(
+                Reduce("... channel height width -> ... channel", reduction="mean"),
+                in_keys=("pretrained_embeddings", "SamAdamDay/resnet18_cifar10"),
+                out_keys="image_level_repr",
+            ),
+            TensorDictModule(
+                Linear(in_features=512, out_features=self.params.d_representation),
+                in_keys="image_level_repr",
+                out_keys="image_level_repr",
+            ),
+        ).to(device)
+
     def build_message_history_upsampler(self) -> TensorDictModule:
         """Build the module which upsamples the history and message.
 
@@ -376,6 +389,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         else:
             cat_keys = ("x_upsampled", "image", "pretrained_embeddings_scaled")
             in_channels += self.pretrained_model_class.embedding_channels
+            # cat_keys = ("pretrained_embeddings_scaled", )
+            # in_channels = self.pretrained_model_class.embedding_channels
 
         return TensorDictSequential(
             TensorDictCat(
@@ -661,6 +676,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         # Encode the image-level and latent pixel-level representations to obtain the
         # final representations
         data = self.final_encoder(data)
+
+        if self.include_pretrained_embeddings:
+            data = self.encoder(data)
 
         return data
 

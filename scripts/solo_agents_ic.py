@@ -55,7 +55,7 @@ param_grid = dict(
     binarification_method=[BinarificationMethodType.MERGE],
     binarification_seed=[None],
     selected_classes=[None],
-    seed=[8144, 820, 4173, 3992],
+    seed=[8144],
 )
 
 
