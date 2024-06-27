@@ -67,10 +67,12 @@ param_grid = dict(
     prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_pretrained_embeddings_model=[None],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
     random_prover=[False],
@@ -132,6 +134,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             body_lr_factor=combo["body_lr_factor"],
             update_schedule=prover_update_schedule,
             building_block_type=combo["prover_block_type"],
+            pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -146,6 +149,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 agent_lr_factor=combo["verifier_lr_factor"],
                 update_schedule=verifier_update_schedule,
                 building_block_type=combo["verifier_block_type"],
+                pretrained_embeddings_model=combo[
+                    "verifier_pretrained_embeddings_model"
+                ],
             ),
             prover=prover_params,
         ),

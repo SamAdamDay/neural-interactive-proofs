@@ -19,6 +19,9 @@ RESULTS_DIR = os.path.join(_root_dir, "results")
 RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")
 GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents")
 
+# The user hosting the pretrained models
+HF_PRETRAINED_MODELS_USER = "SamAdamDay"
+
 # Weights & Biases defaults
 WANDB_PROJECT = "pvg-sandbox"
 WANDB_ENTITY = "lrhammond-team"

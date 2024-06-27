@@ -6,7 +6,8 @@ from torch import nn
 
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base.data import Dataset, DataLoader
+from pvg.scenario_base.data import Dataset
+from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedModel(ABC):
@@ -42,8 +43,21 @@ class PretrainedModel(ABC):
     @abstractmethod
     def generate_dataset_embeddings(
         self, datasets: Iterable[Dataset], delete_model: bool = True
-    ):
-        """Load the model and generate embeddings for the datasets"""
+    ) -> torch.Tensor:
+        """Load the model and generate embeddings for the datasets
+
+        Parameters
+        ----------
+        datasets : Iterable[Dataset]
+            The datasets to generate embeddings for
+        delete_model : bool, default=True
+            Whether to delete the model after generating embeddings
+
+        Returns
+        -------
+        embeddings : torch.Tensor
+            The embeddings for the datasets
+        """
 
     @abstractmethod
     def load_model(self):
@@ -102,10 +116,13 @@ def register_pretrained_model_class(
     return pretrained_model_cls
 
 
-def build_pretrained_model(
-    model_name: str, params: Parameters, settings: ExperimentSettings
-) -> PretrainedModel:
-    """Build a pretrained model by name
+def get_pretrained_model_class(
+    model_name: str, params: Parameters
+) -> type[PretrainedModel]:
+    """Get the class for a pretrained model by name
+
+    If the full model name is not found, it tries to find a model with the name:
+        f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
 
     Parameters
     ----------
@@ -113,19 +130,26 @@ def build_pretrained_model(
         The name of the pretrained model to build
     params : Parameters
         The parameters for the experiment
-    settings : ExperimentSettings
-        The settings for the experiment
     """
 
-    if model_name not in PRETRAINED_MODEL_CLASSES:
-        raise ValueError(f"Unknown pretrained model: {model_name}")
-
-    model_class = PRETRAINED_MODEL_CLASSES[model_name]
+    if model_name in PRETRAINED_MODEL_CLASSES:
+        model_class = PRETRAINED_MODEL_CLASSES[model_name]
+    else:
+        augmented_model_name = (
+            f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
+        )
+        if augmented_model_name in PRETRAINED_MODEL_CLASSES:
+            model_class = PRETRAINED_MODEL_CLASSES[augmented_model_name]
+        else:
+            raise ValueError(
+                f"Unknown pretrained model {model_name!r} for dataset "
+                f"{params.dataset!r}"
+            )
 
     if model_class.dataset != params.dataset and not model_class.allow_other_datasets:
         raise ValueError(
-            f"Model {model_name} was trained on {model_class.dataset}, but the "
-            f"experiment is using dataset {params.dataset}"
+            f"Model {model_name!r} was trained on {model_class.dataset!r}, but the "
+            f"experiment is using dataset {params.dataset!r}"
         )
 
-    return model_class(params, settings)
+    return model_class

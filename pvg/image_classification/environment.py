@@ -103,8 +103,10 @@ class ImageClassificationEnvironment(Environment):
         observation_spec : CompositeSpec
             The observation specification.
         """
-        base_observation_spec = super()._get_observation_spec()
-        base_observation_spec["image"] = UnboundedContinuousTensorSpec(
+
+        observation_spec = super()._get_observation_spec()
+
+        observation_spec["image"] = UnboundedContinuousTensorSpec(
             shape=(
                 self.num_envs,
                 self.dataset_num_channels,
@@ -114,7 +116,8 @@ class ImageClassificationEnvironment(Environment):
             dtype=torch.float,
             device=self.device,
         )
-        base_observation_spec["message"] = DiscreteTensorSpec(
+
+        observation_spec["message"] = DiscreteTensorSpec(
             self.latent_width,
             shape=(
                 self.num_envs,
@@ -124,7 +127,8 @@ class ImageClassificationEnvironment(Environment):
             dtype=torch.float,
             device=self.device,
         )
-        return base_observation_spec
+
+        return observation_spec
 
     def _get_action_spec(self) -> CompositeSpec:
         """Get the specification of the agent actions.
@@ -243,5 +247,11 @@ class ImageClassificationEnvironment(Environment):
         env_td["done"][mask] = False
         env_td["terminated"][mask] = False
         env_td["decision_restriction"][mask] = 0
+
+        pretrained_model_names = self.dataset.pretrained_model_names
+        for model_name in pretrained_model_names:
+            env_td["pretrained_embeddings", model_name][mask] = data_batch[
+                "pretrained_embeddings", model_name
+            ]
 
         return env_td

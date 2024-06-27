@@ -303,7 +303,10 @@ class ImageClassificationDataset(Dataset):
     @property
     def pretrained_embeddings_dir(self) -> str:
         """The path to the directory containing cached pretrained model embeddings."""
-        return os.path.join(IC_DATA_DIR, self.params.dataset, "pretrained_embeddings")
+        sub_dir = "train" if self.train else "test"
+        return os.path.join(
+            IC_DATA_DIR, self.params.dataset, "pretrained_embeddings", sub_dir
+        )
 
     @property
     def binarification_method(self) -> BinarificationMethodType:

@@ -132,6 +132,8 @@ class Environment(EnvBase, ABC):
             * 2: The verifier can only make a guess.
         - `x`: The message history.
         - `message`: The next message.
+        - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
+          specification, where the sub-keys are the pretrained model names.
 
 
         Subclasses should call this method and add at least:
@@ -144,7 +146,8 @@ class Environment(EnvBase, ABC):
         observation_spec : TensorSpec
             The observation specification.
         """
-        return CompositeSpec(
+
+        observation_spec = CompositeSpec(
             round=DiscreteTensorSpec(
                 self.protocol_handler.max_message_rounds,
                 shape=(self.num_envs,),
@@ -171,6 +174,24 @@ class Environment(EnvBase, ABC):
             shape=(self.num_envs,),
             device=self.device,
         )
+
+        # Add specifications for the pretrained embeddings, if any
+        pretrained_model_names = self.dataset.pretrained_model_names
+        for model_name in pretrained_model_names:
+            observation_spec["pretrained_embeddings", model_name] = (
+                UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        *self.dataset.get_pretrained_embedding_feature_shape(
+                            model_name
+                        ),
+                    ),
+                    dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
+                    device=self.device,
+                )
+            )
+
+        return observation_spec
 
     @abstractmethod
     def _get_action_spec(self) -> TensorSpec:

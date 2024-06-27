@@ -8,6 +8,8 @@ from typing import Union, Any
 import shutil
 import os
 from textwrap import indent
+from pathlib import Path
+import json
 
 import torch
 from torch import Tensor
@@ -110,6 +112,50 @@ class Dataset(ABC):
     def device(self) -> TorchDevice:
         return self._main_data.device
 
+    @property
+    def pretrained_model_names(self) -> list[str]:
+        """The names of the pretrained models for which we have computed embeddings.
+
+        Returns
+        -------
+        model_names : list[str]
+            The names of the pretrained models.
+        """
+        return list(self._pretrained_embeddings.keys())
+
+    def get_pretrained_embedding_feature_shape(self, model_name: str) -> torch.Size:
+        """Get the feature shape of the embeddings for a pretrained model.
+
+        The feature shape is the tuple of dimensions of the embeddings excluding the
+        batch dimension.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Returns
+        -------
+        shape : torch.Size
+            The shape of the embeddings.
+        """
+        return self._pretrained_embeddings[model_name].shape[1:]
+
+    def get_pretrained_embedding_dtype(self, model_name: str) -> torch.dtype:
+        """Get the dtype of the embeddings for a pretrained model.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Returns
+        -------
+        dtype : torch.dtype
+            The dtype of the embeddings.
+        """
+        return self._pretrained_embeddings[model_name].dtype
+
     def load_pretrained_embeddings(self, model_name: str):
         """Load cached embeddings for a pretrained model.
 
@@ -129,13 +175,32 @@ class Dataset(ABC):
                 f"Pretrained embeddings for model {model_name} have already been loaded"
             )
 
-        cache_path = os.path.join(self.pretrained_embeddings_dir, f"{model_name}.pt")
+        cache_dir = self._get_pretrained_cache_dir(model_name)
 
-        if not os.path.isfile(cache_path):
+        if not cache_dir.is_dir():
             raise CachedPretrainedEmbeddingsNotFound(model_name)
 
+        # Get the metadata
+        metadata_path = self._get_pretrained_metadata_path(model_name)
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+        shape = metadata["shape"]
+        match metadata["dtype"]:
+            case "torch.float32":
+                dtype = torch.float32
+            case "torch.float64":
+                dtype = torch.float64
+            case _:
+                raise ValueError(
+                    f"Unsupported dtype {metadata['dtype']} found in pretrained "
+                    f"embeddings metadata for model {model_name}"
+                )
+
+        # Load the memory-mapped tensor
         self._pretrained_embeddings[model_name] = MemoryMappedTensor.from_filename(
-            cache_path
+            self._get_pretrained_mmap_path(model_name),
+            dtype=dtype,
+            shape=shape,
         )
 
     def add_pretrained_embeddings(
@@ -158,20 +223,84 @@ class Dataset(ABC):
                 f"Pretrained embeddings for model {model_name} have already been loaded"
             )
 
-        cache_path = os.path.join(self.pretrained_embeddings_dir, f"{model_name}.pt")
+        cache_dir = self._get_pretrained_cache_dir(model_name)
 
-        if os.path.isfile(cache_path) and not overwrite_cache:
+        if cache_dir.is_dir() and not overwrite_cache:
             raise ValueError(
                 f"Pretrained embeddings for model {model_name} already exist in the "
                 "cache and `overwrite_cache` is False."
             )
 
+        # Create the pretrained embeddings directory if it doesn't exist
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
         # Save the embeddings to disk as a memory-mapped tensor
         embeddings = MemoryMappedTensor.from_tensor(
-            embeddings, filename=cache_path, existsok=overwrite_cache
+            embeddings,
+            filename=self._get_pretrained_mmap_path(model_name),
+            existsok=overwrite_cache,
         )
 
+        # Save the metadata
+        metadata = dict(
+            model_name=model_name,
+            shape=tuple(embeddings.shape),
+            dtype=str(embeddings.dtype),
+        )
+        metadata_path = self._get_pretrained_metadata_path(model_name)
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f)
+
         self._pretrained_embeddings[model_name] = embeddings
+
+    def _get_pretrained_cache_dir(self, model_name: str) -> Path:
+        """Get the path to the directory with the cached pretrained embeddings.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Returns
+        -------
+        cache_dir : Path
+            The path to the cache directory.
+        """
+
+        sanitised_model_name = model_name.replace("/", "_")
+        return Path(self.pretrained_embeddings_dir, sanitised_model_name)
+
+    def _get_pretrained_mmap_path(self, model_name: str) -> Path:
+        """Get the path to the memory-mapped tensor for the pretrained embeddings.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Returns
+        -------
+        mmap_path : Path
+            The path to the memory-mapped tensor.
+        """
+        cache_dir = self._get_pretrained_cache_dir(model_name)
+        return cache_dir.joinpath("pretrained_embeddings.pt")
+
+    def _get_pretrained_metadata_path(self, model_name: str) -> Path:
+        """Get the path to the metadata file for the pretrained embeddings.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+
+        Returns
+        -------
+        metadata_path : Path
+            The path to the metadata file.
+        """
+        cache_dir = self._get_pretrained_cache_dir(model_name)
+        return cache_dir.joinpath("metadata.json")
 
     def _download(self):
         """Download the raw data."""

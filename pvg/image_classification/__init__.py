@@ -11,5 +11,5 @@ from .agents import (
     ImageClassificationAgentValueHead,
     ImageClassificationSoloAgentHead,
 )
-
 from .environment import ImageClassificationEnvironment
+from .pretrained_models import PretrainedImageModel

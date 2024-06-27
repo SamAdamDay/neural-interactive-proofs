@@ -21,12 +21,13 @@ from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from tensordict.utils import NestedKey
 
 from einops import repeat
 
 from jaxtyping import Float, Int
 
-from pvg.parameters import Parameters, LrFactors
+from pvg.parameters import Parameters
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
 from pvg.utils.params import check_if_critic_and_single_body
@@ -80,6 +81,10 @@ class AgentHooks:
 class AgentPart(TensorDictModuleBase, ABC):
     """Base class for all agent parts: bodies and heads.
 
+    The in and out keys are split into agent-level and environment-level keys.
+    Agent-level keys are nested under "agents" in the environment's TensorDict, while
+    environment-level keys are at the top level.
+
     Parameters
     ----------
     params : Parameters
@@ -90,7 +95,61 @@ class AgentPart(TensorDictModuleBase, ABC):
         The protocol handler for the experiment.
     device : TorchDevice, optional
         The device to use for this agent part. If not given, the CPU is used.
+
+    Class attributes
+    ----------------
+    agent_level_in_keys : Iterable[NestedKey]
+        The keys required by the agent part whose values are per-agent (so in the
+        environment's TensorDict will be nested under "agents").
+    env_level_in_keys : Iterable[NestedKey]
+        The keys required by the agent part whose values are per-environment (so in the
+        environment's TensorDict will be at the top level).
+    agent_level_out_keys : Iterable[NestedKey]
+        The keys produced by the agent part whose values are per-agent (so in the
+        environment's TensorDict will be nested under "agents").
+    env_level_out_keys : Iterable[NestedKey]
+        The keys produced by the agent part whose values are per-environment (so in the
+        environment's TensorDict will be at the top level).
     """
+
+    agent_level_in_keys: Iterable[NestedKey] = []
+    env_level_in_keys: Iterable[NestedKey] = []
+    agent_level_out_keys: Iterable[NestedKey] = []
+    env_level_out_keys: Iterable[NestedKey] = []
+
+    @property
+    def in_keys(self) -> set[NestedKey]:
+        """The keys required by the module.
+
+        Computed by taking the union of `agent_level_in_keys` and `env_level_in_keys`.
+
+        Returns
+        -------
+        in_keys : set[str]
+            The keys required by the module.
+        """
+
+        in_keys = set()
+        in_keys.update(self.agent_level_in_keys)
+        in_keys.update(self.env_level_in_keys)
+        return in_keys
+
+    @property
+    def out_keys(self) -> set[NestedKey]:
+        """The keys produced by the module.
+
+        Computed by taking the union of `agent_level_out_keys` and `env_level_out_keys`.
+
+        Returns
+        -------
+        out_keys : set[str]
+            The keys produced by the module.
+        """
+
+        out_keys = set()
+        out_keys.update(self.agent_level_out_keys)
+        out_keys.update(self.env_level_out_keys)
+        return out_keys
 
     def __init__(
         self,
@@ -201,7 +260,87 @@ class CombinedAgentPart(TensorDictModuleBase, ABC):
         The protocol handler for the experiment.
     parts : dict[str, AgentPart]
         The agent parts to combine.
+
+    Class attributes
+    ----------------
+    additional_in_keys : list[NestedKey]
+        Input keys required by the module, in addition to the keys required by the agent
+        parts.
+    excluded_in_keys : list[NestedKey]
+        Input keys required by the agent parts, which are not required as inputs to this
+        module (i.e. these keys are populated by this module when called). Agent-level
+        keys should be specified as nested keys, with the first element being "agents".
+    additional_out_keys : list[NestedKey]
+        Output keys produced by the module, in addition to the keys produced by the
+        agent parts.
+    excluded_out_keys : list[NestedKey]
+        Output keys produced by the agent parts, which are not output by this module.
+        Agent-level keys should be specified as nested keys, with the first element
+        being "agents".
     """
+
+    additional_in_keys: list[NestedKey] = []
+    excluded_in_keys: list[NestedKey] = []
+    additional_out_keys: list[NestedKey] = []
+    excluded_out_keys: list[NestedKey] = []
+
+    @property
+    def in_keys(self) -> set[NestedKey]:
+        """The keys required by the module.
+
+        Computed by taking the union of the `agent_level_in_keys` and
+        `env_level_in_keys` of all the parts, and then removing the keys in
+        `excluded_in_keys` and adding the keys in `additional_in_keys`.
+
+        Returns
+        -------
+        in_keys : set[str]
+            The keys required by the module.
+        """
+
+        in_keys = set()
+        for part in self.parts.values():
+            for in_key in part.agent_level_in_keys:
+                if ("agents", in_key) in self.excluded_in_keys:
+                    continue
+                in_keys.add(("agents", in_key))
+            for in_key in part.env_level_in_keys:
+                if in_key in self.excluded_in_keys:
+                    continue
+                in_keys.add(in_key)
+
+        in_keys.update(self.additional_in_keys)
+
+        return in_keys
+
+    @property
+    def out_keys(self) -> set[NestedKey]:
+        """The keys produced by the module.
+
+        Computed by taking the union of the `agent_level_out_keys` and
+        `env_level_out_keys` of all the parts, and then removing the keys in
+        `excluded_out_keys` and adding the keys in `additional_out_keys`.
+
+        Returns
+        -------
+        out_keys : set[str]
+            The keys produced by the module.
+        """
+
+        out_keys = set()
+        for part in self.parts.values():
+            for out_key in part.agent_level_out_keys:
+                if ("agents", out_key) in self.excluded_out_keys:
+                    continue
+                out_keys.add(("agents", out_key))
+            for out_key in part.env_level_out_keys:
+                if out_key in self.excluded_out_keys:
+                    continue
+                out_keys.add(out_key)
+
+        out_keys.update(self.additional_out_keys)
+
+        return out_keys
 
     def __init__(
         self,
@@ -212,6 +351,7 @@ class CombinedAgentPart(TensorDictModuleBase, ABC):
         super().__init__()
         self.params = params
         self.protocol_handler = protocol_handler
+        self.parts = parts
 
         self._agent_names = protocol_handler.agent_names
 

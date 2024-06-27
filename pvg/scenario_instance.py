@@ -40,7 +40,7 @@ from pvg.scenario_base.agents import (
     Agent,
 )
 from pvg.scenario_base.environment import Environment
-from pvg.scenario_base.pretrained_models import build_pretrained_model
+from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 from pvg.utils.params import check_if_critic_and_single_body
@@ -414,16 +414,23 @@ def _add_pretrained_embeddings_to_datasets(
     datasets = dict(train=train_dataset, test=test_dataset)
 
     # Get the names of the pretrained models required by the agents
-    required_pretrained_models = []
+    required_pretrained_models = set()
     for agent in agents.values():
         for field in fields(agent):
             field_value = getattr(agent, field.name)
             if isinstance(field_value, AgentPart):
-                required_pretrained_models.extend(
+                required_pretrained_models |= set(
                     field_value.required_pretrained_models
                 )
 
-    for model_name in required_pretrained_models:
+    for base_model_name in required_pretrained_models:
+
+        # Load the pretrained model class
+        pretrained_model_class = get_pretrained_model_class(base_model_name, params)
+
+        # Get the full model name, which may differ from the model name specified by the
+        # parameters, if the latter is a shorthand
+        model_name = pretrained_model_class.name
 
         # Determine which datasets need embeddings generated from them, by checking if
         # the embeddings are already cached
@@ -440,8 +447,8 @@ def _add_pretrained_embeddings_to_datasets(
         if len(datasets_to_generate) == 0:
             continue
 
-        # Load the pretrained model and generate the embeddings
-        pretrained_model = build_pretrained_model(model_name, params, settings)
+        # Generate the embeddings
+        pretrained_model = pretrained_model_class(params, settings)
         embeddings = pretrained_model.generate_dataset_embeddings(datasets)
 
         # Add the embeddings to the datasets

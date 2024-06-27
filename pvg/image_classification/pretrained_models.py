@@ -8,11 +8,16 @@ agents in image classification tasks.
 """
 
 from abc import ABC
+from typing import Optional
+from math import ceil
 
 import torch
-from torch import nn
+from torch import Tensor
 
 import timm
+from timm.models import ResNet
+
+from jaxtyping import Float
 
 from pvg.scenario_base.data import DataLoader
 from pvg.scenario_base.pretrained_models import (
@@ -24,6 +29,7 @@ from pvg.image_classification.data import (
     DATASET_WRAPPER_CLASSES,
 )
 from pvg.utils.oop import classproperty
+from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedImageModel(PretrainedModel, ABC):
@@ -46,23 +52,24 @@ class PretrainedImageModel(PretrainedModel, ABC):
         The name of the dataset the model was trained for
     allow_other_datasets : bool, default=False
         Whether the model can be used for datasets other than the one it was trained on
-    embedding_width : int
-        The width of the embeddings produced by the model. Must be a factor of the
-        dataset's image width.
-    embedding_height : int
-        The height of the embeddings produced by the model. Must be a factor of the
-        dataset's image height.
+    embedding_downscale_factor : int, optional
+        The factor by which the model decreases the image size to produce embeddings.
+        Instead of defining this, you can define `embedding_width` and
+        `embedding_height` directly.
+    embedding_channels : int
+        The number of channels in the embeddings produced by the model.
     """
 
     name: str
     dataset: str
     allow_other_datasets: bool = False
-    embedding_width: int
-    embedding_height: int
+    embedding_downscale_factor: Optional[int] = None
+    embedding_channels: int
 
+    @torch.no_grad()
     def generate_dataset_embeddings(
         self, datasets: dict[str, ImageClassificationDataset], delete_model: bool = True
-    ) -> dict[str, torch.Tensor]:
+    ) -> dict[str, Tensor]:
         """Load the model and generate embeddings for the datasets
 
         Parameters
@@ -89,18 +96,23 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
             dataloader = DataLoader(dataset, batch_size=batch_size)
             embeddings[dataset_name] = torch.empty(
-                len(dataset), self.embedding_height, self.embedding_width
+                len(dataset),
+                self.embedding_channels,
+                self.embedding_height,
+                self.embedding_width,
             )
 
             # Compute the embeddings for each batch of images
             pbar = self.settings.tqdm_func(
-                total=4, desc=f"Generating embeddings for {self.name}, {dataset_name}"
+                total=len(dataloader),
+                desc=f"Generating embeddings for {self.name}, {dataset_name}",
             )
             for idx, batch in enumerate(dataloader):
                 images = batch["image"].to(self.settings.device)
-                embeddings[dataset_name][idx * batch_size : (idx + 1) * batch_size] = (
-                    self.forward(images).to("cpu")
-                )
+                batch_embeddings = self.forward(images).to("cpu")
+                embeddings[dataset_name][
+                    idx * batch_size : (idx + 1) * batch_size
+                ] = batch_embeddings
                 pbar.update(1)
             pbar.close()
 
@@ -109,26 +121,57 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
         return embeddings
 
+    @classproperty
+    def embedding_width(cls) -> int:
+        """The width of the embeddings produced by the model
+
+        Must be a factor of the dataset's image width.
+        """
+
+        if cls.embedding_downscale_factor is None:
+            raise NotImplementedError(
+                "You must define either `embedding_downscale_factor` or "
+                "`embedding_width` and `embedding_height`"
+            )
+
+        return ceil(
+            DATASET_WRAPPER_CLASSES[cls.dataset].width / cls.embedding_downscale_factor
+        )
+
+    @classproperty
+    def embedding_height(cls) -> int:
+        """The height of the embeddings produced by the model
+
+        Must be a factor of the dataset's image height.
+        """
+
+        if cls.embedding_downscale_factor is None:
+            raise NotImplementedError(
+                "You must define either `embedding_downscale_factor` or "
+                "`embedding_width` and `embedding_height`"
+            )
+
+        return ceil(
+            DATASET_WRAPPER_CLASSES[cls.dataset].height / cls.embedding_downscale_factor
+        )
+
 
 class Resnet18PretrainedModel(PretrainedImageModel, ABC):
     """Base class for Resnet18 models
 
-    These models are hosted on Hugging Face: https://huggingface.co/SamAdamDay
+    These models are hosted on Hugging Face.
 
     They are loaded using the PyTorch Image Models (timm) library.
     """
 
+    embedding_downscale_factor = 32
+    embedding_channels = 512
+
+    _model: ResNet
+
     @classproperty
     def name(cls):
-        return f"SamAdamDay/resnet18_{cls.dataset}"
-
-    @classproperty
-    def embedding_width(cls):
-        return DATASET_WRAPPER_CLASSES[cls.dataset].width // 2  # TODO
-
-    @classproperty
-    def embedding_height(cls):
-        return DATASET_WRAPPER_CLASSES[cls.dataset].height // 2  # TODO
+        return f"{HF_PRETRAINED_MODELS_USER}/resnet18_{cls.dataset}"
 
     @classproperty
     def timm_uri(cls):
@@ -137,8 +180,13 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
     def load_model(self):
         self._model = timm.create_model(self.timm_uri, pretrained=True)
 
+    def forward(
+        self, x: Float[Tensor, "batch 3 width height"]
+    ) -> Float[Tensor, "batch embedding_channels embedding_width embedding_height"]:
+        return self._model.forward_features(x)
 
-@register_pretrained_model_class()
+
+@register_pretrained_model_class
 class Resnet18Cifar10PretrainedModel(Resnet18PretrainedModel):
     """Resnet18 model trained on CIFAR-10"""
 
