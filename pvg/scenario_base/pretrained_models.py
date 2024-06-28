@@ -59,32 +59,6 @@ class PretrainedModel(ABC):
             The embeddings for the datasets
         """
 
-    @abstractmethod
-    def load_model(self):
-        """Load the model.
-
-        Most implementations will store the model in `self._model`
-        """
-
-    @abstractmethod
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Compute the embeddings of an datapoint or batch of datapoints
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            The input datapoint(s) to compute embeddings for
-
-        Returns
-        -------
-        torch.Tensor
-            The embeddings of the input datapoint(s)
-        """
-
-    def delete_model(self):
-        """Delete the loaded model."""
-        self._model = None
-
 
 PRETRAINED_MODEL_CLASSES: dict[str, type[PretrainedModel]] = {}
 
