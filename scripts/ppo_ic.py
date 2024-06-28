@@ -43,7 +43,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
-    dataset_name=["svhn"],
+    dataset_name=["cifar10"],
     num_iterations=[5000],
     num_epochs=[10],
     minibatch_size=[256],
@@ -67,7 +67,7 @@ param_grid = dict(
     prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
-    prover_pretrained_embeddings_model=[None],
+    prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
@@ -77,7 +77,7 @@ param_grid = dict(
     initial_num_channels=[16],
     random_prover=[False],
     pretrain_agents=[False],
-    binarification_method=[BinarificationMethodType.MERGE],
+    binarification_method=[BinarificationMethodType.SELECT_TWO],
     binarification_seed=[None],
     selected_classes=[None],
     activation_function=[ActivationType.TANH],
@@ -98,7 +98,7 @@ param_grid = dict(
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[None],
-    seed=[8144, 820, 4173, 3992],
+    seed=[8144],
 )
 
 

@@ -204,6 +204,10 @@ class ImageClassificationDataset(Dataset):
         )
         images, labels = next(iter(full_dataset_loader))
 
+        # Keep track of the indices of the original dataset from which the final dataset
+        # is produced. This is needed to reconstruct the dataset with `to_torch_dataset`
+        rearrange_index = torch.arange(len(labels))
+
         # The generator used to turn the dataset into a binary classification problem
         binurification_generator = torch.Generator()
         binurification_generator.manual_seed(self.binarification_seed)
@@ -230,6 +234,7 @@ class ImageClassificationDataset(Dataset):
             )
             images = images[index]
             labels = labels[index]
+            rearrange_index = rearrange_index[index]
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
 
         elif (
@@ -256,6 +261,7 @@ class ImageClassificationDataset(Dataset):
             permuted_indices = torch.randperm(len(labels))
             images = images[permuted_indices]
             labels = labels[permuted_indices]
+            rearrange_index = rearrange_index[permuted_indices]
             index_0 = torch.where(labels == 0)[0]
             index_1 = torch.where(labels == 1)[0]
             num_classes_0 = (labels == 0).sum()
@@ -267,6 +273,7 @@ class ImageClassificationDataset(Dataset):
             index = torch.cat((index_0, index_1))
             images = images[index]
             labels = labels[index]
+            rearrange_index = rearrange_index[index]
 
         # Create the pixel features, which are all zeros
         x = torch.zeros(
@@ -276,7 +283,10 @@ class ImageClassificationDataset(Dataset):
             dtype=self.x_dtype,
         )
 
-        return TensorDict(dict(image=images, x=x, y=labels), batch_size=images.shape[0])
+        return TensorDict(
+            dict(image=images, x=x, y=labels, _rearrange_index=rearrange_index),
+            batch_size=images.shape[0],
+        )
 
     @property
     def raw_dir(self) -> str:

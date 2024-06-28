@@ -123,7 +123,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
             # Initialize the embeddings tensor
             embeddings[dataset_name] = torch.empty(
-                len(dataset),
+                len(torch_dataset),
                 self.embedding_channels,
                 self.embedding_height,
                 self.embedding_width,

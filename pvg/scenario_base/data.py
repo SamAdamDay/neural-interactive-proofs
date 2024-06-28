@@ -233,6 +233,10 @@ class Dataset(ABC):
         # Create the pretrained embeddings directory if it doesn't exist
         cache_dir.mkdir(parents=True, exist_ok=True)
 
+        # Index the embeddings tensor by the rearangment index, so that they align with
+        # the main data (which may have been rearranged during processing)
+        embeddings = embeddings[self._main_data["_rearrange_index"]]
+
         # Save the embeddings to disk as a memory-mapped tensor
         embeddings = MemoryMappedTensor.from_tensor(
             embeddings,

@@ -238,6 +238,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         self.global_pooling = self.build_global_pooling().to(device)
         self.final_encoder = self.build_final_encoder().to(device)
 
+        # TODO: Remove this
         self.encoder = TensorDictSequential(
             TensorDictModule(
                 Reduce("... channel height width -> ... channel", reduction="mean"),
