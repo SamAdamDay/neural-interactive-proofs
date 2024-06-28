@@ -176,7 +176,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     @property
     def env_level_in_keys(self):
-        if self.include_pretrained_embeddings:
+        if not self.include_pretrained_embeddings:
             return ("x", "image", "message")
         else:
             return (
