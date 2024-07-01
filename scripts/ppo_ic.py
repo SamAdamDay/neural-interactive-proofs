@@ -98,7 +98,7 @@ param_grid = dict(
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[None],
-    seed=[8144],
+    seed=[8144, 820, 4173, 3992],
 )
 
 
