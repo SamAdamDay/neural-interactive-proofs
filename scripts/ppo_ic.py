@@ -240,10 +240,13 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         run_id=arguments.run_id,
         wandb_tags=wandb_tags,
         global_tqdm_step_fn=arguments.global_tqdm_step_fn,
+        wandb_group=arguments.common_run_name,
     )
 
 
-def run_id_fn(combo_index: int, cmd_args: Namespace) -> str:
+def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+    if combo_index is None:
+        return f"ppo_ic_{cmd_args.run_infix}"
     return f"ppo_ic_{cmd_args.run_infix}_{combo_index}"
 
 
