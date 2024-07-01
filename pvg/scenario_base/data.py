@@ -104,8 +104,43 @@ class Dataset(ABC):
 
         # Create a tensordict to store pretrained model embeddings
         self._pretrained_embeddings = TensorDict(
-            {}, batch_size=self._main_data.batch_size, device=self._main_data.device
+            {}, batch_size=[], device=self._main_data.device
         )
+
+    @property
+    @abstractmethod
+    def raw_dir(self) -> str:
+        """The path to the directory containing the raw data."""
+
+    @property
+    @abstractmethod
+    def processed_dir(self) -> str:
+        """The path to the directory containing the processed data."""
+
+    @property
+    def pretrained_embeddings_dir(self) -> str:
+        """The path to the directory containing cached pretrained model embeddings."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_tensor_dict(self) -> TensorDict:
+        """Build the tensordict from the raw data."""
+
+    def build_torch_dataset(
+        self,
+        **kwargs,
+    ) -> TorchDataset:
+        """Build the base PyTorch dataset, from which the tensordict is constructed.
+
+        The implementation of this method is optional, but is required for using
+        pretrained models because there we need direct access to the raw dataset.
+
+        Parameters
+        ----------
+        **kwargs
+            Additional keyword arguments to pass to the dataset class.
+        """
+        raise NotImplementedError
 
     @property
     def device(self) -> TorchDevice:
@@ -195,15 +230,22 @@ class Dataset(ABC):
                     f"embeddings metadata for model {model_name}"
                 )
 
-        # Load the memory-mapped tensor
-        self._pretrained_embeddings[model_name] = MemoryMappedTensor.from_filename(
+        # Load the memory-mapped tensor of the full pretrained embeddings
+        full_embeddings = MemoryMappedTensor.from_filename(
             self._get_pretrained_mmap_path(model_name),
             dtype=dtype,
             shape=shape,
         )
 
+        # Get the rearranged embeddings tensor, which aligns with the main data
+        embeddings = full_embeddings[self._main_data["_rearrange_index"]]
+        self._pretrained_embeddings[model_name] = embeddings
+
+        # Detect the batch size from the loaded pretrained embeddings
+        self._pretrained_embeddings.auto_batch_size_(batch_dims=1)
+
     def add_pretrained_embeddings(
-        self, model_name: str, embeddings: Tensor, overwrite_cache: bool = False
+        self, model_name: str, full_embeddings: Tensor, overwrite_cache: bool = False
     ):
         """Add pretrained embeddings to the dataset and cache them.
 
@@ -211,8 +253,9 @@ class Dataset(ABC):
         ----------
         model_name : str
             The name of the pretrained model.
-        embeddings : Tensor
-            The embeddings to add to the dataset.
+        full_embeddings : Tensor
+            The embeddings generated from the full original dataset, before any
+            rearrangment or filtering.
         overwrite_cache : bool, default=False
             Whether to overwrite the cached embeddings if they already exist.
         """
@@ -233,13 +276,9 @@ class Dataset(ABC):
         # Create the pretrained embeddings directory if it doesn't exist
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Index the embeddings tensor by the rearangment index, so that they align with
-        # the main data (which may have been rearranged during processing)
-        embeddings = embeddings[self._main_data["_rearrange_index"]]
-
         # Save the embeddings to disk as a memory-mapped tensor
-        embeddings = MemoryMappedTensor.from_tensor(
-            embeddings,
+        full_embeddings = MemoryMappedTensor.from_tensor(
+            full_embeddings,
             filename=self._get_pretrained_mmap_path(model_name),
             existsok=overwrite_cache,
         )
@@ -247,14 +286,20 @@ class Dataset(ABC):
         # Save the metadata
         metadata = dict(
             model_name=model_name,
-            shape=tuple(embeddings.shape),
-            dtype=str(embeddings.dtype),
+            shape=tuple(full_embeddings.shape),
+            dtype=str(full_embeddings.dtype),
         )
         metadata_path = self._get_pretrained_metadata_path(model_name)
         with open(metadata_path, "w") as f:
             json.dump(metadata, f)
 
+        # Get the rearranged embeddings tensor, which aligns with the main data
+        embeddings = full_embeddings[self._main_data["_rearrange_index"]]
         self._pretrained_embeddings[model_name] = embeddings
+
+    def _download(self):
+        """Download the raw data."""
+        raise NotImplementedError
 
     def _get_pretrained_cache_dir(self, model_name: str) -> Path:
         """Get the path to the directory with the cached pretrained embeddings.
@@ -305,45 +350,6 @@ class Dataset(ABC):
         cache_dir = self._get_pretrained_cache_dir(model_name)
         return cache_dir.joinpath("metadata.json")
 
-    def _download(self):
-        """Download the raw data."""
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def raw_dir(self) -> str:
-        """The path to the directory containing the raw data."""
-
-    @property
-    @abstractmethod
-    def processed_dir(self) -> str:
-        """The path to the directory containing the processed data."""
-
-    @property
-    def pretrained_embeddings_dir(self) -> str:
-        """The path to the directory containing cached pretrained model embeddings."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def build_tensor_dict(self) -> TensorDict:
-        """Build the tensordict from the raw data."""
-
-    def build_torch_dataset(
-        self,
-        **kwargs,
-    ) -> TorchDataset:
-        """Build the base PyTorch dataset, from which the tensordict is constructed.
-
-        The implementation of this method is optional, but is required for using
-        pretrained models because there we need direct access to the raw dataset.
-
-        Parameters
-        ----------
-        **kwargs
-            Additional keyword arguments to pass to the dataset class.
-        """
-        raise NotImplementedError
-
     def __getitem__(self, index: IndexType) -> TensorDict | Tensor:
 
         # If the index is a nested key, we're trying to get an item of the tensordict.
@@ -362,7 +368,7 @@ class Dataset(ABC):
         # needed because the tensordict is memory-mapped and so locked.
         data = self._main_data.__getitem__(index).clone(recurse=False)
 
-        # Add the pretrained embeddings if they exist, as a nested tensordict
+        # Add the pretrained embeddings if they exist, as a nested tensordict.
         if len(self._pretrained_embeddings.keys()) > 0:
             pretrained_embeddings = self._pretrained_embeddings.__getitem__(index)
             data.update(dict(pretrained_embeddings=pretrained_embeddings))

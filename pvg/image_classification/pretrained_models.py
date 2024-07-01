@@ -68,7 +68,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
     allow_other_datasets: bool = False
 
     base_model_name = "resnet18"
-    embedding_downscale_factor = 32
+    embedding_downscale_factor = 4
     embedding_channels = 512
 
     @classproperty
@@ -137,7 +137,6 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
             for idx, (image, y) in enumerate(dataloader):
                 image = image.to(self.settings.device)
                 batch_embeddings = model.forward_features(image)
-                batch_embeddings = batch_embeddings.mean(dim=(-1, -2), keepdim=True)
                 batch_embeddings = batch_embeddings.to("cpu")
                 embeddings[dataset_name][
                     idx * batch_size : (idx + 1) * batch_size
