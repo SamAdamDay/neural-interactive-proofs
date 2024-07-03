@@ -43,6 +43,7 @@ def run_experiment(
     allow_auto_generated_run_id: bool = False,
     print_wandb_run_url: bool = False,
     wandb_tags: list = [],
+    wandb_group: Optional[str] = None,
     num_dataset_threads: int = 8,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
@@ -84,6 +85,9 @@ def run_experiment(
         If True, print the URL of the W&B run at the start of the experiment.
     wandb_tags : list[str], default=[]
         The tags to add to the W&B run.
+    wandb_group : str, optional
+        The name of the W&B group for the run. Runs with the same group are placed
+        together in the UI. This is useful for doing multiple runs on the same machine.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     pin_memory : bool, default=True
@@ -103,8 +107,8 @@ def run_experiment(
         global progress bar.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
-        number of iterations possible and then exit. This is useful for testing that
-        the experiment runs without errors.
+        number of iterations possible and then exit. This is useful for testing that the
+        experiment runs without errors.
     """
 
     # Set up Weights & Biases.
@@ -119,6 +123,7 @@ def run_experiment(
             entity=wandb_entity,
             name=run_id,
             tags=wandb_tags,
+            group=wandb_group,
             id=run_id,
             resume="never",
         )

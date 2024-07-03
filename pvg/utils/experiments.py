@@ -14,7 +14,7 @@ See the docstrings of the classes for more details.
 """
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
-from typing import Callable, Optional
+from typing import Callable, Optional, Iterable
 import textwrap
 import os
 from abc import ABC, abstractmethod
@@ -128,6 +128,8 @@ class ExperimentFunctionArguments:
         A unique identifier for the run.
     cmd_args : Namespace
         The command line arguments.
+    common_run_name : str
+        A name for the experiment that is common to all runs.
     tqdm_func : callable
         A function used to create a tqdm progress bar.
     child_logger_adapter : logging.Logger
@@ -137,6 +139,7 @@ class ExperimentFunctionArguments:
     combo: dict
     run_id: str
     cmd_args: Namespace
+    common_run_name: str
     tqdm_func: callable
     child_logger_adapter: logging.Logger
     global_tqdm_step_fn: callable = lambda: ...
@@ -152,7 +155,7 @@ class HyperparameterExperiment(ABC):
         self,
         param_grid: dict,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
-        run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
@@ -160,9 +163,11 @@ class HyperparameterExperiment(ABC):
         arg_parser_description: str = "Run hyperparameter experiments",
     ):
         if run_id_fn is None:
-            run_id_fn = (
-                lambda combo_index, _: f"{experiment_name.lower()}_{combo_index}"
-            )
+
+            def run_id_fn(combo_index, cmd_args):
+                if combo_index is None:
+                    return f"{experiment_name.lower()}"
+                return f"{experiment_name.lower()}_{combo_index}"
 
         self.param_grid = param_grid
         self.experiment_fn = experiment_fn
@@ -248,43 +253,97 @@ class HyperparameterExperiment(ABC):
             fmt="[%(asctime)s %(levelname)s] %(message)s", datefmt="%x %X"
         )
 
+        self.cmd_args: Optional[Namespace] = None
+
     @abstractmethod
-    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
+    def _run(self, base_logger: logging.Logger):
         """The function that actually runs the experiment, to be implemented."""
         pass
+
+    @property
+    def common_run_name(self) -> str:
+        """A name for the experiment that is common to all runs."""
+        if self.cmd_args is None:
+            raise ValueError("The command line arguments have not been parsed yet.")
+        return self.run_id_fn(None, self.cmd_args)
+
+    @property
+    def combinations(self) -> Iterable[dict]:
+        """An iterator over the combinations of hyperparameters."""
+        return ParameterGrid(self.param_grid)
+
+    @property
+    def enumerated_combinations(self) -> Iterable[tuple[int, dict]]:
+        """An iterator over the combinations of hyperparameters plus an enumeration."""
+        return enumerate(ParameterGrid(self.param_grid))
+
+    def check_no_extant_runs(self):
+        """Make sure there are no runs with the same ID as any run in this experiment.
+
+        Raises
+        ------
+        ValueError
+            If there is a run with the same ID as any run in this experiment.
+        """
+
+        if self.cmd_args.use_wandb:
+
+            api = wandb.Api()
+
+            # Get the names of the runs we'll be running
+            num_combinations = len(list(self.combinations))
+            run_names = [
+                self.run_id_fn(i, self.cmd_args) for i in range(num_combinations)
+            ]
+
+            # Check if any already exist
+            runs = api.runs(
+                path=f"{self.cmd_args.wandb_entity}/{self.cmd_args.wandb_project}",
+                filters={"$or": [{"name": run_name} for run_name in run_names]},
+            )
+            try:
+                first_run = runs[0]
+            except IndexError:
+                pass
+            else:
+                raise ValueError(
+                    f"A run with the ID {first_run.id} already exists in the project"
+                )
 
     def run(self):
         """Run the experiment."""
 
         # Get the arguments
-        cmd_args = self.parser.parse_args()
+        self.cmd_args = self.parser.parse_args()
+
+        # Check that no runs with the same ID already exist
+        self.check_no_extant_runs()
 
         # Set up the logger
         base_logger = logging.getLogger(__name__)
         setup_logger_tqdm(formatter=self.logging_formatter)
 
         # Set the log level inside the experiment function
-        if cmd_args.debug:
+        if self.cmd_args.debug:
             self.experiment_log_level = logging.DEBUG
-        elif cmd_args.verbose:
+        elif self.cmd_args.verbose:
             self.experiment_log_level = logging.INFO
         else:
             self.experiment_log_level = logging.WARNING
 
         # Run the experiment
-        self._run(cmd_args, base_logger)
+        self._run(base_logger)
 
         # Send a W&B alert to say the experiment is finished
-        if cmd_args.use_wandb:
+        if self.cmd_args.use_wandb:
             os.environ["WANDB_SILENT"] = "true"
             dummy_run = wandb.init(
                 id=WANDB_DUMMY_RUN_NAME,
                 project=WANDB_DUMMY_RUN_PROJECT,
                 entity=WANDB_DUMMY_RUN_ENTITY,
             )
-            plain_run_id = self.run_id_fn(9999, cmd_args)
             wandb.alert(
-                title=f"{plain_run_id} finished",
+                title=f"{self.common_run_name} finished",
                 text=(
                     f"This hyperparameter experiment for {self.experiment_name}"
                     f" has finished."
@@ -341,9 +400,9 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         self,
         param_grid: dict,
         experiment_fn: Callable[
-            [dict, str, Namespace, Callable, logging.LoggerAdapter], None
+            [dict, str, Namespace, Callable, logging.LoggerAdapter, str], None
         ],
-        run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
@@ -425,19 +484,17 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 cmd_args=cmd_args,
                 tqdm_func=tqdm_func,
                 child_logger_adapter=child_logger_adapter,
+                common_run_name=self.common_run_name,
             )
         )
 
         return True
 
-    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
-        # An iterator over the configurations of hyperparameters
-        param_iter = ParameterGrid(self.param_grid)
-
-        # Enumerate these to keep track of them
-        combinations = enumerate(param_iter)
+    def _run(self, base_logger: logging.Logger):
+        cmd_args = self.cmd_args
 
         # Filter to combos
+        combinations = self.enumerated_combinations
         combinations = filter(
             lambda x: x[0] % cmd_args.combo_groups == cmd_args.combo_num, combinations
         )
@@ -530,7 +587,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         self,
         param_grid: dict,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
-        run_id_fn: Optional[Callable[[int, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
@@ -636,6 +693,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
                 tqdm_func=tqdm_func,
                 child_logger_adapter=child_logger_adapter,
                 global_tqdm_step_fn=global_tqdm_step_fn,
+                common_run_name=self.common_run_name,
             )
         )
 
@@ -648,12 +706,19 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
         return True
 
-    def _run(self, cmd_args: Namespace, base_logger: logging.Logger):
+    def _run(self, base_logger: logging.Logger):
+        cmd_args = self.cmd_args
+
         # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
         torch.multiprocessing.set_start_method("spawn", force=True)
 
+        # Set up Weights & Biases on this process. Later, each worker will init its own
+        # W&B run.
+        if cmd_args.use_wandb:
+            wandb.setup()
+
         # Get all configurations of hyperparameters, and turn this into a list of tasks
-        combinations = list(ParameterGrid(self.param_grid))
+        combinations = list(self.combinations)
 
         # Prepare the runs and compute the total number of iterations
         if self.run_preparer_fn is not None:
