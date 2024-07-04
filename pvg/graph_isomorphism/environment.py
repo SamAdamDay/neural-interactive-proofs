@@ -16,6 +16,8 @@ from torchrl.data.tensor_specs import (
     Box,
 )
 
+from einops import reduce
+
 from jaxtyping import Float, Int
 
 from pvg.parameters import ScenarioType
@@ -210,6 +212,9 @@ class GraphIsomorphismEnvironment(Environment):
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 
+    round_last_in_main_message_history = True
+    main_message_out_key = "node_selected"
+
     @property
     def max_num_nodes(self) -> int:
         if self._max_num_nodes is None:
@@ -217,13 +222,8 @@ class GraphIsomorphismEnvironment(Environment):
         return self._max_num_nodes
 
     @property
-    def _message_history_shape(self) -> tuple:
-        return (
-            self.num_envs,
-            2,
-            self.max_num_nodes,
-            self.protocol_handler.max_message_rounds,
-        )
+    def main_message_space_shape(self) -> tuple:
+        return (2, self.max_num_nodes)
 
     def _get_observation_spec(self) -> CompositeSpec:
         """Get the specification of the agent observations.
@@ -236,8 +236,8 @@ class GraphIsomorphismEnvironment(Environment):
         observation_spec : CompositeSpec
             The observation specification.
         """
-        base_observation_spec = super()._get_observation_spec()
-        base_observation_spec["adjacency"] = AdjacencyMatrixSpec(
+        observation_spec = super()._get_observation_spec()
+        observation_spec["adjacency"] = AdjacencyMatrixSpec(
             self.max_num_nodes,
             shape=(
                 self.num_envs,
@@ -248,7 +248,7 @@ class GraphIsomorphismEnvironment(Environment):
             dtype=self._int_dtype,
             device=self.device,
         )
-        base_observation_spec["node_mask"] = BinaryDiscreteTensorSpec(
+        observation_spec["node_mask"] = BinaryDiscreteTensorSpec(
             self.max_num_nodes,
             shape=(
                 self.num_envs,
@@ -258,7 +258,7 @@ class GraphIsomorphismEnvironment(Environment):
             dtype=torch.bool,
             device=self.device,
         )
-        base_observation_spec["message"] = DiscreteTensorSpec(
+        observation_spec["message"] = DiscreteTensorSpec(
             self.max_num_nodes,
             shape=(
                 self.num_envs,
@@ -268,7 +268,7 @@ class GraphIsomorphismEnvironment(Environment):
             dtype=torch.float,
             device=self.device,
         )
-        return base_observation_spec
+        return observation_spec
 
     def _get_action_spec(self) -> CompositeSpec:
         """Get the specification of the agent actions.
@@ -284,105 +284,22 @@ class GraphIsomorphismEnvironment(Environment):
         action_spec : CompositeSpec
             The action specification.
         """
-        base_action_spec = super()._get_action_spec()
-        base_action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
+        action_spec = super()._get_action_spec()
+        action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
             shape=(self.num_envs, self.num_agents),
             dtype=torch.long,
             device=self.device,
         )
-        return base_action_spec
-
-    def _compute_message_history(
-        self,
-        env_td: TensorDictBase,
-        next_td: TensorDictBase,
-    ) -> TensorDictBase:
-        """Compute the message history and next message.
-
-        Used in the `_step` method of the environment.
-
-        Parameters
-        ----------
-        env_td : TensorDictBase
-            The current observation and state.
-        next_td : TensorDictBase
-            The 'next' tensordict, to be updated with the message history and next
-            message.
-
-        Returns
-        -------
-        next_td : TensorDictBase
-            The updated 'next' tensordict.
-        """
-
-        # Extract the tensors from the dict
-        message_history: Float[Tensor, "... graph node message_round"] = env_td[
-            "message_history"
-        ]
-        round: Int[Tensor, "..."] = env_td["round"]
-        node_selected: Int[Tensor, "... agent"] = env_td["agents", "node_selected"]
-
-        # Compute index of the agent whose turn it is.
-        # (... agent)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
-
-        # Sum up the messages from the agents whose turn it is. If two agents select the
-        # same node, the message will be 2.
-        # (... 2 max_num_nodes)
-        message = F.one_hot(node_selected, 2 * self.max_num_nodes).float()
-        message = torch.where(
-            active_agents_mask[..., None], message, torch.zeros_like(message)
-        )
-        message = message.sum(dim=-2)
-        message = message.view(*message.shape[:-1], 2, self.max_num_nodes)
-
-        # Insert the message into the message history at the current round
-        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
-        message_history = message_history.masked_scatter(
-            round_mask[..., None, None, :], message
-        )
-
-        # Add the message history and next message to the next tensordict
-        next_td["message_history"] = message_history
-        next_td["message"] = message
-
-        return next_td
+        return action_spec
 
     def _masked_reset(
         self, env_td: TensorDictBase, mask: Tensor, data_batch: TensorDict
     ) -> TensorDictBase:
-        """Reset the environment for a subset of the episodes.
 
-        Takes a new sample from the dataset and inserts it into the given episodes. Also
-        resets the other elements of the episodes.
-
-        Parameters
-        ----------
-        env_td : TensorDictBase
-            The current observation, state and done signal.
-        mask : torch.Tensor
-            A boolean mask of the episodes to reset.
-        data_batch : TensorDict
-            The data batch to insert into the episodes.
-
-        Returns
-        -------
-        env_td : TensorDictBase
-            The reset environment tensordict.
-        """
+        env_td = super()._masked_reset(env_td, mask, data_batch)
 
         env_td["adjacency"][mask] = data_batch["adjacency"]
         env_td["node_mask"][mask] = data_batch["node_mask"]
-        env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
-        env_td["message_history"][mask] = torch.zeros_like(
-            env_td["message_history"][mask]
-        )
-        env_td["x"][mask] = torch.zeros_like(env_td["x"][mask])
-        env_td["message"][mask] = 0
-        env_td["round"][mask] = 0
-        env_td["done"][mask] = False
-        env_td["terminated"][mask] = False
-        env_td["decision_restriction"][mask] = 0
 
         return env_td

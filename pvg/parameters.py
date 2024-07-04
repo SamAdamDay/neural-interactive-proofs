@@ -537,6 +537,11 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         The number of layers in the agents's decider MLP.
     include_round_in_decider : bool
         Whether to include the round number in the agents's decider MLP.
+    d_linear_message_selector : int
+        The dimension of the hidden layer in the agents's MLP which selects a linear
+        message, if we're using the linear message space.
+    num_linear_message_selector_layers : int
+        The number of layers in the agents's linear message selector MLP.
     d_value : int
         The dimension of the hidden layer in the agents's MLP which estimates the value
         function.
@@ -582,6 +587,9 @@ class GraphIsomorphismAgentParameters(AgentParameters):
     num_decider_layers: int = 2
     include_round_in_decider: bool = True
 
+    d_linear_message_selector: int = 16
+    num_linear_message_selector_layers: int = 2
+
     d_value: int = 16
     num_value_layers: int = 2
     include_round_in_value: bool = True
@@ -607,6 +615,8 @@ class GraphIsomorphismAgentParameters(AgentParameters):
             num_node_selector_layers=1,
             d_decider=1,
             num_decider_layers=1,
+            d_linear_message_selector=1,
+            num_linear_message_selector_layers=1,
             d_value=1,
             num_value_layers=1,
         )
@@ -655,6 +665,11 @@ class ImageClassificationAgentParameters(AgentParameters):
         The number of layers in the agents's decider MLP.
     include_round_in_decider : bool
         Whether to include the round number in the agents's decider MLP.
+    d_linear_message_selector : int
+        The dimension of the hidden layer in the agents's MLP which selects a linear
+        message, if we're using the linear message space.
+    num_linear_message_selector_layers : int
+        The number of layers in the agents's linear message selector MLP.
     d_value : int
         The dimension of the hidden layer in the agents's MLP which estimates the value
         function.
@@ -681,6 +696,9 @@ class ImageClassificationAgentParameters(AgentParameters):
     num_decider_layers: int = 2
     include_round_in_decider: bool = True
 
+    d_linear_message_selector: int = 16
+    num_linear_message_selector_layers: int = 2
+
     d_value: int = 16
     num_value_layers: int = 2
     include_round_in_value: bool = True
@@ -694,6 +712,8 @@ class ImageClassificationAgentParameters(AgentParameters):
             num_latent_pixel_selector_layers=1,
             d_decider=1,
             num_decider_layers=1,
+            d_linear_message_selector=1,
+            num_linear_message_selector_layers=1,
             d_value=1,
             num_value_layers=1,
         )
@@ -1174,6 +1194,16 @@ class Parameters(BaseParameters):
         The proportion of the dataset to use for testing.
     d_representation : int
         The dimension of each agent's body representation output.
+    include_linear_message_space : bool
+        Whether to include a 1-dimensional message space in addition to the message
+        space specified by the scenario. This allows sending a single number as a
+        message, in addition to the normal message. This can be useful for debugging
+        issues with the message space, especially when combined with shared reward,
+        since it should be easier to learn to send a single number when both agents want
+        to cooperate.
+    d_linear_message_space : int
+        The dimension of the linear message space (i.e. the number of possible messages
+        which can sent). This is only used if `include_linear_message_space` is `True`.
     batch_size : int
         The number of simultaneous environments to run in parallel.
     agents : AgentsParameters | dict[str, AgentParameters], optional
@@ -1214,6 +1244,9 @@ class Parameters(BaseParameters):
     test_size: float = 0.2
 
     d_representation: int = 16
+
+    include_linear_message_space: bool = False
+    d_linear_message_space: int = 2
 
     agents: Optional[AgentsParameters | dict[str, AgentParameters]] = None
 

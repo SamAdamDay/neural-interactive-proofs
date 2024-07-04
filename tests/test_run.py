@@ -57,33 +57,38 @@ def test_prepare_run_experiment():
     }
     common_ppo_params = CommonPpoParameters()
 
+    default_param_spec = {
+        "scenario": ScenarioType.GRAPH_ISOMORPHISM,
+        "trainer": TrainerType.VANILLA_PPO,
+        "ppo_loss": PpoLossType.CLIP,
+        "protocol": InteractionProtocolType.PVG,
+        "spg_variant": SpgVariant.SPG,
+        "is_random": False,
+        "pretrain_agents": False,
+        "manual_architecture": None,
+        "use_shared_body": True,
+        "include_linear_message": False,
+    }
+
     param_specs = [
-        # Test combinations of scenario, random provers, and pretraining
+        # Test the two scenarios with the vanilla PPO trainer
         {
             "scenario": [
                 ScenarioType.GRAPH_ISOMORPHISM,
                 ScenarioType.IMAGE_CLASSIFICATION,
             ],
-            "trainer": [TrainerType.VANILLA_PPO],
-            "ppo_loss": [PpoLossType.CLIP],
-            "protocol": [InteractionProtocolType.PVG],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [True, False],
-            "pretrain_agents": [True, False],
-            "manual_architecture": [None],
-            "use_shared_body": [True],
+        },
+        # Test pretraining the agents
+        {
+            "pretrain_agents": [True],
+        },
+        # Test random agents
+        {
+            "is_random": [True],
         },
         # Test the KL penalty loss
         {
-            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
-            "trainer": [TrainerType.VANILLA_PPO],
             "ppo_loss": [PpoLossType.KL_PENALTY],
-            "protocol": [InteractionProtocolType.PVG],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [False],
-            "pretrain_agents": [False],
-            "manual_architecture": [None],
-            "use_shared_body": [True],
         },
         # Test the using non-shared bodies
         {
@@ -91,33 +96,11 @@ def test_prepare_run_experiment():
                 ScenarioType.GRAPH_ISOMORPHISM,
                 ScenarioType.IMAGE_CLASSIFICATION,
             ],
-            "trainer": [TrainerType.VANILLA_PPO],
-            "ppo_loss": [PpoLossType.CLIP],
-            "protocol": [InteractionProtocolType.PVG],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [False],
-            "pretrain_agents": [True],
-            "manual_architecture": [None],
             "use_shared_body": [False],
-        },
-        # Test the other trainers
-        {
-            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
-            "trainer": [TrainerType.SPG, TrainerType.SOLO_AGENT, TrainerType.REINFORCE],
-            "ppo_loss": [PpoLossType.CLIP],
-            "protocol": [InteractionProtocolType.PVG],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [False],
-            "pretrain_agents": [False],
-            "manual_architecture": [None],
-            "use_shared_body": [True],
         },
         # Test the SPG trainer with different variants
         {
-            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
             "trainer": [TrainerType.SPG],
-            "ppo_loss": [PpoLossType.CLIP],
-            "protocol": [InteractionProtocolType.PVG],
             "spg_variant": [
                 SpgVariant.SPG,
                 SpgVariant.PSPG,
@@ -126,42 +109,35 @@ def test_prepare_run_experiment():
                 SpgVariant.PSOS,
                 SpgVariant.SOS,
             ],
-            "is_random": [False],
-            "pretrain_agents": [False],
-            "manual_architecture": [None],
-            "use_shared_body": [True],
+        },
+        # Test the other trainers
+        {
+            "trainer": [TrainerType.SOLO_AGENT, TrainerType.REINFORCE],
         },
         # Test the other protocols
         {
-            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
-            "trainer": [TrainerType.VANILLA_PPO],
-            "ppo_loss": [PpoLossType.CLIP],
             "protocol": [
                 InteractionProtocolType.DEBATE,
                 InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
                 InteractionProtocolType.MERLIN_ARTHUR,
             ],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [True],
-            "pretrain_agents": [False],
-            "manual_architecture": [None],
-            "use_shared_body": [True],
         },
         # Test manual architectures
         {
-            "scenario": [ScenarioType.GRAPH_ISOMORPHISM],
-            "trainer": [TrainerType.VANILLA_PPO],
-            "ppo_loss": [PpoLossType.CLIP],
-            "protocol": [InteractionProtocolType.PVG],
-            "spg_variant": [SpgVariant.SPG],
-            "is_random": [False],
-            "pretrain_agents": [False],
             "manual_architecture": [("prover",), ("verifier",), ("prover", "verifier")],
-            "use_shared_body": [True],
+        },
+        # Test the including a linear message space
+        {
+            "scenario": [
+                ScenarioType.GRAPH_ISOMORPHISM,
+                ScenarioType.IMAGE_CLASSIFICATION,
+            ],
+            "include_linear_message": [True],
         },
     ]
 
     for param_spec in ParameterGrid(param_specs):
+        param_spec = {**default_param_spec, **param_spec}
         scenario_type = param_spec["scenario"]
         trainer_type = param_spec["trainer"]
         ppo_loss_type = param_spec["ppo_loss"]
