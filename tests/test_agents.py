@@ -76,5 +76,6 @@ def test_graph_isomorphism_combined_agents():
     batch = next(iter(dataloader))
     batch["round"] = torch.zeros(batch.batch_size, dtype=torch.int64)
     batch["decision_restriction"] = torch.zeros(batch.batch_size, dtype=torch.int64)
-    batch["message"] = torch.zeros(batch["x"].shape[:-1], dtype=torch.float32)
+    message_shape = batch["x"].shape[:-3] + batch["x"].shape[-2:]
+    batch["message"] = torch.zeros(message_shape, dtype=torch.float32)
     combined_actor(batch)

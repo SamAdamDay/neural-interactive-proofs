@@ -133,15 +133,6 @@ class Environment(EnvBase, ABC):
         """
 
     @property
-    def round_last_in_main_message_history(self) -> bool:
-        """Whether the round dim comes last in the main message history
-
-        For image datasets it makes sense to have the round come before the height and
-        width dims because it acts as a channel.
-        """
-        return True
-
-    @property
     def message_history_shape(self) -> tuple:
         """The shape of the message history and 'x' tensors
 
@@ -152,19 +143,11 @@ class Environment(EnvBase, ABC):
         message_history_shape: tuple
             The common shape of the message history and 'x' tensors.
         """
-
-        if self.round_last_in_main_message_history:
-            return (
-                self.num_envs,
-                *self.main_message_space_shape,
-                self.protocol_handler.max_message_rounds,
-            )
-        else:
-            return (
-                self.num_envs,
-                self.protocol_handler.max_message_rounds,
-                *self.main_message_space_shape,
-            )
+        return (
+            self.num_envs,
+            self.protocol_handler.max_message_rounds,
+            *self.main_message_space_shape,
+        )
 
     @abstractmethod
     def _get_observation_spec(self) -> TensorSpec:
@@ -402,7 +385,6 @@ class Environment(EnvBase, ABC):
             message_in_key="message",
             message_history_key="message_history",
             message_shape=self.main_message_space_shape,
-            round_last_in_message_history=self.round_last_in_main_message_history,
         )
 
         # Do the same for the linear message space, if it is included
@@ -414,7 +396,6 @@ class Environment(EnvBase, ABC):
                 message_in_key="linear_message",
                 message_shape=(self.params.d_linear_message_space,),
                 message_history_key="linear_message_history",
-                round_last_in_message_history=False,
             )
 
         # Clone the message history to the 'x' feature tensor
@@ -440,7 +421,6 @@ class Environment(EnvBase, ABC):
         message_in_key: str,
         message_history_key: str,
         message_shape: tuple[int, ...],
-        round_last_in_message_history: bool = True,
     ) -> TensorDictBase:
         """Compute the new message history and next message for given keys
 
@@ -466,8 +446,6 @@ class Environment(EnvBase, ABC):
             The key which contains the message history tensor.
         message_shape : tuple[int, ...]
             The shape of the message space.
-        round_last_in_message_history : bool, default=True
-            Whether the round dim comes last in the message history shape.
 
         Returns
         -------
@@ -479,10 +457,9 @@ class Environment(EnvBase, ABC):
         # dim_1 dim_2 etc.
         message_shape_str = " ".join(f"dim_{i}" for i in range(len(message_shape)))
 
-        message_history: (
-            Float[Tensor, f"... round {message_shape_str}"]
-            | Float[Tensor, f"... {message_shape_str} round"]
-        ) = env_td.get(message_history_key)
+        message_history: Float[Tensor, f"... round {message_shape_str}"] = env_td.get(
+            message_history_key
+        )
         round: Int[Tensor, "..."] = env_td.get("round")
         message_selected: Int[Tensor, "... agent"] = env_td.get(
             ("agents", message_out_key)
@@ -510,12 +487,8 @@ class Environment(EnvBase, ABC):
         # Reshape it so that it looks like the message history with 1's for the message
         # space dims
         message_shape_ones = " ".join(["1"] * len(message_shape))
-        if round_last_in_message_history:
-            round_mask_shape = f"{message_shape_ones} round"
-        else:
-            round_mask_shape = f"round {message_shape_ones}"
         round_mask = einops.rearrange(
-            round_mask, f"... round -> ... {round_mask_shape}"
+            round_mask, f"... round -> ... round {message_shape_ones}"
         )
 
         # Insert the message into the message history at the current round

@@ -212,13 +212,12 @@ class GraphIsomorphismEnvironment(Environment):
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 
-    round_last_in_main_message_history = True
     main_message_out_key = "node_selected"
 
     @property
     def max_num_nodes(self) -> int:
         if self._max_num_nodes is None:
-            self._max_num_nodes = self.dataset["x"].shape[-2]
+            self._max_num_nodes = self.dataset["x"].shape[-1]
         return self._max_num_nodes
 
     @property

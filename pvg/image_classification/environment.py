@@ -46,7 +46,6 @@ class ImageClassificationEnvironment(Environment):
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 
-    round_last_in_main_message_history = False
     main_message_out_key = "latent_pixel_selected"
 
     @property

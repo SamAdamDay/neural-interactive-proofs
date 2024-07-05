@@ -232,7 +232,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... pair node feature): The graph node features (message history)
+        - "x" (... round pair node): The graph node features (message history)
         - "adjacency" (... pair node node): The graph adjacency matrices
         - "message" (... pair node), optional: The most recent message from the other
           agent
@@ -300,6 +300,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if self._agent_params.normalize_message_history:
             self.message_history_normalizer = NormalizeOneHotMessageHistory(
                 max_message_rounds=self.protocol_handler.max_message_rounds,
+                message_in_key="x_rearranged",
                 message_out_key="gnn_repr",
                 num_structure_dims=2,
             )
@@ -549,7 +550,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the GNN and transformer on. A TensorDictBase with keys:
 
-            - "x" (... pair node feature): The graph node features (message history)
+            - "x" (... round pair node): The graph node features (message history)
             - "adjacency" (... pair node node): The graph adjacency matrices
             - "message" (... pair node), optional: The most recent message from the
               other agent
@@ -575,18 +576,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
               node-level representations.
         """
 
+        batch_size = data.batch_size
+        max_num_nodes = data["x"].shape[-1]
+
+        # But the round dimension at the end
+        data["x_rearranged"] = rearrange(
+            data["x"], "... round pair node -> ... pair node round"
+        )
+
         # If we are using the manual architecture, skip everything else and run that
         if self._agent_params.use_manual_architecture:
             return self._run_manual_architecture(data, hooks)
-
-        batch_size = data.batch_size
-        max_num_nodes = data["x"].shape[-2]
 
         # Normalize the message history if necessary
         if self._agent_params.normalize_message_history:
             data = self.message_history_normalizer(data)
         else:
-            data = data.update(dict(gnn_repr=data["x"]))
+            data = data.update(dict(gnn_repr=data["x_rearranged"]))
 
         # Add the channel dimension, with a vector of zeros when we're using a dual GNN
         gnn_repr = data["gnn_repr"]
@@ -811,7 +817,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the GNN and transformer on. A TensorDictBase with keys:
 
-            - "x" (... pair node feature): The graph node features (message history)
+            - "x_rearranged" (... pair node round): The graph node features (message
+              history) rearranged to but the round dimension at the end
             - "adjacency" (... pair node node): The graph adjacency matrices
             - "message" (...): The most recent message from the other agent
             - "node_mask" (... pair node): Which nodes actually exist or a
@@ -836,15 +843,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if self.agent_name == "verifier":
             # Symmetrise the message history
             rounded_rounds = (self.protocol_handler.max_message_rounds // 2) * 2
-            gnn_repr = data["x"].clone()
-            gnn_repr[..., range(0, rounded_rounds, 2)] += data["x"][
+            gnn_repr = data["x_rearranged"].clone()
+            gnn_repr[..., range(0, rounded_rounds, 2)] += data["x_rearranged"][
                 ..., range(1, rounded_rounds, 2)
             ]
-            gnn_repr[..., range(1, rounded_rounds, 2)] += data["x"][
+            gnn_repr[..., range(1, rounded_rounds, 2)] += data["x_rearranged"][
                 ..., range(0, rounded_rounds, 2)
             ]
         else:
-            gnn_repr = torch.zeros_like(data["x"])
+            gnn_repr = torch.zeros_like(data["x_rearranged"])
 
         data = data.update(
             dict(
@@ -922,7 +929,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         data : TensorDictBase
             A TensorDictBase with keys:
 
-            - "x" (... pair node feature): The graph node features (message history)
+            - "x" (... round pair node): The graph node features (message history)
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -939,7 +946,7 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         """
 
         # The size of the node dimension
-        max_num_nodes = data["x"].shape[-2]
+        max_num_nodes = data["x"].shape[-1]
 
         # The dummy graph-level representations
         graph_level_repr = torch.zeros(
@@ -1904,12 +1911,12 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     ------
     Input:
         - "round" (...): The current round number.
-        - "x" (... pair node feature): The graph node features (message history)
+        - "x" (... round pair node): The graph node features (message history)
         - "adjacency" (... pair node node): The adjacency matrices.
         - "message" (... pair node), optional: The most recent message.
         - "node_mask" (... pair node): Which nodes actually exist.
-        - "linear_message_history" : (... round linear_message), optional: The
-          linear message history, if using.
+        - "linear_message_history" : (... round linear_message), optional: The linear
+          message history, if using.
 
     Output:
         - ("agents", "node_level_repr") (... agents max_nodes d_representation): The

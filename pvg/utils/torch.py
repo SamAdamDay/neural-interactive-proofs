@@ -650,7 +650,8 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         mean : Tensor
             The mean for message histories with the structure shape of `x`.
         std : Tensor
-            The standard deviation for message histories with the structure shape of `x`.
+            The standard deviation for message histories with the structure shape of 
+            `x`.
         """
         # Get the shape of the structure dimensions
         if self.round_dim_last:

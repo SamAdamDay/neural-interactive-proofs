@@ -73,19 +73,6 @@ def test_graph_isomorphism_environment_step():
             min_message_rounds=1,
             verifier_first=False,
         ),
-        # agents=AgentsParameters(
-        #     prover0=GraphIsomorphismAgentParameters(),
-        #     prover1=GraphIsomorphismAgentParameters(),
-        #     verifier=GraphIsomorphismAgentParameters(),
-        # ),
-        # debate_protocol=ProtocolParameters(
-        #     protocol=InteractionProtocolType.DEBATE,
-        #     prover_reward=1,
-        #     verifier_reward=2,
-        #     verifier_terminated_penalty=-4,
-        #     verifier_no_guess_reward=8,
-        #     verifier_incorrect_penalty=-16,
-        # ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
     protocol_handler = build_protocol_handler(params)
@@ -109,10 +96,10 @@ def test_graph_isomorphism_environment_step():
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
             message_history=torch.zeros(
-                batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
+                batch_size, max_message_rounds, 2, max_num_nodes, dtype=torch.float32
             ),
             x=torch.zeros(
-                batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
+                batch_size, max_message_rounds, 2, max_num_nodes, dtype=torch.float32
             ),
             y=torch.tensor([0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]),
             agents=dict(
@@ -133,7 +120,7 @@ def test_graph_isomorphism_environment_step():
 
     # Define the expected output.
     expected_message_history = torch.zeros(
-        batch_size, 2, max_num_nodes, max_message_rounds, dtype=torch.float32
+        batch_size, max_message_rounds, 2, max_num_nodes, dtype=torch.float32
     )
     expected_message = torch.zeros(batch_size, 2, 8, dtype=torch.float32)
     for i in range(batch_size):
@@ -142,7 +129,7 @@ def test_graph_isomorphism_environment_step():
         message = env_td["agents", "node_selected"][i, agent_index]
         expected_message[i] = F.one_hot(message, 2 * max_num_nodes).view(2, 8)
         graph_id = message // max_num_nodes
-        expected_message_history[i, graph_id, message % max_num_nodes, round] = 1
+        expected_message_history[i, round, graph_id, message % max_num_nodes] = 1
     expected_next = TensorDict(
         dict(
             adjacency=env_td["adjacency"],

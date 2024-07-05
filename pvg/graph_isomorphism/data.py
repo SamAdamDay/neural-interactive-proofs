@@ -105,8 +105,8 @@ class GraphIsomorphismDataset(Dataset):
             # Create the node features, which are all zeros
             x = torch.zeros(
                 num_graph_pairs,
-                max_num_nodes,
                 self.protocol_handler.max_message_rounds,
+                max_num_nodes,
                 dtype=self.x_dtype,
             )
 
@@ -117,7 +117,7 @@ class GraphIsomorphismDataset(Dataset):
 
         # Stack the pairs of in a new batch dimension
         adjacency = torch.stack((adjacency_a, adjacency_b), dim=1)
-        x = torch.stack((x_a, x_b), dim=1)
+        x = torch.stack((x_a, x_b), dim=2)
         node_mask = torch.stack((node_mask_a, node_mask_b), dim=1)
 
         y = (data_dict["wl_scores"] == -1).to(self.y_dtype)
