@@ -242,7 +242,11 @@ class Environment(EnvBase, ABC):
         if self.params.include_linear_message_space:
             observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
                 self.params.d_linear_message_space,
-                shape=(self.num_envs, self.protocol_handler.max_message_rounds),
+                shape=(
+                    self.num_envs,
+                    self.protocol_handler.max_message_rounds,
+                    self.params.d_linear_message_space,
+                ),
                 dtype=torch.float,
                 device=self.device,
             )
@@ -277,10 +281,10 @@ class Environment(EnvBase, ABC):
         )
 
         if self.params.include_linear_message_space:
-            action_spec["agents"]["linear_message"] = DiscreteTensorSpec(
+            action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
                 self.params.d_linear_message_space,
                 shape=(self.num_envs, self.num_agents),
-                dtype=self._int_dtype,
+                dtype=torch.long,
                 device=self.device,
             )
 
@@ -398,18 +402,19 @@ class Environment(EnvBase, ABC):
             message_in_key="message",
             message_history_key="message_history",
             message_shape=self.main_message_space_shape,
-            round_last_in_main_message_history=self.round_last_in_main_message_history,
+            round_last_in_message_history=self.round_last_in_main_message_history,
         )
 
         # Do the same for the linear message space, if it is included
         if self.params.include_linear_message_space:
-            next_td = self._compute_linear_message_history_and_next_message(
+            next_td = self._compute_message_history_and_next_message(
                 env_td,
                 next_td,
                 message_out_key="linear_message_selected",
                 message_in_key="linear_message",
                 message_shape=(self.params.d_linear_message_space,),
                 message_history_key="linear_message_history",
+                round_last_in_message_history=False,
             )
 
         # Clone the message history to the 'x' feature tensor
@@ -435,7 +440,7 @@ class Environment(EnvBase, ABC):
         message_in_key: str,
         message_history_key: str,
         message_shape: tuple[int, ...],
-        round_last_in_main_message_history: bool = True,
+        round_last_in_message_history: bool = True,
     ) -> TensorDictBase:
         """Compute the new message history and next message for given keys
 
@@ -461,8 +466,8 @@ class Environment(EnvBase, ABC):
             The key which contains the message history tensor.
         message_shape : tuple[int, ...]
             The shape of the message space.
-        round_last_in_main_message_history : bool, default=True
-            Whether the round dim comes last in the main message history.
+        round_last_in_message_history : bool, default=True
+            Whether the round dim comes last in the message history shape.
 
         Returns
         -------
@@ -505,7 +510,7 @@ class Environment(EnvBase, ABC):
         # Reshape it so that it looks like the message history with 1's for the message
         # space dims
         message_shape_ones = " ".join(["1"] * len(message_shape))
-        if round_last_in_main_message_history:
+        if round_last_in_message_history:
             round_mask_shape = f"{message_shape_ones} round"
         else:
             round_mask_shape = f"round {message_shape_ones}"

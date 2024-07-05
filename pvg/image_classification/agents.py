@@ -147,14 +147,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... max_message_rounds latent_height latent_width): The message history
+        - "x" (... round latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
         - "message" (... latent_height latent_width), optional: The most recent message
         - "ignore_message" (...), optional: Whether to ignore the message
         - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
           optional: The embeddings of a pretrained model, if using.
-        - "linear_message_history" : (... d_linear_message_space round), optional: The
-          linear message history, if using
+        - "linear_message_history" : (... round linear_message), optional: The linear
+          message history, if using
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -356,7 +356,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x_upsampled" : (... max_message_rounds height width)
+            - "x_upsampled" : (... round height width)
             - "image" : (... num_channels height width)
             - "pretrained_embeddings_scaled" : (... embedding_channels height width),
               optional
@@ -425,13 +425,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... initial_num_channels height width)
+            - "latent_pixel_level_repr" : (... initial_channels height width)
 
         Output:
-            - "latent_pixel_level_repr" : (... latent_num_channels latent_height
+            - "latent_pixel_level_repr" : (... latent_channels latent_height
             latent_width)
 
-        where `latent_num_channels = initial_num_channels * 2**num_block_groups`
+        where `latent_channels = initial_channels * 2**num_block_groups`
 
         Returns
         -------
@@ -525,11 +525,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... latent_num_channels+1 latent_height
+            - "latent_pixel_level_repr" : (... latent_channels+1 latent_height
             latent_width)
 
         Output:
-            - "image_level_repr" : (... latent_num_channels+1)
+            - "image_level_repr" : (... latent_channels+1)
 
         Returns
         -------
@@ -554,10 +554,10 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "image_level_repr" : (... latent_num_channels+1)
-            - "latent_pixel_level_repr" : (... latent_num_channels+1 latent_height
+            - "image_level_repr" : (... latent_channels+1)
+            - "latent_pixel_level_repr" : (... latent_channels+1 latent_height
               latent_width)
-            - "linear_message_history" : (... d_linear_message_space round), optional
+            - "linear_message_history" : (... round linear_message), optional
 
         Output:
             - "image_level_repr" : (... d_representation)
@@ -605,7 +605,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             # Flatten the linear message history
             final_encoder.append(
                 TensorDictModule(
-                    Rearrange("... linear_message round -> ... (linear_message round)"),
+                    Rearrange("... round linear_message -> ... (round linear_message)"),
                     in_keys="linear_message_history",
                     out_keys="linear_message_history_flat",
                 )
@@ -616,6 +616,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 TensorDictCat(
                     in_keys=("image_level_repr", "linear_message_history_flat"),
                     out_key="image_level_repr",
+                    dim=-1,
                 )
             )
 
@@ -646,9 +647,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the body on. A TensorDictBase with keys:
 
-            - "x" (... max_message_rounds latent_height latent_width): The message
-              history
-            - "image" (... num_channels height width): The image
+            - "x" (... round latent_height latent_width): The message history
+            - "image" (... channel height width): The image
             - "message" (... latent_height latent_width), optional: The most recent
               message
             - "ignore_message" (...), optional: Whether to ignore the message. For
@@ -657,8 +657,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             - ("pretrained_embeddings", model_name) (... embedding_width
               embedding_height), optional: The embeddings of a pretrained model, if
               using.
-            - "linear_message_history" : (... d_linear_message_space round), optional:
-              The linear message history, if using.
+            - "linear_message_history" : (... round linear_message), optional: The
+              linear message history, if using.
 
         Returns
         -------
@@ -1544,7 +1544,7 @@ class ImageClassificationCombinedBody(CombinedBody):
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
         - "message" (... latent_height latent_width), optional: The most recent message.
-        - "linear_message_history" : (... d_linear_message_space round), optional: The
+        - "linear_message_history" : (... round linear_message), optional: The
           linear message history, if using.
 
     Output:

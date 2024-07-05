@@ -240,8 +240,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         - "ignore_message" (...), optional: Whether to ignore any values in "message".
           For example, in the first round the there is no message, and the "message"
           field is set to a dummy value.
-        - "linear_message_history" : (... d_linear_message_space round), optional: The
-          linear message history, if using
+        - "linear_message_history" : (... round linear_message), optional: The linear
+          message history, if using
 
     Output:
         - "graph_level_repr" (... 2 d_representation): The output graph-level
@@ -269,11 +269,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         env_level_in_keys = ("x", "adjacency", "message", "node_mask")
 
         if self.params.include_linear_message_space:
-            env_level_in_keys = (
-                *env_level_in_keys,
-                "linear_message_history",
-                "linear_message",
-            )
+            env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
         return env_level_in_keys
 
@@ -562,8 +558,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             - "ignore_message" (...), optional: Whether to ignore any values in
               "message". For example, in the first round the there is no message, and
               the "message" field is set to a dummy value.
-            - "linear_message_history" : (... d_linear_message_space round), optional:
-              The linear message history, if using.
+            - "linear_message_history" : (... round linear_message), optional: The
+              linear message history, if using.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -707,7 +703,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         ):
             linear_message_feature = repeat(
                 data["linear_message_history"],
-                "... round message -> ... channels (round message)",
+                "... round linear_message -> ... channels (round linear_message)",
                 channels=2 + 2 * max_num_nodes,
             )
             linear_message_feature = torch.where(
@@ -1370,12 +1366,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             out_dict["linear_message_selected_logits"] = self.linear_message_selector(
                 body_output
             )["linear_message_selected_logits"]
-        else:
-            out_dict["linear_message_selected_logits"] = torch.zeros(
-                (*body_output.batch_size, self.params.d_linear_message_space),
-                device=self.device,
-                dtype=torch.float32,
-            )
 
         return TensorDict(out_dict, batch_size=body_output.batch_size)
 
@@ -1626,13 +1616,15 @@ class GraphIsomorphismRandomAgentPolicyHead(
 
         max_num_nodes = body_output["node_level_repr"].shape[-2]
 
-        node_selected_logits = torch.zeros(
+        update_dict = {}
+
+        update_dict["node_selected_logits"] = torch.zeros(
             *body_output.batch_size,
             2 * max_num_nodes,
             device=self.device,
             dtype=torch.float32,
         )
-        decision_logits = torch.zeros(
+        update_dict["decision_logits"] = torch.zeros(
             *body_output.batch_size,
             3,
             device=self.device,
@@ -1641,15 +1633,25 @@ class GraphIsomorphismRandomAgentPolicyHead(
 
         # Multiply the outputs by the dummy parameter, so that the gradients PyTorch
         # doesn't complain about not having any gradients
-        node_selected_logits = node_selected_logits * self.dummy_parameter
-        decision_logits = decision_logits * self.dummy_parameter
-
-        return body_output.update(
-            dict(
-                node_selected_logits=node_selected_logits,
-                decision_logits=decision_logits,
-            )
+        update_dict["node_selected_logits"] = (
+            update_dict["node_selected_logits"] * self.dummy_parameter
         )
+        update_dict["decision_logits"] = (
+            update_dict["decision_logits"] * self.dummy_parameter
+        )
+
+        if self.params.include_linear_message_space:
+            update_dict["linear_message_selected_logits"] = torch.zeros(
+                *body_output.batch_size,
+                self.params.d_linear_message_space,
+                device=self.device,
+                dtype=torch.float32,
+            )
+            update_dict["linear_message_selected_logits"] = (
+                update_dict["linear_message_selected_logits"] * self.dummy_parameter
+            )
+
+        return body_output.update(update_dict)
 
 
 @register_scenario_class(GI_SCENARIO, AgentValueHead)
@@ -1920,7 +1922,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         - "adjacency" (... pair node node): The adjacency matrices.
         - "message" (... pair node), optional: The most recent message.
         - "node_mask" (... pair node): Which nodes actually exist.
-        - "linear_message_history" : (... d_linear_message_space round), optional: The
+        - "linear_message_history" : (... round linear_message), optional: The
           linear message history, if using.
 
     Output:
