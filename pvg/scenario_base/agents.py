@@ -232,6 +232,17 @@ class AgentHead(AgentPart, ABC):
 class AgentPolicyHead(AgentHead, ABC):
     """Base class for all agent policy heads."""
 
+    @property
+    def has_decider(self) -> bool:
+        """Whether the policy head has an output yielding a decision.
+
+        By default a decider is used to decide whether to continue exchanging messages.
+        In this case it outputs a single triple of logits for the three options: guess
+        that the graphs are not isomorphic, guess that the graphs are isomorphic, or
+        continue exchanging messages.
+        """
+        return "verifier" in self.agent_name
+
 
 class RandomAgentPolicyHead(DummyAgentPartMixin, AgentPolicyHead, ABC):
     """A policy head which samples actions randomly."""

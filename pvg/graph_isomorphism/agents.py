@@ -1177,7 +1177,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         super().__init__(params, agent_name, protocol_handler, device=device)
 
         self.decider = None
-        self.has_decider = agent_name == "verifier"
 
         if self._agent_params.use_manual_architecture:
             if params.interaction_protocol != InteractionProtocolType.PVG:
@@ -1455,19 +1454,6 @@ class GraphIsomorphismRandomAgentPolicyHead(
             return ("node_selected_logits",)
         else:
             return ("node_selected_logits", "decision_logits")
-
-    def __init__(
-        self,
-        params: Parameters,
-        agent_name: str,
-        protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
-    ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
-
-        # Determine if we should output a decision too
-        self.has_decider = agent_name == "verifier"
 
     def forward(
         self,
