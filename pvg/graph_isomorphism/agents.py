@@ -259,8 +259,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("x", "adjacency", "message", "node_mask", "ignore_message")
-    out_keys = ("graph_level_repr", "node_level_repr")
+    agent_level_in_keys = ("ignore_message",)
+    env_level_in_keys = ("x", "adjacency", "message", "node_mask")
+    agent_level_out_keys = ("graph_level_repr", "node_level_repr")
 
     @property
     def d_gnn_out(self) -> int:
@@ -844,8 +845,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
     """Dummy agent body for the graph isomorphism task."""
 
-    in_keys = ("x",)
-    out_keys = ("graph_level_repr", "node_level_repr")
+    env_level_in_keys = ("x",)
+    agent_level_out_keys = ("graph_level_repr", "node_level_repr")
 
     def forward(
         self,
@@ -1149,16 +1150,18 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    @property
-    def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_decider:
-            return ("graph_level_repr", "node_level_repr", "message", "round")
-        else:
-            return ("graph_level_repr", "node_level_repr", "message")
+    agent_level_in_keys = ("graph_level_repr", "node_level_repr")
 
     @property
-    def out_keys(self):
-        if self.decider is None:
+    def env_level_in_keys(self):
+        if self.has_decider is not None and self._agent_params.include_round_in_decider:
+            return ("message", "round")
+        else:
+            return ("message",)
+
+    @property
+    def agent_level_out_keys(self):
+        if self.has_decider is None:
             return ("node_selected_logits",)
         else:
             return ("node_selected_logits", "decision_logits")
@@ -1173,6 +1176,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     ):
         super().__init__(params, agent_name, protocol_handler, device=device)
 
+        self.decider = None
+
         if self._agent_params.use_manual_architecture:
             if params.interaction_protocol != InteractionProtocolType.PVG:
                 raise NotImplementedError(
@@ -1186,8 +1191,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             # Build the decider module if necessary
             if agent_name == "verifier":
                 self.decider = self._build_decider()
-            else:
-                self.decider = None
 
     def _build_node_selector(self) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
@@ -1443,27 +1446,14 @@ class GraphIsomorphismRandomAgentPolicyHead(
           continue exchanging messages.
     """
 
-    in_keys = ("graph_level_repr", "node_level_repr")
+    agent_level_in_keys = ("graph_level_repr", "node_level_repr")
 
     @property
-    def out_keys(self):
-        if self.decider:
+    def agent_level_out_keys(self):
+        if self.has_decider:
             return ("node_selected_logits",)
         else:
             return ("node_selected_logits", "decision_logits")
-
-    def __init__(
-        self,
-        params: Parameters,
-        agent_name: str,
-        protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
-    ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
-
-        # Determine if we should output a decision too
-        self.decider = agent_name == "verifier"
 
     def forward(
         self,
@@ -1555,14 +1545,16 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    out_keys = ("value",)
+    agent_level_in_keys = ("graph_level_repr",)
 
     @property
-    def in_keys(self):
+    def env_level_in_keys(self):
         if self._agent_params.include_round_in_value:
-            return ("graph_level_repr", "round")
+            return ("round",)
         else:
-            return "graph_level_repr"
+            return ()
+
+    agent_level_out_keys = ("value",)
 
     def __init__(
         self,
@@ -1658,8 +1650,8 @@ class GraphIsomorphismConstantAgentValueHead(
         - "value" (...): The 'value' for each batch item, which is a constant zero.
     """
 
-    in_keys = ("graph_level_repr", "node_level_repr")
-    out_keys = ("value",)
+    agent_level_in_keys = ("graph_level_repr", "node_level_repr")
+    agent_level_out_keys = ("value",)
 
     def forward(
         self,
@@ -1731,8 +1723,8 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("graph_level_repr",)
-    out_keys = ("decision_logits",)
+    agent_level_in_keys = ("graph_level_repr",)
+    agent_level_out_keys = ("decision_logits",)
 
     def __init__(
         self,
@@ -1810,8 +1802,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         The agent bodies to combine.
     """
 
-    in_keys = ("round", "x", "adjacency", "message", "node_mask")
-    out_keys = (("agents", "node_level_repr"), ("agents", "graph_level_repr"))
+    additional_in_keys = ("round",)
 
     def forward(
         self,
@@ -1895,19 +1886,7 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         The agent policy heads to combine.
     """
 
-    in_keys = (
-        ("agents", "node_level_repr"),
-        ("agents", "graph_level_repr"),
-        "round",
-        "node_mask",
-        "message",
-        "ignore_message",
-        "decision_restriction",
-    )
-    out_keys = (
-        ("agents", "node_selected_logits"),
-        ("agents", "decision_logits"),
-    )
+    additional_in_keys = ("ignore_message", "decision_restriction")
 
     def forward(
         self,
@@ -1942,10 +1921,11 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
                         ..., i, :, :
                     ],
                     message=head_output["message"],
-                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )
+            if "round" in head_output.keys():
+                input_td["round"] = head_output["round"]
             policy_outputs[agent_name] = self.policy_heads[agent_name](
                 input_td, hooks=hooks
             )
@@ -2034,9 +2014,6 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
         The agent value heads to combine.
     """
 
-    in_keys = (("agents", "graph_level_repr"), "round")
-    out_keys = (("agents", "value"),)
-
     def forward(
         self,
         head_output: TensorDictBase,
@@ -2072,10 +2049,11 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
                     graph_level_repr=head_output["agents", "graph_level_repr"][
                         ..., i, :, :
                     ],
-                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )
+            if "round" in head_output.keys():
+                input_td["round"] = head_output["round"]
             value_outputs[agent_name] = self.value_heads[agent_name](
                 input_td, hooks=hooks
             )

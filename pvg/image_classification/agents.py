@@ -39,7 +39,7 @@ from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Int
 
-from pvg.scenario_base import (
+from pvg.scenario_base.agents import (
     AgentPart,
     AgentBody,
     AgentHead,
@@ -54,6 +54,7 @@ from pvg.scenario_base import (
     CombinedValueHead,
     Agent,
 )
+from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.scenario_instance import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import (
@@ -81,6 +82,7 @@ from pvg.utils.torch import (
 )
 from pvg.utils.types import TorchDevice
 from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
+from pvg.image_classification.pretrained_models import PretrainedImageModel
 
 
 IC_SCENARIO = ScenarioType.IMAGE_CLASSIFICATION
@@ -102,6 +104,7 @@ class ImageClassificationAgentPart(AgentPart, ABC):
     """
 
     _agent_params: ImageClassificationAgentParameters | RandomAgentParameters
+    _pretrained_model_class: Optional[PretrainedImageModel] = None
 
     def __init__(
         self,
@@ -148,6 +151,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         - "image" (... num_channels height width): The image
         - "message" (... latent_height latent_width), optional: The most recent message
         - "ignore_message" (...), optional: Whether to ignore the message
+        - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
+          optional: The embeddings of a pretrained model, if using.
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -167,8 +172,31 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    in_keys = ("x", "image", "message", "ignore_message")
-    out_keys = ("image_level_repr", "latent_pixel_level_repr")
+    agent_level_in_keys = ("ignore_message",)
+
+    @property
+    def env_level_in_keys(self):
+        if not self.include_pretrained_embeddings:
+            return ("x", "image", "message")
+        else:
+            return (
+                "x",
+                "image",
+                "message",
+                (
+                    "pretrained_embeddings",
+                    self.pretrained_model_name,
+                ),
+            )
+
+    agent_level_out_keys = ("image_level_repr", "latent_pixel_level_repr")
+
+    @property
+    def required_pretrained_models(self) -> list[str]:
+        if self.include_pretrained_embeddings:
+            return [self.pretrained_model_name]
+        else:
+            return []
 
     def __init__(
         self,
@@ -193,6 +221,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 message_out_key="x_normalized",
                 num_structure_dims=2,
                 round_dim_last=False,
+            )
+
+        # Build the pretrained encoding scaler if necessary
+        if self.include_pretrained_embeddings:
+            self.pretrained_embedding_scaler = self.build_pretrained_embedding_scaler()
+            self.pretrained_embedding_scaler = self.pretrained_embedding_scaler.to(
+                device
             )
 
         self.message_history_upsampler = self.build_message_history_upsampler().to(
@@ -230,17 +265,98 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             out_keys="x_upsampled",
         )
 
-    def build_initial_encoder(self) -> TensorDictSequential:
-        """Build the initial encoding layer.
+    def build_pretrained_embedding_scaler(self) -> TensorDictModule:
+        """Build the module which scales the pretrained embeddings.
 
-        Concatenates the upsampled message history with the image, then applies a linear
-        layer to obtain the initial pixel-level representations.
+        The pretrained embeddings scaled to the image size. This can be by upsampling or
+        mean pooling, depending on  whether the image size is larger or smaller than the
+        embedding size.
 
         Shapes
         ------
         Input:
-            - "x_upsampled" : (... max_message_rounds height width) image : (...
-            num_channels height width)
+            - "pretrained_embeddings" : (... embedding_channels embedding_height
+              embedding_width) : The embeddings of the pretrained model
+
+        Output:
+            - "pretrained_embeddings_scaled" : (... embedding_channels height width) :
+              The scaled embeddings
+
+        Returns
+        -------
+        pretrained_embedding_scaler : TensorDictModule
+            The module which scales the pretrained embeddings.
+        """
+
+        embedding_width = self.pretrained_model_class.embedding_width
+        embedding_height = self.pretrained_model_class.embedding_height
+
+        if (
+            embedding_width == self.image_width
+            and embedding_height == self.image_height
+        ):
+            return TensorDictModule(
+                TensorDictCloneKeys(
+                    in_keys=(
+                        "pretrained_embeddings",
+                        self.pretrained_model_name,
+                    ),
+                    out_keys="pretrained_embeddings_scaled",
+                )
+            )
+        elif (
+            embedding_width > self.image_width and embedding_height > self.image_height
+        ):
+            return TensorDictModule(
+                Reduce(
+                    "... channel scale_height*image_height scale_width*image_width "
+                    "-> ... channel image_height image_width",
+                    reduction="mean",
+                    image_height=self.image_height,
+                    image_width=self.image_width,
+                ),
+                in_keys=(
+                    "pretrained_embeddings",
+                    self.pretrained_model_name,
+                ),
+                out_keys="pretrained_embeddings_scaled",
+            )
+        elif (
+            embedding_width < self.image_width and embedding_height < self.image_height
+        ):
+            return TensorDictModule(
+                UpsampleSimulateBatchDims(
+                    size=(self.image_height, self.image_width),
+                    mode="nearest",
+                ),
+                in_keys=(
+                    "pretrained_embeddings",
+                    self.pretrained_model_name,
+                ),
+                out_keys="pretrained_embeddings_scaled",
+            )
+        else:
+            raise ValueError(
+                f"The pretrained embeddings must either be the same size as the image, "
+                f"smaller in both dimensions or larger in both dimensions. Got "
+                f"image size ({self.image_height}, {self.image_width}) and embedding "
+                f"size ({embedding_height}, {embedding_width})."
+            )
+
+    def build_initial_encoder(self) -> TensorDictSequential:
+        """Build the initial encoding layer.
+
+        Concatenates the upsampled message history with the image and pretrained
+        embeddings if using, then applies a two-layer MLP to obtain the initial
+        pixel-level representations.
+
+        Shapes
+        ------
+        Input:
+            - "x_upsampled" : (... max_message_rounds height width)
+            - "image" : (... num_channels height width)
+            - "pretrained_embeddings_scaled" : (... embedding_channels height width),
+              optional
 
         Output:
             - "latent_pixel_level_repr" : (... initial_num_channels height width)
@@ -250,9 +366,22 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         TensorDictSequential
             The initial encoding layer.
         """
+
+        in_channels = (
+            self.protocol_handler.max_message_rounds + self.dataset_num_channels
+        )
+
+        if not self.include_pretrained_embeddings:
+            cat_keys = ("x_upsampled", "image")
+        else:
+            cat_keys = ("x_upsampled", "image", "pretrained_embeddings_scaled")
+            in_channels += self.pretrained_model_class.embedding_channels
+            # cat_keys = ("pretrained_embeddings_scaled", )
+            # in_channels = self.pretrained_model_class.embedding_channels
+
         return TensorDictSequential(
             TensorDictCat(
-                in_keys=("x_upsampled", "image"),
+                in_keys=cat_keys,
                 out_key="latent_pixel_level_repr",
                 dim=-3,
             ),
@@ -263,8 +392,20 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             ),
             TensorDictModule(
                 Linear(
-                    self.protocol_handler.max_message_rounds
-                    + self.dataset_num_channels,
+                    in_channels,
+                    in_channels,
+                ),
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
+            TensorDictModule(
+                self.activation_function(),
+                in_keys="latent_pixel_level_repr",
+                out_keys="latent_pixel_level_repr",
+            ),
+            TensorDictModule(
+                Linear(
+                    in_channels,
                     self.initial_num_channels,
                 ),
                 in_keys="latent_pixel_level_repr",
@@ -500,6 +641,10 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         # Upsample the message history
         data = self.message_history_upsampler(data)
 
+        # Scale the pretrained embeddings if necessary
+        if self.include_pretrained_embeddings:
+            data = self.pretrained_embedding_scaler(data)
+
         # Encode the image and message history
         data = self.initial_encoder(data)
 
@@ -531,6 +676,35 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         self.final_encoder = self.final_encoder.to(device)
         return self
 
+    @property
+    def include_pretrained_embeddings(self) -> bool:
+        """Whether to include pretrained embeddings."""
+        return self._agent_params.pretrained_embeddings_model is not None
+
+    @property
+    def pretrained_model_class(self) -> PretrainedImageModel | None:
+        """The pretrained model class to use, if any."""
+        if self.include_pretrained_embeddings:
+            if self._pretrained_model_class is None:
+                self._pretrained_model_class = get_pretrained_model_class(
+                    self._agent_params.pretrained_embeddings_model, self.params
+                )
+            return self._pretrained_model_class
+        else:
+            return None
+
+    @property
+    def pretrained_model_name(self) -> str | None:
+        """The full name of the pretrained model to use, if any.
+
+        This may be different from the model name in the parameters, if the latter is
+        a shorthand.
+        """
+        if self.include_pretrained_embeddings:
+            return self.pretrained_model_class.name
+        else:
+            return None
+
 
 @register_scenario_class(IC_SCENARIO, DummyAgentBody)
 class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgentBody):
@@ -552,8 +726,8 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
 
     """
 
-    in_keys = ("x", "image")
-    out_keys = ("image_level_repr", "latent_pixel_level_repr")
+    env_level_in_keys = ("x", "image")
+    agent_level_out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     def forward(self, data: TensorDictBase) -> TensorDict:
         """Returns dummy outputs.
@@ -846,15 +1020,17 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    @property
-    def in_keys(self):
-        if self.decider is not None and self._agent_params.include_round_in_decider:
-            return ("image_level_repr", "latent_pixel_level_repr", "round")
-        else:
-            return ("image_level_repr", "latent_pixel_level_repr")
+    agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     @property
-    def out_keys(self):
+    def env_level_in_keys(self):
+        if self.decider is not None and self._agent_params.include_round_in_decider:
+            return ("round",)
+        else:
+            return ()
+
+    @property
+    def agent_level_out_keys(self):
         if self.decider is None:
             return ("latent_pixel_selected_logits",)
         else:
@@ -972,27 +1148,14 @@ class ImageClassificationRandomAgentPolicyHead(
           zeros when the decider is not present.
     """
 
-    in_keys = ("image_level_repr", "latent_pixel_level_repr")
+    agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     @property
-    def out_keys(self):
-        if self.decider:
+    def agent_level_out_keys(self):
+        if self.has_decider:
             return ("latent_pixel_selected_logits",)
         else:
             return ("latent_pixel_selected_logits", "decision_logits")
-
-    def __init__(
-        self,
-        params: Parameters,
-        agent_name: str,
-        protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
-    ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
-
-        # Determine if we should output a decision too
-        self.decider = agent_name == "verifier"
 
     def forward(self, body_output: TensorDict) -> TensorDict:
         """Outputs a uniform distribution.
@@ -1064,14 +1227,16 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    out_keys = ("value",)
+    agent_level_in_keys = ("image_level_repr",)
 
     @property
-    def in_keys(self):
+    def env_level_in_keys(self):
         if self._agent_params.include_round_in_value:
-            return ("image_level_repr", "round")
+            return ("round",)
         else:
-            return "image_level_repr"
+            return ()
+
+    agent_level_out_keys = ("value",)
 
     def __init__(
         self,
@@ -1148,8 +1313,8 @@ class ImageClassificationConstantAgentValueHead(
         - "value" (...): The 'value' for each batch item, which is a constant zero.
     """
 
-    in_keys = ("image_level_repr", "latent_pixel_level_repr")
-    out_keys = ("value",)
+    agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
+    agent_level_out_keys = ("value",)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
         """Returns a constant value.
@@ -1198,8 +1363,8 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
           graphs are isomorphic, or guess that the graphs are not isomorphic.
     """
 
-    in_keys = ("image_level_repr",)
-    out_keys = ("decision_logits",)
+    agent_level_in_keys = ("image_level_repr",)
+    agent_level_out_keys = ("decision_logits",)
 
     def __init__(
         self,
@@ -1269,12 +1434,9 @@ class ImageClassificationCombinedBody(CombinedBody):
         The agent bodies to combine.
     """
 
-    in_keys = ("round", "x", "image", "message")
-    out_keys = (
-        "round",
-        ("agents", "latent_pixel_level_repr"),
-        ("agents", "image_level_repr"),
-    )
+    additional_in_keys = ("round",)
+    excluded_in_keys = (("agents", "ignore_message"),)
+    additional_out_keys = ("round",)
 
     def __init__(
         self,
@@ -1363,16 +1525,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         The agent policy heads to combine.
     """
 
-    in_keys = (
-        ("agents", "latent_pixel_level_repr"),
-        ("agents", "image_level_repr"),
-        "round",
-        "decision_restriction",
-    )
-    out_keys = (
-        ("agents", "latent_pixel_selected_logits"),
-        ("agents", "decision_logits"),
-    )
+    additional_in_keys = ("decision_restriction",)
 
     def __init__(
         self,
@@ -1405,10 +1558,11 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
                 dict(
                     latent_pixel_level_repr=latent_pixel_level_repr[..., i, :, :, :],
                     image_level_repr=image_level_repr[..., i, :],
-                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )
+            if "round" in head_output.keys():
+                input_td["round"] = head_output["round"]
             policy_outputs[agent_name] = self.policy_heads[agent_name](input_td)
 
         # Stack the outputs
@@ -1468,9 +1622,6 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
         The agent value heads to combine.
     """
 
-    in_keys = (("agents", "image_level_repr"), "round")
-    out_keys = (("agents", "value"),)
-
     def __init__(
         self,
         params: Parameters,
@@ -1505,10 +1656,11 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
                 dict(
                     latent_pixel_level_repr=latent_pixel_level_repr[..., i, :, :, :],
                     image_level_repr=image_level_repr[..., i, :],
-                    round=head_output["round"],
                 ),
                 batch_size=head_output.batch_size,
             )
+            if "round" in head_output.keys():
+                input_td["round"] = head_output["round"]
             value_outputs[agent_name] = self.value_heads[agent_name](input_td)
 
         # Stack the outputs

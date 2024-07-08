@@ -43,11 +43,11 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
-    dataset_name=["svhn"],
+    dataset_name=["cifar10"],
     num_iterations=[5000],
     num_epochs=[10],
     minibatch_size=[256],
-    frames_per_batch=[1024],
+    frames_per_batch=[256],
     gamma=[0.95],
     lmbda=[0.95],
     ppo_loss_type=[PpoLossType.CLIP],
@@ -67,15 +67,17 @@ param_grid = dict(
     prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
     random_prover=[False],
     pretrain_agents=[False],
-    binarification_method=[BinarificationMethodType.MERGE],
+    binarification_method=[BinarificationMethodType.SELECT_TWO],
     binarification_seed=[None],
     selected_classes=[None],
     activation_function=[ActivationType.TANH],
@@ -132,6 +134,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             body_lr_factor=combo["body_lr_factor"],
             update_schedule=prover_update_schedule,
             building_block_type=combo["prover_block_type"],
+            pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -146,6 +149,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 agent_lr_factor=combo["verifier_lr_factor"],
                 update_schedule=verifier_update_schedule,
                 building_block_type=combo["verifier_block_type"],
+                pretrained_embeddings_model=combo[
+                    "verifier_pretrained_embeddings_model"
+                ],
             ),
             prover=prover_params,
         ),

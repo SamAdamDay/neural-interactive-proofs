@@ -29,12 +29,14 @@ class Environment(EnvBase, ABC):
     To implement a new environment, subclass this class and implement the following
     attribute and methods:
 
+    - `_message_history_shape`: The shape of the message history and 'x' tensors.
     - `_get_observation_spec`: The specification of the agent observations.
     - `_get_action_spec`: The specification of the agent actions.
     - `_get_state_spec` (optional): The specification of the states space.
     - `_get_reward_spec` (optional): The specification of the agent rewards.
     - `_get_done_spec` (optional): The specification of the agent done signals.
     - `_step`: Perform a step in the environment.
+    - `_compute_message_history`: Compute the new message history and next message.
     - `_masked_reset`: Reset the environment for a subset of the episodes.
 
     Parameters
@@ -130,6 +132,8 @@ class Environment(EnvBase, ABC):
             * 2: The verifier can only make a guess.
         - `x`: The message history.
         - `message`: The next message.
+        - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
+          specification, where the sub-keys are the pretrained model names.
 
 
         Subclasses should call this method and add at least:
@@ -142,7 +146,8 @@ class Environment(EnvBase, ABC):
         observation_spec : TensorSpec
             The observation specification.
         """
-        return CompositeSpec(
+
+        observation_spec = CompositeSpec(
             round=DiscreteTensorSpec(
                 self.protocol_handler.max_message_rounds,
                 shape=(self.num_envs,),
@@ -169,6 +174,24 @@ class Environment(EnvBase, ABC):
             shape=(self.num_envs,),
             device=self.device,
         )
+
+        # Add specifications for the pretrained embeddings, if any
+        pretrained_model_names = self.dataset.pretrained_model_names
+        for model_name in pretrained_model_names:
+            observation_spec["pretrained_embeddings", model_name] = (
+                UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        *self.dataset.get_pretrained_embedding_feature_shape(
+                            model_name
+                        ),
+                    ),
+                    dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
+                    device=self.device,
+                )
+            )
+
+        return observation_spec
 
     @abstractmethod
     def _get_action_spec(self) -> TensorSpec:

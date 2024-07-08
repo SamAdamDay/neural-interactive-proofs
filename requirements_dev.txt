@@ -1,9 +1,9 @@
 -r requirements.txt
-flake8==7.0.0
 black==24.4.2
-pytest==8.2.0
-pre-commit==3.7.0
-tensorboard==2.16.2
-torch_tb_profiler==0.4.3
+flake8==7.1.0
 HolisticTraceAnalysis==0.2.0
 libtmux==0.37.0
+pre-commit==3.7.1
+pytest==8.2.2
+tensorboard==2.17.0
+torch_tb_profiler==0.4.3

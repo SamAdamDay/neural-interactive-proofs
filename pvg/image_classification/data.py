@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Any
 from abc import ABC
 from pathlib import Path
 
@@ -167,29 +167,46 @@ class ImageClassificationDataset(Dataset):
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
     by `params.image_classification.selected_classes`).
+
+    Shapes
+    ------
+    The dataset is a TensorDict with the following keys:
+        - "image" (dataset_size num_channels height width): The images in the dataset.
+        - "x" (dataset_size max_message_rounds height width): The pixel features, which
+          are all zeros.
+        - "y" (dataset_size): The labels of the images.
     """
 
     x_dtype = torch.float32
     y_dtype = torch.int64
 
-    def _build_tensor_dict(self) -> TensorDict:
-        # Load the dataset
+    def build_torch_dataset(
+        self, *, transform: Optional[Any]
+    ) -> TorchVisionDatasetWrapper:
         dataset_class = DATASET_WRAPPER_CLASSES[self.params.dataset]
+        return dataset_class(
+            root=self.raw_dir, train=self.train, transform=transform, download=True
+        )
+
+    def build_tensor_dict(self) -> TensorDict:
+        # Load the dataset
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
                 transforms.Normalize((0.5,), (0.5,)),
             ]
         )
-        torch_dataset = dataset_class(
-            root=self.raw_dir, train=self.train, transform=transform, download=True
-        )
+        torch_dataset = self.build_torch_dataset(transform=transform)
 
         # Get the whole dataset as a single batch
         full_dataset_loader = TorchDataLoader(
             torch_dataset, batch_size=len(torch_dataset)
         )
         images, labels = next(iter(full_dataset_loader))
+
+        # Keep track of the indices of the original dataset from which the final dataset
+        # is produced. This is needed to reconstruct the dataset with `to_torch_dataset`
+        rearrange_index = torch.arange(len(labels))
 
         # The generator used to turn the dataset into a binary classification problem
         binurification_generator = torch.Generator()
@@ -217,6 +234,7 @@ class ImageClassificationDataset(Dataset):
             )
             images = images[index]
             labels = labels[index]
+            rearrange_index = rearrange_index[index]
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
 
         elif (
@@ -243,6 +261,7 @@ class ImageClassificationDataset(Dataset):
             permuted_indices = torch.randperm(len(labels))
             images = images[permuted_indices]
             labels = labels[permuted_indices]
+            rearrange_index = rearrange_index[permuted_indices]
             index_0 = torch.where(labels == 0)[0]
             index_1 = torch.where(labels == 1)[0]
             num_classes_0 = (labels == 0).sum()
@@ -254,6 +273,7 @@ class ImageClassificationDataset(Dataset):
             index = torch.cat((index_0, index_1))
             images = images[index]
             labels = labels[index]
+            rearrange_index = rearrange_index[index]
 
         # Create the pixel features, which are all zeros
         x = torch.zeros(
@@ -263,7 +283,10 @@ class ImageClassificationDataset(Dataset):
             dtype=self.x_dtype,
         )
 
-        return TensorDict(dict(image=images, x=x, y=labels), batch_size=images.shape[0])
+        return TensorDict(
+            dict(image=images, x=x, y=labels, _rearrange_index=rearrange_index),
+            batch_size=images.shape[0],
+        )
 
     @property
     def raw_dir(self) -> str:
@@ -290,6 +313,14 @@ class ImageClassificationDataset(Dataset):
             self.params.dataset,
             f"processed_{self.protocol_handler.max_message_rounds}_{suffix}",
             sub_dir,
+        )
+
+    @property
+    def pretrained_embeddings_dir(self) -> str:
+        """The path to the directory containing cached pretrained model embeddings."""
+        sub_dir = "train" if self.train else "test"
+        return os.path.join(
+            IC_DATA_DIR, self.params.dataset, "pretrained_embeddings", sub_dir
         )
 
     @property

@@ -632,6 +632,17 @@ class ImageClassificationAgentParameters(AgentParameters):
         The kernel size of the building blocks in the agents's CNN.
     stride : int
         The stride of the building blocks in the agents's CNN.
+    pretrained_embeddings_model : str or None
+        If not None, specifies a pretrained model to load. This is usually either of the
+        form "{hf_user}/{model_name}_{dataset}", where `hf_user` is a HuggingFace Hub
+        username, or "{model_name}", which resolves to
+        "{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}", where
+        `HF_PRETRAINED_MODELS_USER` is defined in the `constants` module. The last-layer
+        embeddings will be included in the model architecture.
+    pretrained_embedding_channels : int
+        The number of channels used to represent the pretrained embeddings. The
+        pretrained embeddings are resized to this number of channels by using a 1x1
+        convolution.
     d_latent_pixel_selector : int
         The dimension of the hidden layer in the agents's MLP which selects a latent
         pixel to send as a message.
@@ -659,6 +670,9 @@ class ImageClassificationAgentParameters(AgentParameters):
     num_blocks_per_group: int = 2
     kernel_size: int = 3
     stride: int = 1
+
+    pretrained_embeddings_model: Optional[str] = None
+    pretrained_embedding_channels: int = 64
 
     d_latent_pixel_selector: int = 16
     num_latent_pixel_selector_layers: int = 2

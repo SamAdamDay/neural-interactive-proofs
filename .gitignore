@@ -149,3 +149,6 @@ model_cache/*/*
 # The log
 log
 .devcontainer/devcontainer.json
+
+# PyTorch Image Models Source code
+pytorch-image-models-*

@@ -67,6 +67,8 @@ class ExperimentSettings:
         A function to step the global tqdm progress bar. This is used when there are
         multiple processes running in parallel and each process needs to update the
         global progress bar.
+    pretrained_embeddings_batch_size : int, default=256
+        The batch size to use when generating embeddings for the pretrained models.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -90,6 +92,7 @@ class ExperimentSettings:
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
     global_tqdm_step_fn: callable = lambda: ...
+    pretrained_embeddings_batch_size: int = 256
     test_run: bool = False
 
     def __post_init__(self):

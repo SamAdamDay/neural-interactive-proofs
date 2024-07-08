@@ -36,7 +36,7 @@ MULTIPROCESS = True
 TEST_SIZE = 0.2
 
 param_grid = dict(
-    dataset_name=["svhn"],
+    dataset_name=["cifar10"],
     num_epochs=[50],
     batch_size=[256],
     learning_rate=[0.001],
@@ -45,12 +45,14 @@ param_grid = dict(
     prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
-    binarification_method=[BinarificationMethodType.MERGE],
+    binarification_method=[BinarificationMethodType.SELECT_TWO],
     binarification_seed=[None],
     selected_classes=[None],
     seed=[8144, 820, 4173, 3992],
@@ -67,11 +69,15 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 num_blocks_per_group=combo["verifier_blocks_per_group"],
                 num_decider_layers=combo["verifier_num_decider_layers"],
                 building_block_type=combo["verifier_block_type"],
+                pretrained_embeddings_model=combo[
+                    "verifier_pretrained_embeddings_model"
+                ],
             ),
             prover=ImageClassificationAgentParameters(
                 num_blocks_per_group=combo["prover_blocks_per_group"],
                 num_decider_layers=combo["prover_num_decider_layers"],
                 building_block_type=combo["prover_block_type"],
+                pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
             ),
         ),
         solo_agent=SoloAgentParameters(

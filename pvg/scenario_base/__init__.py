@@ -37,3 +37,8 @@ from .rollout_samples import (
     register_rollout_samples_class,
     build_rollout_samples,
 )
+from .pretrained_models import (
+    PretrainedModel,
+    register_pretrained_model_class,
+    get_pretrained_model_class,
+)
