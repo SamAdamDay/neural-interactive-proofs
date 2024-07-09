@@ -101,6 +101,7 @@ def run(cmd_args: Namespace):
             min_message_rounds=0,
         ),
         pretrain_agents=False,
+        include_linear_message_space=False,
     )
 
     # Train and test the agents

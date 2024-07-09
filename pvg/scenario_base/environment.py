@@ -2,8 +2,12 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional
+from operator import mul
+from functools import reduce
 
 import torch
+from torch import Tensor
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -15,6 +19,10 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import EnvBase
+
+import einops
+
+from jaxtyping import Float, Int
 
 from pvg.scenario_base import DataLoader, Dataset
 from pvg.protocols import ProtocolHandler
@@ -108,8 +116,34 @@ class Environment(EnvBase, ABC):
 
     @property
     @abstractmethod
-    def _message_history_shape(self) -> tuple:
-        """Get the shape of the message history and 'x' tensors
+    def main_message_space_shape(self) -> tuple:
+        """The shape of the main message space used by the agents to communicate
+
+        This is typically informed by the type of data in the environment. E.g. for
+        images this might have shape "height width"
+        """
+
+    @property
+    @abstractmethod
+    def main_message_out_key(self) -> str:
+        """The tensordict key which contains the main message sent by each agent
+
+        This key is the main output of an agent. Typically, the agent's forward pass
+        will output logits for this key, which will then be selected from.
+        """
+
+    @property
+    def round_last_in_main_message_history(self) -> bool:
+        """Whether the round dim comes last in the main message history
+
+        For image datasets it makes sense to have the round come before the height and
+        width dims because it acts as a channel.
+        """
+        return True
+
+    @property
+    def message_history_shape(self) -> tuple:
+        """The shape of the message history and 'x' tensors
 
         This is used to make the specification for these.
 
@@ -118,6 +152,19 @@ class Environment(EnvBase, ABC):
         message_history_shape: tuple
             The common shape of the message history and 'x' tensors.
         """
+
+        if self.round_last_in_main_message_history:
+            return (
+                self.num_envs,
+                *self.main_message_space_shape,
+                self.protocol_handler.max_message_rounds,
+            )
+        else:
+            return (
+                self.num_envs,
+                self.protocol_handler.max_message_rounds,
+                *self.main_message_space_shape,
+            )
 
     @abstractmethod
     def _get_observation_spec(self) -> TensorSpec:
@@ -161,13 +208,13 @@ class Environment(EnvBase, ABC):
                 device=self.device,
             ),
             x=UnboundedContinuousTensorSpec(
-                shape=self._message_history_shape,
+                shape=self.message_history_shape,
                 dtype=torch.float,
                 device=self.device,
             ),
             message_history=BinaryDiscreteTensorSpec(
-                self._message_history_shape[-1],
-                shape=self._message_history_shape,
+                self.message_history_shape[-1],
+                shape=self.message_history_shape,
                 dtype=torch.float,
                 device=self.device,
             ),
@@ -191,6 +238,19 @@ class Environment(EnvBase, ABC):
                 )
             )
 
+        # Add the linear message history, if it is included
+        if self.params.include_linear_message_space:
+            observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
+                self.params.d_linear_message_space,
+                shape=(
+                    self.num_envs,
+                    self.protocol_handler.max_message_rounds,
+                    self.params.d_linear_message_space,
+                ),
+                dtype=torch.float,
+                device=self.device,
+            )
+
         return observation_spec
 
     @abstractmethod
@@ -204,7 +264,8 @@ class Environment(EnvBase, ABC):
         action_spec : TensorSpec
             The action specification.
         """
-        return CompositeSpec(
+
+        action_spec = CompositeSpec(
             agents=CompositeSpec(
                 decision=DiscreteTensorSpec(
                     3,
@@ -218,6 +279,16 @@ class Environment(EnvBase, ABC):
             shape=(self.num_envs,),
             device=self.device,
         )
+
+        if self.params.include_linear_message_space:
+            action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
+                self.params.d_linear_message_space,
+                shape=(self.num_envs, self.num_agents),
+                dtype=torch.long,
+                device=self.device,
+            )
+
+        return action_spec
 
     def _get_state_spec(self) -> TensorSpec:
         """Get the specification of the states space.
@@ -316,13 +387,35 @@ class Environment(EnvBase, ABC):
                 "x",
                 "message_history",
                 "message",
+                "linear_message_history",
+                "linear_message",
                 "round",
                 "decision_restriction",
             ]:
                 next_td[key] = env_td[key]
 
-        # Compute the message history and next message
-        next_td = self._compute_message_history(env_td, next_td)
+        # Compute the message history and next message in the main message space
+        next_td = self._compute_message_history_and_next_message(
+            env_td,
+            next_td,
+            message_out_key=self.main_message_out_key,
+            message_in_key="message",
+            message_history_key="message_history",
+            message_shape=self.main_message_space_shape,
+            round_last_in_message_history=self.round_last_in_main_message_history,
+        )
+
+        # Do the same for the linear message space, if it is included
+        if self.params.include_linear_message_space:
+            next_td = self._compute_message_history_and_next_message(
+                env_td,
+                next_td,
+                message_out_key="linear_message_selected",
+                message_in_key="linear_message",
+                message_shape=(self.params.d_linear_message_space,),
+                message_history_key="linear_message_history",
+                round_last_in_message_history=False,
+            )
 
         # Clone the message history to the 'x' feature tensor
         next_td["x"] = next_td["message_history"].clone()
@@ -338,13 +431,21 @@ class Environment(EnvBase, ABC):
 
         return next_td
 
-    @abstractmethod
-    def _compute_message_history(
+    def _compute_message_history_and_next_message(
         self,
         env_td: TensorDictBase,
         next_td: TensorDictBase,
+        *,
+        message_out_key: str,
+        message_in_key: str,
+        message_history_key: str,
+        message_shape: tuple[int, ...],
+        round_last_in_message_history: bool = True,
     ) -> TensorDictBase:
-        """Compute the new message history and next message.
+        """Compute the new message history and next message for given keys
+
+        This is a generic method for updating one-hot encoded next message and message
+        history tensors given a choice of message for each agent.
 
         Used in the `_step` method of the environment.
 
@@ -355,12 +456,76 @@ class Environment(EnvBase, ABC):
         next_td : TensorDictBase
             The 'next' tensordict, to be updated with the message history and next
             message.
+        message_out_key : str
+            The key in the 'agents' sub-tensordict which contains the message selected
+            by each agent. This results from the output of the agent's forward pass.
+        message_in_key : str
+            The key which contains the next message to be sent, which is used as input
+            to each agent.
+        message_history_key : str
+            The key which contains the message history tensor.
+        message_shape : tuple[int, ...]
+            The shape of the message space.
+        round_last_in_message_history : bool, default=True
+            Whether the round dim comes last in the message history shape.
 
         Returns
         -------
         next_td : TensorDictBase
             The updated 'next' tensordict.
         """
+
+        # Get a string representation of the message space dims, for type annotation.
+        # dim_1 dim_2 etc.
+        message_shape_str = " ".join(f"dim_{i}" for i in range(len(message_shape)))
+
+        message_history: (
+            Float[Tensor, f"... round {message_shape_str}"]
+            | Float[Tensor, f"... {message_shape_str} round"]
+        ) = env_td.get(message_history_key)
+        round: Int[Tensor, "..."] = env_td.get("round")
+        message_selected: Int[Tensor, "... agent"] = env_td.get(
+            ("agents", message_out_key)
+        )
+
+        # Compute index of the agent(s) whose turn it is.
+        # (... agent)
+        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
+
+        # Sum up the messages from the agents whose turn it is. If two agents select the
+        # same message number, the message will be 2.
+        # (... {message_shape_str})
+        message = F.one_hot(message_selected, reduce(mul, message_shape)).float()
+        message = torch.where(active_agents_mask[..., None], message, 0)
+        message = einops.reduce(
+            message,
+            f"... agent ({message_shape_str}) -> ... {message_shape_str}",
+            reduction="sum",
+            **{f"dim_{i}": dim for i, dim in enumerate(message_shape)},
+        )
+
+        # Get a mask for which round it is
+        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+
+        # Reshape it so that it looks like the message history with 1's for the message
+        # space dims
+        message_shape_ones = " ".join(["1"] * len(message_shape))
+        if round_last_in_message_history:
+            round_mask_shape = f"{message_shape_ones} round"
+        else:
+            round_mask_shape = f"round {message_shape_ones}"
+        round_mask = einops.rearrange(
+            round_mask, f"... round -> ... {round_mask_shape}"
+        )
+
+        # Insert the message into the message history at the current round
+        message_history = message_history.masked_scatter(round_mask, message)
+
+        # Add the message history and next message to the next tensordict
+        next_td.set(message_history_key, message_history)
+        next_td.set(message_in_key, message)
+
+        return next_td
 
     def _reset(self, env_td: Optional[TensorDictBase] = None) -> TensorDictBase:
         """(Partially) reset the environment.
@@ -442,7 +607,25 @@ class Environment(EnvBase, ABC):
         env_td : TensorDictBase
             The reset environment tensordict.
         """
-        pass
+
+        env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
+        env_td["message_history"][mask] = torch.zeros_like(
+            env_td["message_history"][mask]
+        )
+        env_td["x"][mask] = torch.zeros_like(env_td["x"][mask])
+        env_td["message"][mask] = 0
+        env_td["round"][mask] = 0
+        env_td["done"][mask] = False
+        env_td["terminated"][mask] = False
+        env_td["decision_restriction"][mask] = 0
+
+        pretrained_model_names = self.dataset.pretrained_model_names
+        for model_name in pretrained_model_names:
+            env_td["pretrained_embeddings", model_name][mask] = data_batch[
+                "pretrained_embeddings", model_name
+            ]
+
+        return env_td
 
     def _set_seed(self, seed: int | None):
         self.rng = torch.manual_seed(seed)
