@@ -1,0 +1,32 @@
+"""Parameters for the dataset."""
+
+from dataclasses import dataclass
+from typing import Optional
+
+from pvg.parameters.base import SubParameters
+from pvg.parameters.types import BinarificationMethodType
+
+
+@dataclass
+class DatasetParameters(SubParameters):
+    """Additional parameters for the dataset.
+
+    Parameters
+    ----------
+    binarification_method : BinarificationMethodType
+        The method to use to turn the multi-class classification task into a binary
+        classification task.
+    selected_classes : tuple[int, int], optional
+        When selecting two classes from the original dataset, the indices of the classes
+        to select. If not provided, the default for the dataset is used.
+    binarification_seed : int, optional
+        The seed used when doing a randomised binarification. If not provided, the
+        default for the dataset is used.
+    make_balanced : bool
+        Whether to make sure the dataset is balanced.
+    """
+
+    binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
+    selected_classes: Optional[tuple[int, int]] = None
+    binarification_seed: Optional[int] = None
+    make_balanced: bool = True

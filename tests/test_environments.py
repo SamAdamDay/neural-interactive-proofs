@@ -12,9 +12,11 @@ from pvg.parameters import (
     TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
+    ImageClassificationAgentParameters,
     RlTrainerParameters,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    ImageClassificationParameters,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
@@ -168,6 +170,147 @@ def test_graph_isomorphism_environment_step():
     # Check that the output is as expected.
     assert_close(next["adjacency"], expected_next["adjacency"])
     assert_close(next["node_mask"], expected_next["node_mask"])
+    assert_close(next["message_history"], expected_next["message_history"])
+    assert_close(next["round"], expected_next["round"])
+    assert_close(next["done"], expected_next["done"])
+    assert_close(next["message"], expected_next["message"])
+    assert_close(next["agents", "reward"], expected_next["agents", "reward"])
+
+
+def test_image_classification_environment_step():
+    """Make sure the IC environment step method works as expected."""
+
+    batch_size = 12
+    max_message_rounds = 6
+
+    # Set up the environment.
+    params = Parameters(
+        ScenarioType.IMAGE_CLASSIFICATION,
+        TrainerType.VANILLA_PPO,
+        "test",
+        rl=RlTrainerParameters(
+            frames_per_batch=batch_size * max_message_rounds,
+            steps_per_env_per_iteration=max_message_rounds,
+        ),
+        agents=AgentsParameters(
+            prover=ImageClassificationAgentParameters(),
+            verifier=ImageClassificationAgentParameters(),
+        ),
+        protocol_common=CommonProtocolParameters(
+            prover_reward=1,
+            verifier_reward=2,
+            verifier_terminated_penalty=-4,
+            verifier_no_guess_reward=8,
+            verifier_incorrect_penalty=-16,
+        ),
+        pvg_protocol=PvgProtocolParameters(
+            max_message_rounds=max_message_rounds,
+            min_message_rounds=1,
+            verifier_first=False,
+        ),
+        image_classification=ImageClassificationParameters(num_block_groups=2),
+    )
+    settings = ExperimentSettings(device="cpu", test_run=True)
+    protocol_handler = build_protocol_handler(params)
+    dataset = ImageClassificationDataset(params, settings, protocol_handler)
+    env = ImageClassificationEnvironment(params, settings, dataset, protocol_handler)
+
+    image_width = env.image_width
+    image_height = env.image_height
+    latent_width = env.latent_width
+    latent_height = env.latent_height
+    num_channels = env.dataset_num_channels
+
+    # Build the tensor of latent pixels selected by the agents.
+    torch.manual_seed(0)
+    latent_pixel_selected = torch.randint(
+        0, latent_height * latent_width, (batch_size, 2)
+    )
+
+    # Set up the TensorDict to feed into the environment.
+    env_td = TensorDict(
+        dict(
+            image=torch.zeros(
+                batch_size, num_channels, image_height, image_width, dtype=torch.int32
+            ),
+            round=torch.remainder(
+                torch.arange(batch_size, dtype=torch.long), max_message_rounds
+            ),
+            message_history=torch.zeros(
+                batch_size,
+                max_message_rounds,
+                latent_height,
+                latent_width,
+                dtype=torch.float32,
+            ),
+            y=torch.tensor([0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]),
+            agents=dict(
+                latent_pixel_selected=latent_pixel_selected,
+                decision=torch.tensor(
+                    [[0] * batch_size, [0, 0, 1, 2, 2, 2, 0, 0, 1, 1, 1, 1]]
+                ).transpose(0, 1),
+            ),
+            done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
+        ),
+        batch_size=batch_size,
+    )
+
+    # Define the expected output.
+    expected_message_history = torch.zeros(
+        batch_size,
+        max_message_rounds,
+        latent_height,
+        latent_width,
+        dtype=torch.float32,
+    )
+    expected_message = torch.zeros(
+        batch_size, latent_height, latent_width, dtype=torch.float32
+    )
+    for i in range(batch_size):
+        round = env_td["round"][i]
+        agent_index = round % 2
+        message = env_td["agents", "latent_pixel_selected"][i, agent_index]
+        expected_message[i] = F.one_hot(message, latent_height * latent_width).view(
+            latent_height, latent_width
+        )
+        y, x = divmod(message.item(), latent_width)
+        expected_message_history[i, round, y, x] = 1
+    expected_next = TensorDict(
+        dict(
+            image=env_td["image"],
+            message_history=expected_message_history,
+            x=expected_message_history,
+            round=env_td["round"] + 1,
+            done=torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool),
+            message=expected_message,
+            agents=dict(
+                reward=torch.tensor(
+                    [
+                        [0, 0],
+                        [0, 2],
+                        [0, 0],
+                        [0, 8],
+                        [0, 0],
+                        [0, -4],
+                        [0, 0],
+                        [0, -16],
+                        [0, 0],
+                        [1, -16],
+                        [0, 0],
+                        [1, 2],
+                    ],
+                    dtype=torch.float32,
+                )
+            ),
+        ),
+        batch_size=batch_size,
+    )
+
+    # Run the step method.
+    next = env._step(env_td)
+
+    # Check that the output is as expected.
+    assert_close(next["image"], expected_next["image"])
     assert_close(next["message_history"], expected_next["message_history"])
     assert_close(next["round"], expected_next["round"])
     assert_close(next["done"], expected_next["done"])
