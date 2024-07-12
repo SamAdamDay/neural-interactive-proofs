@@ -1,7 +1,7 @@
 """Utilities for creating, registering, and timing timeable actions."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar
 from functools import partial
 
 import torch
@@ -199,10 +199,12 @@ class TrainingTimeable(Timeable, ABC):
 
 TIMEABLES: dict[str, Timeable] = {}
 
+T = TypeVar[Timeable]
+
 
 def register_timeable(
     _timeable: Optional[type[Timeable] | Callable] = None, *, name: Optional[str] = None
-) -> type[Timeable]:
+) -> Callable | type[Timeable]:
     """Decorator to register a timeable.
 
     If a callable is given, a subclass of Timeable is created with the callable as the
@@ -239,8 +241,8 @@ def register_timeable(
     """
 
     def _register_timeable(
-        timeable: type[Timeable] | Callable, *, name: Optional[str] = None
-    ) -> type[Timeable]:
+        timeable: type[T] | Callable, *, name: Optional[str] = None
+    ) -> type[T] | type[Timeable]:
         if name is None:
             name = timeable.__name__
 

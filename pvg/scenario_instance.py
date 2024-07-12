@@ -15,6 +15,7 @@ from dataclasses import dataclass, fields
 from typing import Optional, Callable, Any
 from pathlib import Path
 import os
+from typing import TypeVar
 
 import numpy as np
 
@@ -48,6 +49,8 @@ from pvg.utils.params import check_if_critic_and_single_body
 
 SCENARIO_CLASS_REGISTRY: dict[ScenarioType, dict[type, type]] = {}
 
+T = TypeVar("T")
+
 
 def register_scenario_class(scenario: ScenarioType, base_class: type):
     """Register a component with a scenario.
@@ -60,7 +63,7 @@ def register_scenario_class(scenario: ScenarioType, base_class: type):
         The base class of the component being registered.
     """
 
-    def decorator(cls: type):
+    def decorator(cls: type[T]) -> type[T]:
         if scenario not in SCENARIO_CLASS_REGISTRY:
             SCENARIO_CLASS_REGISTRY[scenario] = {}
         SCENARIO_CLASS_REGISTRY[scenario][base_class] = cls
