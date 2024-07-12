@@ -675,52 +675,34 @@ class Agent(ABC):
 
     def _body_param_regex(self, part: str) -> str:
         use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        network_suffix = "network"
         if self.params.functionalize_modules:
-            if use_single_body and use_critic and part == "actor":
-                return f"actor_network_params.module_0_{self.agent_name}"
-            else:
-                if part == "actor":
-                    return f"actor_network_params.module_0_module_0_{self.agent_name}"
-                elif part == "critic":
-                    return f"critic_network_params.module_0_{self.agent_name}"
-                else:
-                    raise ValueError(f"Unknown part: {part}")
+            network_suffix += "_params"
+        if use_single_body and use_critic and part == "actor":
+            return f"actor_{network_suffix}.module.0.{self.agent_name}"
         else:
-            if use_single_body and use_critic and part == "actor":
-                return f"actor_network.module.0.{self.agent_name}"
+            if part == "actor":
+                return f"actor_{network_suffix}.module.0.module.0.{self.agent_name}"
+            elif part == "critic":
+                return f"critic_{network_suffix}.module.0.{self.agent_name}"
             else:
-                if part == "actor":
-                    return f"actor_network.module.0.module.0.{self.agent_name}"
-                elif part == "critic":
-                    return f"critic_network.module.0.{self.agent_name}"
-                else:
-                    raise ValueError(f"Unknown part: {part}")
+                raise ValueError(f"Unknown part: {part}")
 
     def _non_body_param_regex(self, part: str) -> str:
         use_critic, use_single_body = check_if_critic_and_single_body(self.params)
         nums = {"actor": "1-9", "critic": "0-9"}
+        network_suffix = "network"
         if self.params.functionalize_modules:
-            if use_single_body and use_critic:
-                return f"{part}_network_params.module_[{nums[part]}]_{self.agent_name}"
-            else:
-                if part == "actor":
-                    return (
-                        f"actor_network_params.module_0_module_[1-9]_{self.agent_name}"
-                    )
-                elif part == "critic":
-                    return f"critic_network_params.module_[1-9]_{self.agent_name}"
-                else:
-                    raise ValueError(f"Unknown part: {part}")
+            network_suffix += "_params"
+        if use_single_body and use_critic:
+            return f"{part}_{network_suffix}.module.[{nums[part]}].{self.agent_name}"
         else:
-            if use_single_body and use_critic:
-                return f"{part}_network.module.[{nums[part]}].{self.agent_name}"
+            if part == "actor":
+                return f"actor_{network_suffix}.module.0.module.[1-9].{self.agent_name}"
+            elif part == "critic":
+                return f"critic_{network_suffix}.module.[1-9].{self.agent_name}"
             else:
-                if part == "actor":
-                    return f"actor_network.module.0.module.[1-9].{self.agent_name}"
-                elif part == "critic":
-                    return f"critic_network.module.[1-9].{self.agent_name}"
-                else:
-                    raise ValueError(f"Unknown part: {part}")
+                raise ValueError(f"Unknown part: {part}")
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:

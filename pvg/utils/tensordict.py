@@ -1,6 +1,9 @@
 """Utilities for manipulating tensordicts."""
 
+import torch
+
 from tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 
 
 def tensordict_add(
@@ -70,3 +73,27 @@ def tensordict_scalar_multiply(
         clone=False,
         inplace=True,
     )
+
+
+def get_key_batch_size(td: TensorDictBase, key: NestedKey) -> torch.Size:
+    """Get the batch_size of the inner-most tensordict containing the key.
+
+    For instance, if the key is ("next", "agents", "done"), this function will return
+    the batch size of the "agents" sub-tensordict of the "next" sub-tensordict.
+
+    Parameters
+    ----------
+    td: TensorDictBase
+        The tensordict containing the key
+    key: NestedKey
+        The key for which to get the batch size
+
+    Returns
+    -------
+    batch_size: torch.Size
+        The batch size of the inner-most tensordict containing the key
+    """
+
+    if isinstance(key, str):
+        return td.batch_size
+    return td.get(key[:-1]).batch_size

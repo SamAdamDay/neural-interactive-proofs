@@ -146,6 +146,7 @@ class Environment(EnvBase, ABC):
         return (
             self.num_envs,
             self.protocol_handler.max_message_rounds,
+            self.params.message_size,
             *self.main_message_space_shape,
         )
 
@@ -164,12 +165,7 @@ class Environment(EnvBase, ABC):
         - `message`: The next message.
         - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
-
-
-        Subclasses should call this method and add at least:
-
-        - `x`: The message history.
-        - `message`: The next message.
+        - `linear_message_history`: The linear message history, if it is included.
 
         Returns
         -------
@@ -228,6 +224,7 @@ class Environment(EnvBase, ABC):
                 shape=(
                     self.num_envs,
                     self.protocol_handler.max_message_rounds,
+                    self.params.message_size,
                     self.params.d_linear_message_space,
                 ),
                 dtype=torch.float,
@@ -256,7 +253,7 @@ class Environment(EnvBase, ABC):
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
-                shape=(self.num_envs,),
+                shape=(self.num_envs, self.num_agents),
                 device=self.device,
             ),
             shape=(self.num_envs,),
@@ -266,7 +263,11 @@ class Environment(EnvBase, ABC):
         if self.params.include_linear_message_space:
             action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
                 self.params.d_linear_message_space,
-                shape=(self.num_envs, self.num_agents),
+                shape=(
+                    self.num_envs,
+                    self.num_agents,
+                    self.params.message_size,
+                ),
                 dtype=torch.long,
                 device=self.device,
             )
@@ -306,9 +307,9 @@ class Environment(EnvBase, ABC):
             agents=CompositeSpec(
                 reward=UnboundedContinuousTensorSpec(
                     shape=(self.num_envs, self.num_agents),
-                    device=self.device,  # TODO Ask Sam about this
+                    device=self.device,
                 ),
-                shape=(self.num_envs,),
+                shape=(self.num_envs, self.num_agents),
                 device=self.device,
             ),
             shape=(self.num_envs,),
@@ -359,6 +360,10 @@ class Environment(EnvBase, ABC):
         next_td = TensorDict(
             dict(
                 round=env_td["round"] + 1,
+                agents=TensorDict(
+                    {},
+                    batch_size=(*self.batch_size, self.num_agents),
+                ),
             ),
             batch_size=self.batch_size,
             device=self.device,
@@ -457,11 +462,11 @@ class Environment(EnvBase, ABC):
         # dim_1 dim_2 etc.
         message_shape_str = " ".join(f"dim_{i}" for i in range(len(message_shape)))
 
-        message_history: Float[Tensor, f"... round {message_shape_str}"] = env_td.get(
-            message_history_key
+        message_history: Float[Tensor, f"... round position {message_shape_str}"] = (
+            env_td.get(message_history_key)
         )
         round: Int[Tensor, "..."] = env_td.get("round")
-        message_selected: Int[Tensor, "... agent"] = env_td.get(
+        message_selected: Int[Tensor, "... agent position"] = env_td.get(
             ("agents", message_out_key)
         )
 
@@ -471,12 +476,13 @@ class Environment(EnvBase, ABC):
 
         # Sum up the messages from the agents whose turn it is. If two agents select the
         # same message number, the message will be 2.
-        # (... {message_shape_str})
+        # (... position {message_shape_str})
         message = F.one_hot(message_selected, reduce(mul, message_shape)).float()
-        message = torch.where(active_agents_mask[..., None], message, 0)
+        message = torch.where(active_agents_mask[..., None, None], message, 0)
         message = einops.reduce(
             message,
-            f"... agent ({message_shape_str}) -> ... {message_shape_str}",
+            f"... agent position ({message_shape_str}) "
+            f"-> ... position {message_shape_str}",
             reduction="sum",
             **{f"dim_{i}": dim for i, dim in enumerate(message_shape)},
         )
@@ -485,10 +491,10 @@ class Environment(EnvBase, ABC):
         round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
 
         # Reshape it so that it looks like the message history with 1's for the message
-        # space dims
+        # space dims and position dim
         message_shape_ones = " ".join(["1"] * len(message_shape))
         round_mask = einops.rearrange(
-            round_mask, f"... round -> ... round {message_shape_ones}"
+            round_mask, f"... round -> ... round 1 {message_shape_ones}"
         )
 
         # Insert the message into the message history at the current round

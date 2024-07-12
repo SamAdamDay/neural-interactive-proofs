@@ -7,6 +7,7 @@ from contextlib import ExitStack
 import numpy as np
 
 import torch
+from torch import Tensor
 from torch.nn.utils import clip_grad_norm_
 
 from tensordict import TensorDict, TensorDictBase
@@ -20,6 +21,8 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import TransformedEnv
 from torchrl.envs.transforms import Transform, ObservationNorm
+
+from jaxtyping import Int, Float, Bool
 
 from pvg.parameters import (
     Parameters,
@@ -121,6 +124,10 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     def train(self):
         """Train the agents."""
 
+        # Set the seed
+        torch.manual_seed(self.params.seed)
+        np.random.seed(self.params.seed)
+
         # Add the observation normalization transforms if requested
         if self.params.rl.normalize_observations:
             self._add_normalization_transforms()
@@ -130,7 +137,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self._pretrain_agents()
 
         # Setup
-        self._train_setup()
+        self._build_operators()
 
         # Build everything we need for training
         self.train_collector, self.test_collector = self._get_data_collectors()
@@ -154,19 +161,27 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         self.train_environment = TransformedEnv(self.train_environment)
         self.test_environment = TransformedEnv(self.test_environment)
 
-        # Add normalization transforms for each of "x" and "message", and initialize
-        # the statistics by running the environments with random actions
+        # Add normalization transforms for each of "x", "message" and (optionally)
+        # "linear_message_history", and initialize the statistics by running the
+        # environments with random actions
+        normalization_keys = ["x", "message"]
+        if self.params.include_linear_message_space:
+            normalization_keys.append("linear_message_history")
         if self.settings.test_run:
-            num_normalization_steps = 1
+            num_normalization_steps = 10
         else:
             num_normalization_steps = self.params.rl.num_normalization_steps
-        pbar = self.settings.tqdm_func(total=4, desc="Computing norm stats")
+        pbar = self.settings.tqdm_func(
+            total=2 * len(normalization_keys), desc="Computing norm stats"
+        )
         for env in [self.train_environment, self.test_environment]:
-            for key, size in zip(["x", "message"], [4, 3]):
+            for key in normalization_keys:
                 transform = ObservationNorm(in_keys=[key], standard_normal=True)
                 env.append_transform(transform)
+                size = len(env.observation_spec[key].shape)
                 transform.init_stats(
                     num_normalization_steps,
+                    key=key,
                     cat_dim=-size,
                     reduce_dim=list(range(-size - 1, 0)),
                 )
@@ -223,8 +238,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         for agent in self.scenario_instance.agents.values():
             agent.train()
 
-    def _train_setup(self):
-        """Some setup before the training loop"""
+    def _build_operators(self):
+        """Get the policy and value operators for the agents."""
 
         # Build the policy and value operators differently depending on whether the body
         # is shared
@@ -432,25 +447,27 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         else:
             prefix = "test_"
 
-        round = tensordict_data.get(("next", "round"))
-        done = tensordict_data.get(("next", "done"))
-        reward = tensordict_data.get(("next", "agents", "reward"))
-        advantage = (
-            tensordict_data.get(("advantage"))
-            if "advantage" in tensordict_data
-            else None
+        round: Int[Tensor, "..."] = tensordict_data.get(("next", "round"))
+        done: Bool[Tensor, "..."] = tensordict_data.get(("next", "done"))
+        reward: Float[Tensor, "... agent"] = tensordict_data.get(
+            ("next", "agents", "reward")
         )
-        value = tensordict_data.get(("agents", "value"), None)
-        value_target = (
-            tensordict_data.get(("value_target"))
-            if "value_target" in tensordict_data
-            else None
+        advantage: Float[Tensor, "... agent"] = tensordict_data.get("advantage", None)
+        value: Float[Tensor, "... agent"] = tensordict_data.get(
+            ("agents", "value"), None
         )
-        decision_logits = tensordict_data.get(("agents", "decision_logits"))
+        value_target: Float[Tensor, "... agent"] = tensordict_data.get(
+            "value_target", None
+        )
+        decision_logits: Float[Tensor, "... agent 3"] = tensordict_data.get(
+            ("agents", "decision_logits")
+        )
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]
         ].message_logits_key
-        message_logits = tensordict_data.get(("agents", message_logits_key))
+        message_logits: Float[Tensor, "... agent position logit"] = tensordict_data.get(
+            ("agents", message_logits_key)
+        )
 
         log_stats = {}
 
@@ -505,7 +522,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the (normalised) agent message entropy mean and standard deviation
             max_message_ent = -np.log(1 / message_logits.shape[-1])
             message_logit_entropy = (
-                logit_entropy(message_logits[..., i, :]) / max_message_ent
+                logit_entropy(message_logits[..., i, :, :]) / max_message_ent
             )
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
@@ -515,7 +532,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the maximum message probability mean and standard deviation
-            message_probs = torch.softmax(message_logits[..., i, :], dim=-1)
+            message_probs = torch.softmax(message_logits[..., i, :, :], dim=-1)
             max_message_probs = message_probs.max(dim=-1).values
             log_stats[f"{agent_name}.{prefix}mean_max_message_prob"] = (
                 max_message_probs.mean().item()

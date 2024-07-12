@@ -95,6 +95,7 @@ param_grid = dict(
     normalize_advantage=[True],
     normalize_observations=[True],
     include_linear_message=[False],
+    message_size=[1],
     min_message_rounds=[2],
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
@@ -206,6 +207,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         ),
         pretrain_agents=pretrain_agents,
         include_linear_message_space=combo["include_linear_message"],
+        message_size=combo["message_size"],
         seed=combo["seed"],
     )
 

@@ -55,150 +55,71 @@ def _optimizer_has_parameter(
     return False
 
 
-def test_gi_ppo_train_optimizer_groups():
-    """Test that the graph isomorphism PPO optimizer groups are correct."""
-
-    basic_agent_params = GraphIsomorphismAgentParameters.construct_test_params()
-
-    def construct_test_params(
-        lr: float = 3.0,
-        use_shared_body: bool = True,
-        prover_body_lr_factor: float = 1.0,
-        prover_gnn_lr_factor: float = 1.0,
-        verifier_body_lr_factor: float = 1.0,
-        verifier_gnn_lr_factor: float = 1.0,
-        prover_actor_body_lr_factor: float = 1.0,
-        prover_critic_body_lr_factor: float = 1.0,
-        prover_actor_gnn_lr_factor: float = 1.0,
-        prover_critic_gnn_lr_factor: float = 1.0,
-        verifier_actor_body_lr_factor: float = 1.0,
-        verifier_critic_body_lr_factor: float = 1.0,
-        verifier_actor_gnn_lr_factor: float = 1.0,
-        verifier_critic_gnn_lr_factor: float = 1.0,
-    ) -> Parameters:
-        """Construct parameters using the given learning rates and factors."""
-
-        # If we're using the shared body, we copy the body learning rates to the GNN
-        # learning rates to the actor and critic
-        if use_shared_body:
-            prover_actor_body_lr_factor = prover_body_lr_factor
-            prover_critic_body_lr_factor = prover_body_lr_factor
-            prover_actor_gnn_lr_factor = prover_gnn_lr_factor
-            prover_critic_gnn_lr_factor = prover_gnn_lr_factor
-            verifier_actor_body_lr_factor = verifier_body_lr_factor
-            verifier_critic_body_lr_factor = verifier_body_lr_factor
-            verifier_actor_gnn_lr_factor = verifier_gnn_lr_factor
-            verifier_critic_gnn_lr_factor = verifier_gnn_lr_factor
-
-        return Parameters(
-            ScenarioType.GRAPH_ISOMORPHISM,
-            TrainerType.VANILLA_PPO,
-            "test",
-            rl=RlTrainerParameters(lr=lr, use_shared_body=use_shared_body),
-            agents=AgentsParameters(
-                prover=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor=LrFactors(
-                        actor=prover_actor_body_lr_factor,
-                        critic=prover_critic_body_lr_factor,
-                    ),
-                    gnn_lr_factor=LrFactors(
-                        actor=prover_actor_gnn_lr_factor,
-                        critic=prover_critic_gnn_lr_factor,
-                    ),
-                ),
-                verifier=dataclasses.replace(
-                    basic_agent_params,
-                    body_lr_factor=LrFactors(
-                        actor=verifier_actor_body_lr_factor,
-                        critic=verifier_critic_body_lr_factor,
-                    ),
-                    gnn_lr_factor=LrFactors(
-                        actor=verifier_actor_gnn_lr_factor,
-                        critic=verifier_critic_gnn_lr_factor,
-                    ),
-                ),
-            ),
-            functionalize_modules=False,
-        )
-
-    # Define the the different parameter options to test
-    params_list = [
-        construct_test_params(),
-        construct_test_params(prover_body_lr_factor=0.1),
-        construct_test_params(verifier_body_lr_factor=0.1),
-        construct_test_params(prover_gnn_lr_factor=0.1),
-        construct_test_params(prover_body_lr_factor=0.1, prover_gnn_lr_factor=0.1),
-        construct_test_params(verifier_gnn_lr_factor=0.1),
-        construct_test_params(use_shared_body=False),
-        construct_test_params(use_shared_body=False, prover_actor_body_lr_factor=0.1),
-        construct_test_params(use_shared_body=False, prover_critic_body_lr_factor=0.1),
-        construct_test_params(
-            use_shared_body=False,
-            prover_actor_body_lr_factor=0.1,
-            prover_actor_gnn_lr_factor=0.1,
-            prover_critic_body_lr_factor=10.0,
-            prover_critic_gnn_lr_factor=10.0,
-        ),
-        construct_test_params(
-            use_shared_body=False,
-            prover_actor_body_lr_factor=0.1,
-            prover_actor_gnn_lr_factor=0.1,
-            prover_critic_body_lr_factor=10.0,
-            prover_critic_gnn_lr_factor=10.0,
-            verifier_actor_body_lr_factor=0.01,
-            verifier_actor_gnn_lr_factor=0.01,
-            verifier_critic_body_lr_factor=100.0,
-            verifier_critic_gnn_lr_factor=100.0,
-        ),
-    ]
-
-    # Define the expected learning rates for the prover body, the verifier body, and the
-    # rest of the parameters
-    expected_lrs = [
-        dict(
+# A list of LR specifications and corresponding expected computed LRs
+specs_and_expected_lrs = [
+    dict(
+        spec=dict(),
+        expected_lrs=dict(
             prover_gnn=3.0,
             prover_body=3.0,
             verifier_gnn=3.0,
             verifier_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(prover_body_lr_factor=0.1),
+        expected_lrs=dict(
             prover_gnn=0.3,
             prover_body=0.3,
             verifier_gnn=3.0,
             verifier_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(verifier_body_lr_factor=0.1),
+        expected_lrs=dict(
             prover_gnn=3.0,
             prover_body=3.0,
             verifier_gnn=0.3,
             verifier_body=0.3,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(prover_gnn_lr_factor=0.1),
+        expected_lrs=dict(
             prover_gnn=0.3,
             prover_body=3.0,
             verifier_gnn=3.0,
             verifier_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(prover_body_lr_factor=0.1, prover_gnn_lr_factor=0.1),
+        expected_lrs=dict(
             prover_gnn=0.03,
             prover_body=0.3,
             verifier_gnn=3.0,
             verifier_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(verifier_gnn_lr_factor=0.1),
+        expected_lrs=dict(
             prover_gnn=3.0,
             prover_body=3.0,
             verifier_gnn=0.3,
             verifier_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(use_shared_body=False),
+        expected_lrs=dict(
             prover_actor_gnn=3.0,
             prover_critic_gnn=3.0,
             prover_actor_body=3.0,
@@ -209,7 +130,10 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_critic_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(use_shared_body=False, prover_actor_body_lr_factor=0.1),
+        expected_lrs=dict(
             prover_actor_gnn=0.3,
             prover_critic_gnn=3.0,
             prover_actor_body=0.3,
@@ -220,7 +144,10 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_critic_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(use_shared_body=False, prover_critic_body_lr_factor=0.1),
+        expected_lrs=dict(
             prover_actor_gnn=3.0,
             prover_critic_gnn=0.3,
             prover_actor_body=3.0,
@@ -231,7 +158,16 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_critic_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(
+            use_shared_body=False,
+            prover_actor_body_lr_factor=0.1,
+            prover_actor_gnn_lr_factor=0.1,
+            prover_critic_body_lr_factor=10.0,
+            prover_critic_gnn_lr_factor=10.0,
+        ),
+        expected_lrs=dict(
             prover_actor_gnn=0.03,
             prover_critic_gnn=300.0,
             prover_actor_body=0.3,
@@ -242,7 +178,20 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_critic_body=3.0,
             rest=3.0,
         ),
-        dict(
+    ),
+    dict(
+        spec=dict(
+            use_shared_body=False,
+            prover_actor_body_lr_factor=0.1,
+            prover_actor_gnn_lr_factor=0.1,
+            prover_critic_body_lr_factor=10.0,
+            prover_critic_gnn_lr_factor=10.0,
+            verifier_actor_body_lr_factor=0.01,
+            verifier_actor_gnn_lr_factor=0.01,
+            verifier_critic_body_lr_factor=100.0,
+            verifier_critic_gnn_lr_factor=100.0,
+        ),
+        expected_lrs=dict(
             prover_actor_gnn=0.03,
             prover_critic_gnn=300.0,
             prover_actor_body=0.3,
@@ -253,72 +202,164 @@ def test_gi_ppo_train_optimizer_groups():
             verifier_critic_body=300.0,
             rest=3.0,
         ),
-    ]
-
-    for i, params in enumerate(params_list):
-        # Create the experiment settings and scenario instance to pass to the trainer
-        settings = ExperimentSettings(device="cpu", test_run=True)
-        scenario_instance = build_scenario_instance(params, settings)
-
-        # Create the trainer and get the loss module and optimizer
-        trainer = VanillaPpoTrainer(params, scenario_instance, settings)
-        trainer._train_setup()
-        loss_module, _ = trainer._get_loss_module_and_gae()
-        optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
-
-        def get_network_part(param_name: str) -> str:
-            """Determine which part of the network the parameter is in."""
-            if params.rl.use_shared_body:
-                if param_name.startswith("actor_network.module.0.prover.gnn"):
-                    return "prover_gnn"
-                if param_name.startswith("actor_network.module.0.verifier.gnn"):
-                    return "verifier_gnn"
-                if param_name.startswith("actor_network.module.0.prover"):
-                    return "prover_body"
-                if param_name.startswith("actor_network.module.0.verifier"):
-                    return "verifier_body"
-                return "rest"
-            else:
-                if param_name.startswith("actor_network.module.0.module.0.prover.gnn"):
-                    return "prover_actor_gnn"
-                if param_name.startswith("critic_network.module.0.prover.gnn"):
-                    return "prover_critic_gnn"
-                if param_name.startswith(
-                    "actor_network.module.0.module.0.verifier.gnn"
-                ):
-                    return "verifier_actor_gnn"
-                if param_name.startswith("critic_network.module.0.verifier.gnn"):
-                    return "verifier_critic_gnn"
-                if param_name.startswith("actor_network.module.0.module.0.prover"):
-                    return "prover_actor_body"
-                if param_name.startswith("critic_network.module.0.prover"):
-                    return "prover_critic_body"
-                if param_name.startswith("actor_network.module.0.module.0.verifier"):
-                    return "verifier_actor_body"
-                if param_name.startswith("critic_network.module.0.verifier"):
-                    return "verifier_critic_body"
-                return "rest"
-
-        # Run through all the loss module parameters and make sure they are in the
-        # optimizer with the correct learning rate
-        for param_name, param in loss_module.named_parameters():
-            # Make sure the optimizer has the parameter, and get its group
-            has_parameter, param_group = _optimizer_has_parameter(
-                optimizer, param, return_group=True
-            )
-            assert has_parameter, f"Optimizer does not have parameter {param_name}"
-
-            # Check that the learning rate is correct
-            optimizer_lr = param_group["lr"]
-            network_part = get_network_part(param_name)
-            assert optimizer_lr == pytest.approx(expected_lrs[i][network_part]), (
-                f"Parameter {param_name} has learning rate {optimizer_lr} "
-                f"instead of {expected_lrs[i][network_part]}. Matched network part: "
-                f"{network_part}"
-            )
+    ),
+]
 
 
-def test_loss_parameters_in_optimizer():
+@pytest.mark.parametrize(
+    ("lr_spec", "expected_lrs"),
+    [(item["spec"], item["expected_lrs"]) for item in specs_and_expected_lrs],
+)
+def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
+    """Test that the graph isomorphism PPO optimizer groups are correct."""
+
+    # Get the specification, using default values if not provided
+    lr: float = lr_spec.get("lr", 3.0)
+    use_shared_body: bool = lr_spec.get("use_shared_body", True)
+    prover_body_lr_factor: float = lr_spec.get("prover_body_lr_factor", 1.0)
+    prover_gnn_lr_factor: float = lr_spec.get("prover_gnn_lr_factor", 1.0)
+    verifier_body_lr_factor: float = lr_spec.get("verifier_body_lr_factor", 1.0)
+    verifier_gnn_lr_factor: float = lr_spec.get("verifier_gnn_lr_factor", 1.0)
+    prover_actor_body_lr_factor: float = lr_spec.get("prover_actor_body_lr_factor", 1.0)
+    prover_critic_body_lr_factor: float = lr_spec.get(
+        "prover_critic_body_lr_factor", 1.0
+    )
+    prover_actor_gnn_lr_factor: float = lr_spec.get("prover_actor_gnn_lr_factor", 1.0)
+    prover_critic_gnn_lr_factor: float = lr_spec.get("prover_critic_gnn_lr_factor", 1.0)
+    verifier_actor_body_lr_factor: float = lr_spec.get(
+        "verifier_actor_body_lr_factor", 1.0
+    )
+    verifier_critic_body_lr_factor: float = lr_spec.get(
+        "verifier_critic_body_lr_factor", 1.0
+    )
+    verifier_actor_gnn_lr_factor: float = lr_spec.get(
+        "verifier_actor_gnn_lr_factor", 1.0
+    )
+    verifier_critic_gnn_lr_factor: float = lr_spec.get(
+        "verifier_critic_gnn_lr_factor", 1.0
+    )
+
+    # If we're using the shared body, we copy the body learning rates to the GNN
+    # learning rates to the actor and critic
+    if use_shared_body:
+        prover_actor_body_lr_factor = prover_body_lr_factor
+        prover_critic_body_lr_factor = prover_body_lr_factor
+        prover_actor_gnn_lr_factor = prover_gnn_lr_factor
+        prover_critic_gnn_lr_factor = prover_gnn_lr_factor
+        verifier_actor_body_lr_factor = verifier_body_lr_factor
+        verifier_critic_body_lr_factor = verifier_body_lr_factor
+        verifier_actor_gnn_lr_factor = verifier_gnn_lr_factor
+        verifier_critic_gnn_lr_factor = verifier_gnn_lr_factor
+
+    # Construct the parameters
+    basic_agent_params = GraphIsomorphismAgentParameters.construct_test_params()
+    params = Parameters(
+        ScenarioType.GRAPH_ISOMORPHISM,
+        TrainerType.VANILLA_PPO,
+        "test",
+        rl=RlTrainerParameters(lr=lr, use_shared_body=use_shared_body),
+        agents=AgentsParameters(
+            prover=dataclasses.replace(
+                basic_agent_params,
+                body_lr_factor=LrFactors(
+                    actor=prover_actor_body_lr_factor,
+                    critic=prover_critic_body_lr_factor,
+                ),
+                gnn_lr_factor=LrFactors(
+                    actor=prover_actor_gnn_lr_factor,
+                    critic=prover_critic_gnn_lr_factor,
+                ),
+            ),
+            verifier=dataclasses.replace(
+                basic_agent_params,
+                body_lr_factor=LrFactors(
+                    actor=verifier_actor_body_lr_factor,
+                    critic=verifier_critic_body_lr_factor,
+                ),
+                gnn_lr_factor=LrFactors(
+                    actor=verifier_actor_gnn_lr_factor,
+                    critic=verifier_critic_gnn_lr_factor,
+                ),
+            ),
+        ),
+        functionalize_modules=False,
+    )
+
+    # Create the experiment settings and scenario instance to pass to the trainer
+    settings = ExperimentSettings(device="cpu", test_run=True, ignore_cache=True)
+    scenario_instance = build_scenario_instance(params, settings)
+
+    # Create the trainer and get the loss module and optimizer
+    trainer = VanillaPpoTrainer(params, scenario_instance, settings)
+    trainer._build_operators()
+    loss_module, _ = trainer._get_loss_module_and_gae()
+    optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
+
+    def get_network_part(param_name: str) -> str:
+        """Determine which part of the network the parameter is in."""
+        if params.rl.use_shared_body:
+            if param_name.startswith("actor_network.module.0.prover.gnn"):
+                return "prover_gnn"
+            if param_name.startswith("actor_network.module.0.verifier.gnn"):
+                return "verifier_gnn"
+            if param_name.startswith("actor_network.module.0.prover"):
+                return "prover_body"
+            if param_name.startswith("actor_network.module.0.verifier"):
+                return "verifier_body"
+            return "rest"
+        else:
+            if param_name.startswith("actor_network.module.0.module.0.prover.gnn"):
+                return "prover_actor_gnn"
+            if param_name.startswith("critic_network.module.0.prover.gnn"):
+                return "prover_critic_gnn"
+            if param_name.startswith("actor_network.module.0.module.0.verifier.gnn"):
+                return "verifier_actor_gnn"
+            if param_name.startswith("critic_network.module.0.verifier.gnn"):
+                return "verifier_critic_gnn"
+            if param_name.startswith("actor_network.module.0.module.0.prover"):
+                return "prover_actor_body"
+            if param_name.startswith("critic_network.module.0.prover"):
+                return "prover_critic_body"
+            if param_name.startswith("actor_network.module.0.module.0.verifier"):
+                return "verifier_actor_body"
+            if param_name.startswith("critic_network.module.0.verifier"):
+                return "verifier_critic_body"
+            return "rest"
+
+    # Run through all the loss module parameters and make sure they are in the
+    # optimizer with the correct learning rate
+    for param_name, param in loss_module.named_parameters():
+        # Make sure the optimizer has the parameter, and get its group
+        has_parameter, param_group = _optimizer_has_parameter(
+            optimizer, param, return_group=True
+        )
+        assert has_parameter, f"Optimizer does not have parameter {param_name}"
+
+        # Check that the learning rate is correct
+        optimizer_lr = param_group["lr"]
+        network_part = get_network_part(param_name)
+        assert optimizer_lr == pytest.approx(expected_lrs[network_part]), (
+            f"Parameter {param_name} has learning rate {optimizer_lr} "
+            f"instead of {expected_lrs[network_part]}. Matched network part: "
+            f"{network_part}"
+        )
+
+
+@pytest.mark.parametrize(
+    "param_spec",
+    ParameterGrid(
+        {
+            "scenario": [
+                ScenarioType.GRAPH_ISOMORPHISM,
+                ScenarioType.IMAGE_CLASSIFICATION,
+            ],
+            "trainer": [TrainerType.VANILLA_PPO, TrainerType.REINFORCE],
+            "use_shared_body": [True, False],
+            "functionalize_modules": [True, False],
+        }
+    ),
+)
+def test_loss_parameters_in_optimizer(param_spec):
     """Make sure that all the loss parameters are in the optimizer.
 
     This test does less than `test_gi_ppo_train_optimizer_groups`, which also makes sure
@@ -334,50 +375,35 @@ def test_loss_parameters_in_optimizer():
         ImageClassificationAgentParameters.construct_test_params()
     )
 
-    param_specs = [
-        {
-            "scenario": [
-                ScenarioType.GRAPH_ISOMORPHISM,
-                ScenarioType.IMAGE_CLASSIFICATION,
-            ],
-            "trainer": [TrainerType.VANILLA_PPO, TrainerType.REINFORCE],
-            "use_shared_body": [True, False],
-            "functionalize_modules": [True, False],
-        }
-    ]
-
     # Create the common experiment settings
     settings = ExperimentSettings(device="cpu", test_run=True)
 
-    for param_spec in ParameterGrid(param_specs):
-        # Construct the parameters
-        params = Parameters(
-            scenario=param_spec["scenario"],
-            trainer=param_spec["trainer"],
-            dataset="test",
-            agents=AgentsParameters(
-                prover=basic_agent_params[param_spec["scenario"]],
-                verifier=basic_agent_params[param_spec["scenario"]],
-            ),
-            pretrain_agents=False,
-            rl=RlTrainerParameters(use_shared_body=param_spec["use_shared_body"]),
-            functionalize_modules=param_spec["functionalize_modules"],
-            d_representation=1,
-        )
+    # Construct the parameters
+    params = Parameters(
+        scenario=param_spec["scenario"],
+        trainer=param_spec["trainer"],
+        dataset="test",
+        agents=AgentsParameters(
+            prover=basic_agent_params[param_spec["scenario"]],
+            verifier=basic_agent_params[param_spec["scenario"]],
+        ),
+        pretrain_agents=False,
+        rl=RlTrainerParameters(use_shared_body=param_spec["use_shared_body"]),
+        functionalize_modules=param_spec["functionalize_modules"],
+        d_representation=1,
+    )
 
-        # Create the trainer and get the loss module and optimizer
-        scenario_instance = build_scenario_instance(params, settings)
-        trainer: ReinforcementLearningTrainer = build_trainer(
-            params, scenario_instance, settings
-        )
-        trainer._train_setup()
-        loss_module, _ = trainer._get_loss_module_and_gae()
-        optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
+    # Create the trainer and get the loss module and optimizer
+    scenario_instance = build_scenario_instance(params, settings)
+    trainer: ReinforcementLearningTrainer = build_trainer(
+        params, scenario_instance, settings
+    )
+    trainer._build_operators()
+    loss_module, _ = trainer._get_loss_module_and_gae()
+    optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
 
-        # Run through all the loss module parameters and make sure they are in the
-        # optimizer
-        for param_name, param in loss_module.named_parameters():
-            assert (
-                _optimizer_has_parameter(optimizer, param),
-                f"Optimizer does not have parameter {param_name}",
-            )
+    # Run through all the loss module parameters and make sure they are in the
+    # optimizer
+    for param_name, param in loss_module.named_parameters():
+        test = _optimizer_has_parameter(optimizer, param)
+        assert test, f"Optimizer does not have parameter {param_name}"

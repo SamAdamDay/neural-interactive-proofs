@@ -5,7 +5,6 @@ from math import floor
 
 import torch
 from torch import Tensor
-import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -14,10 +13,6 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-
-from einops import reduce
-
-from jaxtyping import Float, Int
 
 from pvg.parameters import ScenarioType
 from pvg.scenario_base import Environment
@@ -119,6 +114,7 @@ class ImageClassificationEnvironment(Environment):
             self.latent_width,
             shape=(
                 self.num_envs,
+                self.params.message_size,
                 self.latent_height,
                 self.latent_width,
             ),
@@ -143,7 +139,7 @@ class ImageClassificationEnvironment(Environment):
         action_spec = super()._get_action_spec()
         action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
             self.latent_height * self.latent_width,
-            shape=(self.num_envs, self.num_agents),
+            shape=(self.num_envs, self.num_agents, self.params.message_size),
             dtype=torch.long,
             device=self.device,
         )

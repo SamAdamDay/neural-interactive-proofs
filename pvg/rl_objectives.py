@@ -18,13 +18,14 @@ from torchrl.objectives import (
 )
 
 from tensordict import TensorDictBase, TensorDict
-from tensordict.nn.distributions import CompositeDistribution
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
 from pvg.parameters import SpgVariant, LrFactors
 from pvg.utils.maths import dot_td, ihvp, compute_sos_update
 from pvg.utils.torch import flatten_batch_dims
+from pvg.utils.distributions import CompositeCategoricalDistribution
+from pvg.utils.tensordict import get_key_batch_size
 
 
 class Objective(LossModule, ABC):
@@ -187,12 +188,13 @@ class Objective(LossModule, ABC):
         for key, action in actions.items():
             if action.requires_grad:
                 raise RuntimeError(f"tensordict stored {key} requires grad.")
+            batch_size = get_key_batch_size(sample, key)
             if actions_batch_size is None:
-                actions_batch_size = action.shape[0]
-            elif actions_batch_size != action.shape[0]:
+                actions_batch_size = batch_size
+            elif actions_batch_size != batch_size:
                 raise RuntimeError(
-                    f"tensordict stored {key} has batch size {action.shape[0]} "
-                    f"but expected {actions_batch_size}."
+                    f"Not all action keys have the same batch size. Key {key!r} has "
+                    f"batch size {batch_size} but expected {actions_batch_size}."
                 )
 
         action_tensordict = TensorDict(actions, batch_size=actions_batch_size)
@@ -204,9 +206,9 @@ class Objective(LossModule, ABC):
         ):
             dist = self.actor_network.get_dist(sample)
 
-        if not isinstance(dist, CompositeDistribution):
+        if not isinstance(dist, CompositeCategoricalDistribution):
             raise RuntimeError(
-                f"Actor must return a CompositeDistribution to work with "
+                f"Actor must return a CompositeCategoricalDistribution to work with "
                 f"{type(self).__name__}, but got {dist}."
             )
 
@@ -276,7 +278,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
         self,
         tensordict: TensorDictBase,
         td_out: TensorDictBase,
-        dist: torch.distributions.Distribution,
+        dist: CompositeCategoricalDistribution,
     ):
         """Set the entropy and critic losses in the output TensorDict.
 
@@ -286,14 +288,14 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
             The input TensorDict.
         td_out : TensorDictBase
             The output TensorDict, which will be modified in place.
-        dist : torch.distributions.Distribution
+        dist : CompositeCategoricalDistribution
             The distribution used to compute the log weight.
         """
 
         num_batch_dims = len(tensordict.batch_size)
 
         if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist).squeeze(dim=-1)
+            entropy = dist.entropy(batch_size=tensordict.get("agents").batch_size)
             entropy_flat = flatten_batch_dims(entropy, num_batch_dims)
             td_out.set(
                 "entropy",
