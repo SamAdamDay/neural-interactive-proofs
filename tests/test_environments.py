@@ -25,6 +25,7 @@ from pvg.image_classification import (
     ImageClassificationDataset,
 )
 from pvg.protocols import build_protocol_handler
+from pvg.utils.maths import manual_seed
 
 
 def test_environment_specs():
@@ -222,7 +223,7 @@ def test_image_classification_environment_step():
     num_channels = env.dataset_num_channels
 
     # Build the tensor of latent pixels selected by the agents.
-    torch.manual_seed(0)
+    manual_seed(0)
     latent_pixel_selected = torch.randint(
         0, latent_height * latent_width, (batch_size, 2)
     )

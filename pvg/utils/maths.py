@@ -1,14 +1,42 @@
 """Utilities for useful mathematical operations."""
 
-from typing import Tuple
+from typing import Tuple, Literal, Optional
+from itertools import product
+import random
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
+import numpy as np
+from numpy.typing import NDArray
+
+from einops import rearrange
+
+from sklearn.utils.extmath import randomized_svd
+
 from jaxtyping import Float
 
 from pvg.parameters import IhvpVariant
+from pvg.utils.types import TorchDevice
+
+
+def manual_seed(seed: int):
+    """Set the random seed for PyTorch, NumPy, and Python's random module.
+
+    Parameters
+    ----------
+    seed : int
+        The random seed to use.
+
+    Returns
+    -------
+    rng = torch.Generator
+        The PyTorch random number generator.
+    """
+    np.random.seed(seed)
+    random.seed(seed)
+    return torch.manual_seed(seed)
 
 
 def dot_td(td1, td2):
@@ -320,7 +348,30 @@ def mean_episode_reward(
     return episode_rewards.mean().item()
 
 
-def pca_project(A: Float[Tensor, "... n m"], num_components: int, centre: bool = True):
+def product_range(sizes: tuple[int]):
+    """Yeilds an iterator over the Cartesian product of ranges of the specified sizes.
+
+    Yeilds
+    ------
+    tuple[int]
+        A tuple of indices into the Cartesian product.
+    """
+
+    for indices in product(*(range(size) for size in sizes)):
+        yield indices
+
+
+def pca_project(
+    A: Float[Tensor, "... n m"],
+    num_components: int,
+    centre: bool = True,
+    method: Literal["torch_svd", "sklearn_randomized_svd"] = "torch_svd",
+    concat_batch_dims: bool = False,
+    pca_sample_prop: float = 1.0,
+    device: Optional[TorchDevice] = None,
+    tqdm_func: Optional[callable] = None,
+    tqdm_desc: str = "Computing SVD",
+) -> Float[Tensor, "... n num_components"]:
     """Project a matrix onto its principal components
 
     Parameters
@@ -331,6 +382,27 @@ def pca_project(A: Float[Tensor, "... n m"], num_components: int, centre: bool =
         The number of principal components to compute.
     centre : bool, default=True
         Whether to centre the data.
+    method : Literal["torch_svd", "scipy_randomized_svd"], default="torch_svd"
+        The method to use for computing the principal components.
+            - "torch_svd": Use `torch.linalg.svd` from PyTorch.
+            - "sklearn_randomized_svd": Use `sklearn.utils.extmath.randomized_svd`,
+              first converting the input matrix to a NumPy array. For this method we
+              loop through the batch dimensions with a *Python loop*, because
+              `randomized_svd` does not support batch dimensions. :(
+    concat_batch_dims : bool, default=False
+        Whether to rearrange `A` so that the batch dimensions are concatenated into the
+        feature dim. This means that instead of doing independent PCAs on each batch
+        element, we do a single PCA on all the batch elements together, which
+        concatenated features.
+    pca_sample_prop : float, default=1.0
+        The proportion of samples to use for the PCA. This is useful for speeding up the
+        computation by using a subset of the samples.
+    device : Optional[TorchDevice], default=None
+        The device to use for the computations. Only applicable to PyTorch methods.
+    tqdm_func : callable, optional
+        A function to use for displaying progress bars. Not applicable to all methods.
+    tqdm_desc : str, default="Computing SVD"
+        The description to use for the progress bar.
 
     Returns
     -------
@@ -341,6 +413,74 @@ def pca_project(A: Float[Tensor, "... n m"], num_components: int, centre: bool =
     if centre:
         A = A - A.mean(dim=-2, keepdim=True)
 
-    U, S, Vh = torch.linalg.svd(A, full_matrices=False)
+    original_device = A.device
+    original_batch_shape = A.shape[:-2]
 
-    return torch.matmul(A, Vh[..., :num_components, :].mT)
+    if concat_batch_dims:
+        A = rearrange(A, "... n m -> n (... m)")
+
+    if pca_sample_prop != 1.0:
+        select_indices = torch.randperm(A.shape[-2], device=A.device)[
+            : int(pca_sample_prop * A.shape[-2])
+        ]
+        A_full = A.clone()
+        A = A_full[..., select_indices, :]
+    else:
+        A_full = A
+
+    if method == "torch_svd":
+
+        if device is not None:
+            A = A.to(device)
+            A_full = A_full.to(device)
+
+        _, _, Vh = torch.linalg.svd(A, full_matrices=False)
+        projected_matrix = torch.matmul(A_full, Vh[..., :num_components, :].mT)
+
+        if device is not None:
+            projected_matrix = projected_matrix.to(original_device)
+
+    elif method == "sklearn_randomized_svd":
+
+        A_np: NDArray = A.detach().cpu().numpy()
+
+        # Make sure the matrix has at least 1 batch dimension
+        if len(A_np.shape) == 2:
+            A_np = np.expand_dims(A_np, 0)
+
+        batch_shape = A_np.shape[:-2]
+
+        if tqdm_func is not None:
+            pbar = tqdm_func(total=np.prod(batch_shape), desc=tqdm_desc)
+
+        # Loop through the batch dimensions and compute the SVD for each batch
+        Vh = np.empty(batch_shape + (num_components, A_np.shape[-1]), dtype=A_np.dtype)
+        for indices in product(*(range(size) for size in batch_shape)):
+            _, _, Vh[indices] = randomized_svd(
+                A_np[indices], n_components=num_components
+            )
+            if tqdm_func is not None:
+                pbar.update(1)
+
+        if tqdm_func is not None:
+            pbar.close()
+
+        Vh = torch.tensor(Vh, device=A.device)
+
+        projected_matrix = torch.matmul(A_full, Vh.mT)
+
+    else:
+        raise ValueError(f"Unknown method: {method!r}")
+
+    if concat_batch_dims:
+        dim_str = " ".join(f"dim{i}" for i in range(len(original_batch_shape)))
+        projected_matrix = rearrange(
+            projected_matrix,
+            f"n ({dim_str} m) -> {dim_str} n m",
+            **{f"dim_{i}": size for i, size in enumerate(original_batch_shape)},
+        )
+
+    if pca_sample_prop != 1.0:
+        del A_full
+
+    return projected_matrix

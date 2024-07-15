@@ -29,6 +29,7 @@ from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
+from pvg.utils.maths import manual_seed
 
 
 class Environment(EnvBase, ABC):
@@ -628,4 +629,4 @@ class Environment(EnvBase, ABC):
         return env_td
 
     def _set_seed(self, seed: int | None):
-        self.rng = torch.manual_seed(seed)
+        self.rng = manual_seed(seed)

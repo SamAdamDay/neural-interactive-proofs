@@ -21,6 +21,7 @@ from pvg.scenario_base.agents import Agent
 from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
+from pvg.utils.maths import manual_seed
 
 
 @register_trainer(TrainerType.SOLO_AGENT)
@@ -47,8 +48,7 @@ class SoloAgentTrainer(Trainer):
             output and what we log to W&B.
         """
 
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        manual_seed(self.params.seed)
         torch_generator = torch.Generator().manual_seed(self.params.seed)
 
         if self.settings.logger is None:

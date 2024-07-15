@@ -45,6 +45,7 @@ from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 from pvg.utils.params import check_if_critic_and_single_body
+from pvg.utils.maths import manual_seed
 
 
 SCENARIO_CLASS_REGISTRY: dict[ScenarioType, dict[type, type]] = {}
@@ -163,8 +164,7 @@ def build_scenario_instance(
         return SCENARIO_CLASS_REGISTRY[params.scenario][base_class]
 
     # Set the random seed
-    torch.manual_seed(params.seed)
-    np.random.seed(params.seed)
+    manual_seed(params.seed)
 
     # Silence W&B if requested
     if settings.silence_wandb:
@@ -267,8 +267,7 @@ def _build_agents(
 
         # Set the random seed based on the agent name
         agent_seed = (params.seed + hash(agent_name)) % (2**32)
-        torch.manual_seed(agent_seed)
-        np.random.seed(agent_seed)
+        manual_seed(agent_seed)
 
         # Get the names of the bodies
         if use_single_body:

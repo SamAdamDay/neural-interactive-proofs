@@ -32,7 +32,7 @@ from pvg.image_classification.data import (
 )
 from pvg.utils.oop import classproperty
 from pvg.constants import HF_PRETRAINED_MODELS_USER
-from pvg.utils.maths import pca_project
+from pvg.utils.maths import pca_project, manual_seed
 
 
 class PretrainedImageModel(PretrainedModel, ABC):
@@ -117,6 +117,8 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
         for dataset_name, dataset in datasets.items():
 
+            manual_seed(0)
+
             # Load the base PyTorch dataset (expected by timm) with the transforms
             transform = self._get_transform(model)
             torch_dataset = dataset.build_torch_dataset(transform=transform)
@@ -130,7 +132,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
             )
 
             # Initialize the embeddings tensor
-            embeddings[dataset_name] = torch.empty(
+            embeddings[dataset_name] = torch.rand(
                 len(torch_dataset),
                 self.embedding_channels,
                 self.embedding_height,
@@ -154,12 +156,18 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
             # Reduce the embeddings to the desired dimension using PCA
             if self.embedding_dim < self.embedding_channels:
-                reshaped_embeddings = rearrange(
+                projected_embeddings = rearrange(
                     embeddings[dataset_name],
                     "batch channels height width -> height width batch channels",
                 )
                 projected_embeddings = pca_project(
-                    reshaped_embeddings, self.embedding_dim
+                    projected_embeddings,
+                    self.embedding_dim,
+                    method="torch_svd",
+                    pca_sample_prop=0.1,
+                    device=self.settings.device,
+                    tqdm_func=self.settings.tqdm_func,
+                    tqdm_desc=f"Reducing embeddings for {self.name}, {dataset_name}",
                 )
                 projected_embeddings = rearrange(
                     projected_embeddings,

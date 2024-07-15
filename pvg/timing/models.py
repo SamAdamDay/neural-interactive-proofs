@@ -16,6 +16,7 @@ from pvg.scenario_base import DataLoader
 from pvg.scenario_instance import build_scenario_instance
 from pvg.utils.data import max_length_iterator
 from pvg.timing.timeables import Timeable, register_timeable
+from pvg.utils.maths import manual_seed
 
 
 class ModelTimeable(Timeable, ABC):
@@ -71,9 +72,7 @@ class ModelTimeable(Timeable, ABC):
         self.scenario_instance = build_scenario_instance(self.params, self.settings)
 
         # Set the random seeds
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
-        self.generator = torch.Generator().manual_seed(self.params.seed)
+        self.generator = manual_seed(self.params.seed)
 
         # Set up the full model as the body and head
         self.model = TensorDictSequential(
