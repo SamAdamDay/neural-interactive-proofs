@@ -318,3 +318,29 @@ def mean_episode_reward(
     episode_rewards = episode_rewards[not_first_done_mask]
 
     return episode_rewards.mean().item()
+
+
+def pca_project(A: Float[Tensor, "... n m"], num_components: int, centre: bool = True):
+    """Project a matrix onto its principal components
+
+    Parameters
+    ----------
+    A : Float[Tensor, "... n m"]
+        The input matrix.
+    num_components : int
+        The number of principal components to compute.
+    centre : bool, default=True
+        Whether to centre the data.
+
+    Returns
+    -------
+    projected_matrix : Float[Tensor, "... n num_components"]
+        The matrix projected onto its principal components.
+    """
+
+    if centre:
+        A = A - A.mean(dim=-2, keepdim=True)
+
+    U, S, Vh = torch.linalg.svd(A, full_matrices=False)
+
+    return torch.matmul(A, Vh[..., :num_components, :].mT)

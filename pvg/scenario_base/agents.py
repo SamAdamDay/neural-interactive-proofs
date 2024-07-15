@@ -182,8 +182,11 @@ class AgentPart(TensorDictModuleBase, ABC):
         pass
 
     @property
-    def required_pretrained_models(self) -> Iterable[str]:
-        """The pretrained models used by the agent.
+    def required_pretrained_models(self) -> Iterable[tuple[str, int]]:
+        """The pretrained models used by the agent and the embeddings dimensions.
+
+        This is an iterable of tuples, where the first element is the name of the
+        pretrained model and the second element is the dimension of the embeddings.
 
         The embeddings of these models will be added to the dataset.
         """

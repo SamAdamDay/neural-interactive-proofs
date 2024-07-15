@@ -30,11 +30,23 @@ from pvg.utils.data import is_nested_key
 
 
 class CachedPretrainedEmbeddingsNotFound(Exception):
-    """Raised when the cached embeddings for a pretrained model are not found."""
+    """Raised when the cached embeddings for a pretrained model are not found.
 
-    def __init__(self, model_name: str):
-        super().__init__(f"Cached embeddings for model {model_name} not found")
+    Parameters
+    ----------
+    model_name : str
+        The name of the pretrained model.
+    embedding_dim : int
+        The dimension of the embeddings (which may be different from the original).
+    """
+
+    def __init__(self, model_name: str, embedding_dim: int):
+        super().__init__(
+            f"Cached embeddings for model {model_name} with embedding dimension "
+            f"{embedding_dim} not found"
+        )
         self.model_name = model_name
+        self.embedding_dim = embedding_dim
 
 
 class Dataset(ABC):
@@ -190,13 +202,15 @@ class Dataset(ABC):
         """
         return self._pretrained_embeddings[model_name].dtype
 
-    def load_pretrained_embeddings(self, model_name: str):
+    def load_pretrained_embeddings(self, model_name: str, embedding_dim: int):
         """Load cached embeddings for a pretrained model.
 
         Parameters
         ----------
         model_name : str
             The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
 
         Raises
         ------
@@ -204,18 +218,21 @@ class Dataset(ABC):
             If the cached embeddings are not found.
         """
 
-        if model_name in self._pretrained_embeddings.keys():
+        embeddings_key = self._get_pretrained_key(model_name, embedding_dim)
+
+        if embeddings_key in self._pretrained_embeddings.keys():
             raise ValueError(
-                f"Pretrained embeddings for model {model_name} have already been loaded"
+                f"Pretrained embeddings for model {model_name} and dimensionality "
+                f"{embedding_dim} have already been loaded"
             )
 
-        cache_dir = self._get_pretrained_cache_dir(model_name)
+        cache_dir = self._get_pretrained_cache_dir(model_name, embedding_dim)
 
         if not cache_dir.is_dir():
-            raise CachedPretrainedEmbeddingsNotFound(model_name)
+            raise CachedPretrainedEmbeddingsNotFound(model_name, embedding_dim)
 
         # Get the metadata
-        metadata_path = self._get_pretrained_metadata_path(model_name)
+        metadata_path = self._get_pretrained_metadata_path(model_name, embedding_dim)
         with open(metadata_path, "r") as f:
             metadata = json.load(f)
         shape = metadata["shape"]
@@ -232,20 +249,24 @@ class Dataset(ABC):
 
         # Load the memory-mapped tensor of the full pretrained embeddings
         full_embeddings = MemoryMappedTensor.from_filename(
-            self._get_pretrained_mmap_path(model_name),
+            self._get_pretrained_mmap_path(model_name, embedding_dim),
             dtype=dtype,
             shape=shape,
         )
 
         # Get the rearranged embeddings tensor, which aligns with the main data
         embeddings = full_embeddings[self._main_data["_rearrange_index"]]
-        self._pretrained_embeddings[model_name] = embeddings
+        self._pretrained_embeddings[embeddings_key] = embeddings
 
         # Detect the batch size from the loaded pretrained embeddings
         self._pretrained_embeddings.auto_batch_size_(batch_dims=1)
 
     def add_pretrained_embeddings(
-        self, model_name: str, full_embeddings: Tensor, overwrite_cache: bool = False
+        self,
+        model_name: str,
+        embedding_dim: int,
+        full_embeddings: Tensor,
+        overwrite_cache: bool = False,
     ):
         """Add pretrained embeddings to the dataset and cache them.
 
@@ -253,6 +274,8 @@ class Dataset(ABC):
         ----------
         model_name : str
             The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
         full_embeddings : Tensor
             The embeddings generated from the full original dataset, before any
             rearrangment or filtering.
@@ -260,17 +283,21 @@ class Dataset(ABC):
             Whether to overwrite the cached embeddings if they already exist.
         """
 
-        if model_name in self._pretrained_embeddings.keys():
+        embeddings_key = self._get_pretrained_key(model_name, embedding_dim)
+
+        if embeddings_key in self._pretrained_embeddings.keys():
             raise ValueError(
-                f"Pretrained embeddings for model {model_name} have already been loaded"
+                f"Pretrained embeddings for model {model_name} and dimensionality "
+                f"{embedding_dim} have already been loaded"
             )
 
-        cache_dir = self._get_pretrained_cache_dir(model_name)
+        cache_dir = self._get_pretrained_cache_dir(model_name, embedding_dim)
 
         if cache_dir.is_dir() and not overwrite_cache:
             raise ValueError(
-                f"Pretrained embeddings for model {model_name} already exist in the "
-                "cache and `overwrite_cache` is False."
+                f"Pretrained embeddings for model {model_name} and dimensionality "
+                f"{embedding_dim} already exist in the cache and `overwrite_cache` is "
+                f"False."
             )
 
         # Create the pretrained embeddings directory if it doesn't exist
@@ -279,7 +306,7 @@ class Dataset(ABC):
         # Save the embeddings to disk as a memory-mapped tensor
         full_embeddings = MemoryMappedTensor.from_tensor(
             full_embeddings,
-            filename=self._get_pretrained_mmap_path(model_name),
+            filename=self._get_pretrained_mmap_path(model_name, embedding_dim),
             existsok=overwrite_cache,
         )
 
@@ -289,25 +316,30 @@ class Dataset(ABC):
             shape=tuple(full_embeddings.shape),
             dtype=str(full_embeddings.dtype),
         )
-        metadata_path = self._get_pretrained_metadata_path(model_name)
+        metadata_path = self._get_pretrained_metadata_path(model_name, embedding_dim)
         with open(metadata_path, "w") as f:
             json.dump(metadata, f)
 
         # Get the rearranged embeddings tensor, which aligns with the main data
         embeddings = full_embeddings[self._main_data["_rearrange_index"]]
-        self._pretrained_embeddings[model_name] = embeddings
+        self._pretrained_embeddings[embeddings_key] = embeddings
+
+        # Detect the batch size from the loaded pretrained embeddings
+        self._pretrained_embeddings.auto_batch_size_(batch_dims=1)
 
     def _download(self):
         """Download the raw data."""
         raise NotImplementedError
 
-    def _get_pretrained_cache_dir(self, model_name: str) -> Path:
+    def _get_pretrained_cache_dir(self, model_name: str, embedding_dim: int) -> Path:
         """Get the path to the directory with the cached pretrained embeddings.
 
         Parameters
         ----------
         model_name : str
             The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
 
         Returns
         -------
@@ -316,39 +348,64 @@ class Dataset(ABC):
         """
 
         sanitised_model_name = model_name.replace("/", "_")
-        return Path(self.pretrained_embeddings_dir, sanitised_model_name)
+        return Path(
+            self.pretrained_embeddings_dir, f"{sanitised_model_name}_d{embedding_dim}"
+        )
 
-    def _get_pretrained_mmap_path(self, model_name: str) -> Path:
+    def _get_pretrained_mmap_path(self, model_name: str, embedding_dim: int) -> Path:
         """Get the path to the memory-mapped tensor for the pretrained embeddings.
 
         Parameters
         ----------
         model_name : str
             The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
 
         Returns
         -------
         mmap_path : Path
             The path to the memory-mapped tensor.
         """
-        cache_dir = self._get_pretrained_cache_dir(model_name)
+        cache_dir = self._get_pretrained_cache_dir(model_name, embedding_dim)
         return cache_dir.joinpath("pretrained_embeddings.pt")
 
-    def _get_pretrained_metadata_path(self, model_name: str) -> Path:
+    def _get_pretrained_metadata_path(
+        self, model_name: str, embedding_dim: int
+    ) -> Path:
         """Get the path to the metadata file for the pretrained embeddings.
 
         Parameters
         ----------
         model_name : str
             The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
 
         Returns
         -------
         metadata_path : Path
             The path to the metadata file.
         """
-        cache_dir = self._get_pretrained_cache_dir(model_name)
+        cache_dir = self._get_pretrained_cache_dir(model_name, embedding_dim)
         return cache_dir.joinpath("metadata.json")
+
+    def _get_pretrained_key(self, model_name: str, embedding_dim: int) -> str:
+        """Get the key for the pretrained embeddings in the tensordict.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the pretrained model.
+        embedding_dim : int
+            The dimension of the embeddings (which may be different from the original).
+
+        Returns
+        -------
+        key : str
+            The key for the pretrained embeddings.
+        """
+        return f"{model_name}_d{embedding_dim}"
 
     def __getitem__(self, index: IndexType) -> TensorDict | Tensor:
 

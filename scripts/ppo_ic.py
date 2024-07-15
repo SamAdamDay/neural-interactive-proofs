@@ -68,11 +68,13 @@ param_grid = dict(
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
     prover_pretrained_embeddings_model=["resnet18"],
+    prover_pretrained_embeddings_num_channels=[64],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     verifier_block_type=[ImageBuildingBlockType.CONV2D],
     verifier_pretrained_embeddings_model=[None],
+    verifier_pretrained_embeddings_num_channels=[64],
     num_block_groups=[1],
     initial_num_channels=[16],
     random_prover=[False],
@@ -136,6 +138,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             update_schedule=prover_update_schedule,
             building_block_type=combo["prover_block_type"],
             pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
+            pretrained_embedding_num_channels=combo[
+                "prover_pretrained_embeddings_num_channels"
+            ],
         )
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
@@ -152,6 +157,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 building_block_type=combo["verifier_block_type"],
                 pretrained_embeddings_model=combo[
                     "verifier_pretrained_embeddings_model"
+                ],
+                pretrained_embedding_num_channels=combo[
+                    "verifier_pretrained_embeddings_num_channels"
                 ],
             ),
             prover=prover_params,

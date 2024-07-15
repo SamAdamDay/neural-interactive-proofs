@@ -417,7 +417,7 @@ def _add_pretrained_embeddings_to_datasets(
     datasets = dict(train=train_dataset, test=test_dataset)
 
     # Get the names of the pretrained models required by the agents
-    required_pretrained_models = set()
+    required_pretrained_models: set[tuple[str, int]] = set()
     for agent in agents.values():
         for field in fields(agent):
             field_value = getattr(agent, field.name)
@@ -426,7 +426,7 @@ def _add_pretrained_embeddings_to_datasets(
                     field_value.required_pretrained_models
                 )
 
-    for base_model_name in required_pretrained_models:
+    for base_model_name, embedding_dim in required_pretrained_models:
 
         # Load the pretrained model class
         pretrained_model_class = get_pretrained_model_class(base_model_name, params)
@@ -443,7 +443,7 @@ def _add_pretrained_embeddings_to_datasets(
             datasets_to_generate = {}
             for dataset_name, dataset in datasets.items():
                 try:
-                    dataset.load_pretrained_embeddings(model_name)
+                    dataset.load_pretrained_embeddings(model_name, embedding_dim)
                 except CachedPretrainedEmbeddingsNotFound:
                     datasets_to_generate[dataset_name] = dataset
 
@@ -451,13 +451,14 @@ def _add_pretrained_embeddings_to_datasets(
             continue
 
         # Generate the embeddings
-        pretrained_model = pretrained_model_class(params, settings)
+        pretrained_model = pretrained_model_class(params, settings, embedding_dim)
         embeddings = pretrained_model.generate_dataset_embeddings(datasets)
 
         # Add the embeddings to the datasets
         for dataset_name, dataset in datasets_to_generate.items():
             dataset.add_pretrained_embeddings(
                 model_name,
+                embedding_dim,
                 embeddings[dataset_name],
                 overwrite_cache=settings.ignore_cache,
             )

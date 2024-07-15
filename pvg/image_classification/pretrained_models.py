@@ -15,11 +15,11 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, default_collate
 
+from einops import rearrange
+
 import timm
 from timm.models import ResNet
 from timm.data import resolve_data_config, create_transform
-
-from jaxtyping import Float
 
 from pvg.scenario_base.data import DataLoader
 from pvg.scenario_base.pretrained_models import (
@@ -32,6 +32,7 @@ from pvg.image_classification.data import (
 )
 from pvg.utils.oop import classproperty
 from pvg.constants import HF_PRETRAINED_MODELS_USER
+from pvg.utils.maths import pca_project
 
 
 class PretrainedImageModel(PretrainedModel, ABC):
@@ -39,6 +40,7 @@ class PretrainedImageModel(PretrainedModel, ABC):
 
     embedding_width: int
     embedding_height: int
+    embedding_channels: int
 
 
 class Resnet18PretrainedModel(PretrainedImageModel, ABC):
@@ -98,6 +100,12 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
             The embeddings for each dataset
         """
 
+        if self.embedding_dim > self.embedding_channels:
+            raise ValueError(
+                f"embedding_dim ({self.embedding_dim}) must be less than or equal to "
+                f"the number of channels in the embeddings ({self.embedding_channels})"
+            )
+
         # Load the model from the hub
         model: ResNet = timm.create_model(self.timm_uri, pretrained=True)
         model.eval()
@@ -143,6 +151,21 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
                 ] = batch_embeddings
                 pbar.update(1)
             pbar.close()
+
+            # Reduce the embeddings to the desired dimension using PCA
+            if self.embedding_dim < self.embedding_channels:
+                reshaped_embeddings = rearrange(
+                    embeddings[dataset_name],
+                    "batch channels height width -> height width batch channels",
+                )
+                projected_embeddings = pca_project(
+                    reshaped_embeddings, self.embedding_dim
+                )
+                projected_embeddings = rearrange(
+                    projected_embeddings,
+                    "height width batch channels -> batch channels height width",
+                )
+                embeddings[dataset_name] = projected_embeddings
 
         if delete_model:
             del model

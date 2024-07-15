@@ -46,10 +46,12 @@ param_grid = dict(
     prover_num_decider_layers=[3],
     prover_block_type=[ImageBuildingBlockType.CONV2D],
     prover_pretrained_embeddings_model=["resnet18"],
+    prover_pretrained_embeddings_num_channels=[64],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_block_type=[ImageBuildingBlockType.CONV2D],
     verifier_pretrained_embeddings_model=[None],
+    verifier_pretrained_embeddings_num_channels=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
     binarification_method=[BinarificationMethodType.SELECT_TWO],
@@ -72,12 +74,18 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 pretrained_embeddings_model=combo[
                     "verifier_pretrained_embeddings_model"
                 ],
+                pretrained_embedding_num_channels=combo[
+                    "verifier_pretrained_embeddings_num_channels"
+                ],
             ),
             prover=ImageClassificationAgentParameters(
                 num_blocks_per_group=combo["prover_blocks_per_group"],
                 num_decider_layers=combo["prover_num_decider_layers"],
                 building_block_type=combo["prover_block_type"],
                 pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
+                pretrained_embedding_num_channels=combo[
+                    "prover_pretrained_embeddings_num_channels"
+                ],
             ),
         ),
         solo_agent=SoloAgentParameters(

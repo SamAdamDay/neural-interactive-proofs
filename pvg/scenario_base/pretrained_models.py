@@ -19,11 +19,16 @@ class PretrainedModel(ABC):
         The parameters for the experiment
     settings : ExperimentSettings
         The settings for the experiment
+    embedding_dim : int
+        The dimensionality of the embeddings. If this is different from the model's
+        output dimensionality, the embeddings will be projected to this dimensionality.
 
     Class attributes
     ----------------
     name : str
-        The name of the model, which should uniquely identify it
+        The name of the model, which should uniquely identify it including the dataset.
+    base_model_name : str
+        The name of the base model (architecture) used for the pretrained model.
     dataset : str
         The name of the dataset the model was trained for
     allow_other_datasets : bool, default=False
@@ -31,13 +36,17 @@ class PretrainedModel(ABC):
     """
 
     name: str
+    base_model_name: str
     dataset: str
     allow_other_datasets: bool = False
 
-    def __init__(self, params: Parameters, settings: ExperimentSettings):
+    def __init__(
+        self, params: Parameters, settings: ExperimentSettings, embedding_dim: int
+    ):
         super().__init__()
         self.params = params
         self.settings = settings
+        self.embedding_dim = embedding_dim
         self._model: Optional[nn.Module] = None
 
     @abstractmethod
@@ -97,6 +106,8 @@ def get_pretrained_model_class(
 
     If the full model name is not found, it tries to find a model with the name:
         f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
+    or one whose base model name is `model_name` and where `allow_other_datasets` is
+    True.
 
     Parameters
     ----------
@@ -106,14 +117,17 @@ def get_pretrained_model_class(
         The parameters for the experiment
     """
 
+    augmented_model_name = f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
+
     if model_name in PRETRAINED_MODEL_CLASSES:
         model_class = PRETRAINED_MODEL_CLASSES[model_name]
+    elif augmented_model_name in PRETRAINED_MODEL_CLASSES:
+        model_class = PRETRAINED_MODEL_CLASSES[augmented_model_name]
     else:
-        augmented_model_name = (
-            f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
-        )
-        if augmented_model_name in PRETRAINED_MODEL_CLASSES:
-            model_class = PRETRAINED_MODEL_CLASSES[augmented_model_name]
+        for cls in PRETRAINED_MODEL_CLASSES.values():
+            if cls.base_model_name == model_name and cls.allow_other_datasets:
+                model_class = cls
+                break
         else:
             raise ValueError(
                 f"Unknown pretrained model {model_name!r} for dataset "

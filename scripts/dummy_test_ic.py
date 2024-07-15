@@ -41,7 +41,7 @@ def run(cmd_args: Namespace):
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.VANILLA_PPO,
-        dataset="cifar10",
+        dataset="test",
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
                 building_block_type=ImageBuildingBlockType.CONV2D,
@@ -66,7 +66,7 @@ def run(cmd_args: Namespace):
                 use_manual_architecture=False,
                 agent_lr_factor={"actor": 1.0, "critic": 1.0},
                 ortho_init=False,
-                pretrained_embeddings_model=None,
+                pretrained_embeddings_model="resnet18",
             ),
         ),
         image_classification=ImageClassificationParameters(

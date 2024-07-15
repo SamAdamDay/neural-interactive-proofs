@@ -184,7 +184,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         if self.include_pretrained_embeddings:
             env_level_in_keys = (
                 *env_level_in_keys,
-                ("pretrained_embeddings", self.pretrained_model_name),
+                self.pretrained_model_key,
             )
 
         if self.params.include_linear_message_space:
@@ -195,9 +195,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     agent_level_out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     @property
-    def required_pretrained_models(self) -> list[str]:
+    def required_pretrained_models(self) -> list[tuple[str, int]]:
         if self.include_pretrained_embeddings:
-            return [self.pretrained_model_name]
+            return [(self.pretrained_model_name, self.pretrained_model_num_channels)]
         else:
             return []
 
@@ -278,11 +278,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "pretrained_embeddings" : (... embedding_channels embedding_height
+            - "pretrained_embeddings" : (... embedding_dim embedding_height
               embedding_width) : The embeddings of the pretrained model
 
         Output:
-            - "pretrained_embeddings_scaled" : (... embedding_channels height width) :
+            - "pretrained_embeddings_scaled" : (... embedding_dim height width) :
               The scaled embeddings
 
         Returns
@@ -300,10 +300,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         ):
             return TensorDictModule(
                 TensorDictCloneKeys(
-                    in_keys=(
-                        "pretrained_embeddings",
-                        self.pretrained_model_name,
-                    ),
+                    in_keys=self.pretrained_model_key,
                     out_keys="pretrained_embeddings_scaled",
                 )
             )
@@ -318,10 +315,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                     image_height=self.image_height,
                     image_width=self.image_width,
                 ),
-                in_keys=(
-                    "pretrained_embeddings",
-                    self.pretrained_model_name,
-                ),
+                in_keys=self.pretrained_model_key,
                 out_keys="pretrained_embeddings_scaled",
             )
         elif (
@@ -332,10 +326,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                     size=(self.image_height, self.image_width),
                     mode="nearest",
                 ),
-                in_keys=(
-                    "pretrained_embeddings",
-                    self.pretrained_model_name,
-                ),
+                in_keys=self.pretrained_model_key,
                 out_keys="pretrained_embeddings_scaled",
             )
         else:
@@ -378,7 +369,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             cat_keys = ("x_upsampled", "image")
         else:
             cat_keys = ("x_upsampled", "image", "pretrained_embeddings_scaled")
-            in_channels += self.pretrained_model_class.embedding_channels
+            in_channels += self.pretrained_model_num_channels
 
         return TensorDictSequential(
             TensorDictCat(
@@ -741,28 +732,66 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         return self._agent_params.pretrained_embeddings_model is not None
 
     @property
-    def pretrained_model_class(self) -> PretrainedImageModel | None:
-        """The pretrained model class to use, if any."""
+    def pretrained_model_class(self) -> PretrainedImageModel:
+        """The pretrained model class to use.
+
+        Raises
+        ------
+        ValueError
+            If no pretrained model is being used.
+        """
+
         if self.include_pretrained_embeddings:
             if self._pretrained_model_class is None:
                 self._pretrained_model_class = get_pretrained_model_class(
                     self._agent_params.pretrained_embeddings_model, self.params
                 )
             return self._pretrained_model_class
-        else:
-            return None
+
+        raise ValueError("No pretrained model is being used.")
 
     @property
-    def pretrained_model_name(self) -> str | None:
+    def pretrained_model_name(self) -> str:
         """The full name of the pretrained model to use, if any.
 
         This may be different from the model name in the parameters, if the latter is
         a shorthand.
+
+        Raises
+        ------
+        ValueError
+            If no pretrained model is being used.
         """
+        return self.pretrained_model_class.name
+
+    @property
+    def pretrained_model_num_channels(self) -> int:
+        """The number of channels used in the embeddings of the pretrained model.
+
+        This can be different from the base number of channels in the pretrained model,
+        if the embeddings are downsampled.
+
+        Raises
+        ------
+        ValueError
+            If no pretrained model is being used.
+        """
+
         if self.include_pretrained_embeddings:
-            return self.pretrained_model_class.name
-        else:
-            return None
+            if self._agent_params.pretrained_embedding_num_channels is not None:
+                return self._agent_params.pretrained_embedding_num_channels
+            else:
+                return self.pretrained_model_class.embedding_channels
+
+        raise ValueError("No pretrained model is being used.")
+
+    @property
+    def pretrained_model_key(self) -> tuple[str, str]:
+        """The key to use for the pretrained embeddings in the data dict."""
+        return (
+            "pretrained_embeddings",
+            f"{self.pretrained_model_name}_d{self.pretrained_model_num_channels}",
+        )
 
 
 @register_scenario_class(IC_SCENARIO, DummyAgentBody)
@@ -974,7 +1003,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         else:
             td_sequential_layers.append(
                 TensorDictCloneKeys(
-                    in_keys=("image_level_repr",), out_keys=("image_level_mlp_input",)
+                    in_keys="image_level_repr", out_keys="image_level_mlp_input"
                 )
             )
 

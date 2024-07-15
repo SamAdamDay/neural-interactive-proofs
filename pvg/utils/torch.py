@@ -513,21 +513,28 @@ class TensorDictCloneKeys(TensorDictModuleBase):
 
     Parameters
     ----------
-    in_keys : NestedKey | Iterable[NestedKey]
+    in_keys : NestedKey | list[NestedKey]
         The keys to clone.
-    out_keys : NestedKey | Iterable[NestedKey]
+    out_keys : NestedKey | list[NestedKey]
         The keys to store the cloned values in.
     """
 
     def __init__(
         self,
-        in_keys: NestedKey | Iterable[NestedKey],
-        out_keys: NestedKey | Iterable[NestedKey],
+        in_keys: NestedKey | list[NestedKey],
+        out_keys: NestedKey | list[NestedKey],
     ):
         super().__init__()
+
+        if not isinstance(in_keys, list):
+            in_keys = [in_keys]
+        if not isinstance(out_keys, list):
+            out_keys = [out_keys]
+
         self.in_keys = in_keys
         self.out_keys = out_keys
-        if len(list(self.in_keys)) != len(list(self.out_keys)):
+
+        if len(self.in_keys) != len(self.out_keys):
             raise ValueError(
                 f"The number of input keys must be the same as the number of output "
                 f"keys. Got {len(list(self.in_keys))} input keys and "

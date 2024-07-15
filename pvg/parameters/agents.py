@@ -306,7 +306,7 @@ class ImageClassificationAgentParameters(AgentParameters):
         "{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}", where
         `HF_PRETRAINED_MODELS_USER` is defined in the `constants` module. The last-layer
         embeddings will be included in the model architecture.
-    pretrained_embedding_channels : int
+    pretrained_embedding_num_channels : int
         The number of channels used to represent the pretrained embeddings. The
         pretrained embeddings are resized to this number of channels by using a 1x1
         convolution.
@@ -344,7 +344,7 @@ class ImageClassificationAgentParameters(AgentParameters):
     stride: int = 1
 
     pretrained_embeddings_model: Optional[str] = None
-    pretrained_embedding_channels: int = 64
+    pretrained_embedding_num_channels: int | None = 64
 
     d_latent_pixel_selector: int = 16
     num_latent_pixel_selector_layers: int = 2
