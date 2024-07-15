@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Any
+from typing import Optional, Any, TypeVar
 from abc import ABC
 from pathlib import Path
 
@@ -67,13 +67,13 @@ class TorchVisionDatasetWrapper(ABC):
 
 DATASET_WRAPPER_CLASSES: dict[str, type[TorchVisionDatasetWrapper]] = {}
 
+D = TypeVar("D", bound=TorchVisionDatasetWrapper)
+
 
 def register_dataset_wrapper_class(dataset_name: str) -> callable:
     """Decorator to register a dataset wrapper class."""
 
-    def decorator(
-        wrapper_class: type[TorchVisionDatasetWrapper],
-    ) -> type[TorchVisionDatasetWrapper]:
+    def decorator(wrapper_class: type[D]) -> type[D]:
         DATASET_WRAPPER_CLASSES[dataset_name] = wrapper_class
         return wrapper_class
 

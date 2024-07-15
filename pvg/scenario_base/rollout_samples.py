@@ -9,6 +9,7 @@ import os
 import pickle
 from textwrap import indent
 import re
+from typing import TypeVar
 
 import wandb
 
@@ -163,6 +164,8 @@ class RolloutSamples(ABC):
 
 ROLLOUT_SAMPLES_CLASS_REGISTRY: dict[ScenarioType, type[RolloutSamples]] = {}
 
+R = TypeVar("R", bound=RolloutSamples)
+
 
 def register_rollout_samples_class(scenario: ScenarioType):
     """Register a subclass of RolloutSamples with a scenario.
@@ -173,7 +176,7 @@ def register_rollout_samples_class(scenario: ScenarioType):
         The scenario with which to register the subclass.
     """
 
-    def decorator(cls):
+    def decorator(cls: type[R]) -> type[R]:
         ROLLOUT_SAMPLES_CLASS_REGISTRY[scenario] = cls
         return cls
 

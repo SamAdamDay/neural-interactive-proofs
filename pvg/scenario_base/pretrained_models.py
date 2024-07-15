@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Iterable
+from typing import Optional, Iterable, TypeVar
 
 import torch
 from torch import nn
@@ -62,10 +62,10 @@ class PretrainedModel(ABC):
 
 PRETRAINED_MODEL_CLASSES: dict[str, type[PretrainedModel]] = {}
 
+P = TypeVar("P", bound=PretrainedModel)
 
-def register_pretrained_model_class(
-    pretrained_model_cls: type[PretrainedModel],
-) -> type[PretrainedModel]:
+
+def register_pretrained_model_class(pretrained_model_cls: type[P]) -> type[P]:
     """Decorator to register a pretrained model class, so it can be built by name
 
     Parameters

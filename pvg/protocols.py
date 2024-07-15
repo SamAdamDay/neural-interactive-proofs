@@ -12,10 +12,10 @@ from abc import ABC, abstractmethod
 
 import torch
 from torch import Tensor
+from typing import TypeVar
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
-from typing import Optional
 from jaxtyping import Int, Bool, Float
 
 from pvg.parameters import Parameters, InteractionProtocolType, Guess
@@ -222,11 +222,13 @@ class ProtocolHandler(ABC):
 
 PROTOCOL_HANDLER_REGISTRY: dict[InteractionProtocolType, type[ProtocolHandler]] = {}
 
+P = TypeVar("P", bound=ProtocolHandler)
+
 
 def register_protocol_handler(protocol_handler: InteractionProtocolType):
     """Decorator to register a protocol handler."""
 
-    def decorator(cls: type[ProtocolHandler]):
+    def decorator(cls: type[P]) -> type[P]:
         PROTOCOL_HANDLER_REGISTRY[protocol_handler] = cls
         return cls
 
