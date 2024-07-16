@@ -212,13 +212,12 @@ class GraphIsomorphismEnvironment(Environment):
     _int_dtype: torch.dtype = torch.int32
     _max_num_nodes: Optional[int] = None
 
-    round_last_in_main_message_history = True
     main_message_out_key = "node_selected"
 
     @property
     def max_num_nodes(self) -> int:
         if self._max_num_nodes is None:
-            self._max_num_nodes = self.dataset["x"].shape[-2]
+            self._max_num_nodes = self.dataset["x"].shape[-1]
         return self._max_num_nodes
 
     @property
@@ -262,6 +261,7 @@ class GraphIsomorphismEnvironment(Environment):
             self.max_num_nodes,
             shape=(
                 self.num_envs,
+                self.params.message_size,
                 2,
                 self.max_num_nodes,
             ),
@@ -287,7 +287,7 @@ class GraphIsomorphismEnvironment(Environment):
         action_spec = super()._get_action_spec()
         action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, self.num_agents),
+            shape=(self.num_envs, self.num_agents, self.params.message_size),
             dtype=torch.long,
             device=self.device,
         )

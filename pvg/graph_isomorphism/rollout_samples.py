@@ -136,7 +136,7 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
                     x, y = graph_pos[node]
                     x += x_add
                     selected_indices = (
-                        rollout["x"][-1, graph_id, node].nonzero()[0].tolist()
+                        rollout["x"][graph_id, node, -1].nonzero()[0].tolist()
                     )
                     if len(selected_indices) == 0:
                         node_x.append(x)

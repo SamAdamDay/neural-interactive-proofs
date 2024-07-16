@@ -21,20 +21,6 @@ from pvg import (
 from pvg.parameters import AGENT_NAMES
 from pvg.utils.output import DummyTqdm
 
-# Default parameter specification
-default_param_spec = {
-    "scenario": ScenarioType.GRAPH_ISOMORPHISM,
-    "trainer": TrainerType.VANILLA_PPO,
-    "ppo_loss": PpoLossType.CLIP,
-    "protocol": InteractionProtocolType.PVG,
-    "spg_variant": SpgVariant.SPG,
-    "is_random": False,
-    "pretrain_agents": False,
-    "manual_architecture": None,
-    "use_shared_body": True,
-    "include_linear_message": False,
-}
-
 # Specification for creating a grid of parameters using ParameterGrid
 param_specs = [
     # Test the two scenarios with the vanilla PPO trainer
@@ -43,6 +29,7 @@ param_specs = [
             ScenarioType.GRAPH_ISOMORPHISM,
             ScenarioType.IMAGE_CLASSIFICATION,
         ],
+        "message_size": [3],
     },
     # Test pretraining the agents
     {
@@ -141,18 +128,17 @@ def test_prepare_run_experiment(param_spec: dict):
     }
     common_ppo_params = CommonPpoParameters()
 
-    # Fill in the parameter specification with the default values
-    param_spec = {**default_param_spec, **param_spec}
-
-    scenario_type = param_spec["scenario"]
-    trainer_type = param_spec["trainer"]
-    ppo_loss_type = param_spec["ppo_loss"]
-    protocol_type = param_spec["protocol"]
-    is_random = param_spec["is_random"]
-    pretrain_agents = param_spec["pretrain_agents"]
-    manual_architecture = param_spec["manual_architecture"]
-    use_shared_body = param_spec["use_shared_body"]
-    include_linear_message = param_spec["include_linear_message"]
+    # Extract the parameters, using defaults if not specified
+    scenario_type = param_spec.get("scenario", ScenarioType.GRAPH_ISOMORPHISM)
+    trainer_type = param_spec.get("trainer", TrainerType.VANILLA_PPO)
+    ppo_loss_type = param_spec.get("ppo_loss", PpoLossType.CLIP)
+    protocol_type = param_spec.get("protocol", InteractionProtocolType.PVG)
+    is_random = param_spec.get("is_random", False)
+    pretrain_agents = param_spec.get("pretrain_agents", False)
+    manual_architecture = param_spec.get("manual_architecture", None)
+    use_shared_body = param_spec.get("use_shared_body", True)
+    include_linear_message = param_spec.get("include_linear_message", False)
+    message_size = param_spec.get("message_size", 1)
 
     # Construct the PPO parameters
     common_ppo_params.loss_type = ppo_loss_type
@@ -190,6 +176,7 @@ def test_prepare_run_experiment(param_spec: dict):
             str(trainer_type): trainer_param,
             "d_representation": 1,
             "include_linear_message_space": include_linear_message,
+            "message_size": message_size,
         }
     )
 

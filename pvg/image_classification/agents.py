@@ -33,8 +33,8 @@ from torch import Tensor
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.utils import NestedKey
 
-from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
 
 from jaxtyping import Int
@@ -76,7 +76,6 @@ from pvg.utils.torch import (
     ParallelTensorDictModule,
     TensorDictCloneKeys,
     OneHot,
-    NormalizeOneHotMessageHistory,
     Print,
     TensorDictPrint,
 )
@@ -147,14 +146,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... round latent_height latent_width): The message history
+        - "x" (... round position latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (... latent_height latent_width), optional: The most recent message
+        - "message" (... position latent_height latent_width), optional: The most recent
+          message
         - "ignore_message" (...), optional: Whether to ignore the message
         - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
           optional: The embeddings of a pretrained model, if using.
-        - "linear_message_history" : (... round linear_message), optional: The linear
-          message history, if using
+        - "linear_message_history" : (... round position linear_message), optional: The
+          linear message history, if using
 
     Output:
         - "image_level_repr" (... d_representation): The output image-level
@@ -217,13 +217,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 "task."
             )
 
-        # Build the message history normalizer if necessary
         if self._agent_params.normalize_message_history:
-            self.message_history_normalizer = NormalizeOneHotMessageHistory(
-                max_message_rounds=self.protocol_handler.max_message_rounds,
-                message_out_key="x_normalized",
-                num_structure_dims=2,
-                round_dim_last=False,
+            raise NotImplementedError(
+                "Message history normalization is implemented any more."
             )
 
         # Build the pretrained encoding scaler if necessary
@@ -249,10 +245,10 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x" : (... max_message_rounds latent_height latent_width)
+            - "x" : (... round position latent_height latent_width)
 
         Output:
-            - "x_upsampled" : (... max_message_rounds height width)
+            - "x_upsampled" : (... round position height width)
 
         Returns
         -------
@@ -264,7 +260,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 size=(self.image_height, self.image_width),
                 mode="nearest",
             ),
-            in_keys="x_normalized",
+            in_keys="x",
             out_keys="x_upsampled",
         )
 
@@ -356,7 +352,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x_upsampled" : (... round height width)
+            - "x_upsampled" : (... round position height width)
             - "image" : (... num_channels height width)
             - "pretrained_embeddings_scaled" : (... embedding_channels height width),
               optional
@@ -371,8 +367,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         in_channels = (
-            self.protocol_handler.max_message_rounds + self.dataset_num_channels
+            self.protocol_handler.max_message_rounds * self.params.message_size
         )
+        in_channels += self.dataset_num_channels
 
         if not self.include_pretrained_embeddings:
             cat_keys = ("x_upsampled", "image")
@@ -381,6 +378,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             in_channels += self.pretrained_model_class.embedding_channels
 
         return TensorDictSequential(
+            TensorDictModule(
+                Rearrange(
+                    "... round position height width "
+                    "-> ... (round position) height width"
+                ),
+                in_keys="x_upsampled",
+                out_keys="x_upsampled",
+            ),
             TensorDictCat(
                 in_keys=cat_keys,
                 out_key="latent_pixel_level_repr",
@@ -554,10 +559,10 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "image_level_repr" : (... latent_channels+1)
-            - "latent_pixel_level_repr" : (... latent_channels+1 latent_height
-              latent_width)
-            - "linear_message_history" : (... round linear_message), optional
+            - "image_level_repr" : (... latent_channels+message_size)
+            - "latent_pixel_level_repr" : (... latent_channels+message_size
+              latent_height latent_width)
+            - "linear_message_history" : (... round position linear_message), optional
 
         Output:
             - "image_level_repr" : (... d_representation)
@@ -571,7 +576,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         image_level_num_channels = latent_pixel_level_num_channels = (
-            self.latent_num_channels + 1
+            self.latent_num_channels + self.params.message_size
         )
 
         final_encoder = []
@@ -605,7 +610,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             # Flatten the linear message history
             final_encoder.append(
                 TensorDictModule(
-                    Rearrange("... round linear_message -> ... (round linear_message)"),
+                    Rearrange(
+                        "... position round linear_message -> ... (position round linear_message)"
+                    ),
                     in_keys="linear_message_history",
                     out_keys="linear_message_history_flat",
                 )
@@ -622,6 +629,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
             image_level_num_channels += (
                 self.params.d_linear_message_space
+                * self.params.message_size
                 * self.protocol_handler.max_message_rounds
             )
 
@@ -647,18 +655,18 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the body on. A TensorDictBase with keys:
 
-            - "x" (... round latent_height latent_width): The message history
+            - "x" (... round position latent_height latent_width): The message history
             - "image" (... channel height width): The image
-            - "message" (... latent_height latent_width), optional: The most recent
-              message
+            - "message" (... position latent_height latent_width), optional: The most
+              recent message
             - "ignore_message" (...), optional: Whether to ignore the message. For
               example, in the first round the there is no message, and the "message"
               field is set to a dummy value.
             - ("pretrained_embeddings", model_name) (... embedding_width
               embedding_height), optional: The embeddings of a pretrained model, if
               using.
-            - "linear_message_history" : (... round linear_message), optional: The
-              linear message history, if using.
+            - "linear_message_history" : (... round position linear_message), optional:
+              The linear message history, if using.
 
         Returns
         -------
@@ -672,12 +680,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         if "message" in data.keys():
-            # Add a channel dimension to the message
-            message = rearrange(
-                data["message"],
-                "... latent_height latent_width -> ... 1 latent_height latent_width",
-            )
             # If the message is to be ignored, set it to zero
+            message = data["message"]
             if "ignore_message" in data.keys():
                 message = torch.where(
                     data["ignore_message"][..., None, None, None],
@@ -686,16 +690,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 )
         else:
             message = torch.zeros(
-                (*data.batch_size, 1, self.latent_height, self.latent_width),
+                (
+                    *data.batch_size,
+                    self.params.message_size,
+                    self.latent_height,
+                    self.latent_width,
+                ),
                 device=self.device,
                 dtype=torch.float,
             )
-
-        # Normalize the message history if necessary
-        if self._agent_params.normalize_message_history:
-            data = self.message_history_normalizer(data)
-        else:
-            data = data.update(dict(x_normalized=data["x"]))
 
         # Upsample the message history
         data = self.message_history_upsampler(data)
@@ -756,8 +759,8 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     def pretrained_model_name(self) -> str | None:
         """The full name of the pretrained model to use, if any.
 
-        This may be different from the model name in the parameters, if the latter is
-        a shorthand.
+        This may be different from the model name in the parameters, if the latter is a
+        shorthand.
         """
         if self.include_pretrained_embeddings:
             return self.pretrained_model_class.name
@@ -774,7 +777,8 @@ class ImageClassificationDummyAgentBody(ImageClassificationAgentPart, DummyAgent
     Input:
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (... latent_height latent_width), optional: The most recent message
+        - "message" (... position latent_height latent_width), optional: The most recent
+          message
         - "ignore_message" (...), optional: Whether to ignore the message
 
     Output:
@@ -1055,20 +1059,20 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
     Input:
         - "image_level_repr" (... d_representation): The output image-level
           representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width
-          d_representation): The output latent-pixel-level representations.
+        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
+          The output latent-pixel-level representations.
         - "round" (optional) (...): The round number.
 
     Output:
-        - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit for
-          each latent pixel, indicating the probability that this latent pixel should be
-          sent as a message to the verifier.
+        - "latent_pixel_selected_logits" (... position latent_height*latent_width): A
+          logit for each latent pixel, indicating the probability that this latent pixel
+          should be sent as a message to the verifier.
         - "decision_logits" (... 3): A logit for each of the three options: guess a
           classification one way or the other, or continue exchanging messages. Set to
           zeros when the decider is not present.
-        - "linear_message_selected_logits" (... d_linear_message_space) (optional):
-          A logit for each linear message, indicating the probability that this linear
-          message should be sent as a message to the verifier.
+        - "linear_message_selected_logits" (... position d_linear_message_space)
+          (optional): A logit for each linear message, indicating the probability that
+          this linear message should be sent as a message to the verifier.
 
     Parameters
     ----------
@@ -1137,14 +1141,23 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         latent_pixel_selector : TensorDictModule
             The latent pixel selector module.
         """
-        return self._build_latent_pixel_mlp(
+
+        latent_pixel_mlp = self._build_latent_pixel_mlp(
             d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_latent_pixel_selector,
-            d_out=1,
+            d_out=self.params.message_size,
             flatten_output=True,
             num_layers=self._agent_params.num_latent_pixel_selector_layers,
             out_key="latent_pixel_selected_logits",
         )
+
+        rearranger = TensorDictModule(
+            Rearrange("... logit position -> ... position logit"),
+            in_keys="latent_pixel_selected_logits",
+            out_keys="latent_pixel_selected_logits",
+        )
+
+        return TensorDictSequential(latent_pixel_mlp, rearranger)
 
     def _build_linear_message_selector(self) -> TensorDictModule:
         """Builds the module which selects which linear message to send.
@@ -1154,14 +1167,26 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         linear_message_selector : TensorDictModule
             The linear message selector module.
         """
-        return self._build_image_level_mlp(
+
+        image_level_mlp = self._build_image_level_mlp(
             d_in=self.params.d_representation,
             d_hidden=self._agent_params.d_linear_message_selector,
-            d_out=self.params.d_linear_message_space,
+            d_out=self.params.d_linear_message_space * self.params.message_size,
             num_layers=self._agent_params.num_linear_message_selector_layers,
             include_round=False,
             out_key="linear_message_selected_logits",
         )
+
+        rearranger = TensorDictModule(
+            Rearrange(
+                "... (position logit) -> ... position logit",
+                logit=self.params.d_linear_message_space,
+            ),
+            in_keys="linear_message_selected_logits",
+            out_keys="linear_message_selected_logits",
+        )
+
+        return TensorDictSequential(image_level_mlp, rearranger)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
         """Runs the policy head on the given body output.
@@ -1183,22 +1208,22 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         out : TensorDict
             A tensor dict with keys:
 
-            - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit
-              for each latent pixel, indicating the probability that this latent pixel
-              should be sent as a message to the verifier.
+            - "latent_pixel_selected_logits" (... position latent_height*latent_width):
+              A logit for each latent pixel, indicating the probability that this latent
+              pixel should be sent as a message to the verifier.
             - "decision_logits" (... 3): A logit for each of the three options: guess a
               classification one way or the other, or continue exchanging messages. Set
               to zeros when the decider is not present.
-            - "linear_message_selected_logits" (... d_linear_message_space) (optional):
-              A logit for each linear message, indicating the probability that this
-              linear message should be sent as a message to the verifier.
+            - "linear_message_selected_logits" (... position d_linear_message_space)
+              (optional): A logit for each linear message, indicating the probability
+              that this linear message should be sent as a message to the verifier.
         """
 
         out_dict = {}
 
         out_dict["latent_pixel_selected_logits"] = self.latent_pixel_selector(
             body_output
-        )["latent_pixel_selected_logits"].squeeze(-1)
+        )["latent_pixel_selected_logits"]
 
         if self.decider is not None:
             out_dict["decision_logits"] = self.decider(body_output)["decision_logits"]
@@ -1245,15 +1270,15 @@ class ImageClassificationRandomAgentPolicyHead(
           The output latent-pixel-level representations.
 
     Output:
-        - "latent_pixel_selected_logits" (... latent_height*latent_width): A logit for
-          each latent pixel, indicating the probability that this latent pixel should be
-          sent as a message to the verifier.
+        - "latent_pixel_selected_logits" (... position latent_height*latent_width): A
+          logit for each latent pixel, indicating the probability that this latent pixel
+          should be sent as a message to the verifier.
         - "decision_logits" (... 3): A logit for each of the three options: guess a
           classification one way or the other, or continue exchanging messages. Set to
           zeros when the decider is not present.
-        - "linear_message_selected_logits" (... d_linear_message_space) (optional):
-          A logit for each linear message, indicating the probability that this linear
-          message should be sent as a message to the verifier.
+        - "linear_message_selected_logits" (... position d_linear_message_space)
+          (optional): A logit for each linear message, indicating the probability that
+          this linear message should be sent as a message to the verifier.
     """
 
     agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
@@ -1287,6 +1312,7 @@ class ImageClassificationRandomAgentPolicyHead(
 
         latent_pixel_selected_logits = torch.zeros(
             *body_output.batch_size,
+            self.params.message_size,
             self.latent_width * self.latent_height,
             device=self.device,
             dtype=torch.float32,
@@ -1530,8 +1556,8 @@ class ImageClassificationCombinedBody(CombinedBody):
         - "round" (...): The round number.
         - "x" (... max_message_rounds latent_height latent_width): The message history
         - "image" (... num_channels height width): The image
-        - "message" (... latent_height latent_width), optional: The most recent message.
-        - "linear_message_history" : (... round linear_message), optional: The
+        - "message" (... position latent_height latent_width), optional: The most recent message.
+        - "linear_message_history" : (... round position linear_message), optional: The
           linear message history, if using.
 
     Output:
@@ -1600,9 +1626,12 @@ class ImageClassificationCombinedBody(CombinedBody):
 
         return data.update(
             dict(
-                agents=dict(
-                    latent_pixel_level_repr=latent_pixel_level_repr,
-                    image_level_repr=image_level_repr,
+                agents=TensorDict(
+                    dict(
+                        latent_pixel_level_repr=latent_pixel_level_repr,
+                        image_level_repr=image_level_repr,
+                    ),
+                    batch_size=(*data.batch_size, len(self._agent_names)),
                 )
             )
         )
@@ -1623,14 +1652,14 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "latent_pixel_selected_logits") (... agents
+        - ("agents", "latent_pixel_selected_logits") (... agents position
           latent_height*latent_width): A logit for each latent pixel, indicating the
           probability that this latent pixel should be sent as a message to the
           verifier.
         - ("agents", "decision_logits") (... agents 3): A logit for each of the three
           options: guess a classification one way or the other, or continue exchanging
           messages. Set to zeros when the decider is not present.
-        - ("agents", "linear_message_selected_logits") (... agents
+        - ("agents", "linear_message_selected_logits") (... agents position
           d_linear_message_space) (optional): A logit for each linear message,
           indicating the probability that this linear message should be sent as a
           message to the verifier.
@@ -1693,7 +1722,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
                 policy_outputs[name]["latent_pixel_selected_logits"]
                 for name in self._agent_names
             ],
-            dim=-2,
+            dim=-3,
         )
         agents_update["decision_logits"] = torch.stack(
             [policy_outputs[name]["decision_logits"] for name in self._agent_names],
@@ -1705,7 +1734,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
                     policy_outputs[name]["linear_message_selected_logits"]
                     for name in self._agent_names
                 ],
-                dim=-2,
+                dim=-3,
             )
 
         # Make sure the verifier only selects decisions which are allowed
@@ -1717,7 +1746,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
             dict(
                 agents=TensorDict(
                     agents_update,
-                    batch_size=head_output.batch_size,
+                    batch_size=(*head_output.batch_size, len(self._agent_names)),
                 )
             )
         )
@@ -1799,7 +1828,7 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
             dict(
                 agents=TensorDict(
                     dict(value=value),
-                    batch_size=head_output.batch_size,
+                    batch_size=(*head_output.batch_size, len(self._agent_names)),
                 )
             ),
         )

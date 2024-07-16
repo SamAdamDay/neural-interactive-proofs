@@ -279,6 +279,7 @@ class ImageClassificationDataset(Dataset):
         x = torch.zeros(
             images.shape[0],
             self.protocol_handler.max_message_rounds,
+            self.params.message_size,
             *images.shape[-2:],
             dtype=self.x_dtype,
         )
@@ -297,21 +298,25 @@ class ImageClassificationDataset(Dataset):
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
 
-        suffix = str(self.binarification_method).lower()
+        processed_name = f"processed"
+        processed_name += f"_{self.protocol_handler.max_message_rounds}"
+        processed_name += f"_{self.params.message_size}"
+
+        processed_name = str(self.binarification_method).lower()
         if self.binarification_method == BinarificationMethodType.SELECT_TWO:
-            suffix += f"_{self.selected_classes[0]}_{self.selected_classes[1]}"
+            processed_name += f"_{self.selected_classes[0]}_{self.selected_classes[1]}"
         elif (
             self.binarification_method == BinarificationMethodType.MERGE
             or self.binarification_method == BinarificationMethodType.RANDOM
         ):
-            suffix += f"_{self.binarification_seed}"
+            processed_name += f"_{self.binarification_seed}"
 
         sub_dir = "train" if self.train else "test"
 
         return os.path.join(
             IC_DATA_DIR,
             self.params.dataset,
-            f"processed_{self.protocol_handler.max_message_rounds}_{suffix}",
+            processed_name,
             sub_dir,
         )
 

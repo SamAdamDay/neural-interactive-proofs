@@ -148,6 +148,9 @@ class Parameters(BaseParameters):
         The proportion of the dataset to use for testing.
     d_representation : int
         The dimension of each agent's body representation output.
+    message_size : int
+        The size of the message sent by agents. This is a dimension of the message
+        space and effectively allows sending multiple messages simultaneously.
     include_linear_message_space : bool
         Whether to include a 1-dimensional message space in addition to the message
         space specified by the scenario. This allows sending a single number as a
@@ -199,6 +202,7 @@ class Parameters(BaseParameters):
 
     d_representation: int = 16
 
+    message_size: int = 1
     include_linear_message_space: bool = False
     d_linear_message_space: int = 2
 
