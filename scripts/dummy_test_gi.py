@@ -17,6 +17,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     SpgParameters,
+    MessageRegressionParameters,
     PpoLossType,
     SpgVariant,
     Guess,
@@ -91,6 +92,14 @@ def run(cmd_args: Namespace):
         ),
         pretrain_agents=False,
         include_linear_message_space=False,
+        message_regression=MessageRegressionParameters(
+            enabled=True,
+            mlp_num_layers=2,
+            mlp_hidden_size=64,
+            mlp_num_epochs=10,
+            mlp_batch_size=512,
+            mlp_learning_rate=0.001,
+        ),
     )
 
     # Prepare the experiment if necessary

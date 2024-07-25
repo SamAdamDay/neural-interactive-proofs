@@ -68,6 +68,7 @@ from .types import (
     InteractionProtocolType,
     MinMessageRoundsSchedulerType,
     ImageBuildingBlockType,
+    MessageRegressionMethodType,
 )
 from .agents import (
     LrFactors,
@@ -98,6 +99,7 @@ from .update_schedule import (
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
 )
+from .message_regression import MessageRegressionParameters
 
 # The agent names required for each protocol
 AGENT_NAMES = {
@@ -222,6 +224,8 @@ class Parameters(BaseParameters):
     protocol_common: Optional[CommonProtocolParameters | dict] = None
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
+
+    message_regression: Optional[MessageRegressionParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums

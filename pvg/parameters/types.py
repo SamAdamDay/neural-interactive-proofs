@@ -151,3 +151,15 @@ class ImageBuildingBlockType(StrEnum):
 
     CONV2D = enum_auto()
     RESIDUAL_BASIC = enum_auto()
+
+
+class MessageRegressionMethodType(StrEnum):
+    """Enum for the method to use to do regression analysis on the messages.
+
+    Enums
+    -----
+    MLP
+        Use a multi-layer perceptron to do the regression.
+    """
+
+    MLP = enum_auto()
