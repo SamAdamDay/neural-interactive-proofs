@@ -9,6 +9,7 @@ function can then be used to build a protocol handler from parameters.
 """
 
 from abc import ABC, abstractmethod
+from functools import cached_property
 
 import torch
 from torch import Tensor
@@ -114,6 +115,33 @@ class ProtocolHandler(ABC):
         return self.get_active_agents_mask(round)[
             ..., self.agent_names.index("verifier")
         ]
+
+    @cached_property
+    def agent_turn_names(self) -> list[list[str]]:
+        """A list of which agent names are active in each round.
+
+        This is a list of lists of agent names, where each inner list contains the agent
+        names that are active in the corresponding round.
+
+        Returns
+        -------
+        agent_turn_names : list[list[str]]
+            A list of which agent names are active in each round.
+        """
+
+        active_agents_mask = self.get_active_agents_mask(
+            torch.arange(self.max_message_rounds)
+        )
+
+        agent_turn_names = []
+        for round in range(self.max_message_rounds):
+            active_agent_names = []
+            for i, agent_name in enumerate(self.agent_names):
+                if active_agents_mask[round, i]:
+                    active_agent_names.append(agent_name)
+            agent_turn_names.append(active_agent_names)
+
+        return agent_turn_names
 
     @abstractmethod
     def _include_prover_rewards(

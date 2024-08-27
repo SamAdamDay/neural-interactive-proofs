@@ -687,8 +687,17 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # trained policy live on different devices.
             self.train_collector.update_policy_weights_()
 
-            # Log statistics
+            # Generate statistics
             to_log = self._get_log_stats(tensordict_data, mean_loss_vals)
+
+            # Do message regression and add these results to be logged
+            message_regression_scores = (
+                self.scenario_instance.message_regressor.fit_score(tensordict_data)
+            )
+            if message_regression_scores != {}:
+                to_log["message_regression_score"] = message_regression_scores
+
+            # Log the statistics
             self.settings.stat_logger.log(to_log, step=iteration)
 
             # Log artifacts to W&B

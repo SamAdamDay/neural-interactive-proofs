@@ -43,6 +43,7 @@ from pvg.scenario_base.agents import (
 from pvg.scenario_base.environment import Environment
 from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
+from pvg.message_regression import MessageRegressor, build_message_regressor
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
 from pvg.utils.params import check_if_critic_and_single_body
 
@@ -87,6 +88,9 @@ class ScenarioInstance:
         The test dataset for the experiment.
     protocol_handler : ProtocolHandler
         The interaction protocol handler for the experiment.
+    message_regressor : MessageRegressor
+        The message regressor for the experiment, which is used to test if the label can
+        be inferred purely from the messages.
     agents : dict[str, Agent]
         The agents for the experiment. Each 'agent' is a dictionary containing all of
         the agent parts.
@@ -113,6 +117,7 @@ class ScenarioInstance:
     test_dataset: Dataset
     agents: dict[str, Agent]
     protocol_handler: ProtocolHandler
+    message_regressor: MessageRegressor
     train_environment: Optional[Environment] = None
     test_environment: Optional[Environment] = None
     combined_body: Optional[CombinedBody] = None
@@ -173,6 +178,9 @@ def build_scenario_instance(
     # Create the protocol handler
     protocol_handler = build_protocol_handler(params)
 
+    # Create the message regressor
+    message_regressor = build_message_regressor(params, settings, protocol_handler)
+
     # Create the datasets
     train_dataset = get_scenario_class(Dataset)(
         params, settings, protocol_handler, train=True
@@ -212,6 +220,7 @@ def build_scenario_instance(
         test_dataset=test_dataset,
         agents=agents,
         protocol_handler=protocol_handler,
+        message_regressor=message_regressor,
         **additional_rl_components,
     )
 
