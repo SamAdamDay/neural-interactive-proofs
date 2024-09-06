@@ -208,6 +208,8 @@ class ProtocolHandler(ABC):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... num_agents"],
+        verifier_index: tuple,
+        prover_indices: list[tuple],
     ):
         """Compute the rewards for the provers and add them to the current reward.
 
@@ -257,6 +259,7 @@ class ProtocolHandler(ABC):
             if "simulator" not in conversation:
 
                 verifier_name = None
+                prover_names = []
                 for agent in conversation:
                     if "verifier" in agent:
                         if verifier_name is None:
@@ -265,18 +268,24 @@ class ProtocolHandler(ABC):
                             raise ValueError(
                                 f"Multiple verifiers in conversation {conversation}."
                             )
+                    if "prover" in agent:
+                        prover_names.append(agent)
                 if verifier_name is None:
                     raise ValueError(f"No verifier in conversation {conversation}.")
 
                 y: Int[Tensor, "... 1"] = env_td[c]["y"]
                 round: Int[Tensor, "..."] = env_td[c]["round"]
                 decision: Int[Tensor, "... agent"] = env_td[c]["agents", "decision"]
-                done: Bool[Tensor, "..."] = env_td["done"]
+                done: Bool[Tensor, "..."] = env_td[c]["done"]
 
                 # Get the mask of the batch items where it is the verifier's turn
                 verifier_turn_mask = self.get_agent_turn_mask(verifier_name, round, c)
 
                 verifier_index = (..., self.agent_names.index(verifier_name))
+                prover_indices = [
+                    (..., self.agent_names.index(prover_name))
+                    for prover_name in prover_names
+                ]
 
                 if self.params.protocol_common.force_guess == Guess.ONE:
                     decision[verifier_index] = torch.ones_like(decision[verifier_index])
@@ -294,39 +303,55 @@ class ProtocolHandler(ABC):
                 verifier_decision_made = verifier_decision_made & (
                     round >= self.min_message_rounds
                 )
-                done = done | verifier_decision_made
+                done = (
+                    done
+                    | verifier_decision_made
+                    | (round >= self.max_message_rounds - 1)
+                )
 
-                # Compute the reward for the verifier when they make a guess
                 reward = torch.zeros(
                     (*done.shape, len(self.agent_names)),
                     dtype=torch.float,
                     device=done.device,
                 )
-                reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
-                reward[verifier_index][
-                    verifier_decision_made & (decision[verifier_index] == y.squeeze())
-                ] = protocol_params.verifier_reward
-                reward[verifier_index][
-                    verifier_decision_made & (decision[verifier_index] != y.squeeze())
-                ] = protocol_params.verifier_incorrect_penalty
 
-                # If we reach the end of the episode and the verifier has not made a guess,
-                # terminate it with a negative reward for the verifier
-                done = done | (round >= self.max_message_rounds - 1)
-                reward[verifier_index][
-                    (round >= self.max_message_rounds - 1) & ~verifier_decision_made
-                ] = protocol_params.verifier_terminated_penalty
+                # Compute the reward for the (non-adversarial) verifier when they make a guess
+                if verifier_name != "verifier1":
 
-                # If the verifier has not made a guess and it's their turn, given them a small
-                # reward for continuing
-                reward[verifier_index][
-                    verifier_turn_mask & ~done
-                ] = protocol_params.verifier_no_guess_reward
+                    reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
+                    reward[verifier_index][
+                        verifier_decision_made
+                        & (decision[verifier_index] == y.squeeze())
+                    ] = protocol_params.verifier_reward
+                    reward[verifier_index][
+                        verifier_decision_made
+                        & (decision[verifier_index] != y.squeeze())
+                    ] = protocol_params.verifier_incorrect_penalty
 
-                # Compute the rewards for the provers and add them
-                self._include_prover_rewards(
-                    verifier_decision_made, decision[verifier_index], reward
-                )
+                    # If we reach the end of the episode and the verifier has not made a guess,
+                    # terminate it with a negative reward for the verifier
+                    reward[verifier_index][
+                        (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+                    ] = protocol_params.verifier_terminated_penalty
+
+                    # If the verifier has not made a guess and it's their turn, given them a small
+                    # reward for continuing
+                    reward[verifier_index][
+                        verifier_turn_mask & ~done
+                    ] = protocol_params.verifier_no_guess_reward
+
+                    # Compute the rewards for the provers and add them
+                    self._include_prover_rewards(
+                        verifier_decision_made,
+                        decision[verifier_index],
+                        reward,
+                        verifier_index,
+                        prover_indices,
+                    )
+
+            else:
+
+                continue
 
             # TODO LH revisit
 
@@ -369,7 +394,7 @@ class ZkProtocol(ProtocolHandler, ABC):
 
     def _include_simulator_rewards(
         self,
-        verifier_a_probs: Float[Tensor, "..."],
+        verifier1_probs: Float[Tensor, "..."],
         simulator_probs: Float[Tensor, "..."],
         reward: Float[Tensor, "... num_agents"],
     ):
@@ -377,7 +402,7 @@ class ZkProtocol(ProtocolHandler, ABC):
 
         # Simulator reward
         reward[..., -1] = (
-            1 - abs(verifier_a_probs - simulator_probs).mean(dim=-1)
+            1 - abs(verifier1_probs - simulator_probs).mean(dim=-1)
         ) * protocol_params.simulator_reward
 
         # Adversarial verifier reward
@@ -400,20 +425,24 @@ class TwoProverProtocol(ProtocolHandler, ABC):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... num_agents"],
+        verifier_index: tuple,
+        prover_indices: list[tuple],
     ):
         protocol_params = self.params.protocol_common
 
         if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
+            for prover_index in prover_indices:
+                reward[prover_index] = reward[verifier_index]
         elif self.adversarial:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
+            for i in range(prover_indices):
+                reward[prover_indices[i]] = (
+                    verifier_decision_made & (verifier_decision == i)
                 ).float() * protocol_params.prover_reward
         else:
-            reward[..., 0] = reward[..., 1] = (
-                verifier_decision_made & (verifier_decision == 1)
-            ).float() * protocol_params.prover_reward
+            for prover_index in prover_indices:
+                reward[prover_index] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.NIP)
@@ -447,10 +476,14 @@ class NipProtocol(ProtocolHandler):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... num_agents"],
+        verifier_index: tuple,
+        prover_indices: list[tuple],
     ):
         protocol_params = self.params.protocol_common
-        verifier_index = (..., self.agent_names.index("verifier"))
-        prover_index = (..., self.agent_names.index("prover"))
+
+        if len(prover_indices) != 1:
+            raise ValueError("NIP protocol should have exactly one prover.")
+        prover_index = prover_indices[0]
 
         if protocol_params.shared_reward:
             reward[prover_index] = reward[verifier_index]

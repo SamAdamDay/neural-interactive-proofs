@@ -102,7 +102,9 @@ class Environment(EnvBase, ABC):
         # Create environment specs
         self.observation_spec = self._get_observation_spec()
         self.action_spec = self._get_action_spec()
+        self.state_spec = self._get_state_spec()
         self.reward_spec = self._get_reward_spec()
+        self.done_spec = self._get_done_spec()
 
     @property
     @abstractmethod
