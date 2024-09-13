@@ -44,7 +44,7 @@ class MessageRegressionParameters(SubParameters):
     """
 
     enabled: bool = False
-    agents: list[str] | None = field(default_factory=lambda: ["prover"])
+    agents: list[str] | None = None
 
     regression_method: MessageRegressionMethodType = MessageRegressionMethodType.MLP
 

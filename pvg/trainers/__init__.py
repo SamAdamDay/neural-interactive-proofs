@@ -4,7 +4,7 @@ A trainer takes the components of a scenario and trains the agents.
 """
 
 from pvg.parameters import Parameters
-from pvg.scenario_instance import ScenarioInstance
+from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 
 from .base import Trainer, IterationContext, attach_progress_bar

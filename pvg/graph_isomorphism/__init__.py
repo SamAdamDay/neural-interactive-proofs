@@ -7,9 +7,6 @@ Has classes for:
 - Generating a dataset
 - Building agents
 
-The `GraphIsomorphismAgentsBuilder.build` factory function is used to build the agents
-using the given parameters.
-
 Examples
 --------
 >>> from pvg.parameters import Parameters, Scenario, Trainer
@@ -17,8 +14,6 @@ Examples
 >>> params = Parameters(Scenario.GRAPH_ISOMORPHISM, Trainer.SOLO_AGENT, "eru10000")
 >>> agents = GraphIsomorphismAgentsBuilder.build(params, "cpu")
 """
-
-import torch
 
 from .data import GraphIsomorphismDataset
 from .environment import GraphIsomorphismEnvironment

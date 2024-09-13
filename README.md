@@ -116,18 +116,19 @@ experiments. To build a new image and use it, follow the proceeding steps.
 3. Create a file named `.env` with the following contents
 
 ```bash
-GITHUB_USER=
-GITHUB_PAT=
+GITHUB_USER=""
+GITHUB_PAT=""
 GIT_NAME=""
 GIT_EMAIL=""
 SSH_PUBKEY=""
 WANDB_KEY=""
+OPENAI_API_KEY=""
 ```
 
 4. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
    like it to appear in git commit messages, the email you'd like to use for git
-   commits, the SSH public key you'd like to use to access the container and your
-   Weight's and Biases API key.
+   commits, the SSH public key you'd like to use to access the container, your
+   Weight's and Biases API key, and your OpenAI API key.
 
 5. Build the image using the following command:
 

@@ -12,7 +12,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from tqdm import tqdm
 
 from pvg.parameters import Parameters
-from pvg.scenario_instance import ScenarioInstance
+from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.params import check_if_critic_and_single_body
 

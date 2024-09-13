@@ -62,7 +62,7 @@ param_grid = dict(
     body_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     gnn_lr_factor=[{"actor": 1.0, "critic": 1.0}],
     use_dual_gnn=[False],
-    ortho_init=[True],
+    use_orthogonal_initialisation=[True],
     prover_num_layers=[5],
     prover_num_value_layers=[2],
     prover_dim_value_layers=[16],
@@ -150,7 +150,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             gnn_lr_factor=combo["gnn_lr_factor"],
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
-            ortho_init=combo["ortho_init"],
+            use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
             update_schedule=prover_update_schedule,
         )
     params = Parameters(
@@ -172,7 +172,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 gnn_lr_factor=combo["gnn_lr_factor"],
                 include_round_in_decider=combo["include_round_in_decider"],
                 use_batch_norm=combo["use_batch_norm"],
-                ortho_init=combo["ortho_init"],
+                use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
                 update_schedule=verifier_update_schedule,
             ),
             prover=prover_params,

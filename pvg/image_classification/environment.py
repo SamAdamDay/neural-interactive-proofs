@@ -15,13 +15,13 @@ from torchrl.data.tensor_specs import (
 )
 
 from pvg.parameters import ScenarioType
-from pvg.scenario_base import Environment
-from pvg.scenario_instance import register_scenario_class
+from pvg.scenario_base import Environment, TensorDictEnvironment
+from pvg.factory import register_scenario_class
 from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 
 
 @register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Environment)
-class ImageClassificationEnvironment(Environment):
+class ImageClassificationEnvironment(TensorDictEnvironment):
     """The image classification RL environment.
 
     Parameters
@@ -114,6 +114,7 @@ class ImageClassificationEnvironment(Environment):
             self.latent_width,
             shape=(
                 self.num_envs,
+                self.protocol_handler.num_message_channels,
                 self.params.message_size,
                 self.latent_height,
                 self.latent_width,
@@ -139,7 +140,12 @@ class ImageClassificationEnvironment(Environment):
         action_spec = super()._get_action_spec()
         action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
             self.latent_height * self.latent_width,
-            shape=(self.num_envs, self.num_agents, self.params.message_size),
+            shape=(
+                self.num_envs,
+                self.num_agents,
+                self.protocol_handler.num_message_channels,
+                self.params.message_size,
+            ),
             dtype=torch.long,
             device=self.device,
         )

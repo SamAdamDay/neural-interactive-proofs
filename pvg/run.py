@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_instance import build_scenario_instance
+from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY

@@ -14,6 +14,7 @@ from pvg import (
     ReinforceParameters,
     ScenarioType,
     TrainerType,
+    InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
     SpgParameters,
@@ -21,6 +22,7 @@ from pvg import (
     PpoLossType,
     SpgVariant,
     Guess,
+    AGENT_NAMES,
     run_experiment,
     prepare_experiment,
 )
@@ -38,25 +40,22 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
+    interaction_protocol = InteractionProtocolType.PVG
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="eru10000",
         agents=AgentsParameters(
-            verifier=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                num_transformer_layers=1,
-                use_manual_architecture=False,
-                agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                ortho_init=False,
-            ),
-            prover=GraphIsomorphismAgentParameters(
-                num_gnn_layers=1,
-                num_transformer_layers=1,
-                use_manual_architecture=False,
-                agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                ortho_init=False,
-            ),
+            **{
+                agent_name: GraphIsomorphismAgentParameters(
+                    num_gnn_layers=1,
+                    num_transformer_layers=1,
+                    use_manual_architecture=False,
+                    agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                    use_orthogonal_initialisation=False,
+                )
+                for agent_name in AGENT_NAMES[interaction_protocol]
+            }
         ),
         rl=RlTrainerParameters(
             num_iterations=100,
@@ -70,11 +69,6 @@ def run(cmd_args: Namespace):
         ),
         spg=SpgParameters(
             variant=SpgVariant.PSOS,
-            # stackelberg_sequence=combo["stackelberg_sequence"],
-            # ihvp_variant=combo["ihvp_variant"],
-            # ihvp_num_iterations=combo["ihvp_num_iterations"],
-            # ihvp_rank=combo["ihvp_rank"],
-            # ihvp_rho=combo["ihvp_rho"],
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,
@@ -83,6 +77,7 @@ def run(cmd_args: Namespace):
         reinforce=ReinforceParameters(
             use_advantage_and_critic=False,
         ),
+        interaction_protocol=interaction_protocol,
         protocol_common=CommonProtocolParameters(
             shared_reward=True,
             force_guess=None,

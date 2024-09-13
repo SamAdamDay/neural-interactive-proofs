@@ -44,10 +44,11 @@ from jaxtyping import Float, Int
 
 from pvg.scenario_base import (
     AgentHooks,
-    AgentPart,
+    TensorDictAgentPartMixin,
     AgentBody,
-    AgentHead,
     DummyAgentBody,
+    TensorDictDummyAgentPartMixin,
+    AgentHead,
     AgentPolicyHead,
     RandomAgentPolicyHead,
     AgentValueHead,
@@ -58,7 +59,7 @@ from pvg.scenario_base import (
     CombinedValueHead,
     Agent,
 )
-from pvg.scenario_instance import register_scenario_class
+from pvg.factory import register_scenario_class
 from pvg.parameters import (
     Parameters,
     GraphIsomorphismAgentParameters,
@@ -66,6 +67,7 @@ from pvg.parameters import (
     ScenarioType,
     InteractionProtocolType,
 )
+from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.torch import (
     ACTIVATION_CLASSES,
@@ -104,13 +106,15 @@ class GraphIsomorphismAgentHooks(AgentHooks):
     node_level_repr: Optional[callable] = None
 
 
-class GraphIsomorphismAgentPart(AgentPart, ABC):
+class GraphIsomorphismAgentPart(TensorDictAgentPartMixin, ABC):
     """Base class for all graph isomorphism agent parts.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -119,25 +123,25 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         The device to use for this agent part. If not given, the CPU is used.
     """
 
-    _agent_params: GraphIsomorphismAgentParameters | RandomAgentParameters
+    agent_params: GraphIsomorphismAgentParameters
 
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
 
-        self._agent_params = params.agents[agent_name]
-        self.agent_index = self.protocol_handler.agent_names.index(agent_name)
-
-        if isinstance(self._agent_params, GraphIsomorphismAgentParameters):
-            self.activation_function = ACTIVATION_CLASSES[
-                self._agent_params.activation_function
-            ]
+        self.activation_function = ACTIVATION_CLASSES[
+            self.agent_params.activation_function
+        ]
 
     @classmethod
     def _run_masked_transformer(
@@ -221,6 +225,12 @@ class GraphIsomorphismAgentPart(AgentPart, ABC):
         return transformer_output
 
 
+class GraphIsomorphismDummyAgentPart(TensorDictDummyAgentPartMixin, ABC):
+    """Base class for all graph isomorphism dummy agent parts."""
+
+    agent_params: RandomAgentParameters
+
+
 @register_scenario_class(GI_SCENARIO, AgentBody)
 class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     """Agent body for the graph isomorphism task.
@@ -231,16 +241,17 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... round position pair node): The graph node features (message history)
+        - "x" (... round channel position pair node): The graph node features (message
+          history)
         - "adjacency" (... pair node node): The graph adjacency matrices
-        - "message" (... position pair node), optional: The most recent message from the
-          other agent
+        - "message" (... channel position pair node), optional: The most recent message
+          from the other agent
         - "node_mask" (... pair node): Which nodes actually exist
         - "ignore_message" (...), optional: Whether to ignore any values in "message".
           For example, in the first round the there is no message, and the "message"
           field is set to a dummy value.
-        - "linear_message_history" : (... round position linear_message), optional: The
-          linear message history, if using
+        - "linear_message_history" : (... round channel position linear_message),
+          optional: The linear message history, if using
 
     Output:
         - "graph_level_repr" (... 2 d_representation): The output graph-level
@@ -252,6 +263,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -278,24 +291,28 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def d_gnn_out(self) -> int:
         """The dimensionality of the GNN output after the stream and feature dims"""
         if (
-            self._agent_params.use_dual_gnn
-            and not self._agent_params.use_manual_architecture
+            self.agent_params.use_dual_gnn
+            and not self.agent_params.use_manual_architecture
         ):
-            return 2 * self._agent_params.d_gnn
+            return 2 * self.agent_params.d_gnn
         else:
-            return self._agent_params.d_gnn
+            return self.agent_params.d_gnn
 
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
 
-        if self._agent_params.normalize_message_history:
+        if self.agent_params.normalize_message_history:
             raise NotImplementedError(
                 "Message history normalization is implemented any more."
             )
@@ -303,7 +320,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         # Build up the GNN module
         self.gnn = self._build_gnn()
 
-        if self._agent_params.use_manual_architecture:
+        if self.agent_params.use_manual_architecture:
             if params.interaction_protocol != InteractionProtocolType.PVG:
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
@@ -312,7 +329,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
             # Build the encoder going from the gnn output to the representation space
             self.representation_encoder = self._build_representation_encoder(
-                self._agent_params.d_gnn
+                self.agent_params.d_gnn
             )
 
         else:
@@ -329,8 +346,10 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             # Build the encoder going from the transformer output to the representation
             # space
             self.representation_encoder = self._build_representation_encoder(
-                self._agent_params.d_transformer
+                self.agent_params.d_transformer
             )
+
+        self._init_weights()
 
     def _build_gnn(self) -> TensorDictSequential:
         """Builds the GNN module for an agent.
@@ -351,19 +370,23 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             "adjacency" and "node_mask".
         """
 
-        d_input = self.protocol_handler.max_message_rounds * self.params.message_size
+        d_input = (
+            self.max_message_rounds
+            * self.num_visible_message_channels
+            * self.params.message_size
+        )
 
         # Build up the GNN
         gnn_layers = []
         gnn_layers.append(
             TensorDictModule(
-                Linear(d_input, self._agent_params.d_gnn),
+                Linear(d_input, self.agent_params.d_gnn),
                 in_keys=("gnn_repr",),
                 out_keys=("gnn_repr",),
             )
         )
 
-        for _ in range(self._agent_params.num_gnn_layers):
+        for _ in range(self.agent_params.num_gnn_layers):
             gnn_layers.append(
                 TensorDictModule(
                     self.activation_function(),
@@ -375,13 +398,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 GIN(
                     Sequential(
                         Linear(
-                            self._agent_params.d_gnn,
-                            self._agent_params.d_gin_mlp,
+                            self.agent_params.d_gnn,
+                            self.agent_params.d_gin_mlp,
                         ),
                         self.activation_function(),
                         Linear(
-                            self._agent_params.d_gin_mlp,
-                            self._agent_params.d_gnn,
+                            self.agent_params.d_gin_mlp,
+                            self.agent_params.d_gnn,
                         ),
                     ),
                     feature_in_key="gnn_repr",
@@ -417,17 +440,22 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         """
 
-        in_features = self.d_gnn_out + 2 + self.params.message_size
+        in_features = (
+            self.d_gnn_out
+            + 2
+            + self.num_visible_message_channels * self.params.message_size
+        )
         if self.params.include_linear_message_space:
             in_features += (
                 self.protocol_handler.max_message_rounds
+                * self.num_visible_message_channels
                 * self.params.message_size
                 * self.params.d_linear_message_space
             )
 
         return Linear(
             in_features,
-            self._agent_params.d_transformer,
+            self.agent_params.d_transformer,
             device=self.device,
         )
 
@@ -440,18 +468,18 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             The transformer module.
         """
 
-        if self._agent_params.num_transformer_layers == 0:
+        if self.agent_params.num_transformer_layers == 0:
             return None
 
         transformer = TransformerEncoder(
             encoder_layer=TransformerEncoderLayer(
-                d_model=self._agent_params.d_transformer,
-                nhead=self._agent_params.num_heads,
+                d_model=self.agent_params.d_transformer,
+                nhead=self.agent_params.num_heads,
                 batch_first=True,
-                dropout=self._agent_params.transformer_dropout,
-                dim_feedforward=self._agent_params.d_transformer_mlp,
+                dropout=self.agent_params.transformer_dropout,
+                dim_feedforward=self.agent_params.d_transformer_mlp,
             ),
-            num_layers=self._agent_params.num_transformer_layers,
+            num_layers=self.agent_params.num_transformer_layers,
         )
 
         transformer = transformer.to(self.device)
@@ -486,7 +514,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             ),
         ]
 
-        if self._agent_params.use_batch_norm:
+        if self.agent_params.use_batch_norm:
             layers.append(
                 BatchNorm1dSimulateBatchDims(
                     num_features=self.d_gnn_out,
@@ -495,10 +523,10 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             )
 
         layers.append(
-            PairedGaussianNoise(sigma=self._agent_params.noise_sigma, pair_dim=-2),
+            PairedGaussianNoise(sigma=self.agent_params.noise_sigma, pair_dim=-2),
         )
 
-        if self._agent_params.use_pair_invariant_pooling:
+        if self.agent_params.use_pair_invariant_pooling:
             layers.append(PairInvariantizer(pair_dim=-2))
 
         global_pooling = Sequential(*layers)
@@ -544,18 +572,18 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         data : TensorDictBase
             The data to run the GNN and transformer on. A TensorDictBase with keys:
 
-            - "x" (... round position pair node): The graph node features (message
-              history)
+            - "x" (... round channel position pair node): The graph node features
+              (message history)
             - "adjacency" (... pair node node): The graph adjacency matrices
-            - "message" (... position pair node), optional: The most recent message from
-              the other agent
+            - "message" (... channel position pair node), optional: The most recent
+              message from the other agent
             - "node_mask" (... pair node), optional: Which nodes actually exist or a
               GraphIsomorphism data object.
             - "ignore_message" (...), optional: Whether to ignore any values in
               "message". For example, in the first round the there is no message, and
               the "message" field is set to a dummy value.
-            - "linear_message_history" : (... round position linear_message), optional:
-              The linear message history, if using.
+            - "linear_message_history" : (... round channel position linear_message),
+              optional: The linear message history, if using.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -574,20 +602,22 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         batch_size = data.batch_size
         max_num_nodes = data["x"].shape[-1]
 
-        # But the round dimension at the end
+        # Put the round dimension at the end
         data["x_rearranged"] = rearrange(
-            data["x"], "... round position pair node -> ... pair node (round position)"
+            data["x"],
+            "... round channel position pair node "
+            "-> ... pair node (round channel position)",
         )
 
         # If we are using the manual architecture, skip everything else and run that
-        if self._agent_params.use_manual_architecture:
+        if self.agent_params.use_manual_architecture:
             return self._run_manual_architecture(data, hooks)
 
         data = data.update(dict(gnn_repr=data["x_rearranged"]))
 
         # Add the stream dimension, with a vector of zeros when we're using a dual GNN
         gnn_repr = data["gnn_repr"]
-        if self._agent_params.use_dual_gnn:
+        if self.agent_params.use_dual_gnn:
             gnn_repr = torch.stack(
                 (gnn_repr, torch.zeros_like(gnn_repr)),
                 dim=-4,
@@ -617,9 +647,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         self._run_recorder_hook(hooks, "gnn_output", gnn_output)
 
-        if self._agent_params.gnn_output_digits is not None:
+        if self.agent_params.gnn_output_digits is not None:
             gnn_output = torch.round(
-                gnn_output, decimals=self._agent_params.gnn_output_digits
+                gnn_output, decimals=self.agent_params.gnn_output_digits
             )
 
         self._run_recorder_hook(hooks, "gnn_output_rounded", gnn_output)
@@ -664,10 +694,11 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self._run_recorder_hook(hooks, "pooled_feature", pooled_feature)
 
         # Turn the most recent message into a feature
-        # (..., 2 + 2 * node, position)
+        # (..., 2 + 2 * node, channel*position)
         if "message" in data.keys():
             message_feature = rearrange(
-                data["message"], "... position pair node -> ... position (pair node)"
+                data["message"],
+                "... channel position pair node -> ... channel position (pair node)",
             )
             message_feature = torch.cat(
                 [
@@ -681,14 +712,18 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 dim=-1,
             )
             message_feature = torch.where(
-                data["ignore_message"][..., None, None], 0, message_feature
+                data["ignore_message"][..., None, None, None], 0, message_feature
             )
             message_feature = rearrange(
-                message_feature, "... position token -> ... token position"
+                message_feature,
+                "... channel position token -> ... token (channel position)",
             )
         else:
             message_feature = torch.zeros(
-                (*transformer_input.shape[:-1], self.params.message_size),
+                (
+                    *transformer_input.shape[:-1],
+                    self.num_visible_message_channels * self.params.message_size,
+                ),
                 device=transformer_input.device,
                 dtype=transformer_input.dtype,
             )
@@ -702,8 +737,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         ):
             linear_message_feature = repeat(
                 data["linear_message_history"],
-                "... round position linear_message "
-                "-> ... token (round position linear_message)",
+                "... round channel position linear_message "
+                "-> ... token (round channel position linear_message)",
                 token=2 + 2 * max_num_nodes,
             )
             linear_message_feature = torch.where(
@@ -712,6 +747,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         elif self.params.include_linear_message_space:
             num_linear_message_features = (
                 self.protocol_handler.max_message_rounds
+                * self.num_visible_message_channels
                 * self.params.message_size
                 * self.params.d_linear_message_space
             )
@@ -728,7 +764,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             )
 
         # Concatenate everything together
-        # (..., 2 + 2 * node, streams * d_gnn + 2 + position + linear_message)
+        # (..., 2 + 2 * node, streams * d_gnn + 2 + channel*position + linear_message)
         transformer_input = torch.cat(
             (
                 transformer_input,
@@ -835,7 +871,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
               node-level representations.
         """
 
-        if self.agent_name == "verifier":
+        if self.is_verifier:
             # Symmetrise the message history
             rounded_rounds = (self.protocol_handler.max_message_rounds // 2) * 2
             gnn_repr = data["x_rearranged"].clone()
@@ -892,11 +928,11 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
-        if self._agent_params.normalize_message_history:
+        if self.agent_params.normalize_message_history:
             self.message_history_normalizer.to(device)
         self.gnn.to(device)
         self.representation_encoder.to(device)
-        if not self._agent_params.use_manual_architecture:
+        if not self.agent_params.use_manual_architecture:
             self.global_pooling.to(device)
             self.global_pooling[-1].to(device)
             self.gnn_transformer_encoder.to(device)
@@ -906,7 +942,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
 
 @register_scenario_class(GI_SCENARIO, DummyAgentBody)
-class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
+class GraphIsomorphismDummyAgentBody(GraphIsomorphismDummyAgentPart, DummyAgentBody):
     """Dummy agent body for the graph isomorphism task."""
 
     env_level_in_keys = ("x",)
@@ -924,8 +960,8 @@ class GraphIsomorphismDummyAgentBody(GraphIsomorphismAgentPart, DummyAgentBody):
         data : TensorDictBase
             A TensorDictBase with keys:
 
-            - "x" (... round position pair node): The graph node features (message
-              history)
+            - "x" (... round channel position pair node): The graph node features
+              (message history)
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -1165,13 +1201,13 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         """
 
         if include_round is None:
-            include_round = self._agent_params.include_round_in_decider
+            include_round = self.agent_params.include_round_in_decider
 
         return self._build_graph_level_mlp(
             d_in=self.params.d_representation,
-            d_hidden=self._agent_params.d_decider,
+            d_hidden=self.agent_params.d_decider,
             d_out=d_out,
-            num_layers=self._agent_params.num_decider_layers,
+            num_layers=self.agent_params.num_decider_layers,
             include_round=include_round,
             out_key="decision_logits",
         )
@@ -1196,21 +1232,22 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         - "round" (optional) (...): The current round number.
 
     Output:
-        - "node_selected_logits" (... position 2*max_nodes): A logit for each node,
-          indicating the probability that this node should be sent as a message to the
-          verifier.
+        - "node_selected_logits" (... channel position 2*max_nodes): A logit for each
+          node, indicating the probability that this node should be sent as a message.
         - "decision_logits" (optional) (... 3): A logit for each of the three options:
           guess that the graphs are isomorphic,  guess that the graphs are not
           isomorphic, or continue exchanging messages. Set to zeros when the decider is
           not present.
-        - "linear_message_selected_logits" (... position d_linear_message_space)
+        - "linear_message_selected_logits" (... channel position linear_message)
           (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message to the verifier.
+          this linear message should be sent as a message.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -1223,7 +1260,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     @property
     def env_level_in_keys(self):
-        if self.has_decider is not None and self._agent_params.include_round_in_decider:
+        if self.has_decider is not None and self.agent_params.include_round_in_decider:
             return ("message", "round")
         else:
             return ("message",)
@@ -1244,16 +1281,20 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
 
         self.decider = None
 
-        if self._agent_params.use_manual_architecture:
+        if self.agent_params.use_manual_architecture:
             if params.interaction_protocol != InteractionProtocolType.PVG:
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
@@ -1264,7 +1305,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.node_selector = self._build_node_selector()
 
             # Build the decider module if necessary
-            if agent_name == "verifier":
+            if self.has_decider:
                 self.decider = self._build_decider()
 
         # Build the linear message selector if necessary
@@ -1272,6 +1313,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             self.linear_message_selector = self._build_linear_message_selector()
         else:
             self.linear_message_selector = None
+
+        self._init_weights()
 
     def _build_node_selector(self) -> TensorDictModule:
         """Builds the module which selects which node to send as a message.
@@ -1283,9 +1326,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         """
         return self._build_node_level_mlp(
             d_in=self.params.d_representation,
-            d_hidden=self._agent_params.d_node_selector,
-            d_out=self.params.message_size,
-            num_layers=self._agent_params.num_node_selector_layers,
+            d_hidden=self.agent_params.d_node_selector,
+            d_out=self.num_visible_message_channels * self.params.message_size,
+            num_layers=self.agent_params.num_node_selector_layers,
             out_key="node_selected_logits",
         )
 
@@ -1300,15 +1343,19 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         return TensorDictSequential(
             self._build_graph_level_mlp(
                 d_in=self.params.d_representation,
-                d_hidden=self._agent_params.d_linear_message_selector,
-                d_out=self.params.message_size * self.params.d_linear_message_space,
-                num_layers=self._agent_params.num_linear_message_selector_layers,
+                d_hidden=self.agent_params.d_linear_message_selector,
+                d_out=self.num_visible_message_channels
+                * self.params.message_size
+                * self.params.d_linear_message_space,
+                num_layers=self.agent_params.num_linear_message_selector_layers,
                 include_round=False,
                 out_key="linear_message_selected_logits",
             ),
             TensorDictModule(
                 Rearrange(
-                    "... (position linear_message) -> ... position linear_message",
+                    "... (channel position linear_message) "
+                    "-> ... channel position linear_message",
+                    channel=self.num_visible_message_channels,
                     linear_message=self.params.d_linear_message_space,
                 ),
                 in_keys="linear_message_selected_logits",
@@ -1348,26 +1395,29 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         out : TensorDict
             A tensor dict with keys:
 
-            - "node_selected_logits" (... position 2*max_nodes): A logit for each node,
-              indicating the probability that this node should be sent as a message to
-              the verifier.
+            - "node_selected_logits" (... channel position 2*max_nodes): A logit for
+              each node, indicating the probability that this node should be sent as a
+              message to the verifier.
             - "decision_logits" (... 3): A logit for each of the three options: guess
               that the graphs are isomorphic,  guess that the graphs are not isomorphic,
               or continue exchanging messages. Set to zeros when the decider is not
               present.
+            - "linear_message_selected_logits" (... channel position linear_message)
+              (optional): A logit for each linear message, indicating the probability
+              that this linear message should be sent as a message.
         """
 
-        if self._agent_params.use_manual_architecture:
+        if self.agent_params.use_manual_architecture:
             return self._run_manual_architecture(body_output, hooks)
 
         out_dict = {}
 
-        out_dict["node_selected_logits"] = self.node_selector(body_output)[
-            "node_selected_logits"
-        ]
+        node_selected_logits = self.node_selector(body_output)["node_selected_logits"]
 
         out_dict["node_selected_logits"] = rearrange(
-            out_dict["node_selected_logits"], "... node position -> ... position node"
+            node_selected_logits,
+            "... node (channel position) -> ... channel position node",
+            channel=self.num_visible_message_channels,
         )
 
         if self.decider is not None:
@@ -1418,8 +1468,8 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               representations.
             - "node_level_repr" (... 2 max_nodes d_representation): The output
               node-level representations.
-            - "message" (... position 2 max_nodes): The most recent message from the
-              other agent.
+            - "message" (... channel position 2 max_nodes): The most recent message in
+              the channel.
             - "round" (optional) (...): The current round number.
 
         hooks : GraphIsomorphismAgentHooks, optional
@@ -1430,18 +1480,23 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         out : TensorDict
             A tensor dict with keys:
 
-            - "node_selected_logits" (... position 2*max_nodes): A logit for each node,
-              indicating the probability that this node should be sent as a message to
-              the verifier.
-            - "decision_logits" (... position 3): A logit for each of the three options:
-              guess that the graphs are isomorphic,  guess that the graphs are not
-              isomorphic, or continue exchanging messages. Set to zeros when the decider
-              is not present.
+            - "node_selected_logits" (... channel position 2*max_nodes): A logit for
+              each node, indicating the probability that this node should be sent as a
+              message to the verifier.
+            - "decision_logits" (... channel position 3): A logit for each of the three
+              options: guess that the graphs are isomorphic,  guess that the graphs are
+              not isomorphic, or continue exchanging messages. Set to zeros when the
+              decider is not present.
         """
 
         if self.params.message_size != 1:
             raise NotImplementedError(
                 "Manual architecture is only supported for message size 1."
+            )
+
+        if self.num_visible_message_channels != 1:
+            raise NotImplementedError(
+                "Manual architecture is only supported for one message channel."
             )
 
         graph_level_repr: Float[Tensor, "... 2 feature"] = body_output[
@@ -1450,15 +1505,15 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         node_level_repr: Float[Tensor, "... 2 node feature"] = body_output[
             "node_level_repr"
         ]
-        message: Float[Tensor, "... position 2 node"] = body_output["message"]
+        message: Float[Tensor, "... channel position 2 node"] = body_output["message"]
         batch_size = body_output.batch_size
         max_num_nodes = node_level_repr.shape[-2]
         d_repr = graph_level_repr.shape[-1]
 
         out_dict = {}
 
-        # Remove the message position dim (which we assume is a singleton)
-        message = rearrange(message, "... 1 pair node -> ... pair node")
+        # Remove the message channel and position dims (which we assume are singletons)
+        message = rearrange(message, "... 1 1 pair node -> ... pair node")
 
         # The agents's best guess about whether the graphs are isomorphic
         # (batch)
@@ -1469,7 +1524,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             < 1e-6
         )
 
-        if self.agent_name == "verifier":
+        if self.is_verifier:
             # Whether to make a guess in this round
             if "round" in body_output.keys():
                 make_guess = (
@@ -1494,18 +1549,19 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             # The verifier selects nodes at random
             out_dict["node_selected_logits"] = torch.zeros(
                 *batch_size,
+                self.num_visible_message_channels,
                 self.params.message_size,
                 2 * max_num_nodes,
                 device=self.device,
                 dtype=torch.float32,
             )
 
-        elif self.agent_name == "prover":
+        elif self.is_prover:
             message_flattened = rearrange(message, "... pair node -> ... (pair node)")
 
             # Get the index of the node selected by the verifier in the previous round.
             # This only works when there is only one message.
-            # (... position)
+            # (... channel position)
             message_index = torch.argmax(message_flattened, dim=-1)
 
             # Compute the similarity between the node sent as a message and the other
@@ -1551,7 +1607,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     def to(self, device: Optional[TorchDevice] = None):
         super().to(device)
         self.device = device
-        if not self._agent_params.use_manual_architecture:
+        if not self.agent_params.use_manual_architecture:
             self.node_selector.to(device)
             if self.decider is not None:
                 self.decider.to(device)
@@ -1559,7 +1615,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
 @register_scenario_class(GI_SCENARIO, RandomAgentPolicyHead)
 class GraphIsomorphismRandomAgentPolicyHead(
-    GraphIsomorphismAgentPart, RandomAgentPolicyHead
+    GraphIsomorphismDummyAgentPart, RandomAgentPolicyHead
 ):
     """Policy head for the graph isomorphism task yielding a uniform distribution.
 
@@ -1572,13 +1628,13 @@ class GraphIsomorphismRandomAgentPolicyHead(
           representations.
 
     Output:
-        - "node_selected_logits" (... position 2*max_nodes): A logit for each node,
-          indicating the probability that this node should be sent as a message to the
-          verifier.
+        - "node_selected_logits" (... channel position 2*max_nodes): A logit for each
+          node, indicating the probability that this node should be sent as a message to
+          the verifier.
         - "decision_logits" (... 3): A logit for each of the three options: guess that
           the graphs are isomorphic, guess that the graphs are not isomorphic, or
           continue exchanging messages.
-        - "linear_message_selected_logits" (... position d_linear_message_space)
+        - "linear_message_selected_logits" (... channel position d_linear_message_space)
           (optional): A logit for each linear message, indicating the probability that
           this linear message should be sent as a message to the verifier.
     """
@@ -1623,14 +1679,15 @@ class GraphIsomorphismRandomAgentPolicyHead(
         out : TensorDict
             A tensor dict with keys (all zeros):
 
-            - "node_selected_logits" (... position 2*max_nodes): A logit for each node,
-              indicating the probability that this node should be sent as a message to
-              the verifier.
+            - "node_selected_logits" (... channel position 2*max_nodes): A logit for
+              each node, indicating the probability that this node should be sent as a
+              message to the verifier.
             - "decision_logits" (... 3): A logit for each of the three options: continue
               exchanging messages, guess that the graphs are isomorphic, or guess that
               the graphs are not isomorphic. Set to zeros when the decider is not
               present.
-            - "linear_message_selected_logits" (... position d_linear_message_space)
+            - "linear_message_selected_logits" (... channel position
+              d_linear_message_space)
             (optional): A logit for each linear message, indicating the probability that
             this linear message should be sent as a message to the verifier.
         """
@@ -1641,6 +1698,7 @@ class GraphIsomorphismRandomAgentPolicyHead(
 
         update_dict["node_selected_logits"] = torch.zeros(
             *body_output.batch_size,
+            self.num_visible_message_channels,
             self.params.message_size,
             2 * max_num_nodes,
             device=self.device,
@@ -1665,6 +1723,7 @@ class GraphIsomorphismRandomAgentPolicyHead(
         if self.params.include_linear_message_space:
             update_dict["linear_message_selected_logits"] = torch.zeros(
                 *body_output.batch_size,
+                self.num_visible_message_channels,
                 self.params.message_size,
                 self.params.d_linear_message_space,
                 device=self.device,
@@ -1697,6 +1756,8 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -1709,7 +1770,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
     @property
     def env_level_in_keys(self):
-        if self._agent_params.include_round_in_value:
+        if self.agent_params.include_round_in_value:
             return ("round",)
         else:
             return ()
@@ -1719,14 +1780,20 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
 
         self.value_mlp = self._build_mlp()
+
+        self._init_weights()
 
     def _build_mlp(self) -> TensorDictModule:
         """Builds the module which computes the value function.
@@ -1738,10 +1805,10 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
         """
         return self._build_graph_level_mlp(
             d_in=self.params.d_representation,
-            d_hidden=self._agent_params.d_value,
+            d_hidden=self.agent_params.d_value,
             d_out=1,
-            num_layers=self._agent_params.num_value_layers,
-            include_round=self._agent_params.include_round_in_value,
+            num_layers=self.agent_params.num_value_layers,
+            include_round=self.agent_params.include_round_in_value,
             out_key="value",
             squeeze=True,
         )
@@ -1794,7 +1861,7 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
 
 @register_scenario_class(GI_SCENARIO, ConstantAgentValueHead)
 class GraphIsomorphismConstantAgentValueHead(
-    GraphIsomorphismAgentHead, ConstantAgentValueHead
+    GraphIsomorphismDummyAgentPart, ConstantAgentValueHead
 ):
     """A constant value head for the graph isomorphism task.
 
@@ -1875,6 +1942,8 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -1889,14 +1958,20 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
 
         self.decider = self._build_decider(d_out=2, include_round=False)
+
+        self._init_weights()
 
     def forward(
         self,
@@ -1941,23 +2016,26 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     ------
     Input:
         - "round" (...): The current round number.
-        - "x" (... round position pair node): The graph node features (message history)
+        - "x" (... round channel position pair node): The graph node features (message
+          history)
         - "adjacency" (... pair node node): The adjacency matrices.
-        - "message" (... position pair node), optional: The most recent message.
+        - "message" (... channel position pair node), optional: The most recent message.
         - "node_mask" (... pair node): Which nodes actually exist.
-        - "linear_message_history" : (... round position linear_message), optional: The
-          linear message history, if using.
+        - "linear_message_history" : (... round channel position linear_message),
+          optional: The linear message history, if using.
 
     Output:
-        - ("agents", "node_level_repr") (... agents max_nodes d_representation): The
+        - ("agents", "node_level_repr") (... agent pair max_nodes d_representation): The
           output node-level representations.
-        - ("agents", "graph_level_repr") (... agents d_representation): The output
+        - ("agents", "graph_level_repr") (... agent pair d_representation): The output
           graph-level representations.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     bodies : dict[str, GraphIsomorphismAgentBody]
@@ -1971,19 +2049,35 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         data: TensorDictBase,
         hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
-        round: Int[Tensor, "batch"] = data["round"]
+
+        round: Int[Tensor, "..."] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
-        for agent_name in self._agent_names:
-            # Build the input dict for the agent body
+        for agent_name in self.agent_names:
+            # Build the input dict for the agent body. For the message and history keys
+            # we need to mask out the invisible channels
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
                     input_dict[key] = round == 0
-                else:
-                    if key == "message" and "message" not in data.keys():
+                elif key == "message":
+                    if "message" not in data.keys():
                         continue
+                    input_dict[key] = self._restrict_input_to_visible_channels(
+                        agent_name, data[key], "... channel position pair node"
+                    )
+                elif key == "linear_message_history":
+                    input_dict[key] = self._restrict_input_to_visible_channels(
+                        agent_name,
+                        data[key],
+                        "... round channel position linear_message",
+                    )
+                elif key == "x":
+                    input_dict[key] = self._restrict_input_to_visible_channels(
+                        agent_name, data[key], "... round channel position pair node"
+                    )
+                else:
                     input_dict[key] = data[key]
             input_td = TensorDict(
                 input_dict,
@@ -1994,13 +2088,13 @@ class GraphIsomorphismCombinedBody(CombinedBody):
             body_outputs[agent_name] = self.bodies[agent_name](input_td, hooks=hooks)
 
         # Stack the outputs
-        node_level_repr = torch.stack(
-            [body_outputs[name]["node_level_repr"] for name in self._agent_names],
-            dim=-4,
+        node_level_repr = rearrange(
+            [body_outputs[name]["node_level_repr"] for name in self.agent_names],
+            "agent ... pair node feature -> ... agent pair node feature",
         )
-        graph_level_repr = torch.stack(
-            [body_outputs[name]["graph_level_repr"] for name in self._agent_names],
-            dim=-3,
+        graph_level_repr = rearrange(
+            [body_outputs[name]["graph_level_repr"] for name in self.agent_names],
+            "agent ... pair feature -> ... agent pair feature",
         )
 
         return data.update(
@@ -2010,7 +2104,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
                         node_level_repr=node_level_repr,
                         graph_level_repr=graph_level_repr,
                     ),
-                    batch_size=(*data.batch_size, len(self._agent_names)),
+                    batch_size=(*data.batch_size, len(self.agent_names)),
                 )
             )
         )
@@ -2023,26 +2117,26 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     Shapes
     ------
     Input:
-        - ("agents", "node_level_repr") (... agents 2*max_nodes d_representation): The
-          output node-level representations.
-        - ("agents", "graph_level_repr") (... agents d_representation): The output
+        - ("agents", "node_level_repr") (... agent pair node feature): The output
+          node-level representations.
+        - ("agents", "graph_level_repr") (... agent pair feature): The output
           graph-level representations.
         - "round" (...): The current round number.
         - "node_mask" (... pair node): Which nodes actually exist.
-        - "message" (... position pair node): The most recent message.
+        - "message" (... channel position pair node): The most recent message.
         - "ignore_message" (...): Whether to ignore the message
         - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "node_selected_logits") (... agents position 2*max_nodes): A logit
-          for each node, indicating the probability that this node should be sent as a
-          message to the verifier.
-        - ("agents", "decision_logits") (... agents 3): A logit for each of the three
+        - ("agents", "node_selected_logits") (... agent channel position 2*max_nodes): A
+          logit for each node, indicating the probability that this node should be sent
+          as a message to the verifier.
+        - ("agents", "decision_logits") (... agent 3): A logit for each of the three
           options: guess that the graphs are isomorphic, guess that the graphs are not
           isomorphic, or continue exchanging messages. d_linear_message_space)
           (optional): A logit for each linear message, indicating the probability that
           this linear message should be sent as a message to the verifier.
-        - ("agents", "linear_message_selected_logits") (... agents position
+        - ("agents", "linear_message_selected_logits") (... agent channel position
           d_linear_message_space) (optional): A logit for each linear message,
           indicating the probability that this linear message should be sent as a
           message to the verifier.
@@ -2052,6 +2146,8 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     policy_heads : dict[str, GraphIsomorphismAgentPolicyHead]
@@ -2062,51 +2158,71 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
     def forward(
         self,
-        head_output: TensorDictBase,
+        body_output: TensorDictBase,
         hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
         """Run the agent policy heads and combine their outputs.
 
         Parameters
         ----------
-        tensordict : TensorDictBase
-            The input to the value heads.
-
+        body_output : TensorDictBase
+            The combined output of the agent bodies.
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
 
         Returns
         -------
-        tensordict: TensorDict
-            The tensordict update in place with the output of the value heads.
+        body_output: TensorDict
+            The tensordict updated in place with the output of the policy heads.
         """
 
         # Run the policy heads to obtain the probability distributions
         policy_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self._agent_names):
+        for i, agent_name in enumerate(self.agent_names):
+
+            # Build the input dict by selecting the correct agent's body output
             input_td = TensorDict(
                 dict(
-                    node_level_repr=head_output["agents", "node_level_repr"][
+                    node_level_repr=body_output["agents", "node_level_repr"][
                         ..., i, :, :, :
                     ],
-                    graph_level_repr=head_output["agents", "graph_level_repr"][
+                    graph_level_repr=body_output["agents", "graph_level_repr"][
                         ..., i, :, :
                     ],
-                    message=head_output["message"],
+                    message=body_output["message"],
                 ),
-                batch_size=head_output.batch_size,
+                batch_size=body_output.batch_size,
             )
-            if "round" in head_output.keys():
-                input_td["round"] = head_output["round"]
+            if "round" in body_output.keys():
+                input_td["round"] = body_output["round"]
+
+            # Run the policy head for the agent
             policy_outputs[agent_name] = self.policy_heads[agent_name](
                 input_td, hooks=hooks
             )
 
+            # Expand the logits to all channels (not just the ones visible to the agent)
+            policy_outputs[agent_name]["node_selected_logits"] = (
+                self._expand_logits_to_all_channels(
+                    agent_name,
+                    policy_outputs[agent_name]["node_selected_logits"],
+                    "... channel position node",
+                )
+            )
+            if "linear_message_selected_logits" in policy_outputs[agent_name].keys():
+                policy_outputs[agent_name]["linear_message_selected_logits"] = (
+                    self._expand_logits_to_all_channels(
+                        agent_name,
+                        policy_outputs[agent_name]["linear_message_selected_logits"],
+                        "... channel position logit",
+                    )
+                )
+
             # Make sure the provers only select nodes in the opposite graph to the most
             # recent message
             if agent_name in self.protocol_handler.prover_names:
-                message: Tensor = head_output["message"]
-                max_num_nodes = head_output["agents", "node_level_repr"].shape[-2]
+                message: Tensor = body_output["message"]
+                max_num_nodes = body_output["agents", "node_level_repr"].shape[-2]
                 other_graph = (message[..., 0, :].max(dim=-1)[0] > 0).long()
                 node_ok_mask = F.one_hot(other_graph, num_classes=2)
                 node_ok_mask = node_ok_mask.bool()
@@ -2124,29 +2240,26 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         agents_update = {}
 
         # Stack the outputs
-        agents_update["node_selected_logits"] = torch.stack(
-            [
-                policy_outputs[name]["node_selected_logits"]
-                for name in self._agent_names
-            ],
-            dim=-3,
+        agents_update["node_selected_logits"] = rearrange(
+            [policy_outputs[name]["node_selected_logits"] for name in self.agent_names],
+            "agent ... channel position node -> ... agent channel position node",
         )
-        agents_update["decision_logits"] = torch.stack(
-            [policy_outputs[name]["decision_logits"] for name in self._agent_names],
-            dim=-2,
+        agents_update["decision_logits"] = rearrange(
+            [policy_outputs[name]["decision_logits"] for name in self.agent_names],
+            "agent ... logit-> ... agent logit",
         )
         if self.params.include_linear_message_space:
-            agents_update["linear_message_selected_logits"] = torch.stack(
+            agents_update["linear_message_selected_logits"] = rearrange(
                 [
                     policy_outputs[name]["linear_message_selected_logits"]
-                    for name in self._agent_names
+                    for name in self.agent_names
                 ],
-                dim=-3,
+                "agent ... channel position logit -> ... agent channel position logit",
             )
 
         # Make sure the agents only select nodes which exist
         node_mask_flatter = rearrange(
-            head_output["node_mask"], "... pair node -> ... 1 1 (pair node)"
+            body_output["node_mask"], "... pair node -> ... 1 1 1 (pair node)"
         )
         agents_update["node_selected_logits"] = torch.where(
             node_mask_flatter,
@@ -2156,14 +2269,14 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
 
         # Make sure the verifier only selects decisions which are allowed
         agents_update["decision_logits"] = self._restrict_decisions(
-            head_output["decision_restriction"], agents_update["decision_logits"]
+            body_output["decision_restriction"], agents_update["decision_logits"]
         )
 
-        return head_output.update(
+        return body_output.update(
             dict(
                 agents=TensorDict(
                     agents_update,
-                    batch_size=(*head_output.batch_size, len(self._agent_names)),
+                    batch_size=(*body_output.batch_size, len(self.agent_names)),
                 )
             )
         )
@@ -2176,17 +2289,19 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     Shapes
     ------
     Input:
-        - ("agents", "graph_level_repr") (... agents d_representation): The output
+        - ("agents", "graph_level_repr") (... agent d_representation): The output
           graph-level representations.
         - "round" (...): The current round number.
 
     Output:
-        - ("agents", "value") (... agents): The estimated value for each batch item
+        - ("agents", "value") (... agent): The estimated value for each batch item
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     value_heads : dict[str, GraphIsomorphismAgentValueHead]
@@ -2219,7 +2334,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 
         # Run the value heads to obtain the value estimates
         value_outputs: dict[str, TensorDict] = {}
-        for i, agent_name in enumerate(self._agent_names):
+        for i, agent_name in enumerate(self.agent_names):
             input_td = TensorDict(
                 dict(
                     node_level_repr=head_output["agents", "node_level_repr"][
@@ -2238,15 +2353,16 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
             )
 
         # Stack the outputs
-        value = torch.stack(
-            [value_outputs[name]["value"] for name in self._agent_names], dim=-1
+        value = rearrange(
+            [value_outputs[name]["value"] for name in self.agent_names],
+            "agent ... -> ... agent",
         )
 
         return head_output.update(
             dict(
                 agents=TensorDict(
                     dict(value=value),
-                    batch_size=(*head_output.batch_size, len(self._agent_names)),
+                    batch_size=(*head_output.batch_size, len(self.agent_names)),
                 )
             ),
         )
@@ -2255,7 +2371,7 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
 @register_scenario_class(GI_SCENARIO, Agent)
 @dataclass
 class GraphIsomorphismAgent(Agent):
-    _agent_params: ClassVar[GraphIsomorphismAgentParameters | RandomAgentParameters]
+    agent_params: ClassVar[GraphIsomorphismAgentParameters | RandomAgentParameters]
 
     message_logits_key: ClassVar[str] = "node_selected_logits"
 
@@ -2289,8 +2405,8 @@ class GraphIsomorphismAgent(Agent):
         # Check for mistakes
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.agent_lr_factor.actor
-            != self._agent_params.agent_lr_factor.critic
+            and self.agent_params.agent_lr_factor.actor
+            != self.agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
                 "The agent learning rate factor for the actor and critic must be the "
@@ -2298,18 +2414,18 @@ class GraphIsomorphismAgent(Agent):
             )
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.body_lr_factor.actor
-            != self._agent_params.body_lr_factor.critic
+            and self.agent_params.body_lr_factor.actor
+            != self.agent_params.body_lr_factor.critic
         ):
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the "
                 "same if the body is shared."
             )
-        if hasattr(self._agent_params, "gnn_lr_factor"):
+        if hasattr(self.agent_params, "gnn_lr_factor"):
             if (
                 self.params.rl.use_shared_body
-                and self._agent_params.gnn_lr_factor.actor
-                != self._agent_params.gnn_lr_factor.critic
+                and self.agent_params.gnn_lr_factor.actor
+                != self.agent_params.gnn_lr_factor.critic
             ):
                 raise ValueError(
                     "The GNN learning rate factor for the actor and critic must be the "
@@ -2318,19 +2434,19 @@ class GraphIsomorphismAgent(Agent):
 
         # The learning rate of the whole agent
         agent_lr = {
-            "actor": self._agent_params.agent_lr_factor.actor * base_lr,
-            "critic": self._agent_params.agent_lr_factor.critic * base_lr,
+            "actor": self.agent_params.agent_lr_factor.actor * base_lr,
+            "critic": self.agent_params.agent_lr_factor.critic * base_lr,
         }
 
         # Determine the learning rate of the body
         body_lr = {
             "actor": (
-                agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+                agent_lr["actor"] * self.agent_params.body_lr_factor.actor
                 if not body_lr_factor_override
                 else agent_lr["actor"]
             ),
             "critic": (
-                agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+                agent_lr["critic"] * self.agent_params.body_lr_factor.critic
                 if not body_lr_factor_override
                 else agent_lr["critic"]
             ),
@@ -2339,13 +2455,13 @@ class GraphIsomorphismAgent(Agent):
         # Determine the learning rate for the GNN encoder
         gnn_lr = {
             "actor": (
-                body_lr["actor"] * self._agent_params.gnn_lr_factor.actor
-                if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+                body_lr["actor"] * self.agent_params.gnn_lr_factor.actor
+                if isinstance(self.agent_params, GraphIsomorphismAgentParameters)
                 else 0
             ),
             "critic": (
-                body_lr["critic"] * self._agent_params.gnn_lr_factor.critic
-                if isinstance(self._agent_params, GraphIsomorphismAgentParameters)
+                body_lr["critic"] * self.agent_params.gnn_lr_factor.critic
+                if isinstance(self.agent_params, GraphIsomorphismAgentParameters)
                 else 0
             ),
         }

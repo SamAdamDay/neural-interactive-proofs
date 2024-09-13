@@ -1,7 +1,7 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Any
 from operator import mul
 from functools import reduce
 
@@ -29,10 +29,140 @@ from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
+from pvg.utils.nested_array_dict import NumpySpec
 
 
-class Environment(EnvBase, ABC):
+class Environment(ABC):
     """The base class for all Prover-Verifier RL environments.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    dataset : Dataset
+        The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    train : bool, optional
+        Whether the environment is used for training or evaluation.
+    """
+
+    @property
+    @abstractmethod
+    def observation_spec(self) -> TensorSpec | NumpySpec:
+        """The specification for the observation keys."""
+
+    @property
+    @abstractmethod
+    def action_spec(self) -> TensorSpec | NumpySpec:
+        """The specification for the action keys."""
+
+    @property
+    @abstractmethod
+    def state_spec(self) -> TensorSpec | NumpySpec:
+        """The specification for the state keys."""
+
+    @property
+    @abstractmethod
+    def reward_spec(self) -> TensorSpec | NumpySpec:
+        """The specification for the agent reward keys."""
+
+    @property
+    @abstractmethod
+    def done_spec(self) -> TensorSpec | NumpySpec:
+        """The specification for the done keys (done and terminated)."""
+
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        dataset: Dataset,
+        protocol_handler: ProtocolHandler,
+        *,
+        train: bool = True,
+    ):
+        self.params = params
+        self.settings = settings
+        self.protocol_handler = protocol_handler
+        self.train = train
+        self.dataset = dataset
+        self.data_cycler: Optional[VariableDataCycler] = None
+
+        self._initialise()
+
+    def _initialise(self):
+        """Initialise the environment.
+
+        This method is to be called as part of `__init__`. Having a separate method for
+        this is necessary because a subclass which also derives from TorchRL's `EnvBase`
+        class will need to call that class's `__init__` method first.
+        """
+
+        self.num_agents = len(self.protocol_handler.agent_names)
+
+        # Create a random number generator
+        self.rng = torch.Generator()
+
+        self.data_cycler: Optional[VariableDataCycler] = None
+
+        # The number of environments is the number of episodes we can fit in a batch
+        if self.params.rl.steps_per_env_per_iteration is not None:
+            steps_per_env_per_iteration = self.params.rl.steps_per_env_per_iteration
+            if self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0:
+                raise ValueError(
+                    f"The parameter `rl.steps_per_env_per_iteration` must divide "
+                    f"`rl.frames_per_batch` without remainder, but got "
+                    f"{steps_per_env_per_iteration} and "
+                    f"{self.params.rl.frames_per_batch}."
+                )
+        else:
+            steps_per_env_per_iteration = self.protocol_handler.max_message_rounds
+            if self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0:
+                raise ValueError(
+                    f"The maximum number of message rounds must divide "
+                    f"`rl.frames_per_batch` without remainder, but got "
+                    f"{steps_per_env_per_iteration} and "
+                    f"{self.params.rl.frames_per_batch}."
+                )
+        self.steps_per_env_per_iteration = steps_per_env_per_iteration
+        self.num_envs = self.params.rl.frames_per_batch // steps_per_env_per_iteration
+        self.batch_size = (self.num_envs,)
+
+    @abstractmethod
+    def step(self, env_state: Any) -> Any:
+        """Perform a step in the environment.
+
+        Parameters
+        ----------
+        env_state : Any
+            The current environment state.
+
+        Returns
+        -------
+        next_env_state : Any
+            The next environment state.
+        """
+
+    @abstractmethod
+    def reset(self, env_state: Optional[Any] = None, **kwargs) -> Any:
+        """Reset the environment.
+
+        Parameters
+        ----------
+        env_state : Optional[Any]
+            The current environment state.
+
+        Returns
+        -------
+        next_env_state : Any
+            The reset environment state.
+        """
+
+
+class TensorDictEnvironment(EnvBase, Environment, ABC):
+    """The base class for all Prover-Verifier RL environments which use tensordicts.
 
     To implement a new environment, subclass this class and implement the following
     attribute and methods:
@@ -77,35 +207,9 @@ class Environment(EnvBase, ABC):
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.train = train
-
-        self.num_agents = len(protocol_handler.agent_names)
-
-        # Create a random number generator
-        self.rng = torch.Generator()
-
-        # Load the dataset
         self.dataset = dataset
-        self.data_cycler: Optional[VariableDataCycler] = None
 
-        # The number of environments is the number of episodes we can fit in a batch
-        if params.rl.steps_per_env_per_iteration is not None:
-            steps_per_env_per_iteration = params.rl.steps_per_env_per_iteration
-            if params.rl.frames_per_batch % steps_per_env_per_iteration != 0:
-                raise ValueError(
-                    f"The parameter `rl.steps_per_env_per_iteration` must divide "
-                    f"`rl.frames_per_batch` without remainder, but got "
-                    f"{steps_per_env_per_iteration} and {params.rl.frames_per_batch} "
-                )
-        else:
-            steps_per_env_per_iteration = self.protocol_handler.max_message_rounds
-            if params.rl.frames_per_batch % steps_per_env_per_iteration != 0:
-                raise ValueError(
-                    f"The maximum number of message rounds must divide "
-                    f"`rl.frames_per_batch` without remainder, but got "
-                    f"{steps_per_env_per_iteration} and {params.rl.frames_per_batch} "
-                )
-        self.num_envs = params.rl.frames_per_batch // steps_per_env_per_iteration
-        self.batch_size = (self.num_envs,)
+        self._initialise()
 
         # Create environment specs
         self.observation_spec = self._get_observation_spec()
@@ -146,6 +250,7 @@ class Environment(EnvBase, ABC):
         return (
             self.num_envs,
             self.protocol_handler.max_message_rounds,
+            self.protocol_handler.num_message_channels,
             self.params.message_size,
             *self.main_message_space_shape,
         )
@@ -224,6 +329,7 @@ class Environment(EnvBase, ABC):
                 shape=(
                     self.num_envs,
                     self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_message_channels,
                     self.params.message_size,
                     self.params.d_linear_message_space,
                 ),
@@ -266,6 +372,7 @@ class Environment(EnvBase, ABC):
                 shape=(
                     self.num_envs,
                     self.num_agents,
+                    self.protocol_handler.num_message_channels,
                     self.params.message_size,
                 ),
                 dtype=torch.long,
@@ -461,28 +568,30 @@ class Environment(EnvBase, ABC):
         # Get a string representation of the message space dims, for type annotation.
         # dim_1 dim_2 etc.
         message_shape_str = " ".join(f"dim_{i}" for i in range(len(message_shape)))
+        message_shape_ones = " ".join(["1"] * len(message_shape))
 
-        message_history: Float[Tensor, f"... round position {message_shape_str}"] = (
-            env_td.get(message_history_key)
-        )
+        # ... round channel position {message_shape_str}
+        message_history = env_td.get(message_history_key)
         round: Int[Tensor, "..."] = env_td.get("round")
-        message_selected: Int[Tensor, "... agent position"] = env_td.get(
+        message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
         )
 
-        # Compute index of the agent(s) whose turn it is.
-        # (... agent)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask(round)
+        # Get the mask for the active agents per channel in the current round
+        # (... agent channel)
+        active_agents_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
+            round
+        )
 
         # Sum up the messages from the agents whose turn it is. If two agents select the
         # same message number, the message will be 2.
-        # (... position {message_shape_str})
+        # (... channel position {message_shape_str})
         message = F.one_hot(message_selected, reduce(mul, message_shape)).float()
         message = torch.where(active_agents_mask[..., None, None], message, 0)
         message = einops.reduce(
             message,
-            f"... agent position ({message_shape_str}) "
-            f"-> ... position {message_shape_str}",
+            f"... agent channel position ({message_shape_str}) "
+            f"-> ... channel position {message_shape_str}",
             reduction="sum",
             **{f"dim_{i}": dim for i, dim in enumerate(message_shape)},
         )
@@ -491,10 +600,9 @@ class Environment(EnvBase, ABC):
         round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
 
         # Reshape it so that it looks like the message history with 1's for the message
-        # space dims and position dim
-        message_shape_ones = " ".join(["1"] * len(message_shape))
+        # space dims and channel and position dim
         round_mask = einops.rearrange(
-            round_mask, f"... round -> ... round 1 {message_shape_ones}"
+            round_mask, f"... round -> ... round 1 1 {message_shape_ones}"
         )
 
         # Insert the message into the message history at the current round
