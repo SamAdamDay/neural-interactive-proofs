@@ -20,7 +20,7 @@ from pvg import (
     ActivationType,
     SpgVariant,
     IhvpVariant,
-    Guess,
+    InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
     ConstantUpdateSchedule,
@@ -39,6 +39,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
+    interaction_protocol=[InteractionProtocolType.DEBATE],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -83,7 +84,7 @@ param_grid = dict(
     pretrain_agents=[False],
     activation_function=[ActivationType.TANH],
     spg_variant=[SpgVariant.SPG],
-    stackelberg_sequence=[(("verifier",), ("prover",))],
+    stackelberg_sequence=[None],
     ihvp_variant=[IhvpVariant.NYSTROM],
     ihvp_num_iterations=[5],
     ihvp_rank=[5],
@@ -153,30 +154,44 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
             update_schedule=prover_update_schedule,
         )
+    verifier_params = GraphIsomorphismAgentParameters(
+        num_gnn_layers=combo["verifier_num_layers"],
+        activation_function=combo["activation_function"],
+        agent_lr_factor=verifier_lr_factor,
+        num_transformer_layers=combo["num_transformer_layers"],
+        num_heads=combo["num_transformer_heads"],
+        num_value_layers=combo["verifier_num_value_layers"],
+        d_value=combo["verifier_dim_value_layers"],
+        use_manual_architecture=combo["verifier_manual_architecture"],
+        use_dual_gnn=combo["use_dual_gnn"],
+        body_lr_factor=combo["body_lr_factor"],
+        gnn_lr_factor=combo["gnn_lr_factor"],
+        include_round_in_decider=combo["include_round_in_decider"],
+        use_batch_norm=combo["use_batch_norm"],
+        use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
+        update_schedule=verifier_update_schedule,
+    )
+    if combo["interaction_protocol"] in (
+        InteractionProtocolType.PVG,
+        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+    ):
+        agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
+    elif combo["interaction_protocol"] in (
+        InteractionProtocolType.DEBATE,
+        InteractionProtocolType.MERLIN_ARTHUR,
+    ):
+        agents_params = AgentsParameters(
+            verifier=verifier_params, prover0=prover_params, prover1=prover_params
+        )
+    else:
+        raise NotImplementedError(
+            f"Unknown interaction protocol: {combo['interaction_protocol']}"
+        )
     params = Parameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
-        agents=AgentsParameters(
-            verifier=GraphIsomorphismAgentParameters(
-                num_gnn_layers=combo["verifier_num_layers"],
-                activation_function=combo["activation_function"],
-                agent_lr_factor=verifier_lr_factor,
-                num_transformer_layers=combo["num_transformer_layers"],
-                num_heads=combo["num_transformer_heads"],
-                num_value_layers=combo["verifier_num_value_layers"],
-                d_value=combo["verifier_dim_value_layers"],
-                use_manual_architecture=combo["verifier_manual_architecture"],
-                use_dual_gnn=combo["use_dual_gnn"],
-                body_lr_factor=combo["body_lr_factor"],
-                gnn_lr_factor=combo["gnn_lr_factor"],
-                include_round_in_decider=combo["include_round_in_decider"],
-                use_batch_norm=combo["use_batch_norm"],
-                use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
-                update_schedule=verifier_update_schedule,
-            ),
-            prover=prover_params,
-        ),
+        agents=agents_params,
         rl=RlTrainerParameters(
             frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
@@ -211,6 +226,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             ihvp_rank=combo["ihvp_rank"],
             ihvp_rho=combo["ihvp_rho"],
         ),
+        interaction_protocol=combo["interaction_protocol"],
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
             verifier_terminated_penalty=combo["verifier_terminated_penalty"],
