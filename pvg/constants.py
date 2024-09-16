@@ -9,6 +9,7 @@ _root_dir = Path(_file_dir).parent.parent.absolute()
 DATA_DIR = os.path.join(_root_dir, "data")
 GI_DATA_DIR = os.path.join(DATA_DIR, "graph_isomorphism")
 IC_DATA_DIR = os.path.join(DATA_DIR, "image_classification")
+CV_DATA_DIR = os.path.join(DATA_DIR, "code_validation")
 
 CACHED_MODELS_DIR = os.path.join(_root_dir, "model_cache")
 CACHED_MODELS_METADATA_FILENAME = "metadata.json"
@@ -33,3 +34,8 @@ CHECKPOINT_ARTIFACT_TYPE = "checkpoint"
 WANDB_DUMMY_RUN_PROJECT = "pvg-sandbox"
 WANDB_DUMMY_RUN_ENTITY = "lrhammond-team"
 WANDB_DUMMY_RUN_NAME = "dummy_run"
+
+# Might need to be smarter about storing this
+OPENROUTER_API_KEY = (
+    "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"
+)
