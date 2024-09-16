@@ -58,7 +58,9 @@ class ProtocolHandler(ABC):
     @property
     def verifier_names(self) -> list[str]:
         """The names of the verifiers in the protocol."""
-        return ["verifier"]
+        return [
+            agent_name for agent_name in self.agent_names if "verifier" in agent_name
+        ]
 
     @property
     @abstractmethod
@@ -678,12 +680,12 @@ class DebateProtocol(DeterministicProtocolHandler):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
-    message_channel_names = ["prover0", "prover1"]
+    message_channel_names = ["prover0_channel", "prover1_channel"]
     agent_channel_visibility = [
-        ("prover0", "prover0"),
-        ("prover1", "prover1"),
-        ("verifier", "prover0"),
-        ("verifier", "prover1"),
+        ("prover0", "prover0_channel"),
+        ("prover1", "prover1_channel"),
+        ("verifier", "prover0_channel"),
+        ("verifier", "prover1_channel"),
     ]
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
@@ -699,7 +701,7 @@ class DebateProtocol(DeterministicProtocolHandler):
         """
 
         if agent_name in ["prover0", "prover1"]:
-            if channel_name == agent_name:
+            if channel_name == f"{agent_name}_channel":
                 return round % 2 == 0
             else:
                 return False
@@ -752,8 +754,6 @@ class MerlinArthurProtocol(ProtocolHandler):
         ("prover1", "main"),
         ("verifier", "main"),
     ]
-
-    agents_first_active_rounds = {"prover0": 0, "prover1": 0, "verifier": 1}
 
     max_message_rounds = 2
     min_message_rounds = 2

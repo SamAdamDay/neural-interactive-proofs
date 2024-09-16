@@ -103,15 +103,19 @@ def test_graph_isomorphism_combined_agents():
 def test_channel_visibility(
     scenario_type: ScenarioType, agent_params_class: type[AgentParameters]
 ):
-    """Test the visibility of the message channels.
+    """Test that the agents only see the channels they are supposed to see.
 
     Uses the multi-channel test protocol to check that the agents only see the channels
     they are supposed to see.
+
+    Replaces the bodies of the agents with a test body that checks the data received by
+    the agent. The test body checks that the data has the expected number of channels
+    and that all the expected channels are present in the data.
     """
 
     torch.manual_seed(0)
 
-    num_channels = 3
+    num_message_channels = 3
     max_message_rounds = 8
     batch_size = 5
 
@@ -196,7 +200,7 @@ def test_channel_visibility(
 
     # The protocol should have 3 channels and 8 rounds for the test to work. If this
     # changes, the test will need to be updated.
-    assert num_channels == protocol_handler.num_message_channels
+    assert num_message_channels == protocol_handler.num_message_channels
     assert max_message_rounds == protocol_handler.max_message_rounds
 
     # Construct the input tensordict for the combined body
@@ -206,7 +210,7 @@ def test_channel_visibility(
         f"dim_{i}": dim for i, dim in enumerate(environment.main_message_space_shape)
     }
     input_td["x"] = repeat(
-        torch.arange(num_channels, dtype=input_td["x"].dtype),
+        torch.arange(num_message_channels, dtype=input_td["x"].dtype),
         f"channel -> batch round channel position {' '.join(extra_dims.keys())}",
         batch=batch_size,
         round=max_message_rounds,

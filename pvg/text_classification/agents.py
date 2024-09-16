@@ -296,6 +296,7 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
                 raise UnknownFinishReasonError(retry, finish_reason)
 
             completion_text = completion.choices[0].message.content
+            completion_text = completion_text.strip()
 
             # Match based on the completion text
             if completion_text.startswith("Question: "):

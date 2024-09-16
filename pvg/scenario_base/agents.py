@@ -193,9 +193,9 @@ class AgentPart(ABC):
         """The mask for the message channels visible to the agent."""
 
         if self._visible_message_channel_mask is None:
-            num_channels = len(self.protocol_handler.message_channel_names)
+            num_message_channels = len(self.protocol_handler.message_channel_names)
             self._visible_message_channel_mask = torch.zeros(
-                num_channels, dtype=torch.bool, device=self.device
+                num_message_channels, dtype=torch.bool, device=self.device
             )
             self._visible_message_channel_mask[self.visible_message_channel_indices] = (
                 True

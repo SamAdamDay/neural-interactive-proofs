@@ -294,14 +294,16 @@ def test_image_classification_environment_step():
     image_height = env.image_height
     latent_width = env.latent_width
     latent_height = env.latent_height
-    num_channels = env.dataset_num_channels
+    num_image_channels = env.dataset_num_channels
 
     num_message_channels = protocol_handler.num_message_channels
 
     # Build the tensor of latent pixels selected by the agents.
     torch.manual_seed(0)
     latent_pixel_selected = torch.randint(
-        0, latent_height * latent_width, (batch_size, 2, num_channels, message_size)
+        0,
+        latent_height * latent_width,
+        (batch_size, 2, num_image_channels, message_size),
     )
 
     # This test setup only works when the number of message channels is 1. If this
@@ -312,7 +314,11 @@ def test_image_classification_environment_step():
     env_td = TensorDict(
         dict(
             image=torch.zeros(
-                batch_size, num_channels, image_height, image_width, dtype=torch.int32
+                batch_size,
+                num_image_channels,
+                image_height,
+                image_width,
+                dtype=torch.int32,
             ),
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
