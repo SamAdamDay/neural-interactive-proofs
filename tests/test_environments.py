@@ -101,11 +101,11 @@ def test_graph_isomorphism_environment_step():
             verifier_terminated_penalty=-4,
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
+            verifier_first=False,
         ),
         pvg_protocol=PvgProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
-            verifier_first=False,
         ),
         message_size=message_size,
     )
@@ -277,11 +277,11 @@ def test_image_classification_environment_step():
             verifier_terminated_penalty=-4,
             verifier_no_guess_reward=8,
             verifier_incorrect_penalty=-16,
+            verifier_first=False,
         ),
         pvg_protocol=PvgProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
-            verifier_first=False,
         ),
         image_classification=ImageClassificationParameters(num_block_groups=2),
     )

@@ -590,13 +590,7 @@ class PvgProtocol(DeterministicProtocolHandler):
 
     message_channel_names = ["main"]
     agent_channel_visibility = [("prover", "main"), ("verifier", "main")]
-
-    @property
-    def agent_names(self) -> list[str]:
-        if self.params.pvg_protocol.verifier_first:
-            return ["verifier", "prover"]
-        else:
-            return ["prover", "verifier"]
+    agent_names = ["prover", "verifier"]
 
     @property
     def max_message_rounds(self) -> int:
@@ -605,7 +599,7 @@ class PvgProtocol(DeterministicProtocolHandler):
     @property
     def max_verifier_turns(self) -> int:
         """The maximum number of turns the verifier can take."""
-        if self.params.pvg_protocol.verifier_first:
+        if self.params.protocol_common.verifier_first:
             return ceil(self.max_message_rounds / 2)
         else:
             return floor(self.max_message_rounds / 2)
@@ -625,7 +619,7 @@ class PvgProtocol(DeterministicProtocolHandler):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.pvg_protocol.verifier_first:
+        if self.params.protocol_common.verifier_first:
             if agent_name == "verifier":
                 return round % 2 == 0
             elif agent_name == "prover":
@@ -670,7 +664,7 @@ class AdpProtocol(PvgProtocol):
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
-class DebateProtocol(DeterministicProtocolHandler):
+class DebateProtocol(PvgProtocol):
     """Implementation of the Debate protocol.
 
     Parameters
@@ -691,8 +685,9 @@ class DebateProtocol(DeterministicProtocolHandler):
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
         """Specifies whether an agent is active in a given round and channel.
 
-        The provers are active in (zero-based) even rounds in their respective channels,
-        and the verifier is active in (zero-based) odd rounds in both channels.
+        When the verifier goes second, the provers are active in (zero-based) even
+        rounds in their respective channels, and the verifier is active in (zero-based)
+        odd rounds in both channels.
 
         Returns
         -------
@@ -700,13 +695,22 @@ class DebateProtocol(DeterministicProtocolHandler):
             Whether the agent is active in the given round and channel.
         """
 
-        if agent_name in ["prover0", "prover1"]:
-            if channel_name == f"{agent_name}_channel":
+        if self.params.protocol_common.verifier_first:
+            if agent_name in ["prover0", "prover1"]:
+                if channel_name == f"{agent_name}_channel":
+                    return round % 2 == 1
+                else:
+                    return False
+            elif agent_name == "verifier":
                 return round % 2 == 0
-            else:
-                return False
-        elif agent_name == "verifier":
-            return round % 2 == 1
+        else:
+            if agent_name in ["prover0", "prover1"]:
+                if channel_name == f"{agent_name}_channel":
+                    return round % 2 == 0
+                else:
+                    return False
+            elif agent_name == "verifier":
+                return round % 2 == 1
 
     @property
     def max_message_rounds(self) -> int:
@@ -715,10 +719,6 @@ class DebateProtocol(DeterministicProtocolHandler):
     @property
     def min_message_rounds(self) -> int:
         return self.params.debate_protocol.min_message_rounds
-
-    @property
-    def max_verifier_turns(self) -> int:
-        return floor(self.max_message_rounds / 2)
 
     def _include_prover_rewards(
         self,
@@ -776,24 +776,35 @@ class MerlinArthurProtocol(ProtocolHandler):
         active_agents : Bool[Tensor, "... agent channel"]
             A boolean mask indicating which agents are active in the given round.
         """
-        prover1_first = torch.randint_like(round, 2).bool()
-        return rearrange(
-            [
-                (round % 2 == 0) & prover1_first,
-                (round % 2 == 0) & ~prover1_first,
-                round % 2 == 1,
-            ],
-            "agent ... -> ... agent 1",
-        )
+        if self.params.protocol_common.verifier_first:
+            prover1_first = torch.randint_like(round, 2).bool()
+            return rearrange(
+                [
+                    (round % 2 == 1) & prover1_first,
+                    (round % 2 == 1) & ~prover1_first,
+                    round % 2 == 0,
+                ],
+                "agent ... -> ... agent 1",
+            )
+        else:
+            prover1_first = torch.randint_like(round, 2).bool()
+            return rearrange(
+                [
+                    (round % 2 == 0) & prover1_first,
+                    (round % 2 == 0) & ~prover1_first,
+                    round % 2 == 1,
+                ],
+                "agent ... -> ... agent 1",
+            )
 
     def can_agent_be_active(
         self, agent_name: str, round: int, channel_name: str
     ) -> bool:
         """Specifies whether an agent can be active in a given round and channel.
 
-        Both provers can be active in (zero-based) even rounds in their respective
-        channels, and the verifier is active in (zero-based) odd rounds in both
-        channels.
+        When the verifier goes second, both provers can be active in (zero-based) even
+        rounds in their respective channels, and the verifier is active in (zero-based)
+        odd rounds in both channels.
 
         Returns
         -------
@@ -801,13 +812,22 @@ class MerlinArthurProtocol(ProtocolHandler):
             Whether the agent can be active in the given round and channel.
         """
 
-        if agent_name in ["prover0", "prover1"]:
-            if channel_name == agent_name:
+        if self.params.protocol_common.verifier_first:
+            if agent_name in ["prover0", "prover1"]:
+                if channel_name == agent_name:
+                    return round % 2 == 1
+                else:
+                    return False
+            elif agent_name == "verifier":
                 return round % 2 == 0
-            else:
-                return False
-        elif agent_name == "verifier":
-            return round % 2 == 1
+        else:
+            if agent_name in ["prover0", "prover1"]:
+                if channel_name == agent_name:
+                    return round % 2 == 0
+                else:
+                    return False
+            elif agent_name == "verifier":
+                return round % 2 == 1
 
     def _include_prover_rewards(
         self,

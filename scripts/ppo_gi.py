@@ -231,11 +231,11 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             shared_reward=combo["shared_reward"],
             verifier_terminated_penalty=combo["verifier_terminated_penalty"],
             verifier_no_guess_reward=combo["verifier_no_guess_reward"],
+            verifier_first=combo["verifier_first"],
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
-            verifier_first=combo["verifier_first"],
         ),
         pretrain_agents=pretrain_agents,
         d_representation=combo["d_representation"],
