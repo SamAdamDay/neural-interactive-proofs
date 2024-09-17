@@ -23,6 +23,7 @@ from pvg import (
     InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
+    DebateProtocolParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     run_experiment,
@@ -234,6 +235,10 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             verifier_first=combo["verifier_first"],
         ),
         pvg_protocol=PvgProtocolParameters(
+            min_message_rounds=combo["min_message_rounds"],
+            max_message_rounds=combo["max_message_rounds"],
+        ),
+        debate_protocol=DebateProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),
