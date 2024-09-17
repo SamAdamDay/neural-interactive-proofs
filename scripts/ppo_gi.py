@@ -39,7 +39,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
-    interaction_protocol=[InteractionProtocolType.DEBATE],
+    interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
