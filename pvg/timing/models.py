@@ -13,7 +13,7 @@ import numpy as np
 from pvg.parameters import Parameters, SoloAgentParameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import DataLoader
-from pvg.scenario_instance import build_scenario_instance
+from pvg.factory import build_scenario_instance
 from pvg.utils.data import max_length_iterator
 from pvg.timing.timeables import Timeable, register_timeable
 

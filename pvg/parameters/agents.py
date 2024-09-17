@@ -8,7 +8,7 @@ The `AgentsParameters` object is a dictionary of agent names and their correspon
 """
 
 from abc import ABC
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Literal
 from dataclasses import dataclass
 import dataclasses
 
@@ -84,10 +84,11 @@ class AgentParameters(SubParameters, ABC):
     checkpoint_version: str
         The version of the checkpoint to load. If not provided, the latest version is
         used.
-    ortho_init: bool or float, optional
-        Whether to use orthogonal initialisation for the weights of the various networks
-        with gain ``float`` (and biases initiliased to 0). If ``True``, the gain is set
-        to 1.0. If not provided or ``False``, orthogonal initialisation is not used.
+    use_orthogonal_initialisation : bool
+        Whether to use orthogonal initialisation for the weights of the various
+        networks.
+    orthogonal_initialisation_gain: float
+        The gain when using orthogonal initialisation.
     """
 
     agent_lr_factor: Optional[LrFactors | dict] = None
@@ -104,7 +105,8 @@ class AgentParameters(SubParameters, ABC):
     checkpoint_run_id: Optional[str] = None
     checkpoint_version: str = "latest"
 
-    ortho_init: Optional[bool | float] = True
+    use_orthogonal_initialisation: bool = True
+    orthogonal_initialisation_gain: float = 1.0
 
     # The parameters which are preserved when loading from W&B config
     LOAD_PRESERVED_PARAMETERS: ClassVar[list[str]] = [
@@ -374,6 +376,31 @@ class ImageClassificationAgentParameters(AgentParameters):
             d_value=1,
             num_value_layers=1,
         )
+
+
+@dataclass
+class TextClassificationAgentParameters(AgentParameters):
+    """Additional parameters for agents in the text classification experiment.
+
+    Parameters
+    ----------
+    model_provider : Literal["OpenAI"]
+        The provider of the model and API to use.
+    model_name : str
+        The name of the model to use.
+    max_tokens_per_message : int
+        The maximum number of tokens which the model is allowed to generate in a single
+        message.
+    num_invalid_generation_retries : int
+        The number of times to retry generating a message if the model returns an
+        invalid response.
+    """
+
+    model_provider: Literal["OpenAI"] = "OpenAI"
+    model_name: str = "gpt-4o-mini"
+
+    max_tokens_per_message: int = 512
+    num_invalid_generation_retries: int = 5
 
 
 class AgentsParameters(dict[str, AgentParameters], ParameterValue):

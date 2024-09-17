@@ -1,4 +1,4 @@
-"""A generic reinforcement learning trainer."""
+"""A generic reinforcement learning trainer using tensordicts."""
 
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -38,7 +38,8 @@ from pvg.model_cache import (
     save_model_state_dicts,
     load_cached_model_state_dicts,
 )
-from pvg.scenario_instance import ScenarioInstance
+from pvg.scenario_base import TensorDictEnvironment
+from pvg.factory import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
 from pvg.rl_objectives import Objective
 from pvg.utils.maths import logit_entropy
@@ -74,7 +75,7 @@ def update_schedule_iterator(schedule: AgentUpdateSchedule):
 
 
 class ReinforcementLearningTrainer(Trainer, ABC):
-    """Base class for all reinforcement learning trainers.
+    """Base class for all reinforcement learning trainers which use tensordicts.
 
     Parameters
     ----------
@@ -111,8 +112,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     ):
         super().__init__(params, scenario_instance, settings)
 
-        self.train_environment = self.scenario_instance.train_environment
-        self.test_environment = self.scenario_instance.test_environment
+        self.train_environment: TensorDictEnvironment = (
+            self.scenario_instance.train_environment
+        )
+        self.test_environment: TensorDictEnvironment = (
+            self.scenario_instance.test_environment
+        )
 
         # Update clip value to be a float or None
         self.clip_value = self.params.rl.clip_value
@@ -465,8 +470,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]
         ].message_logits_key
-        message_logits: Float[Tensor, "... agent position logit"] = tensordict_data.get(
-            ("agents", message_logits_key)
+        message_logits: Float[Tensor, "... agent channel position logit"] = (
+            tensordict_data.get(("agents", message_logits_key))
         )
 
         log_stats = {}
@@ -522,7 +527,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the (normalised) agent message entropy mean and standard deviation
             max_message_ent = -np.log(1 / message_logits.shape[-1])
             message_logit_entropy = (
-                logit_entropy(message_logits[..., i, :, :]) / max_message_ent
+                logit_entropy(message_logits[..., i, :, :, :]) / max_message_ent
             )
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
@@ -532,7 +537,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the maximum message probability mean and standard deviation
-            message_probs = torch.softmax(message_logits[..., i, :, :], dim=-1)
+            message_probs = torch.softmax(message_logits[..., i, :, :, :], dim=-1)
             max_message_probs = message_probs.max(dim=-1).values
             log_stats[f"{agent_name}.{prefix}mean_max_message_prob"] = (
                 max_message_probs.mean().item()

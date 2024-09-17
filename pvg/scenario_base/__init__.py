@@ -14,10 +14,14 @@ method is used to build the agents using the given parameters.
 """
 
 from .data import Dataset, DataLoader
-from .environment import Environment
+from .environment import Environment, TensorDictEnvironment
 from .agents import (
     AgentHooks,
     AgentPart,
+    TensorDictAgentPartMixin,
+    TensorDictDummyAgentPartMixin,
+    WholeAgent,
+    RandomWholeAgent,
     AgentBody,
     AgentHead,
     DummyAgentBody,
@@ -27,6 +31,8 @@ from .agents import (
     ConstantAgentValueHead,
     SoloAgentHead,
     CombinedAgentPart,
+    CombinedTensorDictAgentPart,
+    CombinedWhole,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,

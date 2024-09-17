@@ -1,10 +1,6 @@
 """Stackelberg Policy Gradient RL trainer."""
 
-from torchrl.collectors import SyncDataCollector
-from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.objectives.value import GAE
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.objectives import ValueEstimators
 
 from pvg.rl_objectives import SpgLoss

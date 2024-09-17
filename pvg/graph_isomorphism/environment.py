@@ -4,7 +4,6 @@ from typing import Optional
 
 import torch
 from torch import Tensor
-import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -16,13 +15,11 @@ from torchrl.data.tensor_specs import (
     Box,
 )
 
-from einops import reduce
-
-from jaxtyping import Float, Int
+from einops import rearrange
 
 from pvg.parameters import ScenarioType
-from pvg.scenario_base import Environment
-from pvg.scenario_instance import register_scenario_class
+from pvg.scenario_base import Environment, TensorDictEnvironment
+from pvg.factory import register_scenario_class
 from pvg.utils.types import TorchDevice
 
 
@@ -141,7 +138,7 @@ class AdjacencyMatrixSpec(TensorSpec):
         adjacency_values = torch.rand(*shape, *self.shape, device=self.device)
         adjacency = (adjacency_values < 0.5).to(self.dtype)
         adjacency = adjacency.triu(diagonal=1)
-        adjacency += adjacency.transpose(1, 2).clone()
+        adjacency += rearrange(adjacency, "... node1 node2 -> ... node2 node1").clone()
 
         return adjacency
 
@@ -190,7 +187,7 @@ class AdjacencyMatrixSpec(TensorSpec):
 
 
 @register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Environment)
-class GraphIsomorphismEnvironment(Environment):
+class GraphIsomorphismEnvironment(TensorDictEnvironment):
     """The graph isomorphism RL environment.
 
     Agents see the adjacency matrix and the messages sent so far.
@@ -261,6 +258,7 @@ class GraphIsomorphismEnvironment(Environment):
             self.max_num_nodes,
             shape=(
                 self.num_envs,
+                self.protocol_handler.num_message_channels,
                 self.params.message_size,
                 2,
                 self.max_num_nodes,
@@ -287,7 +285,12 @@ class GraphIsomorphismEnvironment(Environment):
         action_spec = super()._get_action_spec()
         action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
             2 * self.max_num_nodes,
-            shape=(self.num_envs, self.num_agents, self.params.message_size),
+            shape=(
+                self.num_envs,
+                self.num_agents,
+                self.protocol_handler.num_message_channels,
+                self.params.message_size,
+            ),
             dtype=torch.long,
             device=self.device,
         )

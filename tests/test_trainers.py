@@ -20,7 +20,7 @@ from pvg import (
 from pvg.trainers import build_trainer
 from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
 from pvg.trainers.vanilla_ppo import VanillaPpoTrainer
-from pvg.scenario_instance import build_scenario_instance
+from pvg.factory import build_scenario_instance
 
 
 def _optimizer_has_parameter(

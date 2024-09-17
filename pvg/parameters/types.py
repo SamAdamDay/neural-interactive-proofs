@@ -16,6 +16,7 @@ class ScenarioType(StrEnum):
 
     GRAPH_ISOMORPHISM = enum_auto()
     IMAGE_CLASSIFICATION = enum_auto()
+    TEXT_CLASSIFICATION = enum_auto()
 
 
 class SpgVariant(StrEnum):
@@ -50,6 +51,7 @@ class TrainerType(StrEnum):
     SOLO_AGENT = enum_auto()
     SPG = enum_auto()
     REINFORCE = enum_auto()
+    PURE_TEXT_EI = enum_auto()
 
 
 class PpoLossType(StrEnum):
@@ -103,6 +105,8 @@ class InteractionProtocolType(StrEnum):
         The Debate protocol.
     MERLIN_ARTHUR
         The Merlin-Arthur classifier protocol.
+    MULTI_CHANNEL_TEST
+        A protocol for testing multi-channel communication.
     """
 
     PVG = enum_auto()
@@ -110,6 +114,7 @@ class InteractionProtocolType(StrEnum):
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
     MARKET_MAKING = enum_auto()  # TODO
+    MULTI_CHANNEL_TEST = enum_auto()
 
 
 class MinMessageRoundsSchedulerType(StrEnum):

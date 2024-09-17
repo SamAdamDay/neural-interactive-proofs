@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import dataclasses
 import typing
-from typing import Union
+from typing import Union, Any
 from types import UnionType
 
 try:
@@ -47,6 +47,41 @@ class BaseParameters(ParameterValue, ABC):
             params_dict[field.name] = value
 
         return params_dict
+
+    def get(self, address: str) -> Any:
+        """Get a value from the parameters object using a dot-separated address.
+
+        Parameters
+        ----------
+        address : str
+            The path to the value in the parameters object, separated by dots.
+
+        Returns
+        -------
+        value : Any
+            The value at the address.
+
+        Raises
+        ------
+        KeyError
+            If the address does not exist.
+        """
+
+        first_key, _, remainder = address.partition(".")
+
+        for field in dataclasses.fields(self):
+            if field.name == first_key:
+                value = getattr(self, first_key)
+                if isinstance(value, BaseParameters):
+                    try:
+                        return value.get(remainder)
+                    except KeyError:
+                        raise KeyError(
+                            f"Address {address!r} not found in parameters object."
+                        )
+                return value
+
+        raise KeyError(f"Address {address!r} not found in parameters object.")
 
     @classmethod
     def construct_test_params(cls) -> "BaseParameters":

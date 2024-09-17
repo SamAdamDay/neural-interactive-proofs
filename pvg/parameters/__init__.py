@@ -76,6 +76,7 @@ from .agents import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    TextClassificationAgentParameters,
     AgentsParameters,
 )
 from .trainers import (
@@ -102,20 +103,32 @@ from .update_schedule import (
 from .message_regression import MessageRegressionParameters
 
 # The agent names required for each protocol
-AGENT_NAMES = {
+AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     InteractionProtocolType.PVG: ("verifier", "prover"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
+    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+        "verifier",
+        "prover0",
+        "prover1",
+        "prover2",
+    ),
 }
 
-DEFAULT_STACKELBERG_SEQUENCE = {
+DEFAULT_STACKELBERG_SEQUENCE: dict[
+    InteractionProtocolType, tuple[tuple[str, ...], ...]
+] = {
     InteractionProtocolType.PVG: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
+    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+        ("verifier",),
+        ("prover0", "prover1", "prover2"),
+    ),
 }
 
 

@@ -15,12 +15,14 @@ from pvg import (
     ReinforceParameters,
     ScenarioType,
     TrainerType,
+    InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
     SpgParameters,
     PpoLossType,
     SpgVariant,
     Guess,
+    AGENT_NAMES,
     ImageClassificationParameters,
     run_experiment,
 )
@@ -38,36 +40,27 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
+    interaction_protocol = InteractionProtocolType.PVG
     params = Parameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.VANILLA_PPO,
         dataset="cifar10",
         agents=AgentsParameters(
-            verifier=ImageClassificationAgentParameters(
-                building_block_type=ImageBuildingBlockType.CONV2D,
-                d_latent_pixel_selector=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                num_blocks_per_group=1,
-                use_manual_architecture=False,
-                agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                ortho_init=False,
-            ),
-            prover=ImageClassificationAgentParameters(
-                building_block_type=ImageBuildingBlockType.CONV2D,
-                d_latent_pixel_selector=1,
-                d_decider=1,
-                num_decider_layers=1,
-                d_value=1,
-                num_value_layers=1,
-                num_blocks_per_group=1,
-                use_manual_architecture=False,
-                agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                ortho_init=False,
-                pretrained_embeddings_model=None,
-            ),
+            **{
+                agent_name: ImageClassificationAgentParameters(
+                    building_block_type=ImageBuildingBlockType.CONV2D,
+                    d_latent_pixel_selector=1,
+                    d_decider=1,
+                    num_decider_layers=1,
+                    d_value=1,
+                    num_value_layers=1,
+                    num_blocks_per_group=1,
+                    use_manual_architecture=False,
+                    agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                    use_orthogonal_initialisation=False,
+                )
+                for agent_name in AGENT_NAMES[interaction_protocol]
+            }
         ),
         image_classification=ImageClassificationParameters(
             num_block_groups=1,
@@ -93,6 +86,7 @@ def run(cmd_args: Namespace):
         reinforce=ReinforceParameters(
             use_advantage_and_critic=False,
         ),
+        interaction_protocol=interaction_protocol,
         protocol_common=CommonProtocolParameters(
             shared_reward=True,
             force_guess=None,

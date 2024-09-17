@@ -5,9 +5,10 @@ Changing these settings should not effect the reproducibility of the experiment.
 
 from typing import Optional
 from dataclasses import dataclass, field
-import logging
 
 import torch
+
+from openai import OpenAI
 
 import wandb
 
@@ -38,6 +39,8 @@ class ExperimentSettings:
         The logger to log to. If None, the trainer will create a logger.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
+    openai_client : OpenAI, optional
+        The OpenAI client to use for interacting with the OpenAI API.
     ignore_cache : bool, default=False
         If True, the dataset and model cache are ignored and rebuilt.
     num_rollout_samples : int, default=10
@@ -83,6 +86,7 @@ class ExperimentSettings:
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
     profiler: Optional[torch.profiler.profile] = None
+    openai_client: Optional[OpenAI] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
     rollout_sample_period: int = 1000
@@ -104,3 +108,7 @@ class ExperimentSettings:
 
         if self.test_run and self.wandb_run is not None:
             raise ValueError("test_run cannot be True if wandb_run is not None.")
+
+    def __deepcopy__(self, memo) -> "ExperimentSettings":
+        """We do not deepcopy this object, as it is a singleton."""
+        return self
