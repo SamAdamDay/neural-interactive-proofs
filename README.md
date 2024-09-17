@@ -133,12 +133,26 @@ OPENAI_API_KEY=""
 5. Build the image using the following command:
 
 ```
-docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
+docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target default --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
 ```
 
-replacing `DOCKER_REPO` and `DOCKER_TAG` with the appropriate details.
+replacing `DOCKER_USER` with your Docker Hub username, and `DOCKER_REPO` and
+`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'pvg-experiments/default').
 
-5. Push the image to the Docker Hub, ready for use.
+Alternatively, you can build an image with all of the datasets already downloaded. This
+will result in a much larger image, but can make the process of spinning up and running
+a new instance faster overall, if using a large dataset. To do this, use the 'datasets'
+target as follows:
+
+```
+docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target datasets --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
+```
+
+6. Push the image to the Docker Hub, ready for use:
+
+```
+docker push DOCKER_USER/DOCKER_REPO:DOCKER_TAG
+```
 
 
 ## Wishlist TODOs
