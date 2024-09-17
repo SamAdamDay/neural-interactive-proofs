@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:11.7.1-runtime-ubuntu22.04
+FROM nvidia/cuda:11.7.1-runtime-ubuntu22.04 AS base
 
 # Set the timezone environmental variable
 ENV TZ=Europe/London
@@ -59,8 +59,20 @@ RUN pip install --upgrade pip \
     && pip install -e . \
     && pip install nvitop
 
-# Apparently this is necessary to fully install primesieve
-RUN yes | pip uninstall primesieve && pip install --no-cache-dir primesieve
+
+# The default target doesn't do much else
+FROM base AS default
+
+# Go back to the root
+WORKDIR /root
+
+# Expose the default SSH port (inside the container)
+EXPOSE 22
+
+
+# The datasets target downloads all the datasets used in the project. This is slower to
+# download from the hub, but faster overall if you're using a large dataset
+FROM base AS datasets
 
 # Download all the datasets used in the project
 RUN python scripts/download_all_datasets.py
