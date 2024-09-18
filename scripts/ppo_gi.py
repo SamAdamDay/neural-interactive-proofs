@@ -100,6 +100,8 @@ param_grid = dict(
     min_message_rounds=[2],
     max_message_rounds=[8],
     verifier_first=[True],
+    debate_sequential=[False],
+    debate_prover0_first=[True],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[None],
     seed=[8144, 820, 4173, 3992],
@@ -241,6 +243,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         debate_protocol=DebateProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
+            sequential=combo["debate_sequential"],
+            prover0_first=combo["debate_prover0_first"],
         ),
         pretrain_agents=pretrain_agents,
         d_representation=combo["d_representation"],

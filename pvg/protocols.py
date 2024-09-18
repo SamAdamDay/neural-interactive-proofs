@@ -677,6 +677,8 @@ class DebateProtocol(PvgProtocol):
     message_channel_names = ["prover0_channel", "prover1_channel"]
     agent_channel_visibility = [
         ("prover0", "prover0_channel"),
+        ("prover0", "prover1_channel"),
+        ("prover1", "prover0_channel"),
         ("prover1", "prover1_channel"),
         ("verifier", "prover0_channel"),
         ("verifier", "prover1_channel"),
@@ -684,6 +686,14 @@ class DebateProtocol(PvgProtocol):
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
         """Specifies whether an agent is active in a given round and channel.
+
+        In sequential debate with verifier first, the order is:
+
+        - Verifier in both channels
+        - First prover (determined by `prover0_first`) in their respective channel
+        - Second prover in their respective channel
+
+        In simultaneous debate with verifier first, the order is:
 
         When the verifier goes second, the provers are active in (zero-based) even
         rounds in their respective channels, and the verifier is active in (zero-based)
@@ -695,22 +705,68 @@ class DebateProtocol(PvgProtocol):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.protocol_common.verifier_first:
-            if agent_name in ["prover0", "prover1"]:
-                if channel_name == f"{agent_name}_channel":
-                    return round % 2 == 1
-                else:
-                    return False
-            elif agent_name == "verifier":
-                return round % 2 == 0
+        if self.params.debate_protocol.prover0_first:
+            first_prover = "prover0"
+            second_prover = "prover1"
         else:
-            if agent_name in ["prover0", "prover1"]:
-                if channel_name == f"{agent_name}_channel":
+            first_prover = "prover1"
+            second_prover = "prover0"
+
+        if self.params.protocol_common.verifier_first:
+
+            # Verifier first, sequential
+            if self.params.debate_protocol.sequential:
+                if agent_name == "verifier":
+                    return round % 3 == 0
+                elif agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 2
+                    else:
+                        return False
+
+            # Verifier first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return (
+                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
+                        )
+                    else:
+                        return False
+                elif agent_name == "verifier":
                     return round % 2 == 0
-                else:
-                    return False
-            elif agent_name == "verifier":
-                return round % 2 == 1
+
+        else:
+
+            # Provers first, sequential
+            if self.params.debate_protocol.sequential:
+                if agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 0
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 3 == 2
+
+            # Provers first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 2 == 0
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 2 == 1
 
     @property
     def max_message_rounds(self) -> int:
