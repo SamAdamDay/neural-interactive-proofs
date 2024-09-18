@@ -695,9 +695,8 @@ class DebateProtocol(PvgProtocol):
 
         In simultaneous debate with verifier first, the order is:
 
-        When the verifier goes second, the provers are active in (zero-based) even
-        rounds in their respective channels, and the verifier is active in (zero-based)
-        odd rounds in both channels.
+        - Verifier in both channels
+        - Provers in their respective channels at the same time
 
         Returns
         -------
