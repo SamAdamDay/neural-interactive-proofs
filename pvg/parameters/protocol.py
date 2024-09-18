@@ -105,6 +105,10 @@ class DebateProtocolParameters(LongProtocolParameters):
 
     Parameters
     ----------
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -115,3 +119,6 @@ class DebateProtocolParameters(LongProtocolParameters):
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
     """
+
+    sequential: bool = False
+    prover0_first: bool = True
