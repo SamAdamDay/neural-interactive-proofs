@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 _file_dir = os.path.realpath(__file__)
 _root_dir = Path(_file_dir).parent.parent.absolute()
@@ -35,7 +36,7 @@ WANDB_DUMMY_RUN_PROJECT = "pvg-sandbox"
 WANDB_DUMMY_RUN_ENTITY = "lrhammond-team"
 WANDB_DUMMY_RUN_NAME = "dummy_run"
 
-# Might need to be smarter about storing this
-OPENROUTER_API_KEY = (
-    "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"
-)
+# OpenRouter API Key
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")

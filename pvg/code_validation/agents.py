@@ -1,15 +1,8 @@
 import json
 import requests
 
-# from pvg.constants import OPENROUTER_API_KEY
 
-# For some reason above the import above doesn't work
-OPENROUTER_API_KEY = (
-    "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"
-)
-
-
-def get_response(model, messages):
+def get_openrouter_response(model, messages, api_key):
     """
     Sends a POST request to the OpenRouter API to get responses from a chat model.
 
@@ -27,7 +20,7 @@ def get_response(model, messages):
 
     response = requests.post(
         url="https://openrouter.ai/api/v1/chat/completions",
-        headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+        headers={"Authorization": f"Bearer {api_key}"},
         data=json.dumps({"model": model, "messages": messages}),
     )
 
