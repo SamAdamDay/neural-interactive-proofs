@@ -52,7 +52,7 @@ class CodeValidationDatasetConfig:
     openrouter_api_key: Optional[str] = OPENROUTER_API_KEY
     pull_repo: Optional[str] = "lrhammond/buggy-apps"
     push_repo: Optional[str] = "lrhammond/buggy-apps"
-    save_after: Optional[int] = 10
+    save_after: Optional[int] = 5
 
     def __post_init__(self):
         """
@@ -314,6 +314,7 @@ def test_buggy_solution(
 def generate_buggy_solutions(
     datum: dict,
     model: str,
+    openrouter_api_key: str,
     system_prompt: str,
     fraction_to_modify: float,
     max_modifications: int,
@@ -367,9 +368,10 @@ def generate_buggy_solutions(
 
             while not valid_buggy_solution and attempts < max_attempts:
                 attempts += 1
+
                 model_output = get_openrouter_response(
-                    model, messages, api_key=OPENROUTER_API_KEY
-                )
+                    model, messages, openrouter_api_key
+                )[0]["message"]
                 buggy_solution, problematic_inputs, safe = extract_code_and_input(
                     model_output
                 )
@@ -485,11 +487,13 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
     for s in split:
         for d in config.difficulties:
             data_slice = data[s].filter(lambda x: x["difficulty"] == d)
-            to_add = min(config.num_data, len(data_slice))
+            num_buggy_data = min(config.num_data, len(data_slice))
             print(
-                f"Generating {to_add} buggy data for the {d} problems in the {s} split"
+                f"Generating {num_buggy_data} buggy data for the {d} problems in the {s} split"
             )
-            for datum in data_slice.select(range(to_add)):
+            for datum in data_slice:
+
+                print(datum["problem_id"])
 
                 # Check if we've already generated enough buggy data for this problem or if there is only one solution given
                 if (
@@ -497,12 +501,16 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
                     or len(json.loads(datum["solutions"])) <= 1
                 ):
                     continue
+                elif len(buggy_data[s]) >= num_buggy_data:
+                    break
+
                 num_added[s] += 1
 
                 # Generate new buggy solutions
                 buggy_solutions = generate_buggy_solutions(
                     datum,
                     config.model,
+                    config.openrouter_api_key,
                     config.system_prompt,
                     config.fraction_to_modify,
                     config.max_modifications,
@@ -529,10 +537,14 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
             if config.push_repo is not None:
                 buggy_data[s].push_to_hub(config.push_repo, split=s)
 
+        elapsed_time = datetime.now() - start_time
+        elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
+        print(f"Added {num_added[s]} buggy {s} data in {elapsed_time}")
+
     # Calculate the elapsed time, rounding microseconds down
     elapsed_time = datetime.now() - start_time
     elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
-    print(f"Added {sum(num_added.values())} data in {elapsed_time}")
+    print(f"Added {sum(num_added.values())} buggy data overall in {elapsed_time}")
 
 
 # TODO (work in progress, original version that is useful for more intelligently updating or extending the buggy dataset)
@@ -670,3 +682,6 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
             buggy_data[s].to_json(os.path.join(config.local_dir, f"{s}.jsonl"))
             if config.push_repo is not None:
                 buggy_data.push_to_hub(config.push_repo, split=s)
+
+
+generate_cv_dataset({})

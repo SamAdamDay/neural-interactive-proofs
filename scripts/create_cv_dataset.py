@@ -33,7 +33,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--openrouter_api_key",
-    type=int,
+    type=str,
     default=OPENROUTER_API_KEY,
     help="The OpenRouter API key to use for generating responses",
 )
