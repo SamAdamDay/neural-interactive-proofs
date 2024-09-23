@@ -27,7 +27,11 @@ import wandb
 
 from pvg.parameters import Parameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base.data import Dataset, CachedPretrainedEmbeddingsNotFound
+from pvg.scenario_base.data import (
+    Dataset,
+    TensorDictDataset,
+    CachedPretrainedEmbeddingsNotFound,
+)
 from pvg.scenario_base.agents import (
     AgentPart,
     WholeAgent,
@@ -50,7 +54,7 @@ from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.message_regression import MessageRegressor, build_message_regressor
 from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
-from pvg.utils.params import check_if_critic_and_single_body
+from pvg.utils.params import get_agent_part_flags
 
 T = TypeVar("T")
 
@@ -213,8 +217,8 @@ def build_scenario_instance(
     ----------
     params : Parameters
         The params of the experiment.
-    device : TorchDevice
-        The device to use for training.
+    settings : ExperimentSettings
+        The settings of the experiment.
 
     Returns
     -------
@@ -246,7 +250,7 @@ def build_scenario_instance(
         param_selector = SCENARIO_CLASS_REGISTRY[(params.scenario, base_class)]
 
         if agent_name is not None:
-            params_to_select = params.agents["agent_name"]
+            params_to_select = params.agents[agent_name]
         else:
             params_to_select = params
 
@@ -284,15 +288,19 @@ def build_scenario_instance(
     agents = _build_agents(params, settings, protocol_handler, get_scenario_class)
 
     # Add pretrained embeddings to the datasets
-    _add_pretrained_embeddings_to_datasets(
-        params, settings, agents, train_dataset, test_dataset
-    )
+    if isinstance(train_dataset, TensorDictDataset) and isinstance(
+        test_dataset, TensorDictDataset
+    ):
+        _add_pretrained_embeddings_to_datasets(
+            params, settings, agents, train_dataset, test_dataset
+        )
 
     # Build additional components if the trainer is an RL trainer
     if (
         params.trainer == TrainerType.VANILLA_PPO
         or params.trainer == TrainerType.SPG
         or params.trainer == TrainerType.REINFORCE
+        or params.trainer == TrainerType.PURE_TEXT_EI
     ):
         additional_rl_components = _build_components_for_rl_trainer(
             params=params,
@@ -320,7 +328,7 @@ def _build_agents(
     params: Parameters,
     settings: ExperimentSettings,
     protocol_handler: ProtocolHandler,
-    get_scenario_class: Callable[[type], type],
+    get_scenario_class: Callable[[type, Optional[str]], type],
 ) -> dict[str, Agent]:
     """Build the agents for the experiment.
 
@@ -344,8 +352,9 @@ def _build_agents(
 
     device = settings.device
 
-    # Check if we need a critic and if it shares a body with the actor
-    use_critic, use_single_body = check_if_critic_and_single_body(params)
+    # Check if we need a critic, if it shares a body with the actor, and if the agents
+    # are whole agents
+    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(params)
 
     # Create the agents
     agents: dict[str, Agent] = {}
@@ -376,22 +385,21 @@ def _build_agents(
         else:
             body_names = ["policy_body", "value_body"]
 
-        part_arguments = dict(
-            params=params,
-            settings=settings,
-            protocol_handler=protocol_handler,
-            agent_name=agent_name,
-        )
+        def build_part(base_class: type[T]) -> T:
+            return get_scenario_class(base_class, agent_name=agent_name)(
+                params=params,
+                settings=settings,
+                protocol_handler=protocol_handler,
+                agent_name=agent_name,
+            )
 
         # Random agents have a dummy body
-        if params.trainer != TrainerType.PURE_TEXT_EI:
+        if not use_whole_agent:
             for name in body_names:
                 if agent_params.is_random:
-                    agent_dict[name] = get_scenario_class(DummyAgentBody)(
-                        **part_arguments
-                    )
+                    agent_dict[name] = build_part(DummyAgentBody)
                 else:
-                    agent_dict[name] = get_scenario_class(AgentBody)(**part_arguments)
+                    agent_dict[name] = build_part(AgentBody)
 
         if (
             params.trainer == TrainerType.VANILLA_PPO
@@ -399,33 +407,23 @@ def _build_agents(
             or params.trainer == TrainerType.REINFORCE
         ):
             if agent_params.is_random:
-                agent_dict["policy_head"] = get_scenario_class(RandomAgentPolicyHead)(
-                    **part_arguments
-                )
+                agent_dict["policy_head"] = build_part(RandomAgentPolicyHead)
                 if use_critic:
-                    agent_dict["value_head"] = get_scenario_class(
-                        ConstantAgentValueHead
-                    )(**part_arguments)
+                    agent_dict["value_head"] = build_part(ConstantAgentValueHead)
             else:
-                agent_dict["policy_head"] = get_scenario_class(AgentPolicyHead)(
-                    **part_arguments
-                )
+                agent_dict["policy_head"] = build_part(AgentPolicyHead)
                 if use_critic:
-                    agent_dict["value_head"] = get_scenario_class(AgentValueHead)(
-                        **part_arguments
-                    )
+                    agent_dict["value_head"] = build_part(AgentValueHead)
         if params.trainer == TrainerType.SOLO_AGENT or (
             params.pretrain_agents and not agent_params.is_random
         ):
             if agent_params.is_random:
                 raise ValueError("Cannot use random agents with solo agent trainer.")
-            agent_dict["solo_head"] = get_scenario_class(SoloAgentHead)(
-                **part_arguments
-            )
-        if params.trainer == TrainerType.PURE_TEXT_EI:
-            agent_dict["whole"] = get_scenario_class(WholeAgent)(**part_arguments)
+            agent_dict["solo_head"] = build_part(SoloAgentHead)
+        if use_whole_agent:
+            agent_dict["whole"] = build_part(WholeAgent)
 
-        agents[agent_name] = get_scenario_class(Agent)(
+        agents[agent_name] = get_scenario_class(Agent, agent_name=agent_name)(
             params=params, agent_name=agent_name, **agent_dict
         )
 
@@ -571,7 +569,7 @@ def _build_components_for_rl_trainer(
     """
 
     # Check if we need a critic and if it shares a body with the actor
-    use_critic, use_single_body = check_if_critic_and_single_body(params)
+    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(params)
 
     additional_rl_components = {}
 
@@ -592,47 +590,57 @@ def _build_components_for_rl_trainer(
     )
 
     # Create the combined agents
-    if use_single_body:
-        additional_rl_components["combined_body"] = get_scenario_class(CombinedBody)(
+    if use_whole_agent:
+        additional_rl_components["combined_whole"] = get_scenario_class(CombinedWhole)(
             params=params,
             settings=settings,
             protocol_handler=protocol_handler,
-            bodies={name: agents[name].body for name in params.agents},
+            wholes={name: agents[name].whole for name in params.agents},
         )
     else:
-        additional_rl_components["combined_policy_body"] = get_scenario_class(
-            CombinedBody
-        )(
-            params=params,
-            settings=settings,
-            protocol_handler=protocol_handler,
-            bodies={name: agents[name].policy_body for name in params.agents},
-        )
-        if use_critic:
-            additional_rl_components["combined_value_body"] = get_scenario_class(
+        if use_single_body:
+            additional_rl_components["combined_body"] = get_scenario_class(
                 CombinedBody
             )(
                 params=params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                bodies={name: agents[name].value_body for name in params.agents},
+                bodies={name: agents[name].body for name in params.agents},
             )
-    additional_rl_components["combined_policy_head"] = get_scenario_class(
-        CombinedPolicyHead
-    )(
-        params=params,
-        settings=settings,
-        protocol_handler=protocol_handler,
-        policy_heads={name: agents[name].policy_head for name in params.agents},
-    )
-    if use_critic:
-        additional_rl_components["combined_value_head"] = get_scenario_class(
-            CombinedValueHead
+        else:
+            additional_rl_components["combined_policy_body"] = get_scenario_class(
+                CombinedBody
+            )(
+                params=params,
+                settings=settings,
+                protocol_handler=protocol_handler,
+                bodies={name: agents[name].policy_body for name in params.agents},
+            )
+            if use_critic:
+                additional_rl_components["combined_value_body"] = get_scenario_class(
+                    CombinedBody
+                )(
+                    params=params,
+                    settings=settings,
+                    protocol_handler=protocol_handler,
+                    bodies={name: agents[name].value_body for name in params.agents},
+                )
+        additional_rl_components["combined_policy_head"] = get_scenario_class(
+            CombinedPolicyHead
         )(
             params=params,
             settings=settings,
             protocol_handler=protocol_handler,
-            value_heads={name: agents[name].value_head for name in params.agents},
+            policy_heads={name: agents[name].policy_head for name in params.agents},
         )
+        if use_critic:
+            additional_rl_components["combined_value_head"] = get_scenario_class(
+                CombinedValueHead
+            )(
+                params=params,
+                settings=settings,
+                protocol_handler=protocol_handler,
+                value_heads={name: agents[name].value_head for name in params.agents},
+            )
 
     return additional_rl_components

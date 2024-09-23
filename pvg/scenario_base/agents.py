@@ -34,7 +34,7 @@ from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
-from pvg.utils.params import check_if_critic_and_single_body
+from pvg.utils.params import get_agent_part_flags
 from pvg.utils.torch import apply_orthogonal_initialisation
 
 
@@ -1005,7 +1005,7 @@ class Agent(ABC):
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
     def _body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         network_suffix = "network"
         if self.params.functionalize_modules:
             network_suffix += "_params"
@@ -1020,7 +1020,7 @@ class Agent(ABC):
                 raise ValueError(f"Unknown part: {part}")
 
     def _non_body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         nums = {"actor": "1-9", "critic": "0-9"}
         network_suffix = "network"
         if self.params.functionalize_modules:
@@ -1037,7 +1037,7 @@ class Agent(ABC):
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.named_parameters(), self.value_body.named_parameters()
@@ -1046,7 +1046,7 @@ class Agent(ABC):
 
     @property
     def _body_parameters(self) -> Iterable[TorchParameter]:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.parameters(), self.value_body.parameters()

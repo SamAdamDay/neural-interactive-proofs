@@ -20,3 +20,20 @@ class ImageClassificationParameters(SubParameters):
 
     num_block_groups: int = 1
     initial_num_channels: int = 16
+
+
+@dataclass
+class CodeValidationParameters(SubParameters):
+    """Additional parameters for the code validation task.
+
+    Parameters
+    ----------
+    app_difficulty : str
+        The difficulty level of the APPS dataset, if using.
+    app_solution_number : int
+        Each question in the APPS dataset has multiple solutions. This parameter
+        specifies which solution to use.
+    """
+
+    apps_difficulty: str = "interview"
+    apps_solution_number: int = 0

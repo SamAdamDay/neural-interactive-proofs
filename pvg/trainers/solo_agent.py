@@ -16,16 +16,16 @@ from torch.optim import Adam, Optimizer
 from tensordict import TensorDict
 from tensordict.nn import TensorDictSequential
 
-from pvg.scenario_base.data import DataLoader, Dataset
+from pvg.scenario_base.data import TensorDictDataLoader, Dataset
 from pvg.scenario_base.agents import Agent
-from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
+from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
 
 
 @register_trainer(TrainerType.SOLO_AGENT)
-class SoloAgentTrainer(Trainer):
-    """Trainer for training agents in isolation.
+class SoloAgentTrainer(TensorDictTrainer):
+    """Trainer for training tensordict agents in isolation.
 
     Parameters
     ----------
@@ -157,7 +157,7 @@ class SoloAgentTrainer(Trainer):
             optimizers[agent_name] = Adam(model_param_dict, eps=1e-5)
 
         # Create the data loaders
-        train_dataloader = DataLoader(
+        train_dataloader = TensorDictDataLoader(
             train_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=True,
@@ -249,7 +249,7 @@ class SoloAgentTrainer(Trainer):
             The logger to use.
         """
 
-        test_loader = DataLoader(
+        test_loader = TensorDictDataLoader(
             test_dataset,
             batch_size=self.params.solo_agent.batch_size,
             shuffle=False,

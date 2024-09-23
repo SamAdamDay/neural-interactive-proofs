@@ -12,7 +12,7 @@ import numpy as np
 
 from pvg.parameters import Parameters, SoloAgentParameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import DataLoader
+from pvg.scenario_base import TensorDictDataLoader
 from pvg.factory import build_scenario_instance
 from pvg.utils.data import max_length_iterator
 from pvg.timing.timeables import Timeable, register_timeable
@@ -107,7 +107,7 @@ class ModelTimeable(Timeable, ABC):
             The profiler to run the model with.
         """
 
-        dataloader = DataLoader(
+        dataloader = TensorDictDataLoader(
             self.scenario_instance.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,

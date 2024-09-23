@@ -1,6 +1,7 @@
 """The graph isomorphism RL environment."""
 
 from typing import Optional
+from functools import cached_property
 
 import torch
 from torch import Tensor
@@ -18,7 +19,7 @@ from torchrl.data.tensor_specs import (
 from einops import rearrange
 
 from pvg.parameters import ScenarioType
-from pvg.scenario_base import Environment, TensorDictEnvironment
+from pvg.scenario_base import Environment, TensorDictEnvironment, TensorDictDataset
 from pvg.factory import register_scenario_class
 from pvg.utils.types import TorchDevice
 
@@ -198,7 +199,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
-    dataset : Dataset
+    dataset : TensorDictDataset
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.

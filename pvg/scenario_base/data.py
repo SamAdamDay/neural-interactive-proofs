@@ -9,6 +9,7 @@ import os
 from textwrap import indent
 from pathlib import Path
 import json
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -18,15 +19,19 @@ from torch.utils.data.dataloader import (
     _SingleProcessDataLoaderIter,
     _MultiProcessingDataLoaderIter,
 )
+from torch.utils.data.sampler import BatchSampler, RandomSampler, SequentialSampler
 
 from tensordict import TensorDict, MemoryMappedTensor
 from tensordict.utils import _td_fields, IndexType
+
+from numpy.typing import NDArray
 
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.types import TorchDevice
 from pvg.utils.data import is_nested_key
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 class CachedPretrainedEmbeddingsNotFound(Exception):
@@ -39,6 +44,42 @@ class CachedPretrainedEmbeddingsNotFound(Exception):
 
 class Dataset(ABC):
     """Base class for all datasets.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters for the experiment.
+    settings : ExperimentSettings
+        The settings for the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    train : bool
+        Whether to load the training or test set.
+    """
+
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        train: bool = True,
+    ):
+        self.params = params
+        self.settings = settings
+        self.protocol_handler = protocol_handler
+        self.train = train
+
+    @abstractmethod
+    def __getitem__(self, index: IndexType) -> Any:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+class TensorDictDataset(Dataset, ABC):
+    """Base class for datasets based on tensordicts.
 
     The dataset is stored a as a memory-mapped tensordict. See
     https://pytorch.org/tensordict/saving.html
@@ -72,10 +113,12 @@ class Dataset(ABC):
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
-        self.params = params
-        self.settings = settings
-        self.protocol_handler = protocol_handler
-        self.train = train
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            train=train,
+        )
 
         # Download the raw data if this is implemented
         try:
@@ -106,6 +149,10 @@ class Dataset(ABC):
         self._pretrained_embeddings = TensorDict(
             {}, batch_size=[], device=self._main_data.device
         )
+
+    def _download(self):
+        """Download the raw data."""
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -378,6 +425,9 @@ class Dataset(ABC):
     # All of the logic for getting multiple items is performed in __getitem__
     __getitems__ = __getitem__
 
+    # All of the logic for getting multiple items is performed in __getitem__
+    __getitems__ = __getitem__
+
     def __len__(self) -> int:
         return len(self._main_data)
 
@@ -390,6 +440,26 @@ class Dataset(ABC):
         is_shared_str = indent(f"is_shared={self._main_data.is_shared()}", 4 * " ")
         string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
         return f"{type(self).__name__}(\n{string})"
+
+
+class NestedArrayDictDataset(Dataset, ABC):
+    """Base class for all datasets based on nested array dicts.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters for the experiment.
+    settings : ExperimentSettings
+        The settings for the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    train : bool
+        Whether to load the training or test set.
+    """
+
+    @abstractmethod
+    def __getitem__(self, index: IndexType) -> NestedArrayDict | NDArray:
+        pass
 
 
 class TensorDictSingleProcessDataLoaderIter(_SingleProcessDataLoaderIter):
@@ -412,18 +482,18 @@ class TensorDictSingleProcessDataLoaderIter(_SingleProcessDataLoaderIter):
         return data
 
 
-class DataLoader(TorchDataLoader):
-    """The dataloader class, which may be subclassed to add functionality.
+class TensorDictDataLoader(TorchDataLoader):
+    """Dataloader class for TensorDict datasets.
 
-    Works with a `Dataset` subclass. The dataloader will yield tensordicts.
+    Works with a `TensorDictDataset` subclass. The dataloader will yield tensordicts.
 
     Parameters
     ----------
-    dataset : Dataset
+    dataset : TensorDictDataset
         The dataset to load.
     """
 
-    def __init__(self, dataset: Dataset, **kwargs):
+    def __init__(self, dataset: TensorDictDataset, **kwargs):
         collate_fn = kwargs.pop("collate_fn", lambda x: x)
         super().__init__(dataset, collate_fn=collate_fn, **kwargs)
 
@@ -432,3 +502,35 @@ class DataLoader(TorchDataLoader):
             return TensorDictSingleProcessDataLoaderIter(self)
         else:
             return _MultiProcessingDataLoaderIter(self)
+
+
+class NestedArrayDictDataLoader(TorchDataLoader):
+    """Dataloader class for NestedArrayDict datasets.
+
+    Parameters
+    ----------
+    dataset : NestedArrayDictDataset
+        The dataset to load.
+    """
+
+    def __init__(
+        self,
+        dataset: NestedArrayDictDataset,
+        batch_size: int | None = 1,
+        shuffle: bool = False,
+        drop_last: bool = False,
+        generator: torch.Generator | None = None,
+        **kwargs,
+    ):
+        if shuffle:
+            sampler = RandomSampler(dataset, generator=generator)
+        else:
+            sampler = SequentialSampler(dataset)
+        sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=drop_last)
+
+        super().__init__(
+            dataset,
+            batch_size=None,
+            sampler=sampler,
+            **kwargs,
+        )

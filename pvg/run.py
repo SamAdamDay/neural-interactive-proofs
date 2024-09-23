@@ -22,11 +22,13 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
+from pvg.utils.env import load_env_once
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 from pvg.protocols import build_protocol_handler
 from pvg.stat_logger import WandbStatLogger, DummyStatLogger
 import pvg.graph_isomorphism
 import pvg.image_classification
+import pvg.code_validation
 
 
 def run_experiment(
@@ -110,6 +112,9 @@ def run_experiment(
         number of iterations possible and then exit. This is useful for testing that the
         experiment runs without errors.
     """
+
+    # Load the environment variables.
+    load_env_once()
 
     # Set up Weights & Biases.
     if use_wandb:
@@ -238,6 +243,9 @@ def prepare_experiment(
     prepared_experiment_info : PreparedExperimentInfo
         Information about the prepared experiment.
     """
+
+    # Load the environment variables.
+    load_env_once()
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"

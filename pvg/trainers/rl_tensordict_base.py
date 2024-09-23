@@ -31,7 +31,7 @@ from pvg.parameters import (
     ContiguousPeriodicUpdateSchedule,
 )
 from pvg.experiment_settings import ExperimentSettings
-from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
+from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
 from pvg.trainers.solo_agent import SoloAgentTrainer
 from pvg.model_cache import (
     cached_models_exist,
@@ -74,7 +74,7 @@ def update_schedule_iterator(schedule: AgentUpdateSchedule):
         raise ValueError(f"Unknown update schedule: {schedule}")
 
 
-class ReinforcementLearningTrainer(Trainer, ABC):
+class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
     """Base class for all reinforcement learning trainers which use tensordicts.
 
     Parameters
@@ -328,18 +328,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.rl.frames_per_batch,
-            total_frames=self.params.rl.frames_per_batch
+            frames_per_batch=self.train_environment.frames_per_batch,
+            total_frames=self.train_environment.frames_per_batch
             * self.params.rl.num_iterations,
         )
 
         test_collector = SyncDataCollector(
-            self.train_environment,
+            self.test_environment,
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.rl.frames_per_batch,
-            total_frames=self.params.rl.frames_per_batch
+            frames_per_batch=self.test_environment.frames_per_batch,
+            total_frames=self.test_environment.frames_per_batch
             * self.params.rl.num_test_iterations,
         )
 
@@ -360,7 +360,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         """
         return ReplayBuffer(
             storage=LazyTensorStorage(
-                self.params.rl.frames_per_batch, device=self.device
+                self.train_environment.frames_per_batch, device=self.device
             ),
             sampler=SamplerWithoutReplacement(),
             batch_size=self.params.rl.minibatch_size,
@@ -730,7 +730,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         total_steps = 0
         for _ in range(self.params.rl.num_epochs):
             for _ in range(
-                self.params.rl.frames_per_batch // self.params.rl.minibatch_size
+                self.train_environment.frames_per_batch // self.params.rl.minibatch_size
             ):
                 # Sample a minibatch from the replay buffer
                 sub_data = self.replay_buffer.sample()

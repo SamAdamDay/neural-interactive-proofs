@@ -4,7 +4,7 @@ from torchrl.objectives.value import GAE
 from torchrl.objectives import ValueEstimators
 
 from pvg.rl_objectives import ClipPPOLossImproved, KLPENPPOLossImproved
-from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
+from pvg.trainers.rl_tensordict_base import ReinforcementLearningTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType, PpoLossType
 

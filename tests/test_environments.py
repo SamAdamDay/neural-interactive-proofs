@@ -10,7 +10,7 @@ from torchrl.envs.utils import check_env_specs
 
 from einops import rearrange
 
-from pvg.scenario_base import Environment, Dataset
+from pvg.scenario_base import Environment, TensorDictDataset
 from pvg.parameters import (
     Parameters,
     ScenarioType,
@@ -50,7 +50,7 @@ from pvg.protocols import build_protocol_handler
 )
 def test_environment_specs(
     scenario_type: ScenarioType,
-    dataset_class: type[Dataset],
+    dataset_class: type[TensorDictDataset],
     environment_class: type[Environment],
 ):
     """Test that the environment has the correct specs.
@@ -59,7 +59,7 @@ def test_environment_specs(
     ----------
     scenario_type : ScenarioType
         The scenario to test.
-    dataset_class : type[Dataset]
+    dataset_class : type[TensorDictDataset]
         The dataset class to use for the scenario.
     environment_class : type[Environment]
         The environment class to use for the scenario.
@@ -172,6 +172,7 @@ def test_graph_isomorphism_environment_step():
                 batch_size=(batch_size, 2),
             ),
             done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
+            terminated=torch.zeros(batch_size, dtype=torch.bool),
         ),
         batch_size=batch_size,
     )
@@ -343,6 +344,7 @@ def test_image_classification_environment_step():
                 batch_size=(batch_size, 2),
             ),
             done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
+            terminated=torch.zeros(batch_size, dtype=torch.bool),
         ),
         batch_size=batch_size,
     )

@@ -6,7 +6,7 @@ from torch import nn
 
 from pvg.parameters import Parameters
 from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base.data import Dataset
+from pvg.scenario_base.data import TensorDictDataset
 from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
@@ -42,13 +42,13 @@ class PretrainedModel(ABC):
 
     @abstractmethod
     def generate_dataset_embeddings(
-        self, datasets: Iterable[Dataset], delete_model: bool = True
+        self, datasets: Iterable[TensorDictDataset], delete_model: bool = True
     ) -> torch.Tensor:
         """Load the model and generate embeddings for the datasets
 
         Parameters
         ----------
-        datasets : Iterable[Dataset]
+        datasets : Iterable[TensorDictDataset]
             The datasets to generate embeddings for
         delete_model : bool, default=True
             Whether to delete the model after generating embeddings

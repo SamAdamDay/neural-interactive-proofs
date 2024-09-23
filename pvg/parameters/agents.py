@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import dataclasses
 
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
-from pvg.parameters.base import SubParameters, ParameterValue
+from pvg.parameters.base import BaseParameters, SubParameters, ParameterValue
 from pvg.parameters.types import ActivationType, ImageBuildingBlockType
 from pvg.parameters.update_schedule import (
     AgentUpdateSchedule,
@@ -379,8 +379,8 @@ class ImageClassificationAgentParameters(AgentParameters):
 
 
 @dataclass
-class TextClassificationAgentParameters(AgentParameters):
-    """Additional parameters for agents in the text classification experiment.
+class CodeValidationAgentParameters(AgentParameters):
+    """Additional parameters for agents in the code validation experiment.
 
     Parameters
     ----------
@@ -388,6 +388,9 @@ class TextClassificationAgentParameters(AgentParameters):
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.
+    use_dummy_api : bool
+        Whether to use a dummy API instead of the real API. This is useful for testing
+        the agent without making real API requests.
     max_tokens_per_message : int
         The maximum number of tokens which the model is allowed to generate in a single
         message.
@@ -398,9 +401,14 @@ class TextClassificationAgentParameters(AgentParameters):
 
     model_provider: Literal["OpenAI"] = "OpenAI"
     model_name: str = "gpt-4o-mini"
+    use_dummy_api: bool = False
 
     max_tokens_per_message: int = 512
     num_invalid_generation_retries: int = 5
+
+    @classmethod
+    def construct_test_params(cls) -> "CodeValidationAgentParameters":
+        return cls(use_dummy_api=True)
 
 
 class AgentsParameters(dict[str, AgentParameters], ParameterValue):

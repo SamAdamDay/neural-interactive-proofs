@@ -1,17 +1,19 @@
-"""Text classification agent components.
+"""Code validation agent components.
 
-To integrate easily into the codebase, the text classification agents a split into
+To integrate easily into the codebase, the code validation agents a split into
 three parts: the body, the policy head, and the value head. However, for text
 classification, the split is not necessary, so only the policy head actually does
 anything. The body and value head return the input data unchanged.
 """
 
-from abc import ABC
-from typing import Optional, Literal
+from abc import ABC, abstractmethod
+from typing import Optional, Literal, ClassVar
 from functools import cached_property
 import importlib.resources
 from string import Template
 from itertools import product
+from dataclasses import dataclass
+from random import randrange
 
 from torch import from_numpy
 
@@ -24,10 +26,10 @@ from jaxtyping import Float, Int, Bool
 
 from openai import OpenAI
 
-from pvg.scenario_base import WholeAgent, RandomWholeAgent, CombinedWhole
+from pvg.scenario_base import WholeAgent, RandomWholeAgent, CombinedWhole, Agent
 from pvg.parameters import (
     Parameters,
-    TextClassificationAgentParameters,
+    CodeValidationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
     InteractionProtocolType,
@@ -37,8 +39,10 @@ from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype
+from pvg.utils.env import load_env_once
+from pvg.utils.string import random_string
 
-TC_SCENARIO = ScenarioType.TEXT_CLASSIFICATION
+CV_SCENARIO = ScenarioType.CODE_VALIDATION
 
 
 class GenerationError(Exception, ABC):
@@ -76,32 +80,40 @@ class InvalidDecisionError(InvalidResponseError):
     """Raised when the agent's decision is invalid (i.e. not accept or reject)"""
 
 
-class TextClassificationWholeAgent(WholeAgent, ABC):
-    """Base class for text classification agent parts."""
+class CodeValidationWholeAgent(WholeAgent, ABC):
+    """Base class for code validation agent parts."""
 
-    _visible_message_channel_mask: Optional[Bool[NDArray, "channel"]] = None
+    _visible_message_channel_mask: Optional[Bool[np.ndarray, "channel"]] = None
 
     @cached_property
-    def visible_message_channel_mask(self) -> Bool[NDArray, "channel"]:
+    def visible_message_channel_mask(self) -> Bool[np.ndarray, "channel"]:
         """The mask for the message channels visible to the agent."""
         return super().visible_message_channel_mask.cpu().detach().numpy()
 
+    @abstractmethod
+    def forward(self, data: NestedArrayDict) -> NestedArrayDict:
+        """Forward pass through the agent"""
 
-@register_scenario_class(TC_SCENARIO, WholeAgent, {"model_provider": "OpenAI"})
-class OpenAiWholeAgent(TextClassificationWholeAgent):
-    """The whole agent for text classification, using OpenAI's API."""
+    def __call__(self, data: NestedArrayDict) -> NestedArrayDict:
+        return self.forward(data)
 
-    agent_params: TextClassificationAgentParameters
+
+@register_scenario_class(CV_SCENARIO, WholeAgent, {"model_provider": "OpenAI"})
+class OpenAiWholeAgent(CodeValidationWholeAgent):
+    """The whole agent for code validation, using OpenAI's API."""
+
+    agent_params: CodeValidationAgentParameters
 
     agent_level_in_keys = ["active_mask"]
-    env_level_in_keys = ["message_history", "problem", "solution"]
-    agent_level_out_keys = ["message", "decision"]
-    env_level_out_keys = ["retry_count", "token_limit"]
+    env_level_in_keys = ["message_history", "question", "solution", "round"]
+    agent_level_out_keys = ["message", "decision", "retry_count", "token_limit"]
 
     @property
     def client(self) -> OpenAI:
         """The OpenAI client to use for interacting with the OpenAI API."""
-        return self.settings.openai_client
+        if self._openai_client is None:
+            self._openai_client = OpenAI()
+        return self._openai_client
 
     def __init__(
         self,
@@ -117,11 +129,15 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             protocol_handler=protocol_handler,
         )
 
+        # Make sure the environment variables are loaded, so that we can access the
+        # OpenAI API key
+        load_env_once()
+
         self.model_name = self.agent_params.model_name
 
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
-            "pvg.text_classification.prompt_templates"
+            "pvg.code_validation.prompt_templates"
         )
         if self.is_verifier:
             template_filename = "verifier_system_prompt.txt"
@@ -132,6 +148,8 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
         self.system_template = Template(
             prompt_template_traversable.joinpath(template_filename).read_text()
         )
+
+        self._openai_client: Optional[OpenAI] = None
 
     def forward(self, data: NestedArrayDict) -> NestedArrayDict:
         """Forward pass through the agent policy head.
@@ -144,7 +162,7 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             - "round" (...): The current round number.
             - "message_history" (... round channel): The history of messages exchanged
                 between the agents in each channel.
-            - "problem" (...): The problem text.
+            - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
             - "active_mask" (... channel): A boolean array indicating whether the agent
                 is active in each channel.
@@ -171,7 +189,7 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
                 message=np.full(
                     (*batch_size, self.num_visible_message_channels),
                     None,
-                    dtype=NumpyStringDtype(),
+                    dtype=NumpyStringDtype,
                 ),
                 decision=np.full(batch_size, 2, dtype=np.int32),
                 retry_count=np.zeros(
@@ -184,7 +202,7 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             batch_size=batch_size,
         )
 
-        for batch_id in product(range(dim) for dim in batch_size):
+        for batch_id in product(*(range(dim) for dim in batch_size)):
             for channel_id, channel_name in enumerate(
                 self.protocol_handler.message_channel_names
             ):
@@ -194,10 +212,12 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
                 # Generate and store the next message and decision
                 next_message, decision, retry_count, warning = (
                     self._generate_next_message_and_decision(
-                        message_history=data["message_history"][*batch_id, channel_id],
+                        message_history=data["message_history"][
+                            *batch_id, :, channel_id
+                        ],
                         round=data["round"][batch_id],
                         channel_name=channel_name,
-                        problem=data["problem"][batch_id],
+                        question=data["question"][batch_id],
                         solution=data["solution"][batch_id],
                     )
                 )
@@ -212,10 +232,10 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
 
     def _generate_next_message_and_decision(
         self,
-        message_history: list[str],
+        message_history: NDArray,
         round: int,
         channel_name: str,
-        problem: str,
+        question: str,
         solution: str,
     ) -> tuple[str | None, int, int, Literal["max_tokens"] | None]:
         """Generate the next message and decision for the agent, with retries.
@@ -229,13 +249,13 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
 
         Parameters
         ----------
-        message_history : list[str]
-            The list of messages in the chat history.
+        message_history : NDArray
+            The array of messages in the chat history.
         round : int
             The current round number.
         channel_name : str
             The name of the message channel.
-        problem : str
+        question : str
             The problem text.
         solution : str
             The proposed solution text.
@@ -270,7 +290,7 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             message_history=message_history,
             round_id=round,
             channel_name=channel_name,
-            problem=problem,
+            question=question,
             solution=solution,
         )
 
@@ -278,16 +298,11 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             retry: int,
         ) -> tuple[str | None, int, Literal["max_tokens"] | None]:
 
-            completion = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=chat_messages_prompt,
-                max_tokens=self.agent_params.max_tokens_per_message,
-            )
+            completion_text, finish_reason = self._call_api(chat_messages_prompt)
 
             warning = None
 
             # Validate the reason for finishing the generation
-            finish_reason = completion.choices[0].finish_reason
             if finish_reason == "content_filter":
                 raise ContentFilterError(retry)
             elif finish_reason == "length":
@@ -295,17 +310,18 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
             elif finish_reason != "stop":
                 raise UnknownFinishReasonError(retry, finish_reason)
 
-            completion_text = completion.choices[0].message.content
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.startswith("Question: "):
+            if completion_text.startswith("Question: ") or completion_text.startswith(
+                "Answer: "
+            ):
                 return completion_text, 2, retry, warning
             elif completion_text.startswith("Decision: "):
                 if completion_text == "Decision: accept":
-                    return None, 1, retry, warning
+                    return completion_text, 1, retry, warning
                 elif completion_text == "Decision: reject":
-                    return None, 0, retry, warning
+                    return completion_text, 0, retry, warning
                 else:
                     raise InvalidDecisionError(retry)
             else:
@@ -319,25 +335,65 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
                 if retry == self.agent_params.num_invalid_generation_retries - 1:
                     raise e
 
+    def _call_api(
+        self,
+        chat_messages_prompt: list[dict[Literal["role", "content"], str]],
+    ) -> tuple[str, Literal["stop", "content_filter", "length"]]:
+        """Call the OpenAI API to generate the next message.
+
+        Parameters
+        ----------
+        chat_messages_prompt : list[dict[str, str]]
+            The message history to feed to the API. A list of dicts with keys "role"
+            and "content".
+
+        Returns
+        -------
+        completion_text : str
+            The text of the completion generated by the API.
+        finish_reason : Literal["stop", "content_filter", "length"]
+            The reason for finishing the generation.
+        """
+
+        if self.agent_params.use_dummy_api:
+            if chat_messages_prompt[-1]["content"].startswith("Question: "):
+                return f"Answer: {random_string(20)}", "stop"
+            else:
+                output_type = randrange(3)
+                if output_type == 0:
+                    return "Decision: reject", "stop"
+                elif output_type == 1:
+                    return "Decision: accept", "stop"
+                else:
+                    return f"Question: {random_string(20)}", "stop"
+        else:
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=chat_messages_prompt,
+                max_tokens=self.agent_params.max_tokens_per_message,
+            )
+            choice = completion.choices[0]
+            return choice.message.content, choice.finish_reason
+
     def _build_chat_messages_prompt(
         self,
-        message_history: list[str],
+        message_history: NDArray,
         round_id: int,
         channel_name: str,
-        problem: str,
+        question: str,
         solution: str,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
 
         Parameters
         ----------
-        message_history : list[str]
+        message_history : NDArray
             The list of messages in the chat history.
         round : int
             The current round number.
         channel_name : str
             The name of the message channel.
-        problem : str
+        question : str
             The problem text.
         solution : str
             The proposed solution text.
@@ -350,35 +406,51 @@ class OpenAiWholeAgent(TextClassificationWholeAgent):
 
         # First add the system prompt
         system_prompt = self.system_template.substitute(
-            problem=problem,
+            question=question,
             solution=solution,
-            max_questions=self.protocol_handler.max_verifier_turns,
+            max_questions=self.protocol_handler.max_verifier_turns - 1,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
 
         # Then add the chat history, with messages from the current agent
-        for round_id in range(message_history):
+        for round_id, message in enumerate(message_history):
+            if message is None:
+                break
             if self.protocol_handler.can_agent_be_active(
                 self.agent_name, round_id, channel_name
             ):
                 role = "assistant"
             else:
                 role = "user"
-            chat_messages.append(dict(role=role, content=message_history[round_id]))
+            chat_messages.append(dict(role=role, content=str(message)))
 
         return chat_messages
 
+    def __getstate__(self) -> dict[str, any]:
+        """Get the state of the object for pickling.
 
-@register_scenario_class(TC_SCENARIO, RandomWholeAgent)
-class TextClassificationRandomAgentPolicyHead(
-    TextClassificationWholeAgent, RandomWholeAgent
-):
-    """Random agent for text classification, yielding random strings."""
+        We don't pickle the OpenAI client, as it is not picklable.
+
+        Returns
+        -------
+        state : dict[str, any]
+            The state of the object.
+        """
+
+        state = self.__dict__
+        state["_openai_client"] = None
+
+        return state
 
 
-@register_scenario_class(TC_SCENARIO, CombinedWhole)
-class TextClassificationCombinedWholeAgent(CombinedWhole):
-    """Module which combines all agents for text classification."""
+@register_scenario_class(CV_SCENARIO, RandomWholeAgent)
+class CodeValidationRandomAgentPolicyHead(CodeValidationWholeAgent, RandomWholeAgent):
+    """Random agent for code validation, yielding random strings."""
+
+
+@register_scenario_class(CV_SCENARIO, CombinedWhole)
+class CodeValidationCombinedWholeAgent(CombinedWhole):
+    """Module which combines all agents for code validation."""
 
     def forward(self, data: NestedArrayDict) -> NestedArrayDict:
         """Run the forward pass through all agent parts and combine the outputs.
@@ -391,7 +463,7 @@ class TextClassificationCombinedWholeAgent(CombinedWhole):
             - "round" (...): The current round number.
             - "message_history" (... round channel): The history of messages exchanged
                 between the agents in each channel.
-            - "problem" (...): The problem text.
+            - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
 
         Returns
@@ -404,13 +476,18 @@ class TextClassificationCombinedWholeAgent(CombinedWhole):
               agent.
             - ("agents", "decision") (... agent): The decision made by the agent. This
               is either 0 (reject), 1 (accept) or 2 (no decision).
+            - ("agents", "retry_count") (... agent channel): The number of retries
+              before the generation was successful for each agent.
+            - ("agents", "token_limit") (... agent channel): A boolean array indicating
+              whether the generation was stopped because the maximum number of tokens
+              was reached for each agent.
         """
 
         # Get the active agent mask for the batch
         active_agent_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
             from_numpy(data["round"])
         )
-        active_agent_mask: Bool[NDArray, "... agent channel"] = (
+        active_agent_mask: Bool[np.ndarray, "... agent channel"] = (
             active_agent_mask.cpu().detach().numpy()
         )
 
@@ -451,5 +528,27 @@ class TextClassificationCombinedWholeAgent(CombinedWhole):
             [whole_outputs[agent_name]["decision"] for agent_name in self.agent_names],
             "agent ... -> ... agent",
         )
+        agents_update["retry_count"] = rearrange(
+            [
+                whole_outputs[agent_name]["retry_count"]
+                for agent_name in self.agent_names
+            ],
+            "agent ... channel -> ... agent channel",
+        )
+        agents_update["token_limit"] = rearrange(
+            [
+                whole_outputs[agent_name]["token_limit"]
+                for agent_name in self.agent_names
+            ],
+            "agent ... channel -> ... agent channel",
+        )
 
-        return data.update(dict(agents=agents_update))
+        data = data.update(dict(agents=agents_update))
+
+        return data
+
+
+@register_scenario_class(CV_SCENARIO, Agent)
+@dataclass
+class CodeValidationAgent(Agent):
+    agent_params: ClassVar[CodeValidationAgentParameters | RandomAgentParameters]
