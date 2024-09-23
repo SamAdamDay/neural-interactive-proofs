@@ -21,7 +21,7 @@ from pvg.parameters import AgentParameters, AGENT_NAMES
 from pvg.factory import build_scenario_instance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import (
-    DataLoader,
+    TensorDictDataLoader,
     TensorDictEnvironment,
     TensorDictAgentPartMixin,
 )
@@ -81,7 +81,9 @@ def test_graph_isomorphism_combined_agents():
     )
 
     # Get the dataloader
-    dataloader = DataLoader(dataset=scenario_instance.train_dataset, batch_size=8)
+    dataloader = TensorDictDataLoader(
+        dataset=scenario_instance.train_dataset, batch_size=8
+    )
 
     # Make sure the combined actor can process a batch
     batch = next(iter(dataloader))

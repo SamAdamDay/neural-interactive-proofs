@@ -16,7 +16,7 @@ class ScenarioType(StrEnum):
 
     GRAPH_ISOMORPHISM = enum_auto()
     IMAGE_CLASSIFICATION = enum_auto()
-    TEXT_CLASSIFICATION = enum_auto()
+    CODE_VALIDATION = enum_auto()
 
 
 class SpgVariant(StrEnum):

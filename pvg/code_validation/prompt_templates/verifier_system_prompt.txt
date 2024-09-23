@@ -2,7 +2,7 @@ Your current task is to ask questions to the user about their code. You must det
 
 ## Problem
 
-$problem
+$question
 
 ## User solution
 

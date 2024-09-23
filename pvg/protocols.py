@@ -25,6 +25,7 @@ from jaxtyping import Int, Bool, Float
 
 from pvg.parameters import Parameters, InteractionProtocolType, Guess
 from pvg.experiment_settings import ExperimentSettings
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 class ProtocolHandler(ABC):
@@ -290,8 +291,8 @@ class ProtocolHandler(ABC):
 
     def step_interaction_protocol(
         self,
-        env_td: TensorDictBase,
-    ) -> tuple[Bool[Tensor, "..."], Float[Tensor, "... agent"]]:
+        env_td: TensorDictBase | NestedArrayDict,
+    ) -> tuple[Bool[Tensor, "..."], Bool[Tensor, "..."], Float[Tensor, "... agent"]]:
         """Take a step in the interaction protocol.
 
         Computes the done signal, reward and next decision restriction.
@@ -300,13 +301,18 @@ class ProtocolHandler(ABC):
 
         Parameters
         ----------
-        env_td : TensorDictBase
-            The current observation and state.
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
 
         Returns
         -------
         done : Bool[Tensor, "..."]
-            A boolean mask indicating whether the episode is done.
+            A boolean mask indicating whether the episode is done because the verifier
+            has guessed.
+        terminated : Bool[Tensor, "..."]
+            A boolean mask indicating whether the episode has been terminated because
+            the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
         """
@@ -317,6 +323,14 @@ class ProtocolHandler(ABC):
         round: Int[Tensor, "..."] = env_td["round"]
         decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
         done: Bool[Tensor, "..."] = env_td["done"]
+        terminated: Bool[Tensor, "..."] = env_td["terminated"]
+
+        if isinstance(env_td, NestedArrayDict):
+            y = torch.from_numpy(y)
+            round = torch.from_numpy(round)
+            decision = torch.from_numpy(decision)
+            done = torch.from_numpy(done)
+            terminated = torch.from_numpy(terminated)
 
         # Get the mask of the batch items where the verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round)
@@ -351,7 +365,7 @@ class ProtocolHandler(ABC):
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
-        done = done | (round >= self.max_message_rounds - 1)
+        terminated = terminated | (round >= self.max_message_rounds - 1)
         reward[verifier_index][
             (round >= self.max_message_rounds - 1) & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
@@ -359,7 +373,7 @@ class ProtocolHandler(ABC):
         # If the verifier has not made a guess and it's their turn, given them a small
         # reward for continuing
         reward[verifier_index][
-            verifier_guess_mask & ~done
+            verifier_guess_mask & ~done & ~terminated
         ] = protocol_params.verifier_no_guess_reward
 
         # Compute the rewards for the provers and add them
@@ -367,7 +381,7 @@ class ProtocolHandler(ABC):
             verifier_decision_made, decision[verifier_index], reward
         )
 
-        return done, reward
+        return done, terminated, reward
 
     def _validate_active_agents(self):
         """Make sure that agents are only active in channels they can see."""

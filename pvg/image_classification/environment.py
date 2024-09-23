@@ -2,6 +2,7 @@
 
 from typing import Optional
 from math import floor
+from functools import cached_property
 
 import torch
 from torch import Tensor
@@ -30,7 +31,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
-    dataset : Dataset
+    dataset : TensorDictDataset
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.

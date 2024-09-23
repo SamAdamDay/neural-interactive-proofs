@@ -14,7 +14,7 @@ from tqdm import tqdm
 from pvg.parameters import Parameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
-from pvg.utils.params import check_if_critic_and_single_body
+from pvg.utils.params import get_agent_part_flags
 
 
 class Trainer(ABC):
@@ -30,6 +30,11 @@ class Trainer(ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    @property
+    def max_message_rounds(self) -> int:
+        """The maximum number of message rounds in the protocol."""
+        return self.scenario_instance.protocol_handler.max_message_rounds
+
     def __init__(
         self,
         params: Parameters,
@@ -42,15 +47,44 @@ class Trainer(ABC):
 
         self._agent_names = self.scenario_instance.protocol_handler.agent_names
 
-        self.device = self.settings.device
-
-        # Check if we need a critic and if it shares a body with the actor
-        self.use_critic, self.use_single_body = check_if_critic_and_single_body(params)
-
     @abstractmethod
     def train(self):
         """Train the agents."""
         pass
+
+    def get_total_num_iterations(self) -> int:
+        """Get the total number of iterations that the trainer will run for.
+
+        This is the sum of the number of iterations declared by methods decorated with
+        `attach_progress_bar`.
+
+        Returns
+        -------
+        total_iterations : int
+            The total number of iterations.
+        """
+        total_iterations = 0
+        for _, method in inspect.getmembers(self, predicate=inspect.ismethod):
+            if hasattr(method, "_num_iterations_func"):
+                total_iterations += method._num_iterations_func(self)
+        return total_iterations
+
+
+class TensorDictTrainer(Trainer, ABC):
+    """Base class for trainers that use tensors and TensorDicts."""
+
+    def __init__(
+        self,
+        params: Parameters,
+        scenario_instance: ScenarioInstance,
+        settings: ExperimentSettings,
+    ):
+        super().__init__(params, scenario_instance, settings)
+
+        self.device = self.settings.device
+
+        # Check if we need a critic and if it shares a body with the actor
+        self.use_critic, self.use_single_body, _ = get_agent_part_flags(params)
 
     def _build_train_context(self, stack: ExitStack) -> list[ContextManager]:
         """Builds the context manager ExitStack for training.
@@ -159,23 +193,6 @@ class Trainer(ABC):
         add_context_manager(torch.no_grad())
 
         return context_managers
-
-    def get_total_num_iterations(self) -> int:
-        """Get the total number of iterations that the trainer will run for.
-
-        This is the sum of the number of iterations declared by methods decorated with
-        `attach_progress_bar`.
-
-        Returns
-        -------
-        total_iterations : int
-            The total number of iterations.
-        """
-        total_iterations = 0
-        for _, method in inspect.getmembers(self, predicate=inspect.ismethod):
-            if hasattr(method, "_num_iterations_func"):
-                total_iterations += method._num_iterations_func(self)
-        return total_iterations
 
 
 class IterationContext:

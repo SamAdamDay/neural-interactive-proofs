@@ -23,7 +23,7 @@ from tensordict import TensorDict
 from pvg.parameters import BinarificationMethodType
 from pvg.parameters import ScenarioType
 from pvg.factory import register_scenario_class
-from pvg.scenario_base import Dataset
+from pvg.scenario_base import Dataset, TensorDictDataset
 from pvg.constants import IC_DATA_DIR
 
 
@@ -162,7 +162,7 @@ class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
 
 
 @register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
-class ImageClassificationDataset(Dataset):
+class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined

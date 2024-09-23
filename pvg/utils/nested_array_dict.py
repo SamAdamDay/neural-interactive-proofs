@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Sequence, Union, ClassVar
+from collections.abc import Iterator
 from textwrap import indent
 from dataclasses import dataclass
 
@@ -14,8 +15,8 @@ from pvg.utils.types import NumpyStringDtype
 class NestedArrayDict:
     """A nested dictionary of numpy arrays.
 
-    A NestedDict behaves similarly to a TensorDict: it allows for nested dictionaries,
-    expects each array have a shape and has a common batch size
+    A NestedDict behaves similarly to a TensorDict: it allows for nested dictionaries
+    and has a common batch size
     """
 
     def __init__(
@@ -59,20 +60,25 @@ class NestedArrayDict:
 
         self._batch_size = value
 
-    def keys(self, include_prefixes: bool = True) -> list[tuple[str, ...] | str]:
-        """Return the all keys, optionally including prefixes.
+    def keys(
+        self, include_prefixes: bool = True, return_all_tuples: bool = False
+    ) -> Iterator[tuple[str, ...] | str]:
+        """An iterator over the all keys, optionally including prefixes.
 
-        Top-level keys are returned as strings, while nested keys are returned as
-        tuples.
+        By default top-level keys are returned as strings, while nested keys are
+        returned as tuples.
 
         Parameters
         ----------
         include_prefixes : bool, default=True
             Whether to include prefixes of the leaf keys.
+        return_all_tuples : bool, default=False
+            If true, all keys will be returned as tuples. Otherwise, single element
+            tuples will be replaced by their items
 
-        Returns
-        -------
-        keys : list[tuple[str, ...] | str]
+        Yields
+        ------
+        key : tuple[str, ...] | str
             The keys of the data. Each key is either a string or a a tuple of strings
             that represents the path to the data in the nested dictionary.
         """
@@ -84,13 +90,39 @@ class NestedArrayDict:
                 for i in range(1, len(key)):
                     tuple_keys.add(key[:i])
 
-        # Convert single-element tuples to strings
         for key in self._tuple_keys:
-            if len(key) == 1:
-                tuple_keys.remove(key)
-                tuple_keys.add(key[0])
+            if len(key) == 1 and not return_all_tuples:
+                yield key[0]
+            else:
+                yield key
 
-        return tuple_keys
+    def items(
+        self, include_prefixes: bool = True, return_all_tuples: bool = False
+    ) -> Iterator[tuple[tuple[str, ...], NDArray]]:
+        """Return an iterator over the items, optionally including prefixes.
+
+        By default top-level keys are returned as strings, while nested keys are returned as
+        tuples.
+
+        Parameters
+        ----------
+        include_prefixes : bool, default=True
+            Whether to include prefixes of the leaf keys.
+        return_all_tuples : bool, default=False
+            If true, all keys will be returned as tuples. Otherwise, single element
+            tuples will be replaced by their items
+
+        Yields
+        ------
+        key : tuple[str, ...]
+            The key of the item.
+        value : NDArray
+            The value of the item.
+        """
+        for key in self.keys(
+            include_prefixes=include_prefixes, return_all_tuples=return_all_tuples
+        ):
+            yield key, self[key]
 
     def leaf_keys(self) -> list[tuple[str, ...]]:
         """Return the leaf keys as tuples.
@@ -166,25 +198,37 @@ class NestedArrayDict:
                 f"{other._batch_size}"
             )
 
-        for key, value in other.items():
+        for key, value in other.items(include_prefixes=True):
             self[key] = value
 
         return self
 
-    def items(self):
-        """Return an iterator over the items of the NestedDict.
+    @classmethod
+    def zeros_like(self, other: "NestedArrayDict") -> "NestedArrayDict":
+        """Create a NestedDict with zeros in the same structure as another NestedDict.
 
-        Yields
-        ------
-        key : tuple[str, ...]
-            The key of the item.
-        value : NDArray
-            The value of the item.
+        Parameters
+        ----------
+        other : NestedArrayDict
+            The NestedArrayDict to copy the structure from.
+
+        Returns
+        -------
+        zero_dict : NestedArrayDict
+            The NestedArrayDict with the same structure as `other`, but with zero
+            arrays.
         """
-        for key in self.keys(include_prefixes=False):
-            yield key, self[key]
+        zero_dict = NestedArrayDict(batch_size=other.batch_size)
+        for key in other.keys(include_prefixes=True):
+            if other[key].dtype == NumpyStringDtype:
+                zero_dict[key] = np.full_like(other[key], None)
+            else:
+                zero_dict[key] = np.zeros_like(other[key])
+        return zero_dict
 
-    def __getitem__(self, index: Any) -> Union["NestedArrayDict", dict[str, str]]:
+    def __getitem__(self, index: Any) -> Union["NestedArrayDict", NDArray]:
+
+        original_index = index
 
         if isinstance(index, str):
             index = (index,)
@@ -206,7 +250,10 @@ class NestedArrayDict:
                     if key[: len(index)] == index
                 ]
                 if len(key_extensions) == 0:
-                    raise IndexError(f"Key {index} not found in {type(self).__name__}")
+                    raise IndexError(
+                        f"Key {original_index!r} not found in {type(self).__name__} with "
+                        f"keys {list(self.keys(include_prefixes=True))}"
+                    )
                 selected = [
                     self._arrays[self._tuple_keys.index(index + key_extension)]
                     for key_extension in key_extensions
@@ -233,9 +280,17 @@ class NestedArrayDict:
                 f"Index {index} is not supported in {type(self).__name__}"
             ) from e
 
+        # Compute the batch size of the selected arrays. TODO: This is inefficient
+        # because it requires allocating memory for an array of shape self.batch_size.
+        # However, it means we can compute batch sizes for any index which numpy can
+        # handle
+        dummy_array = np.empty(self._batch_size, dtype=np.bool_)
+        index_array = dummy_array[index]
+        indexed_batch_size = index_array.shape
+
         # Build a new NestedDict from the selected arrays
         return type(self).from_arrays_and_scalars(
-            selected, self._tuple_keys, batch_size=()
+            selected, self._tuple_keys, batch_size=indexed_batch_size
         )
 
     def __setitem__(self, index: Any, value: Any):
@@ -302,6 +357,11 @@ class NestedArrayDict:
             for i, key in enumerate(self._tuple_keys)
             if i not in index_key_extensions
         ]
+        self._arrays = [
+            array
+            for i, array in enumerate(self._arrays)
+            if i not in index_key_extensions
+        ]
 
         # For new arrays, add the new key and value
         if isinstance(value, np.ndarray):
@@ -310,7 +370,9 @@ class NestedArrayDict:
 
         # For new NestedDicts, add the new keys and values
         else:
-            for key, sub_value in zip(value._tuple_keys, value._table.columns):
+            for key, sub_value in value.items(
+                include_prefixes=True, return_all_tuples=True
+            ):
                 new_tuple_key = index + key
                 self._arrays.append(sub_value)
                 self._tuple_keys.append(new_tuple_key)
@@ -320,6 +382,9 @@ class NestedArrayDict:
             f"Contains not yet implemented for {type(self).__name__}. Use "
             f"`key in string_dict.keys()` instead."
         )
+
+    def __len__(self):
+        return self.batch_size[0]
 
     def __repr__(self):
 
@@ -409,10 +474,19 @@ class NestedArrayDict:
 
         for key, value in data.items():
 
-            if not isinstance(key, str):
+            # Validate and transform the key
+            if isinstance(key, str):
+                key = (key,)
+            elif isinstance(key, tuple):
+                if not all(isinstance(sub_key, str) for sub_key in key):
+                    raise ValueError(
+                        f"Any key in {type(self).__name__} data that is a tuple must "
+                        f"contain only strings, but got {key}."
+                    )
+            else:
                 raise ValueError(
-                    f"Each key in {type(self).__name__} data must be a string, not "
-                    f"{type(key)}"
+                    f"Each key in {type(self).__name__} data must be a string or tuple "
+                    f"of strings, not {type(key)}"
                 )
 
             # If the value is a nested dictionary, recursively create arrays
@@ -422,7 +496,7 @@ class NestedArrayDict:
                     batch_size=batch_size,
                 )
                 for sub_key in sub_tuple_keys:
-                    tuple_keys.append((key,) + sub_key)
+                    tuple_keys.append(key + sub_key)
                 arrays.extend(sub_arrays)
 
             else:
@@ -437,7 +511,7 @@ class NestedArrayDict:
                     )
 
                 arrays.append(value)
-                tuple_keys.append((key,))
+                tuple_keys.append(key)
 
         return tuple_keys, arrays
 
@@ -501,6 +575,88 @@ class NestedArrayDict:
         return shape[: len(self._batch_size)] == self._batch_size
 
 
+def stack_nested_array_dicts(nds: Sequence[NestedArrayDict], dim=0) -> NestedArrayDict:
+    """Stack a sequence of NestedArrayDicts along a new dimension.
+
+    Parameters
+    ----------
+    nds : Sequence[NestedArrayDict]
+        The NestedArrayDicts to stack. All NestedArrayDicts must have the same keys,
+        shapes and batch sizes.
+    dim : int, default=0
+        The dimension to stack along. This must be a non-negative integer at most equal
+        to the number of batch dimensions.
+
+    Returns
+    -------
+    stacked : NestedArrayDict
+        The NestedArrayDict with the stacked arrays. The batch size of the new
+        NestedArrayDict is the batch size of the input NestedArrayDicts with the new
+        dimension added.
+    """
+
+    # Check that all NestedArrayDicts have the same keys
+    expected_keys = set(nds[0].keys(include_prefixes=True))
+    for nd in nds[1:]:
+        if set(nd.keys(include_prefixes=True)) != expected_keys:
+            raise ValueError(
+                f"All NestedArrayDicts must have the same keys, but found "
+                f"{list(nd.keys(include_prefixes=True))} and {list(expected_keys)}"
+            )
+
+    # Stack the arrays
+    nd_dict = {}
+    for key in nds[0].keys(include_prefixes=True):
+        nd_dict[key] = np.stack([nd[key] for nd in nds], axis=dim)
+
+    common_batch_size = nds[0].batch_size
+    stacked_batch_size = (*common_batch_size[:dim], len(nds), *common_batch_size[dim:])
+
+    return NestedArrayDict(nd_dict, batch_size=stacked_batch_size)
+
+
+def concatenate_nested_array_dicts(
+    nds: Sequence[NestedArrayDict], dim=0
+) -> NestedArrayDict:
+    """Concatenate a sequence of NestedArrayDicts along an existing dimension.
+
+    Parameters
+    ----------
+    nds : Sequence[NestedArrayDict]
+        The NestedArrayDicts to concatenate. All NestedArrayDicts must have the same
+        keys, shapes and batch sizes, except for the dimension to concatenate along.
+    dim : int, default=0
+        The dimension to concatenate along. This must be a non-negative integer at most
+        equal to the number of batch dimensions.
+
+    Returns
+    -------
+    concatenated : NestedArrayDict
+        The NestedArrayDict with the concatenated arrays. The batch size of the new
+        NestedArrayDict is the batch size of the input NestedArrayDicts with the
+        concatenated dimension removed.
+    """
+
+    # Check that all NestedArrayDicts have the same keys
+    if not all(set(nd.keys()) == set(nds[0].keys()) for nd in nds):
+        raise ValueError("All NestedArrayDicts must have the same keys")
+
+    # Concatenate the arrays
+    nd_dict = {}
+    for key in nds[0].keys(include_prefixes=True):
+        nd_dict[key] = np.concatenate([nd[key] for nd in nds], axis=dim)
+
+    common_batch_size = nds[0].batch_size
+    dim_length = sum(nd.batch_size[dim] for nd in nds)
+    concatenated_batch_size = (
+        *common_batch_size[:dim],
+        dim_length,
+        *common_batch_size[dim + 1 :],
+    )
+
+    return NestedArrayDict(nd_dict, batch_size=concatenated_batch_size)
+
+
 @dataclass
 class NumpySpec(ABC):
     """Base class for numpy array specifications.
@@ -538,28 +694,28 @@ class NumpyArraySpec(NumpySpec):
 
 
 @dataclass
-class IntArraySpec(NumpySpec):
+class IntArraySpec(NumpyArraySpec):
     """Specification for a single integer numpy array."""
 
     dtype: ClassVar[DTypeLike] = np.int64
 
 
 @dataclass
-class FloatArraySpec(NumpySpec):
+class FloatArraySpec(NumpyArraySpec):
     """Specification for a single float numpy array."""
 
     dtype: ClassVar[DTypeLike] = np.float32
 
 
 @dataclass
-class BoolArraySpec(NumpySpec):
+class BoolArraySpec(NumpyArraySpec):
     """Specification for a single boolean numpy array."""
 
     dtype: ClassVar[DTypeLike] = np.bool
 
 
 @dataclass
-class StringArraySpec(NumpySpec):
+class StringArraySpec(NumpyArraySpec):
     """Specification for a single string numpy array."""
 
     dtype: ClassVar[DTypeLike] = NumpyStringDtype
@@ -584,19 +740,54 @@ class CompositeSpec(NumpySpec):
         for key, spec in specs.items():
             if spec.shape[: len(shape)] != shape:
                 raise ValueError(
-                    f"The shape of the {type(self).__name__} ({shape}) must be a "
-                    f"prefix of the shape of spec {key!r} ({spec.shape})"
+                    f"The shape of the {type(self).__name__} {shape} must be a "
+                    f"prefix of the shape of spec {key!r} {spec.shape}"
                 )
-            if spec.dim_names is not None and dim_names is not None:
-                if spec.dim_names[: len(shape)] != dim_names:
+            if spec.dim_names is not None and self.dim_names is not None:
+                if spec.dim_names[: len(shape)] != self.dim_names:
                     raise ValueError(
-                        f"The dim_names of the {type(self).__name__} ({dim_names}) "
+                        f"The dim_names of the {type(self).__name__} {self.dim_names} "
                         f"must be a prefix of the dim_names of spec {key!r} "
-                        f"({spec.dim_names})"
+                        f"{spec.dim_names}"
                     )
+
+    def __getitem__(self, key: str) -> NumpySpec:
+        return self.specs[key]
+
+    def __setitem__(self, key: str, value: NumpySpec):
+        self.specs[key] = value
 
     def zero(self) -> NestedArrayDict:
         return NestedArrayDict(
             {key: spec.zero() for key, spec in self.specs.items()},
             batch_size=self.shape,
         )
+
+    def keys(self, recurse=False):
+        """Iterate over the keys of the CompositeSpec, optionally recursing to sub-specs
+
+        Parameters
+        ----------
+        recurse : bool, default=False
+            Whether to recurse to sub-specs. In this case, the keys are tuples of
+            strings representing the path to the data in the nested dictionary.
+
+        Yields
+        ------
+        key : str | tuple[str, ...]
+            The key of the spec. If recurse is True, the key is a tuple of strings
+            representing the path to the data in the nested dictionary. Otherwise, the
+            key is a string.
+        """
+
+        if not recurse:
+            for key in self.specs.keys():
+                yield key
+
+        else:
+            for key, spec in self.specs.items():
+                if isinstance(spec, CompositeSpec):
+                    for sub_key in spec.keys(recurse=True):
+                        yield (key,) + sub_key
+                else:
+                    yield key

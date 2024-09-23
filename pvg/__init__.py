@@ -5,6 +5,7 @@ from .parameters import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CodeValidationAgentParameters,
     SoloAgentParameters,
     RlTrainerParameters,
     CommonPpoParameters,

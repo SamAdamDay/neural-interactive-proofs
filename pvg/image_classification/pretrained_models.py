@@ -21,7 +21,7 @@ from timm.data import resolve_data_config, create_transform
 
 from jaxtyping import Float
 
-from pvg.scenario_base.data import DataLoader
+from pvg.scenario_base.data import TensorDictDataLoader
 from pvg.scenario_base.pretrained_models import (
     PretrainedModel,
     register_pretrained_model_class,
@@ -114,7 +114,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
             torch_dataset = dataset.build_torch_dataset(transform=transform)
 
             # Create the dataloader
-            dataloader = DataLoader(
+            dataloader = TensorDictDataLoader(
                 torch_dataset,
                 batch_size=batch_size,
                 shuffle=False,

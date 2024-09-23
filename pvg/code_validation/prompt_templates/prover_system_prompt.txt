@@ -2,7 +2,7 @@ Your current task is to convince the user that the following code is a correct s
 
 ## Problem
 
-$problem
+$question
 
 ## Solution
 

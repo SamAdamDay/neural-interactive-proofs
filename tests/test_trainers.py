@@ -18,7 +18,7 @@ from pvg import (
     LrFactors,
 )
 from pvg.trainers import build_trainer
-from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
+from pvg.trainers.rl_tensordict_base import ReinforcementLearningTrainer
 from pvg.trainers.vanilla_ppo import VanillaPpoTrainer
 from pvg.factory import build_scenario_instance
 

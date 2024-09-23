@@ -1,3 +1,5 @@
+"""Dataset classes for the graph isomorphism experiments."""
+
 import os
 
 import torch
@@ -8,14 +10,14 @@ from torch_geometric.utils import to_dense_adj
 
 from einops import repeat
 
-from pvg.scenario_base import Dataset
+from pvg.scenario_base import Dataset, TensorDictDataset
 from pvg.parameters import ScenarioType
 from pvg.factory import register_scenario_class
 from pvg.constants import GI_DATA_DIR
 
 
 @register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Dataset)
-class GraphIsomorphismDataset(Dataset):
+class GraphIsomorphismDataset(TensorDictDataset):
     """A dataset for the graph isomorphism experiments.
 
     Uses the a pre-generated set of graphs.
