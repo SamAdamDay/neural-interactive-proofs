@@ -92,7 +92,7 @@ def get_openrouter_response(
                         {k: c[k] for k in ["token", "logprob"]}
                         for c in completion["logprobs"]["content"]
                     ]
-                    if log_probs
+                    if log_probs and completion["logprobs"] is not None
                     else None
                 ),
                 "top_logprobs": (
@@ -103,7 +103,7 @@ def get_openrouter_response(
                         ]
                         for c in completion["logprobs"]["content"]
                     ]
-                    if top_logprobs
+                    if top_logprobs and completion["logprobs"] is not None
                     else None
                 ),
             }

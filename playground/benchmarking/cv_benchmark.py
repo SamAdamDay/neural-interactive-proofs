@@ -7,6 +7,7 @@ import argparse
 from pvg.constants import OPENROUTER_API_KEY
 from datetime import datetime, timedelta
 import os
+import tqdm
 
 MODELS = [
     "openai/gpt-4o-mini",
@@ -103,7 +104,7 @@ def guess_if_correct(
             answer_prob = None
             alt_prob = None
 
-            if check_probs:
+            if check_probs and r["log_probs"] is not None and r["log_probs"] != []:
                 for t in reversed(r["log_probs"]):
                     if "yes" in t["token"].lower() or "no" in t["token"].lower():
                         if answer not in t["token"].lower():
@@ -114,7 +115,11 @@ def guess_if_correct(
                         # answer_index = r["log_probs"].index(t)
                         break
 
-            if num_alternatives is not None:
+            if (
+                num_alternatives is not None
+                and r["log_probs"] is not None
+                and r["log_probs"] != []
+            ):
                 top_logprobs = (
                     r["top_logprobs"][r["log_probs"].index(t)]
                     if "top_logprobs" in r
@@ -174,13 +179,15 @@ def evaluate_model(
 
     for split in ["train", "test"]:
 
+        print("Split: {split}\n")
+
         indices = buggy_data[split]["problem_id"]
         sliced_data = data[split].filter(lambda x: x["problem_id"] in indices)
 
         problems_tested = 0
         num_added = 0
 
-        for buggy_datum, datum in zip(buggy_data[split], sliced_data):
+        for buggy_datum, datum in tqdm(zip(buggy_data[split], sliced_data)):
 
             if buggy_datum["problem_id"] != datum["problem_id"]:
                 raise ValueError("The data is not aligned.")
@@ -250,7 +257,7 @@ def evaluate_model(
                                 correct_alt_probs.append(alt_probs[i])
                         else:
                             correct.append(0)
-                            if check_probs:
+                            if check_probs and answer_probs[i] is not None:
                                 incorrect_probs.append(answer_probs[i])
                             if (
                                 num_alternatives is not None
