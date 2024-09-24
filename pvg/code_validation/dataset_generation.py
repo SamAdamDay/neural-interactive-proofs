@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import json
 import os
+import sys
 from math import floor
 from tqdm import tqdm
 import datasets
@@ -14,10 +15,18 @@ import requests
 import multiprocessing
 import argparse
 from openai import OpenAI
-from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY
+from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY, HF_TOKEN
 
-HF_TOKEN = "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"
-
+def suppress_output(func):
+    def wrapper(*args, **kwargs):
+        with open(os.devnull, 'w') as fnull:
+            sys.stdout = fnull
+            sys.stderr = fnull
+            result = func(*args, **kwargs)
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
+        return result
+    return wrapper
 
 def solution_generation_wrapper(
     result,
