@@ -206,14 +206,14 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
             for channel_id, channel_name in enumerate(
                 self.protocol_handler.message_channel_names
             ):
-                if not data["active_mask"][*batch_id, channel_id]:
+                if not data["active_mask"][(*batch_id, channel_id)]:
                     continue
 
                 # Generate and store the next message and decision
                 next_message, decision, retry_count, warning = (
                     self._generate_next_message_and_decision(
-                        message_history=data["message_history"][
-                            *batch_id, :, channel_id
+                        message_history=data["message_history"][batch_id][
+                            :, channel_id
                         ],
                         round=data["round"][batch_id],
                         channel_name=channel_name,
@@ -221,10 +221,10 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
                         solution=data["solution"][batch_id],
                     )
                 )
-                output_data["message"][*batch_id, channel_id] = next_message
+                output_data["message"][(*batch_id, channel_id)] = next_message
                 output_data["decision"][batch_id] = decision
-                output_data["retry_count"][*batch_id, channel_id] = retry_count
-                output_data["token_limit"][*batch_id, channel_id] = (
+                output_data["retry_count"][(*batch_id, channel_id)] = retry_count
+                output_data["token_limit"][(*batch_id, channel_id)] = (
                     warning == "max_tokens"
                 )
 
