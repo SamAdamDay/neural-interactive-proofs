@@ -121,10 +121,11 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         pretrain_agents = combo["pretrain_agents"]
 
     # Create the parameters object
-    if combo["update_spec"] is None:
-        verifier_update_schedule = ConstantUpdateSchedule()
-        prover_update_schedule = ConstantUpdateSchedule()
-    elif len(combo["update_spec"]) == 2:
+    verifier_update_schedule = ConstantUpdateSchedule()
+    prover_update_schedule = ConstantUpdateSchedule()
+    prover0_update_schedule = ConstantUpdateSchedule()
+    prover1_update_schedule = ConstantUpdateSchedule()
+    if isinstance(combo["update_spec"], tuple) and len(combo["update_spec"]) == 2:
         period = combo["update_spec"][0] + combo["update_spec"][1]
         verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=True
@@ -132,7 +133,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         prover_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=False
         )
-    elif len(combo["update_spec"]) == 3:
+    elif isinstance(combo["update_spec"], tuple) and len(combo["update_spec"]) == 3:
         period = sum(combo["update_spec"])
         verifier_update_schedule = ContiguousPeriodicUpdateSchedule(
             period, 0, combo["update_spec"][0]
@@ -173,6 +174,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
             use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
+            update_schedule=prover_update_schedule,
         )
     verifier_params = GraphIsomorphismAgentParameters(
         num_gnn_layers=combo["verifier_num_layers"],
@@ -195,7 +197,6 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         InteractionProtocolType.PVG,
         InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
     ):
-        prover_params.update_schedule = prover_update_schedule
         agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
