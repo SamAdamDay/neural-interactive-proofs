@@ -22,14 +22,14 @@ parser.add_argument(
 parser.add_argument(
     "--num_data",
     type=int,
-    default=100,
+    default=10000,
     help="How many problems the dataset should contain (per split per difficulty level)",
 )
 parser.add_argument(
     "--save_after",
     type=int,
     default=10,
-    help="The number of problems after which to save (and possibly push) the dataset",
+    help="The number of problems added after which to save (and possibly push) the dataset",
 )
 parser.add_argument(
     "--openrouter_api_key",

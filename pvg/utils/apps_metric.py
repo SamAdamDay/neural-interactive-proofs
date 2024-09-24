@@ -6,12 +6,16 @@ from io import StringIO
 import platform
 import sys
 import signal
-from pvg.utils.bugfix import RuntimeModule
 import faulthandler
 import numpy as np
 from typing import Optional, List
 from datetime import datetime
 import json
+import multiprocessing
+
+# import warnings
+# warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
+from pvg.utils.bugfix import RuntimeModule
 
 
 class CODE_TYPE(Enum):
@@ -33,12 +37,41 @@ def handler(signum, frame):
 signal.signal(signal.SIGALRM, handler)
 
 
+def wrapper(result, problem, solution, evaluate, debug):
+
+    # warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
+    try:
+        results, outputs = run_test(
+            problem, test=solution, evaluate=evaluate, debug=debug
+        )
+        result.append((results, outputs))
+    except Exception as e:
+        result.append((None, None))
+
+
 def check_correctness(
     problem, solution, evaluate=None, timeout=30, debug=False, return_outputs=False
 ):
     """Check correctness of code solution with a global timeout.
     The global timeout is to catch some extreme/rare cases not handled by the timeouts
     inside `run_test`"""
+
+    # warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
+
+    # manager = multiprocessing.Manager()
+    # result = manager.list()
+    # p = multiprocessing.Process(target=wrapper, args=(result, problem, solution, evaluate, debug))
+    # p.start()
+    # p.join(timeout)
+
+    # if p.is_alive():
+    #     p.terminate()
+    #     p.join()
+    #     print(f"The function run_test timed out after {timeout} seconds.")
+    #     results, outputs = None, None
+    # else:
+    #     results, outputs = result[0]
+
     # def _temp_run(problem, solution, debug, result):
     #     result.append(run_test(problem, test=solution, debug=debug))
     # manager = multiprocessing.Manager()
@@ -48,6 +81,8 @@ def check_correctness(
     # p.join(timeout=timeout + 1)
     # if p.is_alive():
     #     p.kill()
+
+    ### PREVIOUS CODE BLOCK ###
     try:
         # start_time = datetime.now()
         signal.alarm(timeout)

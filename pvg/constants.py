@@ -43,3 +43,6 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Hugging Face API Key
+HF_TOKEN = "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"

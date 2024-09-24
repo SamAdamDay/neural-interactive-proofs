@@ -1,6 +1,9 @@
 """Replacements for buggy parts of libraries we use."""
 
 # Monkey patch inspect.getargspec to inspect.getfullargspec (RuntimeModule is imported from bugfix for the code validation dataset generation)
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
 import inspect
 
 if not hasattr(inspect, "getargspec"):

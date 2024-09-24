@@ -11,8 +11,38 @@ import re
 import textdistance
 from pvg.utils.apps_metric import check_correctness
 import requests
+import multiprocessing
+import argparse
 from openai import OpenAI
 from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY
+
+HF_TOKEN = "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"
+
+
+def solution_generation_wrapper(
+    result,
+    datum,
+    model,
+    openrouter_api_key,
+    system_prompt,
+    max_modifications,
+    max_attempts=None,
+    debug=False,
+):
+
+    try:
+        buggy_solutions = generate_buggy_solutions(
+            datum,
+            model,
+            openrouter_api_key,
+            system_prompt,
+            max_modifications,
+            max_attempts=max_attempts,
+            debug=debug,
+        )
+        return result.append(buggy_solutions)
+    except Exception as e:
+        result.append([None])
 
 
 def get_openai_response(
@@ -151,12 +181,13 @@ class CodeValidationDatasetConfig:
     split: str | None = None
     fraction_to_modify: float = 0.5
     max_modifications: int = 1
-    num_data: Optional[int] = 100  # per split per difficulty level
+    num_data: Optional[int] = 10000  # per split per difficulty level
     num_problematic_inputs: int = 0
     system_prompt: Optional[str] = None
     max_attempts: int = 10
     local_dir: str = CV_DATA_DIR
     openrouter_api_key: Optional[str] = OPENROUTER_API_KEY
+    token: Optional[str] = HF_TOKEN
     pull_repo: Optional[str] = "lrhammond/buggy-apps"
     push_repo: Optional[str] = "lrhammond/buggy-apps"
     save_after: Optional[int] = 10
@@ -320,7 +351,7 @@ def test_buggy_solution(
 
     # Test the buggy solution against the correctness checks
     results, buggy_outputs = check_correctness(
-        datum, buggy_solution, timeout=20, debug=False, return_outputs=True
+        datum, buggy_solution, timeout=5, debug=False, return_outputs=True
     )
 
     if results is None:
@@ -362,12 +393,12 @@ def test_buggy_solution(
         return False, results, None
 
     _, outputs = check_correctness(
-        datum, solution, evaluate=problematic_inputs, timeout=20, debug=False
+        datum, solution, evaluate=problematic_inputs, timeout=5, debug=False
     )
 
     if outputs is not None:
         _, buggy_outputs = check_correctness(
-            datum, buggy_solution, evaluate=problematic_inputs, timeout=20, debug=False
+            datum, buggy_solution, evaluate=problematic_inputs, timeout=5, debug=False
         )
     else:
         buggy_outputs = outputs
@@ -426,6 +457,7 @@ def generate_buggy_solutions(
     max_modifications: int,
     fraction_to_modify: float = 0.5,
     max_attempts: int = 10,
+    multiple_completions: bool = True,
     existing_buggy_solutions: Optional[List[dict]] = None,
     debug: Optional[bool] = False,
 ) -> List[str | None]:
@@ -444,6 +476,9 @@ def generate_buggy_solutions(
         List[str | None]: A list of buggy solutions or None if a valid buggy solution could not be generated.
     """
 
+    if debug:
+        print(f"Problem: {datum['problem_id']}")
+
     if existing_buggy_solutions is None:
         buggy_solutions = [None] * len(json.loads(datum["solutions"]))
 
@@ -457,6 +492,10 @@ def generate_buggy_solutions(
     for s in range(len(solutions)):
 
         if modified >= num_to_modify or buggy_solutions[s] is not None:
+            continue
+
+        # Check that original solution is valid
+        elif not all(check_correctness(datum, solutions[s])):
             continue
 
         else:
@@ -473,20 +512,51 @@ def generate_buggy_solutions(
             valid_buggy_solution = False
             attempts = 0
 
-            while not valid_buggy_solution and attempts < max_attempts:
-                attempts += 1
+            if debug:
+                print(f"Solution: {s}/{len(solutions)}")
 
-                model_output = get_openrouter_response(
-                    model, messages, openrouter_api_key
-                )[0]["message"]
-                buggy_solution, problematic_inputs, safe = extract_code_and_input(
-                    model_output
-                )
-                if not safe:
-                    continue
-                valid_buggy_solution, input_output_checks, _ = test_buggy_solution(
-                    buggy_solution, solution, problematic_inputs, datum
-                )
+            while not valid_buggy_solution and attempts < max_attempts:
+
+                if debug:
+                    print(f"Attempt: {attempts}")
+
+                if multiple_completions:
+                    model_outputs = get_openrouter_response(
+                        model, messages, openrouter_api_key, num_responses=max_attempts
+                    )
+                    model_outputs = [m["message"] for m in model_outputs]
+                else:
+                    model_outputs = [
+                        get_openrouter_response(model, messages, openrouter_api_key)[0][
+                            "message"
+                        ]
+                    ]
+
+                if debug:
+                    print("Model output(s) received")
+
+                for model_output in model_outputs:
+
+                    attempts += 1
+
+                    buggy_solution, problematic_inputs, safe = extract_code_and_input(
+                        model_output
+                    )
+
+                    if debug:
+                        print("Answer extracted")
+
+                    if not safe:
+                        if debug:
+                            print("Unsafe solution generated")
+                        continue
+
+                    valid_buggy_solution, input_output_checks, _ = test_buggy_solution(
+                        buggy_solution, solution, problematic_inputs, datum
+                    )
+
+                    if valid_buggy_solution:
+                        break
 
             # if not (True in input_output_checks or False in input_output_checks):
             #     valid_buggy_solution = False
@@ -531,10 +601,19 @@ def generate_buggy_solutions(
     return buggy_solutions
 
 
-def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
+def generate_cv_dataset(
+    config: CodeValidationDatasetConfig | dict,
+    manager: Optional[multiprocessing.Manager] = None,
+):
 
     if isinstance(config, dict):
         config = CodeValidationDatasetConfig(**config)
+
+    # Create process manager in case we get stuck on any of the problems
+    if manager is None:
+        manager = multiprocessing.Manager()
+    else:
+        process_results = manager.list()
 
     split = ["train", "test"] if config.split is None else [config.split]
 
@@ -576,21 +655,39 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
     start_time = datetime.now()
 
     for s in split:
+
+        problematic_problems_filename = os.path.join(
+            config.local_dir, f"problematic_{s}_problems.csv"
+        )
+        with open(problematic_problems_filename, mode="r") as file:
+            line = file.readline().strip()
+            problematic_problems = [
+                int(value) for value in line.split(",") if value != ""
+            ]
+
         for d in config.difficulties:
+
             data_slice = (
                 data[s].filter(lambda x: x["difficulty"] == d).sort("problem_id")
             )
             buggy_data_slice = buggy_data.filter(
                 lambda x: x["difficulty"] == d and x["apps_split"] == s
             ).sort("apps_problem_id")
-            num_buggy_data_to_generate = min(config.num_data, len(data_slice))
+
+            num_buggy_data_to_generate = min(config.num_data, len(data_slice)) - len(
+                buggy_data_slice
+            )
             num_data_added = 0
             print(
                 f"Generating {num_buggy_data_to_generate} buggy data for the {d} problems in the {s} split"
             )
+
             for datum in tqdm(data_slice, colour="green"):
 
-                if datum["solutions"] == "":
+                if (
+                    datum["solutions"] == ""
+                    or int(datum["problem_id"]) in problematic_problems
+                ):
                     continue
                 # print(datum["problem_id"])
                 solutions = json.loads(datum["solutions"])
@@ -602,7 +699,7 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
                 ):
                     break
                 elif (
-                    datum["problem_id"] <= max(buggy_data_slice["apps_problem_id"])
+                    datum["problem_id"] in buggy_data_slice["apps_problem_id"]
                     or len(solutions) <= 1
                 ):
                     continue
@@ -617,21 +714,51 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
                 }
 
                 # Generate new buggy solutions
-                buggy_solutions = generate_buggy_solutions(
-                    datum,
-                    config.model,
-                    config.openrouter_api_key,
-                    config.system_prompt,
-                    config.max_modifications,
-                    max_attempts=config.max_attempts,
-                    # debug=True,
+                timeout = min(20 + (5 * len(solutions)), 120)
+                p = multiprocessing.Process(
+                    target=solution_generation_wrapper,
+                    args=(
+                        process_results,
+                        datum,
+                        config.model,
+                        config.openrouter_api_key,
+                        config.system_prompt,
+                        config.max_modifications,
+                        config.max_attempts,
+                        False,
+                    ),
                 )
+                p.start()
+                p.join(timeout)
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
+                    print(
+                        f"Generating buggy solutions for problem {datum['problem_id']} ({s}) timed out after {timeout} seconds"
+                    )
+                    buggy_solutions = [None]
+                else:
+                    buggy_solutions = process_results[-1]
 
+                # buggy_solutions = generate_buggy_solutions(
+                #     datum,
+                #     config.model,
+                #     config.openrouter_api_key,
+                #     config.system_prompt,
+                #     config.max_modifications,
+                #     max_attempts=config.max_attempts,
+                #     debug=True,
+                # )
+
+                # If we didn't manage to geerate any buggy solutions, we make a note of this problem so we can skip it in the future
                 num_buggy_solutions_generated = len(
                     buggy_solutions
                 ) - buggy_solutions.count(None)
                 if num_buggy_solutions_generated == 0:
+                    with open(problematic_problems_filename, "a") as f:
+                        f.write(f"{datum['problem_id']},")
                     continue
+
                 solutions_added = 0
                 num_checks = len(json.loads(datum["input_output"])["inputs"])
                 for i in range(len(buggy_solutions)):
@@ -661,7 +788,7 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
                         os.path.join(config.local_dir, "code_validation.data")
                     )
                     if config.push_repo is not None:
-                        buggy_data.push_to_hub(config.push_repo)
+                        buggy_data.push_to_hub(config.push_repo, token=config.token)
 
             # Calculate the elapsed time, rounding microseconds down
             elapsed_time = datetime.now() - start_time
@@ -678,7 +805,9 @@ def generate_cv_dataset(config: CodeValidationDatasetConfig | dict):
                     os.path.join(config.local_dir, "code_validation.data")
                 )
                 if config.push_repo is not None:
-                    buggy_data.push_to_hub(config.push_repo, commit_message=message)
+                    buggy_data.push_to_hub(
+                        config.push_repo, commit_message=message, token=config.token
+                    )
 
 
 def change_to_new_cv_dataset(max_solutions=1):
@@ -913,7 +1042,7 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
                 Path(config.local_dir).mkdir(parents=True, exist_ok=True)
                 buggy_data[s].to_json(os.path.join(config.local_dir, f"{s}.jsonl"))
                 if config.push_repo is not None:
-                    buggy_data[s].push_to_hub(config.push_repo)
+                    buggy_data[s].push_to_hub(config.push_repo, token=config.token)
 
     # Calculate the elapsed time, rounding microseconds down
     elapsed_time = datetime.now() - start_time
@@ -982,11 +1111,48 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
 
 if __name__ == "__main__":
 
-    config = {
-        "split": "train",
-        "difficulties": ["interview"],
-        "num_data": 500,
-        "max_attempts": 10,
-    }
+    # Set up the arg parser
+    parser = argparse.ArgumentParser(
+        description="Generate a code validation dataset",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default=None,
+        help="Whether to draw problems from the train or test split of the APPS dataset",
+    )
+    parser.add_argument(
+        "--num_data",
+        type=int,
+        default=10000,
+        help="How many problems the dataset should contain (per split per difficulty level)",
+    )
+    parser.add_argument(
+        "--save_after",
+        type=int,
+        default=10,
+        help="The number of problems added after which to save (and possibly push) the dataset",
+    )
+    parser.add_argument(
+        "--openrouter_api_key",
+        type=str,
+        default=OPENROUTER_API_KEY,
+        help="The OpenRouter API key to use for generating responses",
+    )
 
-    generate_cv_dataset(config)
+    # Get the arguments
+    cmd_args = parser.parse_args()
+
+    # Create the config
+    config = CodeValidationDatasetConfig(
+        split=cmd_args.split,
+        num_data=cmd_args.num_data,
+        save_after=cmd_args.save_after,
+        openrouter_api_key=cmd_args.openrouter_api_key,
+    )
+
+    manager = multiprocessing.Manager()
+
+    # Generate the dataset
+    generate_cv_dataset(config, manager=manager)
