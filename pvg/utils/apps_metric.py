@@ -6,7 +6,7 @@ from io import StringIO
 import platform
 import sys
 import signal
-from pyext import RuntimeModule
+from pvg.utils.bugfix import RuntimeModule
 import faulthandler
 import numpy as np
 from typing import Optional, List

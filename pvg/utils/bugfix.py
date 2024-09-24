@@ -1,5 +1,12 @@
 """Replacements for buggy parts of libraries we use."""
 
+# Monkey patch inspect.getargspec to inspect.getfullargspec (RuntimeModule is imported from bugfix for the code validation dataset generation)
+import inspect
+
+if not hasattr(inspect, "getargspec"):
+    inspect.getargspec = inspect.getfullargspec
+from pyext import RuntimeModule
+
 import torch
 
 from torchrl.objectives.value.functional import (
