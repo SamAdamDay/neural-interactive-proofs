@@ -9,7 +9,7 @@ from tqdm import tqdm
 import datasets
 import re
 import textdistance
-from apps_metric import utils
+from pvg.utils.apps_metric import check_correctness
 import requests
 from openai import OpenAI
 from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY
@@ -319,7 +319,7 @@ def test_buggy_solution(
     """
 
     # Test the buggy solution against the correctness checks
-    results, buggy_outputs = utils.check_correctness(
+    results, buggy_outputs = check_correctness(
         datum, buggy_solution, timeout=20, debug=False, return_outputs=True
     )
 
@@ -361,12 +361,12 @@ def test_buggy_solution(
     if problematic_inputs == []:
         return False, results, None
 
-    _, outputs = utils.check_correctness(
+    _, outputs = check_correctness(
         datum, solution, evaluate=problematic_inputs, timeout=20, debug=False
     )
 
     if outputs is not None:
-        _, buggy_outputs = utils.check_correctness(
+        _, buggy_outputs = check_correctness(
             datum, buggy_solution, evaluate=problematic_inputs, timeout=20, debug=False
         )
     else:
@@ -800,6 +800,8 @@ def change_to_new_cv_dataset(max_solutions=1):
 # TODO (work in progress, original version that is useful for more intelligently updating or extending the buggy dataset)
 def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
 
+    return
+
     # return
 
     if isinstance(config, dict):
@@ -978,11 +980,13 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
                     }
 
 
-config = {
-    "split": "train",
-    "difficulties": ["interview"],
-    "num_data": 500,
-    "max_attempts": 10,
-}
+if __name__ == "__main__":
 
-generate_cv_dataset(config)
+    config = {
+        "split": "train",
+        "difficulties": ["interview"],
+        "num_data": 500,
+        "max_attempts": 10,
+    }
+
+    generate_cv_dataset(config)
