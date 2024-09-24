@@ -80,7 +80,7 @@ def get_openrouter_response(
             top_logprobs=top_logprobs,
             num_responses=num_responses,
         )
-        completions = [c.dict() for c in completions]
+        completions = [c.model_dump() for c in completions]
 
     for completion in completions:
 

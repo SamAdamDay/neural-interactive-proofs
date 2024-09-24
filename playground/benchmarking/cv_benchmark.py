@@ -10,7 +10,7 @@ import os
 import tqdm
 
 MODELS = [
-    "openai/gpt-4o-mini",
+    "openai/gpt-3.5-turbo" "openai/gpt-4o-mini",
     "meta-llama/llama-3.1-8b-instruct",
     "deepseek/deepseek-coder",
     "mistralai/codestral-mamba",
@@ -147,6 +147,16 @@ def guess_if_correct(
     return answers, answer_probs, alt_probs
 
 
+def alt_answer(answer):
+
+    if answer == "yes":
+        return "no"
+    elif answer == "no":
+        return "yes"
+    else:
+        raise ValueError("The answer must be either 'yes' or 'no'.")
+
+
 def evaluate_model(
     model,
     api_key=OPENROUTER_API_KEY,
@@ -162,11 +172,13 @@ def evaluate_model(
     save_after=10,
 ):
 
-    data = load_dataset("codeparrot/apps", trust_remote_code=True)
-    buggy_data = load_dataset("lrhammond/buggy-apps")
+    data = load_dataset("lrhammond/buggy-apps", split="train")
 
     if save_path is None:
-        results = {split: {} for split in ["train", "test"]}
+        results = {
+            s: {d: {} for d in ["introductory", "interview", "competition"]}
+            for s in ["train", "test"]
+        }
     else:
         model_name = model.split("/")[-1]
         reasoning = "with_reasoning" if show_working else "without_reasoning"
@@ -175,148 +187,133 @@ def evaluate_model(
             with open(filename, "r") as f:
                 results = json.load(f)
         else:
-            results = {split: {} for split in ["train", "test"]}
+            results = {
+                s: {d: {} for d in ["introductory", "interview", "competition"]}
+                for s in ["train", "test"]
+            }
 
-    for split in ["train", "test"]:
+    problems_tested = 0
+    num_added = 0
 
-        print("Split: {split}\n")
+    for datum in data:
 
-        indices = buggy_data[split]["problem_id"]
-        sliced_data = data[split].filter(lambda x: x["problem_id"] in indices)
+        id = str(datum["apps_problem_id"])
 
-        problems_tested = 0
-        num_added = 0
-
-        for buggy_datum, datum in tqdm(zip(buggy_data[split], sliced_data)):
-
-            if buggy_datum["problem_id"] != datum["problem_id"]:
-                raise ValueError("The data is not aligned.")
-            elif problems_tested >= max_problems:
-                break
-            elif str(datum["problem_id"]) in results[split]:
-                problems_tested += 1
-                continue
-
-            question = datum["question"]
-            solutions = json.loads(datum["solutions"])
-            buggy_solutions = json.loads(buggy_datum["solutions"])
-
-            results[split][str(datum["problem_id"])] = {}
-            num_added += 1
+        if problems_tested >= max_problems:
+            break
+        elif id in results[datum["apps_split"]][datum["difficulty"]]:
             problems_tested += 1
+            continue
+
+        results[datum["apps_split"]][datum["difficulty"]][id] = {}
+        num_added += 1
+        problems_tested += 1
+
+        if verbose:
+            print("\n\n")
+            print(f"Problem: {id} ({datum['apps_split']})")
+
+        for actual_answer, sols in zip(
+            ["yes", "no"], [datum["solutions"], datum["buggy_solutions"]]
+        ):
 
             if verbose:
-                print("\n\n")
-                print(f"Split: {split}")
-                print(f"Problem ID: {buggy_datum['problem_id']}")
+                print("====================================")
+                print(f"Actual answer: {actual_answer}\n")
 
-            for actual_answer, sols in zip(["yes", "no"], [solutions, buggy_solutions]):
+            for sol in sols:
 
-                if verbose:
-                    print("====================================")
-                    print(f"Actual answer: {actual_answer}\n")
+                query = generate_query(datum["question"], sol["solution"], show_working)
+                answers, answer_probs, alt_probs = guess_if_correct(
+                    model,
+                    api_key,
+                    query,
+                    temperature,
+                    n_attempts,
+                    check_probs,
+                    num_alternatives,
+                    show_working,
+                )
 
-                for sol in sols:
+                # correct = []
+                if check_probs:
+                    correct_probs = []
+                    incorrect_probs = []
+                if num_alternatives is not None:
+                    correct_alt_probs = []
+                    incorrect_alt_probs = []
 
-                    # Ignore solutions where we don't have a buggy and non-buggy pair
-                    if buggy_solutions[sols.index(sol)] == None:
+                for i in range(len(answers)):
+                    if answers[i] is None:
                         continue
-                    # elif solutions_tested >= max_solutions:
-                    #     break
-                    query = generate_query(question, sol, show_working)
-                    answers, answer_probs, alt_probs = guess_if_correct(
-                        model,
-                        api_key,
-                        query,
-                        temperature,
-                        n_attempts,
-                        check_probs,
-                        num_alternatives,
-                        show_working,
+                    elif answers[i] == actual_answer:
+                        # correct.append('correct')
+                        if check_probs and answer_probs[i] is not None:
+                            correct_probs.append(answer_probs[i])
+                        if num_alternatives is not None and alt_probs[i] is not None:
+                            correct_alt_probs.append(alt_probs[i])
+                    else:
+                        # correct.append(0)
+                        if check_probs and answer_probs[i] is not None:
+                            incorrect_probs.append(answer_probs[i])
+                        if num_alternatives is not None and alt_probs[i] is not None:
+                            incorrect_alt_probs.append(alt_probs[i])
+
+                correct = answers.count(actual_answer)
+                incorrect = answers.count(alt_answer(actual_answer))
+                num_answers = len(answers)
+                stats = {
+                    "fraction_correct": correct / num_answers,
+                    "fraction_incorrect": incorrect / num_answers,
+                    "fraction_failed": (num_answers - correct - incorrect)
+                    / num_answers,
+                }
+                if check_probs:
+                    stats["avg_prob_when_correct"] = (
+                        np.mean(correct_probs) if len(correct_probs) > 0 else None
+                    )
+                    stats["avg_prob_when_incorrect"] = (
+                        np.mean(incorrect_probs) if len(incorrect_probs) > 0 else None
+                    )
+                if num_alternatives is not None:
+                    stats["avg_alt_prob_when_correct"] = (
+                        np.mean(correct_alt_probs)
+                        if len(correct_alt_probs) > 0
+                        else None
+                    )
+                    stats["avg_alt_prob_when_incorrect"] = (
+                        np.mean(incorrect_alt_probs)
+                        if len(incorrect_alt_probs) > 0
+                        else None
                     )
 
-                    correct = []
-                    if check_probs:
-                        correct_probs = []
-                        incorrect_probs = []
-                    if num_alternatives is not None:
-                        correct_alt_probs = []
-                        incorrect_alt_probs = []
+                results[datum["apps_split"]][datum["difficulty"]][id][
+                    actual_answer
+                ] = stats
 
-                    for i in range(len(answers)):
-                        if answers[i] is None:
-                            continue
-                        elif answers[i] == actual_answer:
-                            correct.append(1)
-                            if check_probs and answer_probs[i] is not None:
-                                correct_probs.append(answer_probs[i])
-                            if (
-                                num_alternatives is not None
-                                and alt_probs[i] is not None
-                            ):
-                                correct_alt_probs.append(alt_probs[i])
-                        else:
-                            correct.append(0)
-                            if check_probs and answer_probs[i] is not None:
-                                incorrect_probs.append(answer_probs[i])
-                            if (
-                                num_alternatives is not None
-                                and alt_probs[i] is not None
-                            ):
-                                incorrect_alt_probs.append(alt_probs[i])
-
-                    stats = {
-                        "fraction_correct": (
-                            np.mean(correct) if len(correct) > 0 else None
-                        ),
-                        "fraction_failed": 1 - (len(correct) / len(answers)),
-                    }
+                if verbose:
+                    print("----------------------------")
+                    print(f"Solution number: {sols.index(sol)}")
+                    print(f"Fraction correct: {stats['fraction_correct']}")
+                    print(f"Fraction failed: {stats['fraction_failed']}")
                     if check_probs:
-                        stats["avg_prob_when_correct"] = (
-                            np.mean(correct_probs) if len(correct_probs) > 0 else None
+                        print(
+                            f"Avg prob when correct: {stats['avg_prob_when_correct']}"
                         )
-                        stats["avg_prob_when_incorrect"] = (
-                            np.mean(incorrect_probs)
-                            if len(incorrect_probs) > 0
-                            else None
+                        print(
+                            f"Avg prob when incorrect: {stats['avg_prob_when_incorrect']}"
                         )
                     if num_alternatives is not None:
-                        stats["avg_alt_prob_when_correct"] = (
-                            np.mean(correct_alt_probs)
-                            if len(correct_alt_probs) > 0
-                            else None
+                        print(
+                            f"Avg alt prob when correct: {stats['avg_alt_prob_when_correct']}"
                         )
-                        stats["avg_alt_prob_when_incorrect"] = (
-                            np.mean(incorrect_alt_probs)
-                            if len(incorrect_alt_probs) > 0
-                            else None
+                        print(
+                            f"Avg alt prob when incorrect: {stats['avg_alt_prob_when_incorrect']}"
                         )
 
-                    results[split][str(datum["problem_id"])][actual_answer] = stats
-
-                    if verbose:
-                        print("----------------------------")
-                        print(f"Solution number: {sols.index(sol)}")
-                        print(f"Fraction correct: {stats['fraction_correct']}")
-                        print(f"Fraction failed: {stats['fraction_failed']}")
-                        if check_probs:
-                            print(
-                                f"Avg prob when correct: {stats['avg_prob_when_correct']}"
-                            )
-                            print(
-                                f"Avg prob when incorrect: {stats['avg_prob_when_incorrect']}"
-                            )
-                        if num_alternatives is not None:
-                            print(
-                                f"Avg alt prob when correct: {stats['avg_alt_prob_when_correct']}"
-                            )
-                            print(
-                                f"Avg alt prob when incorrect: {stats['avg_alt_prob_when_incorrect']}"
-                            )
-
-            if save_path is not None and problems_tested % save_after == 0:
-                with open(filename, "w") as f:
-                    json.dump(results, f)
+        if save_path is not None and num_added % save_after == 0:
+            with open(filename, "w") as f:
+                json.dump(results, f)
 
     if save_path is not None:
         with open(filename, "w") as f:
@@ -356,7 +353,7 @@ def main():
     parser.add_argument(
         "--n_attempts",
         type=int,
-        default=5,
+        default=10,
         help="Number of attempts that the model should make",
     )
     parser.add_argument(
