@@ -76,6 +76,7 @@ from .agents import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CodeValidationAgentParameters,
     AgentsParameters,
 )
 from .trainers import (
@@ -91,7 +92,7 @@ from .protocol import (
     PvgProtocolParameters,
     DebateProtocolParameters,
 )
-from .scenario import ImageClassificationParameters
+from .scenario import ImageClassificationParameters, CodeValidationParameters
 from .dataset import DatasetParameters
 from .update_schedule import (
     AgentUpdateSchedule,
@@ -102,20 +103,32 @@ from .update_schedule import (
 from .message_regression import MessageRegressionParameters
 
 # The agent names required for each protocol
-AGENT_NAMES = {
+AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     InteractionProtocolType.PVG: ("verifier", "prover"),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
+    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+        "verifier",
+        "prover0",
+        "prover1",
+        "prover2",
+    ),
 }
 
-DEFAULT_STACKELBERG_SEQUENCE = {
+DEFAULT_STACKELBERG_SEQUENCE: dict[
+    InteractionProtocolType, tuple[tuple[str, ...], ...]
+] = {
     InteractionProtocolType.PVG: (("verifier",), ("prover",)),
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
+    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+        ("verifier",),
+        ("prover0", "prover1", "prover2"),
+    ),
 }
 
 
@@ -184,6 +197,8 @@ class Parameters(BaseParameters):
         "solo_agent" or when `pretrain_agents` is `True`.
     image_classification : ImageClassificationParameters, optional
         Additional parameters for the image classification task.
+    code_validation : CodeValidationParameters, optional
+        Additional parameters for the code validation task.
     dataset_options : DatasetParameters, optional
         Additional parameters for the dataset.
     """
@@ -218,6 +233,7 @@ class Parameters(BaseParameters):
     solo_agent: Optional[SoloAgentParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
+    code_validation: Optional[CodeValidationParameters | dict] = None
 
     dataset_options: Optional[DatasetParameters | dict] = None
 
@@ -238,18 +254,21 @@ class Parameters(BaseParameters):
                 self.interaction_protocol
             ]
 
-        # Convert graph isomorphism agent parameters to the appropriate class
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
             )
 
-        # Convert image classification agent parameters to the appropriate class, and
-        # convert the image classification parameters to the appropriate class
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
             self._process_agents_params(
                 ImageClassificationAgentParameters,
+                RandomAgentParameters,
+            )
+
+        elif self.scenario == ScenarioType.CODE_VALIDATION:
+            self._process_agents_params(
+                CodeValidationAgentParameters,
                 RandomAgentParameters,
             )
 

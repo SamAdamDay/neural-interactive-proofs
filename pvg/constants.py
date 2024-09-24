@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 _file_dir = os.path.realpath(__file__)
 _root_dir = Path(_file_dir).parent.parent.absolute()
 
+ENV_FILE = os.path.join(_root_dir, ".env")
+
 DATA_DIR = os.path.join(_root_dir, "data")
 GI_DATA_DIR = os.path.join(DATA_DIR, "graph_isomorphism")
 IC_DATA_DIR = os.path.join(DATA_DIR, "image_classification")

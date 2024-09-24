@@ -65,7 +65,10 @@ param_specs = [
     },
     # Test the other trainers
     {
-        "trainer": [TrainerType.SOLO_AGENT, TrainerType.REINFORCE],
+        "trainer": [
+            TrainerType.SOLO_AGENT,
+            TrainerType.REINFORCE,
+        ],
     },
     # Test the other protocols
     {
@@ -77,7 +80,11 @@ param_specs = [
     },
     # Test manual architectures
     {
-        "manual_architecture": [("prover",), ("verifier",), ("prover", "verifier")],
+        "manual_architecture": [
+            ("prover",),
+            ("verifier",),
+            ("prover", "verifier"),
+        ],
     },
     # Test the including a linear message space
     {

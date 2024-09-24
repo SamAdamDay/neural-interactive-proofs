@@ -14,6 +14,8 @@ class CommonProtocolParameters(SubParameters):
 
     Parameters
     ----------
+    verifier_first : bool
+        Whether the verifier goes first in the protocol.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
@@ -32,12 +34,15 @@ class CommonProtocolParameters(SubParameters):
         guess using its policy.
     """
 
+    verifier_first: bool = True
+
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
     shared_reward: bool = False
+
     force_guess: Optional[Guess] = None
 
 
@@ -82,8 +87,6 @@ class PvgProtocolParameters(LongProtocolParameters):
 
     Parameters
     ----------
-    verifier_first : bool
-        Whether the verifier goes first in the PVG protocol.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -94,8 +97,6 @@ class PvgProtocolParameters(LongProtocolParameters):
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
     """
-
-    verifier_first: bool = True
 
 
 @dataclass
@@ -104,6 +105,10 @@ class DebateProtocolParameters(LongProtocolParameters):
 
     Parameters
     ----------
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -114,3 +119,6 @@ class DebateProtocolParameters(LongProtocolParameters):
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
     """
+
+    sequential: bool = False
+    prover0_first: bool = True

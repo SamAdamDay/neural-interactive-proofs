@@ -5,6 +5,7 @@ from .parameters import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CodeValidationAgentParameters,
     SoloAgentParameters,
     RlTrainerParameters,
     CommonPpoParameters,
@@ -33,6 +34,7 @@ from .parameters import (
     ConstantUpdateSchedule,
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
+    AGENT_NAMES,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment, PreparedExperimentInfo

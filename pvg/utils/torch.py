@@ -47,6 +47,27 @@ def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
     return x.flatten(0, num_batch_dims - 1)
 
 
+def apply_orthogonal_initialisation(module: nn.Module, gain: float):
+    """Apply orthogonal initialisation to a module's weights and set the biases to 0.
+
+    Parameters
+    ----------
+    module : nn.Module
+        The module to which to apply the initialisation.
+    gain : float
+        The orthogonal initialisation gain.
+    """
+
+    def init_weights(sub_module: nn.Module):
+        if hasattr(sub_module, "weight"):
+            if sub_module.weight.dim() >= 2:
+                torch.nn.init.orthogonal_(sub_module.weight, gain=gain)
+        if hasattr(sub_module, "bias") and sub_module.bias is not None:
+            torch.nn.init.constant_(sub_module.bias, 0.0)
+
+    module.apply(init_weights)
+
+
 class DummyOptimizer(torch.optim.Optimizer):
     """A dummy optimizer which does nothing."""
 

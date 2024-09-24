@@ -4,15 +4,16 @@ A trainer takes the components of a scenario and trains the agents.
 """
 
 from pvg.parameters import Parameters
-from pvg.scenario_instance import ScenarioInstance
+from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 
-from .base import Trainer, IterationContext, attach_progress_bar
-from .rl_trainer_base import ReinforcementLearningTrainer
+from .base import Trainer, TensorDictTrainer, IterationContext, attach_progress_bar
+from .rl_tensordict_base import ReinforcementLearningTrainer
 from .vanilla_ppo import VanillaPpoTrainer
 from .solo_agent import SoloAgentTrainer
 from .spg import SpgTrainer
 from .reinforce import ReinforceTrainer
+from .ei_pure_text import PureTextEiTrainer
 from .registry import register_trainer, TRAINER_REGISTRY
 
 

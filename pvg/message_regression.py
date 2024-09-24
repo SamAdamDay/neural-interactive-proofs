@@ -52,15 +52,6 @@ class MessageRegressor(ABC):
         else:
             self.agent_names = self.protocol_handler.agent_names
 
-        # Determine the first round in which each agent is active
-        self.agent_first_rounds = {}
-        for round, active_agent_names in enumerate(
-            self.protocol_handler.agent_turn_names
-        ):
-            for agent_name in active_agent_names:
-                if agent_name not in self.agent_first_rounds:
-                    self.agent_first_rounds[agent_name] = round
-
     def fit_score(self, data: TensorDictBase) -> dict[str, float]:
         """Fit and score the regressor on the data.
 
@@ -83,7 +74,10 @@ class MessageRegressor(ABC):
         for agent_name in self.agent_names:
 
             # Select the data for the first round in which the agent is active
-            round_mask = data["round"] == self.agent_first_rounds[agent_name]
+            round_mask = (
+                data["round"]
+                == self.protocol_handler.agent_first_active_round[agent_name]
+            )
             agent_data = data[round_mask]
 
             # Split into training and testing data

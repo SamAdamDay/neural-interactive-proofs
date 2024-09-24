@@ -1,4 +1,4 @@
-"""A generic reinforcement learning trainer."""
+"""A generic reinforcement learning trainer using tensordicts."""
 
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -31,14 +31,15 @@ from pvg.parameters import (
     ContiguousPeriodicUpdateSchedule,
 )
 from pvg.experiment_settings import ExperimentSettings
-from pvg.trainers.base import Trainer, attach_progress_bar, IterationContext
+from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
 from pvg.trainers.solo_agent import SoloAgentTrainer
 from pvg.model_cache import (
     cached_models_exist,
     save_model_state_dicts,
     load_cached_model_state_dicts,
 )
-from pvg.scenario_instance import ScenarioInstance
+from pvg.scenario_base import TensorDictEnvironment
+from pvg.factory import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
 from pvg.rl_objectives import Objective
 from pvg.utils.maths import logit_entropy
@@ -73,8 +74,8 @@ def update_schedule_iterator(schedule: AgentUpdateSchedule):
         raise ValueError(f"Unknown update schedule: {schedule}")
 
 
-class ReinforcementLearningTrainer(Trainer, ABC):
-    """Base class for all reinforcement learning trainers.
+class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
+    """Base class for all reinforcement learning trainers which use tensordicts.
 
     Parameters
     ----------
@@ -111,8 +112,12 @@ class ReinforcementLearningTrainer(Trainer, ABC):
     ):
         super().__init__(params, scenario_instance, settings)
 
-        self.train_environment = self.scenario_instance.train_environment
-        self.test_environment = self.scenario_instance.test_environment
+        self.train_environment: TensorDictEnvironment = (
+            self.scenario_instance.train_environment
+        )
+        self.test_environment: TensorDictEnvironment = (
+            self.scenario_instance.test_environment
+        )
 
         # Update clip value to be a float or None
         self.clip_value = self.params.rl.clip_value
@@ -323,18 +328,18 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.rl.frames_per_batch,
-            total_frames=self.params.rl.frames_per_batch
+            frames_per_batch=self.train_environment.frames_per_batch,
+            total_frames=self.train_environment.frames_per_batch
             * self.params.rl.num_iterations,
         )
 
         test_collector = SyncDataCollector(
-            self.train_environment,
+            self.test_environment,
             self.policy_operator,
             device=self.device,
             storing_device=self.device,
-            frames_per_batch=self.params.rl.frames_per_batch,
-            total_frames=self.params.rl.frames_per_batch
+            frames_per_batch=self.test_environment.frames_per_batch,
+            total_frames=self.test_environment.frames_per_batch
             * self.params.rl.num_test_iterations,
         )
 
@@ -355,7 +360,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         """
         return ReplayBuffer(
             storage=LazyTensorStorage(
-                self.params.rl.frames_per_batch, device=self.device
+                self.train_environment.frames_per_batch, device=self.device
             ),
             sampler=SamplerWithoutReplacement(),
             batch_size=self.params.rl.minibatch_size,
@@ -465,8 +470,8 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         message_logits_key = self.scenario_instance.agents[
             self._agent_names[0]
         ].message_logits_key
-        message_logits: Float[Tensor, "... agent position logit"] = tensordict_data.get(
-            ("agents", message_logits_key)
+        message_logits: Float[Tensor, "... agent channel position logit"] = (
+            tensordict_data.get(("agents", message_logits_key))
         )
 
         log_stats = {}
@@ -522,7 +527,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             # Compute the (normalised) agent message entropy mean and standard deviation
             max_message_ent = -np.log(1 / message_logits.shape[-1])
             message_logit_entropy = (
-                logit_entropy(message_logits[..., i, :, :]) / max_message_ent
+                logit_entropy(message_logits[..., i, :, :, :]) / max_message_ent
             )
             log_stats[f"{agent_name}.{prefix}mean_message_entropy"] = (
                 message_logit_entropy.mean().item()
@@ -532,7 +537,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
             )
 
             # Compute the maximum message probability mean and standard deviation
-            message_probs = torch.softmax(message_logits[..., i, :, :], dim=-1)
+            message_probs = torch.softmax(message_logits[..., i, :, :, :], dim=-1)
             max_message_probs = message_probs.max(dim=-1).values
             log_stats[f"{agent_name}.{prefix}mean_max_message_prob"] = (
                 max_message_probs.mean().item()
@@ -725,7 +730,7 @@ class ReinforcementLearningTrainer(Trainer, ABC):
         total_steps = 0
         for _ in range(self.params.rl.num_epochs):
             for _ in range(
-                self.params.rl.frames_per_batch // self.params.rl.minibatch_size
+                self.train_environment.frames_per_batch // self.params.rl.minibatch_size
             ):
                 # Sample a minibatch from the replay buffer
                 sub_data = self.replay_buffer.sample()

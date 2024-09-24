@@ -1,3 +1,5 @@
+"""Dataset classes for the graph isomorphism experiments."""
+
 import os
 
 import torch
@@ -8,14 +10,14 @@ from torch_geometric.utils import to_dense_adj
 
 from einops import repeat
 
-from pvg.scenario_base import Dataset
+from pvg.scenario_base import Dataset, TensorDictDataset
 from pvg.parameters import ScenarioType
-from pvg.scenario_instance import register_scenario_class
+from pvg.factory import register_scenario_class
 from pvg.constants import GI_DATA_DIR
 
 
 @register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Dataset)
-class GraphIsomorphismDataset(Dataset):
+class GraphIsomorphismDataset(TensorDictDataset):
     """A dataset for the graph isomorphism experiments.
 
     Uses the a pre-generated set of graphs.
@@ -50,7 +52,9 @@ class GraphIsomorphismDataset(Dataset):
             GI_DATA_DIR,
             self.params.dataset,
             f"processed"
-            f"_{self.protocol_handler.max_message_rounds}_{self.params.message_size}",
+            f"_{self.protocol_handler.max_message_rounds}"
+            f"_{self.protocol_handler.num_message_channels}"
+            f"_{self.params.message_size}",
             sub_dir,
         )
 
@@ -107,6 +111,7 @@ class GraphIsomorphismDataset(Dataset):
             x = torch.zeros(
                 num_graph_pairs,
                 self.protocol_handler.max_message_rounds,
+                self.protocol_handler.num_message_channels,
                 self.params.message_size,
                 max_num_nodes,
                 dtype=self.x_dtype,

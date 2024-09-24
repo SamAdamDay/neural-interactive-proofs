@@ -13,11 +13,21 @@ Scenarios should subclass the `ScenarioInstance` class, and its `build` factory 
 method is used to build the agents using the given parameters.
 """
 
-from .data import Dataset, DataLoader
-from .environment import Environment
+from .data import (
+    Dataset,
+    TensorDictDataset,
+    NestedArrayDictDataset,
+    TensorDictDataLoader,
+    NestedArrayDictDataLoader,
+)
+from .environment import Environment, TensorDictEnvironment, PureTextEnvironment
 from .agents import (
     AgentHooks,
     AgentPart,
+    TensorDictAgentPartMixin,
+    TensorDictDummyAgentPartMixin,
+    WholeAgent,
+    RandomWholeAgent,
     AgentBody,
     AgentHead,
     DummyAgentBody,
@@ -27,6 +37,8 @@ from .agents import (
     ConstantAgentValueHead,
     SoloAgentHead,
     CombinedAgentPart,
+    CombinedTensorDictAgentPart,
+    CombinedWhole,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,

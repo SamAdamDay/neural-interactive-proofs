@@ -11,7 +11,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 from abc import ABC, abstractmethod
 from typing import Optional, Any, Iterable, Callable, ClassVar
 from dataclasses import dataclass, fields, InitVar
-from functools import partial
+from functools import partial, cached_property
 import re
 import itertools
 
@@ -19,18 +19,23 @@ import torch
 from torch import Tensor
 from torch.nn.parameter import Parameter as TorchParameter
 
+import numpy as np
+from numpy.typing import NDArray
+
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey
 
-from einops import repeat
+from einops import repeat, rearrange
 
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, Bool
 
 from pvg.parameters import Parameters
+from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
-from pvg.utils.params import check_if_critic_and_single_body
+from pvg.utils.params import get_agent_part_flags
+from pvg.utils.torch import apply_orthogonal_initialisation
 
 
 @dataclass
@@ -78,17 +83,19 @@ class AgentHooks:
         return cls(**cls_args)
 
 
-class AgentPart(TensorDictModuleBase, ABC):
+class AgentPart(ABC):
     """Base class for all agent parts: bodies and heads.
 
     The in and out keys are split into agent-level and environment-level keys.
-    Agent-level keys are nested under "agents" in the environment's TensorDict, while
+    Agent-level keys are nested under "agents" in the environment's state dict, while
     environment-level keys are at the top level.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     agent_name : str
         The name of the agent.
     protocol_handler : ProtocolHandler
@@ -100,16 +107,16 @@ class AgentPart(TensorDictModuleBase, ABC):
     ----------------
     agent_level_in_keys : Iterable[NestedKey]
         The keys required by the agent part whose values are per-agent (so in the
-        environment's TensorDict will be nested under "agents").
+        environment's state dict will be nested under "agents").
     env_level_in_keys : Iterable[NestedKey]
         The keys required by the agent part whose values are per-environment (so in the
-        environment's TensorDict will be at the top level).
+        environment's state dict will be at the top level).
     agent_level_out_keys : Iterable[NestedKey]
         The keys produced by the agent part whose values are per-agent (so in the
-        environment's TensorDict will be nested under "agents").
+        environment's state dict will be nested under "agents").
     env_level_out_keys : Iterable[NestedKey]
         The keys produced by the agent part whose values are per-environment (so in the
-        environment's TensorDict will be at the top level).
+        environment's state dict will be at the top level).
     """
 
     agent_level_in_keys: Iterable[NestedKey] = []
@@ -151,21 +158,123 @@ class AgentPart(TensorDictModuleBase, ABC):
         out_keys.update(self.env_level_out_keys)
         return out_keys
 
+    @property
+    def is_prover(self) -> bool:
+        """Whether the agent is a prover."""
+        return self.agent_name in self.protocol_handler.prover_names
+
+    @property
+    def is_verifier(self) -> bool:
+        """Whether the agent is a verifier."""
+        return self.agent_name in self.protocol_handler.verifier_names
+
+    @property
+    def max_message_rounds(self) -> int:
+        return self.protocol_handler.max_message_rounds
+
+    @cached_property
+    def visible_message_channel_names(self) -> list[str]:
+        """The names of the message channels visible to the agent."""
+
+        return self.protocol_handler.get_agent_visible_channels(self.agent_name)
+
+    @cached_property
+    def visible_message_channel_indices(self) -> list[int]:
+        """The indices of the message channels visible to the agent."""
+
+        visible_channels = self.visible_message_channel_names
+        all_channels = self.protocol_handler.message_channel_names
+        return [all_channels.index(channel) for channel in visible_channels]
+
+    _visible_message_channel_mask: Optional[Bool[Tensor, "channel"]] = None
+
+    @property
+    def visible_message_channel_mask(self) -> Bool[Tensor, "channel"]:
+        """The mask for the message channels visible to the agent."""
+
+        if self._visible_message_channel_mask is None:
+            num_message_channels = len(self.protocol_handler.message_channel_names)
+            self._visible_message_channel_mask = torch.zeros(
+                num_message_channels, dtype=torch.bool, device=self.device
+            )
+            self._visible_message_channel_mask[self.visible_message_channel_indices] = (
+                True
+            )
+
+        return self._visible_message_channel_mask.to(self.device)
+
+    @cached_property
+    def num_visible_message_channels(self) -> int:
+        """The number of message channels visible to the agent."""
+        return len(self.visible_message_channel_names)
+
+    @property
+    def required_pretrained_models(self) -> Iterable[str]:
+        """The pretrained models used by the agent.
+
+        The embeddings of these models will be added to the dataset.
+        """
+        return []
+
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: Optional[TorchDevice] = None,
     ):
         super().__init__()
         self.params = params
+        self.settings = settings
         self.agent_name = agent_name
         self.protocol_handler = protocol_handler
-        if device is None:
-            device = "cpu"
-        self.device = device
+
+        self.agent_params = params.agents[agent_name]
+        self.agent_index = self.protocol_handler.agent_names.index(agent_name)
+
+    @abstractmethod
+    def forward(self, data: Any) -> Any:
+        """Forward pass through the agent part.
+
+        Parameters
+        ----------
+        data : Any
+            The input to the agent part.
+
+        Returns
+        -------
+        output : Any
+            The output of the forward pass on the input.
+        """
+
+
+class TensorDictAgentPartMixin(AgentPart, TensorDictModuleBase, ABC):
+    """Mixin for agent parts which use TensorDicts as input and output."""
+
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        agent_name: str,
+        protocol_handler: ProtocolHandler,
+    ):
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
+        self.device = settings.device
+
+    def _init_weights(self):
+        """Initialise the module weights
+
+        Should be called at the end of `__init__`
+        """
+        if self.agent_params.use_orthogonal_initialisation:
+            apply_orthogonal_initialisation(
+                self, self.agent_params.orthogonal_initialisation_gain
+            )
 
     def _run_recorder_hook(
         self,
@@ -177,21 +286,13 @@ class AgentPart(TensorDictModuleBase, ABC):
             hooks.__getattribute__(hook_name)(output, agent_name=self.agent_name)
 
     @abstractmethod
-    def to(device: TorchDevice):
+    def to(self, device: TorchDevice):
         """Move the agent to the given device."""
         pass
 
-    @property
-    def required_pretrained_models(self) -> Iterable[str]:
-        """The pretrained models used by the agent.
 
-        The embeddings of these models will be added to the dataset.
-        """
-        return []
-
-
-class DummyAgentPartMixin(AgentPart, ABC):
-    """A mixin for agent parts which are dummy (e.g. random or constant).
+class TensorDictDummyAgentPartMixin(TensorDictAgentPartMixin, ABC):
+    """A tensordict mixin for agent parts which are dummy (e.g. random or constant).
 
     Adds a dummy parameter to the agent part, so that PyTorch can calculate gradients
     and so that tensordict can determine the device.
@@ -200,18 +301,30 @@ class DummyAgentPartMixin(AgentPart, ABC):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
-        *,
-        device: TorchDevice | None = None,
     ):
-        super().__init__(params, agent_name, protocol_handler, device=device)
+        super().__init__(
+            params=params,
+            settings=settings,
+            agent_name=agent_name,
+            protocol_handler=protocol_handler,
+        )
         self.dummy_parameter = TorchParameter(torch.tensor(0.0, device=self.device))
 
     def to(self, device: TorchDevice):
         """Move the agent to the given device."""
         self.device = device
         self.dummy_parameter = self.dummy_parameter.to(device)
+
+
+class WholeAgent(AgentPart, ABC):
+    """Base class for agents which are not split into parts."""
+
+
+class RandomWholeAgent(WholeAgent, ABC):
+    """Base class for whole random agents."""
 
 
 class AgentBody(AgentPart, ABC):
@@ -221,7 +334,7 @@ class AgentBody(AgentPart, ABC):
     """
 
 
-class DummyAgentBody(DummyAgentPartMixin, AgentBody, ABC):
+class DummyAgentBody(AgentBody, ABC):
     """A dummy agent body which does nothing."""
 
 
@@ -241,10 +354,10 @@ class AgentPolicyHead(AgentHead, ABC):
         that the graphs are not isomorphic, guess that the graphs are isomorphic, or
         continue exchanging messages.
         """
-        return "verifier" in self.agent_name
+        return self.is_verifier
 
 
-class RandomAgentPolicyHead(DummyAgentPartMixin, AgentPolicyHead, ABC):
+class RandomAgentPolicyHead(AgentPolicyHead, ABC):
     """A policy head which samples actions randomly."""
 
 
@@ -252,7 +365,7 @@ class AgentValueHead(AgentHead, ABC):
     """Base class for all agent value heads, to the value of a state."""
 
 
-class ConstantAgentValueHead(DummyAgentPartMixin, AgentValueHead, ABC):
+class ConstantAgentValueHead(AgentValueHead, ABC):
     """A value head which returns a constant value."""
 
 
@@ -260,13 +373,15 @@ class SoloAgentHead(AgentHead, ABC):
     """Base class for all solo agent heads, which attempt the task on their own."""
 
 
-class CombinedAgentPart(TensorDictModuleBase, ABC):
+class CombinedAgentPart(ABC):
     """Base class for modules which combine agent parts together.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     parts : dict[str, AgentPart]
@@ -356,35 +471,153 @@ class CombinedAgentPart(TensorDictModuleBase, ABC):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         parts: dict[str, AgentPart],
     ):
         super().__init__()
         self.params = params
+        self.settings = settings
         self.protocol_handler = protocol_handler
         self.parts = parts
 
-        self._agent_names = protocol_handler.agent_names
+        self.agent_names = protocol_handler.agent_names
 
-        if set(parts.keys()) != set(self._agent_names):
+        if set(parts.keys()) != set(self.agent_names):
             raise ValueError(
                 f"The agent names in {type(self).__name__} must match the agent names "
-                f"in the protocol handler. Expected {self._agent_names}, got "
+                f"in the protocol handler. Expected {self.agent_names}, got "
                 f"{parts.keys()}."
             )
 
+    def _restrict_input_to_visible_channels(
+        self, agent_name: str, input_array: Tensor | NDArray, shape_spec: str
+    ) -> Tensor:
+        """Restrict an agent's input to its visible message channels.
+
+        Agents only receive messages from the channels they can see. This function
+        restricts the input to the agent to only the visible message channels.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        input_array : Tensor | NDArray
+            The input array to the agent.
+        shape_spec : str
+            The shape of the input. This is a space-separated string of the dimensions
+            of the input. One of these must be "channel".
+
+        Returns
+        -------
+        restricted_input : Tensor | NDArray
+            The input restricted to the visible message channels.
+        """
+
+        agent_index = self.agent_names.index(agent_name)
+
+        dim_names = shape_spec.split(" ")
+
+        if dim_names.count("channel") != 1:
+            raise ValueError(
+                f"The input shape must contain exactly one 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = dim_names.index("channel")
+
+        if "..." in dim_names[channel_dim + 1 :]:
+            raise ValueError(
+                f"An ellipsis (...) is not allowed after the 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = channel_dim - len(dim_names)
+
+        # If the input already has the correct number of channels, return it
+        if input_array.shape[channel_dim] == len(
+            self.protocol_handler.get_agent_visible_channels(agent_name)
+        ):
+            return input_array
+
+        # Create an index for the tensor, which selects the visible channels using a
+        # mask along the channel dimension
+        visible_mask = self.protocol_handler.agent_channel_visibility_mask[agent_index]
+        if isinstance(input_array, np.ndarray):
+            visible_mask = visible_mask.cpu().numpy()
+        index = (Ellipsis, visible_mask) + (slice(None),) * (-1 - channel_dim)
+
+        # Apply the mask to the input
+        return input_array[index]
+
+
+class CombinedWhole(CombinedAgentPart, ABC):
+    """Base class for modules which combine whole agents together."""
+
+    @abstractmethod
+    def forward(self, data: Any) -> Any:
+        """Run a forward pass through all the agents and combine the output."""
+
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        wholes: dict[str, WholeAgent],
+    ):
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            parts=wholes,
+        )
+        self.wholes = wholes
+
+
+class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
+    """Base class for modules which combine agent parts together and use TensorDicts."""
+
+    @property
+    def device(self) -> TorchDevice:
+        device = None
+        for part in self.parts.values():
+            if device is None:
+                device = part.device
+            elif device != part.device:
+                raise RuntimeError(
+                    f"The device of all {type(self).__name__} parts must be the same,"
+                    f" but got {device} and {part.device}."
+                )
+        return device
+
+    def __init__(
+        self,
+        params: Parameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        parts: dict[str, AgentPart],
+    ):
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            parts=parts,
+        )
+
         # Add the parts as submodules, so that PyTorch knows about them
-        for agent_name in self._agent_names:
+        for agent_name in self.agent_names:
             self.add_module(agent_name, parts[agent_name])
 
 
-class CombinedBody(CombinedAgentPart, ABC):
+class CombinedBody(CombinedTensorDictAgentPart, ABC):
     """A module which combines all the agent bodies together.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     bodies : dict[str, AgentBody]
@@ -394,10 +627,16 @@ class CombinedBody(CombinedAgentPart, ABC):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         bodies: dict[str, AgentBody],
     ):
-        super().__init__(params, protocol_handler, bodies)
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            parts=bodies,
+        )
         self.bodies = bodies
 
     @abstractmethod
@@ -417,13 +656,15 @@ class CombinedBody(CombinedAgentPart, ABC):
         pass
 
 
-class CombinedPolicyHead(CombinedAgentPart, ABC):
+class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
     """A module which combines all the agent policy heads together.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     policy_heads : dict[str, AgentPolicyHead]
@@ -433,10 +674,16 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         policy_heads: dict[str, AgentPolicyHead],
     ):
-        super().__init__(params, protocol_handler, policy_heads)
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            parts=policy_heads,
+        )
         self.policy_heads = policy_heads
 
     @abstractmethod
@@ -454,6 +701,76 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
             The output of the combined policy head.
         """
         pass
+
+    def _expand_logits_to_all_channels(
+        self, agent_name: str, logits: Tensor, shape_spec: str, fill_value: float = -1e9
+    ) -> Tensor:
+        """Expand an agent's logits from its visible message channels to all.
+
+        Agents only output messages for the channels they can see. This function expands
+        the output to all channels, by filling in `fill_value` for the logits in the
+        channels the agent cannot see.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        logits : Tensor
+            A tensor of output logits. This is a single key in the output of the agent's
+            forward pass.
+        shape_spec : str
+            The shape of the output. This is a space-separated string of the dimensions
+            of the output. One of these must be "channel".
+        fill_value : float, default=-1e9
+            The value to fill in for the channels the agent cannot see.
+
+        Returns
+        -------
+        expanded_logits : Tensor
+            The output expanded to all channels. This has the same shape as `logits`,
+            except that the channel dimension is the full set of message channels.
+        """
+
+        agent_index = self.agent_names.index(agent_name)
+
+        dim_names = shape_spec.split(" ")
+
+        if dim_names.count("channel") != 1:
+            raise ValueError(
+                f"The output shape must contain exactly one 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = dim_names.index("channel")
+
+        if "..." in dim_names[channel_dim + 1 :]:
+            raise ValueError(
+                f"An ellipsis (...) is not allowed after the 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = channel_dim - len(dim_names)
+
+        # If the output is already expanded, return it
+        if logits.shape[channel_dim] == self.protocol_handler.num_message_channels:
+            return logits
+
+        # Create a tensor filled with `fill_value` of the correct shape
+        full_shape = list(logits.shape)
+        full_shape[channel_dim] = self.protocol_handler.num_message_channels
+        expanded_logits = torch.full(
+            full_shape, fill_value, device=self.device, dtype=logits.dtype
+        )
+
+        # Create an index for the tensor, which selects the visible channels using a
+        # mask along the channel dimension
+        visible_mask = self.protocol_handler.agent_channel_visibility_mask[agent_index]
+        index = (Ellipsis, visible_mask) + (slice(None),) * (-1 - channel_dim)
+
+        # Fill in the visible channels
+        expanded_logits[index] = logits
+
+        return expanded_logits
 
     def _restrict_decisions(
         self,
@@ -481,7 +798,7 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
             -1e9.
         """
 
-        num_agents = len(self._agent_names)
+        num_agents = len(self.agent_names)
 
         no_guess_mask = decision_restriction == 1
         no_guess_mask = repeat(no_guess_mask, f"... -> ... {num_agents} 3").clone()
@@ -498,13 +815,15 @@ class CombinedPolicyHead(CombinedAgentPart, ABC):
         return decision_logits
 
 
-class CombinedValueHead(CombinedAgentPart, ABC):
+class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
     """A module which combines all the agent value heads together.
 
     Parameters
     ----------
     params : Parameters
         The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
     value_heads : dict[str, AgentValueHead]
@@ -514,10 +833,16 @@ class CombinedValueHead(CombinedAgentPart, ABC):
     def __init__(
         self,
         params: Parameters,
+        settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         value_heads: dict[str, AgentValueHead],
     ):
-        super().__init__(params, protocol_handler, value_heads)
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            parts=value_heads,
+        )
         self.value_heads = value_heads
 
     @abstractmethod
@@ -549,6 +874,8 @@ class Agent(ABC):
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
+    whole : WholeAgent, optional
+        The whole agent, if the agent is not split into parts.
     body : AgentBody, optional
         The (shared) body of the agent.
     policy_body : AgentBody, optional
@@ -565,6 +892,7 @@ class Agent(ABC):
 
     params: InitVar[Parameters]
     agent_name: InitVar[str]
+    whole: Optional[WholeAgent] = None
     body: Optional[AgentBody] = None
     policy_body: Optional[AgentBody] = None
     value_body: Optional[AgentBody] = None
@@ -579,8 +907,10 @@ class Agent(ABC):
         params: Parameters,
         agent_name: str,
     ):
-        if self.body is None and self.policy_body is None:
-            raise ValueError("An agent must have either a body or a policy body")
+        if self.body is None and self.policy_body is None and self.whole is None:
+            raise ValueError(
+                "An agent must have either a body or a policy body, or be a whole agent"
+            )
 
         if self.body is not None and self.policy_body is not None:
             raise ValueError("An agent cannot have both a body and a policy body")
@@ -588,9 +918,10 @@ class Agent(ABC):
         if self.value_body is not None and self.policy_body is None:
             raise ValueError("An agent with a value body must have a policy body")
 
-        if self.policy_head is None and self.solo_head is None:
+        if self.policy_head is None and self.solo_head is None and self.whole is None:
             raise ValueError(
-                "An agent must have either a policy head or a solo head, or both."
+                "An agent which is not whole must have either a policy head or a solo "
+                "head, or both."
             )
 
         if self.value_head is not None and self.policy_head is None:
@@ -636,7 +967,7 @@ class Agent(ABC):
         self.params = params
         self.agent_name = agent_name
 
-        self._agent_params = params.agents[agent_name]
+        self.agent_params = params.agents[agent_name]
 
     @staticmethod
     def _append_filtered_params(
@@ -674,7 +1005,7 @@ class Agent(ABC):
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
     def _body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         network_suffix = "network"
         if self.params.functionalize_modules:
             network_suffix += "_params"
@@ -689,7 +1020,7 @@ class Agent(ABC):
                 raise ValueError(f"Unknown part: {part}")
 
     def _non_body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         nums = {"actor": "1-9", "critic": "0-9"}
         network_suffix = "network"
         if self.params.functionalize_modules:
@@ -706,7 +1037,7 @@ class Agent(ABC):
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.named_parameters(), self.value_body.named_parameters()
@@ -715,7 +1046,7 @@ class Agent(ABC):
 
     @property
     def _body_parameters(self) -> Iterable[TorchParameter]:
-        use_critic, use_single_body = check_if_critic_and_single_body(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.parameters(), self.value_body.parameters()
@@ -751,16 +1082,16 @@ class Agent(ABC):
         # Check for mistakes
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.agent_lr_factor.actor
-            != self._agent_params.agent_lr_factor.critic
+            and self.agent_params.agent_lr_factor.actor
+            != self.agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
                 "The agent learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
             self.params.rl.use_shared_body
-            and self._agent_params.body_lr_factor.actor
-            != self._agent_params.body_lr_factor.critic
+            and self.agent_params.body_lr_factor.actor
+            != self.agent_params.body_lr_factor.critic
         ):
             raise ValueError(
                 "The body learning rate factor for the actor and critic must be the same if the body is shared."
@@ -768,19 +1099,19 @@ class Agent(ABC):
 
         # The learning rate of the whole agent
         agent_lr = {
-            "actor": self._agent_params.agent_lr_factor.actor * base_lr,
-            "critic": self._agent_params.agent_lr_factor.critic * base_lr,
+            "actor": self.agent_params.agent_lr_factor.actor * base_lr,
+            "critic": self.agent_params.agent_lr_factor.critic * base_lr,
         }
 
         # Determine the learning rate of the body
         body_lr = {
             "actor": (
-                agent_lr["actor"] * self._agent_params.body_lr_factor.actor
+                agent_lr["actor"] * self.agent_params.body_lr_factor.actor
                 if not body_lr_factor_override
                 else agent_lr["actor"]
             ),
             "critic": (
-                agent_lr["critic"] * self._agent_params.body_lr_factor.critic
+                agent_lr["critic"] * self.agent_params.body_lr_factor.critic
                 if not body_lr_factor_override
                 else agent_lr["critic"]
             ),

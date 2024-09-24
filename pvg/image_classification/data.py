@@ -22,8 +22,8 @@ from tensordict import TensorDict
 
 from pvg.parameters import BinarificationMethodType
 from pvg.parameters import ScenarioType
-from pvg.scenario_instance import register_scenario_class
-from pvg.scenario_base import Dataset
+from pvg.factory import register_scenario_class
+from pvg.scenario_base import Dataset, TensorDictDataset
 from pvg.constants import IC_DATA_DIR
 
 
@@ -162,7 +162,7 @@ class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
 
 
 @register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
-class ImageClassificationDataset(Dataset):
+class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
@@ -279,6 +279,7 @@ class ImageClassificationDataset(Dataset):
         x = torch.zeros(
             images.shape[0],
             self.protocol_handler.max_message_rounds,
+            self.protocol_handler.num_message_channels,
             self.params.message_size,
             *images.shape[-2:],
             dtype=self.x_dtype,
@@ -300,6 +301,7 @@ class ImageClassificationDataset(Dataset):
 
         processed_name = f"processed"
         processed_name += f"_{self.protocol_handler.max_message_rounds}"
+        processed_name += f"_{self.protocol_handler.num_message_channels}"
         processed_name += f"_{self.params.message_size}"
 
         processed_name = str(self.binarification_method).lower()

@@ -3,11 +3,12 @@
 Changing these settings should not effect the reproducibility of the experiment.
 """
 
-from typing import Optional
-from dataclasses import dataclass, field
-import logging
+from typing import Optional, ClassVar, Any
+from dataclasses import dataclass, field, fields
 
 import torch
+
+from openai import OpenAI
 
 import wandb
 
@@ -15,6 +16,10 @@ from tqdm import tqdm
 
 from pvg.stat_logger import StatLogger, DummyStatLogger
 from pvg.utils.types import TorchDevice, LoggingType
+
+
+def default_global_tqdm_step_fn():
+    pass
 
 
 @dataclass
@@ -51,6 +56,9 @@ class ExperimentSettings:
         RL training between each save of the models.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    num_rollout_workers : int, default=4
+        The number of workers to use for collecting rollout samples, when this is done
+        in parallel.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training. When the device if the
@@ -88,12 +96,15 @@ class ExperimentSettings:
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
+    num_rollout_workers: int = 4
     pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
-    global_tqdm_step_fn: callable = lambda: ...
+    global_tqdm_step_fn: callable = default_global_tqdm_step_fn
     pretrained_embeddings_batch_size: int = 256
     test_run: bool = False
+
+    unpicklable_fields: ClassVar[tuple[str, ...]] = ("global_tqdm_step_fn",)
 
     def __post_init__(self):
         if isinstance(self.device, str):
@@ -104,3 +115,25 @@ class ExperimentSettings:
 
         if self.test_run and self.wandb_run is not None:
             raise ValueError("test_run cannot be True if wandb_run is not None.")
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Get the state of the object for pickling.
+
+        This method is called when the object is pickled. We override it to remove
+        fields that are not picklable.
+
+        Returns
+        -------
+        state : dict[str, Any]
+            The state of the object.
+        """
+
+        state = {}
+        for setting_field in fields(self):
+            field_name = setting_field.name
+            if field_name in self.unpicklable_fields:
+                state[field_name] = setting_field.default
+            else:
+                state[field_name] = getattr(self, field_name)
+
+        return state

@@ -1,0 +1,24 @@
+Your current task is to ask questions to the user about their code. You must determine if the user's code is a correct solution to the programming problem below.
+
+## Problem
+
+$question
+
+## User solution
+
+```python
+$solution
+```
+
+## Instructions
+
+First ask the user a series of questions about their code. Every question you make must start with "Question:". You should ask questions about parts of the code to help you determine if it is a correct solution to the problem.
+
+Once you have asked enough questions, you must make a decision. You must type one of the following:
+- "Decision: accept" if you believe the code is a correct solution to the problem.
+- "Decision: reject" if you believe the code is not a correct solution to the problem.
+When making a decision do not type anything else. Just type either "Decision: accept" or "Decision: reject".
+
+If you are right, you will receive a reward. If you are wrong, you will receive a penalty.
+
+You can ask at most $max_questions questions. After that, you must make a decision.

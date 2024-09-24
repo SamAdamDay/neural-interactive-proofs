@@ -116,28 +116,43 @@ experiments. To build a new image and use it, follow the proceeding steps.
 3. Create a file named `.env` with the following contents
 
 ```bash
-GITHUB_USER=
-GITHUB_PAT=
+GITHUB_USER=""
+GITHUB_PAT=""
 GIT_NAME=""
 GIT_EMAIL=""
 SSH_PUBKEY=""
 WANDB_KEY=""
+OPENAI_API_KEY=""
 ```
 
 4. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
    like it to appear in git commit messages, the email you'd like to use for git
-   commits, the SSH public key you'd like to use to access the container and your
-   Weight's and Biases API key.
+   commits, the SSH public key you'd like to use to access the container, your
+   Weight's and Biases API key, and your OpenAI API key.
 
 5. Build the image using the following command:
 
 ```
-docker build -t DOCKER_REPO:DOCKER_TAG --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
+docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target default --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
 ```
 
-replacing `DOCKER_REPO` and `DOCKER_TAG` with the appropriate details.
+replacing `DOCKER_USER` with your Docker Hub username, and `DOCKER_REPO` and
+`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'pvg-experiments/default').
 
-5. Push the image to the Docker Hub, ready for use.
+Alternatively, you can build an image with all of the datasets already downloaded. This
+will result in a much larger image, but can make the process of spinning up and running
+a new instance faster overall, if using a large dataset. To do this, use the 'datasets'
+target as follows:
+
+```
+docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target datasets --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
+```
+
+6. Push the image to the Docker Hub, ready for use:
+
+```
+docker push DOCKER_USER/DOCKER_REPO:DOCKER_TAG
+```
 
 
 ## Wishlist TODOs

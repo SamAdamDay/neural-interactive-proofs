@@ -9,7 +9,7 @@ from torchrl.envs.transforms import Transform, Compose as ComposeTransform
 
 from pvg.utils.bugfix import Reward2GoTransform
 
-from pvg.trainers.rl_trainer_base import ReinforcementLearningTrainer
+from pvg.trainers.rl_tensordict_base import ReinforcementLearningTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
 from pvg.rl_objectives import ReinforceLossImproved

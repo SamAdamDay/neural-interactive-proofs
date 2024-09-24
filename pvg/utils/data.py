@@ -7,6 +7,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from pvg.utils.types import TorchDevice
+from pvg.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 
 
 def forgetful_cycle(iterable):
@@ -19,6 +20,13 @@ def forgetful_cycle(iterable):
 class VariableDataCycler:
     """A loader that cycles through data, but allows the batch size to vary.
 
+    If a default batch size is provided, it is possible to iterate infinitely over the
+    data as follows:
+
+    >>> data_cycler = VariableDataCycler(dataloader, default_batch_size=32)
+    >>> for batch in data_cycler:
+    ...     # Do something with the batch
+
     Parameters
     ----------
     dataloader : Iterable
@@ -27,6 +35,10 @@ class VariableDataCycler:
         The device to move the data to. If None, the data will not be moved.
     non_blocking : bool, default=False
         Whether to move the data to the device with `non_blocking=True`.
+    default_batch_size : int, optional
+        The default batch size to use when getting a batch and iterating over the
+        instance. If None, the batch size must be manually specified when getting a
+        batch, and it is not possible to iterate over the instance.
     """
 
     def __init__(
@@ -34,16 +46,27 @@ class VariableDataCycler:
         dataloader: Iterable,
         device: Optional[TorchDevice] = None,
         non_blocking: bool = False,
+        default_batch_size: Optional[int] = None,
     ):
         self.dataloader = dataloader
         self.device = device
         self.non_blocking = non_blocking
+        self.default_batch_size = default_batch_size
         self.dataloader_iter = iter(forgetful_cycle(self.dataloader))
-        self.remainder: Optional[list[TensorDict]] = None
+        self.remainder: Optional[list[TensorDict | NestedArrayDict]] = None
+
+    def __iter__(self):
+        if self.default_batch_size is None:
+            raise ValueError(
+                "Cannot iterate over the VariableDataCycler without a default batch "
+                "size."
+            )
+        while True:
+            yield self.get_batch()
 
     def get_batch(
         self,
-        batch_size: int,
+        batch_size: Optional[int] = None,
     ) -> TensorDict:
         """Get a batch of data from the dataloader with the given batch size.
 
@@ -51,8 +74,9 @@ class VariableDataCycler:
 
         Parameters
         ----------
-        batch_size : int
-            The size of the batch to return.
+        batch_size : int, optional
+            The size of the batch to return. If None, the default batch size will be
+            used, if it was provided.
 
         Returns
         -------
@@ -60,8 +84,16 @@ class VariableDataCycler:
             A batch of data with the given batch size.
         """
 
+        if batch_size is None:
+            if self.default_batch_size is None:
+                raise ValueError(
+                    "Must provide a batch size when the default batch size is not "
+                    "specified."
+                )
+            batch_size = self.default_batch_size
+
         left_to_sample = batch_size
-        batch_components: list[TensorDict] = []
+        batch_components: list[TensorDict | NestedArrayDict] = []
 
         # Start by sampling from the remainder from the previous sampling
         if self.remainder is not None:
@@ -75,7 +107,7 @@ class VariableDataCycler:
 
         # Keep sampling batches until we have enough
         while left_to_sample > 0:
-            batch: TensorDict = next(self.dataloader_iter)
+            batch: TensorDict | NestedArrayDict = next(self.dataloader_iter)
             if self.device is not None:
                 batch = batch.to(self.device, non_blocking=self.non_blocking)
             batch_components.append(batch[:left_to_sample])
@@ -86,7 +118,10 @@ class VariableDataCycler:
                 left_to_sample = 0
 
         # Concatenate the batch components into a single batch
-        batch = torch.cat(batch_components, dim=0)
+        if isinstance(batch_components[0], TensorDict):
+            batch = torch.cat(batch_components, dim=0)
+        else:
+            batch = concatenate_nested_array_dicts(batch_components, dim=0)
 
         return batch
 
@@ -227,3 +262,20 @@ def is_nested_key(index: Any) -> bool:
         return all(isinstance(key, str) for key in index)
 
     return False
+
+
+def truncated_iterator(iterable, maxlen):
+    """An iterator that stops after a maximum length.
+
+    Parameters
+    ----------
+    iterable : Iterable
+        The iterable to iterate over.
+    maxlen : int
+        The maximum length to iterate over.
+    """
+
+    for i, item in enumerate(iterable):
+        if i >= maxlen:
+            return
+        yield item
