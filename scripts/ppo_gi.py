@@ -3,6 +3,7 @@
 from argparse import Namespace
 import os
 import logging
+import dataclasses
 
 import torch
 
@@ -26,6 +27,7 @@ from pvg import (
     DebateProtocolParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
+    ContiguousPeriodicUpdateSchedule,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -102,7 +104,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
+    # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
+    # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
     seed=[8144, 820, 4173, 3992],
 )
@@ -121,13 +124,28 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
     if combo["update_spec"] is None:
         verifier_update_schedule = ConstantUpdateSchedule()
         prover_update_schedule = ConstantUpdateSchedule()
-    else:
+    elif len(combo["update_spec"]) == 2:
         period = combo["update_spec"][0] + combo["update_spec"][1]
         verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=True
         )
         prover_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=False
+        )
+    elif len(combo["update_spec"]) == 3:
+        period = sum(combo["update_spec"])
+        verifier_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period, 0, combo["update_spec"][0]
+        )
+        prover0_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period,
+            combo["update_spec"][0],
+            combo["update_spec"][0] + combo["update_spec"][1],
+        )
+        prover1_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period,
+            combo["update_spec"][0] + combo["update_spec"][1],
+            period,
         )
     if combo["prover_manual_architecture"]:
         prover_lr_factor = {"actor": 0.0, "critic": 0.0}
@@ -155,7 +173,6 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             include_round_in_decider=combo["include_round_in_decider"],
             use_batch_norm=combo["use_batch_norm"],
             use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
-            update_schedule=prover_update_schedule,
         )
     verifier_params = GraphIsomorphismAgentParameters(
         num_gnn_layers=combo["verifier_num_layers"],
@@ -178,13 +195,20 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         InteractionProtocolType.PVG,
         InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
     ):
+        prover_params.update_schedule = prover_update_schedule
         agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MERLIN_ARTHUR,
     ):
+        prover0_params = dataclasses.replace(
+            prover_params, update_schedule=prover0_update_schedule
+        )
+        prover1_params = dataclasses.replace(
+            prover_params, update_schedule=prover1_update_schedule
+        )
         agents_params = AgentsParameters(
-            verifier=verifier_params, prover0=prover_params, prover1=prover_params
+            verifier=verifier_params, prover0=prover0_params, prover1=prover1_params
         )
     else:
         raise NotImplementedError(
