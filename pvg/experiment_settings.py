@@ -137,3 +137,7 @@ class ExperimentSettings:
                 state[field_name] = getattr(self, field_name)
 
         return state
+
+    def __deepcopy__(self, memo) -> "ExperimentSettings":
+        """We do not deepcopy this object, as it is a singleton and contains locks."""
+        return self
