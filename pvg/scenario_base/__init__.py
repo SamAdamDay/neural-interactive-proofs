@@ -27,6 +27,7 @@ from .agents import (
     TensorDictAgentPartMixin,
     TensorDictDummyAgentPartMixin,
     WholeAgent,
+    PureTextWholeAgent,
     RandomWholeAgent,
     AgentBody,
     AgentHead,
@@ -43,6 +44,7 @@ from .agents import (
     CombinedPolicyHead,
     CombinedValueHead,
     Agent,
+    AgentState,
 )
 from .rollout_samples import (
     RolloutSamples,

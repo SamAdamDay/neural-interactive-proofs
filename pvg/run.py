@@ -47,6 +47,7 @@ def run_experiment(
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
     num_dataset_threads: int = 8,
+    num_rollout_workers: int = 4,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
     enable_efficient_attention: bool = False,
@@ -92,6 +93,9 @@ def run_experiment(
         together in the UI. This is useful for doing multiple runs on the same machine.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    num_rollout_workers : int, default=4
+        The number of workers to use for collecting rollout samples, when this is done
+        in parallel.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training.
@@ -143,6 +147,7 @@ def run_experiment(
     # Set up the experiment settings
     settings = ExperimentSettings(
         device=device,
+        run_id=run_id,
         wandb_run=wandb_run,
         stat_logger=stat_logger,
         tqdm_func=tqdm_func,
@@ -150,6 +155,7 @@ def run_experiment(
         profiler=profiler,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,
+        num_rollout_workers=num_rollout_workers,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
         enable_efficient_attention=enable_efficient_attention,

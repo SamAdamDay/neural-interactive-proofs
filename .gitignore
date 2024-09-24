@@ -152,3 +152,6 @@ log
 
 # PyTorch Image Models Source code
 pytorch-image-models-*
+
+# Experiment checkpoints
+experiment_checkpoints/*

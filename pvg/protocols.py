@@ -161,6 +161,17 @@ class ProtocolHandler(ABC):
 
         return visible_channels
 
+    def can_agent_see_channel(self, agent_name: str, channel_name: str) -> bool:
+        """Determine whether an agent can see a channel.
+
+        Returns
+        -------
+        can_see_channel : bool
+            Whether the agent can see the channel.
+        """
+
+        return (agent_name, channel_name) in self.agent_channel_visibility
+
     @abstractmethod
     def get_active_agents_mask_from_rounds(
         self, round: Int[Tensor, "..."]

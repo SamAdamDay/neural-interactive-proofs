@@ -112,19 +112,24 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
     ):
         super().__init__(params, scenario_instance, settings)
 
-        self.train_environment: TensorDictEnvironment = (
-            self.scenario_instance.train_environment
-        )
-        self.test_environment: TensorDictEnvironment = (
-            self.scenario_instance.test_environment
-        )
-
         # Update clip value to be a float or None
         self.clip_value = self.params.rl.clip_value
         if self.clip_value == True:
             self.clip_value = self.params.ppo.clip_epsilon
         elif self.clip_value == False:
             self.clip_value = None
+
+    def _initialise_state(self):
+        """Initialise the state of the trainer."""
+
+        super()._initialise_state()
+
+        self.train_environment: TensorDictEnvironment = (
+            self.scenario_instance.train_environment
+        )
+        self.test_environment: TensorDictEnvironment = (
+            self.scenario_instance.test_environment
+        )
 
     def train(self):
         """Train the agents."""

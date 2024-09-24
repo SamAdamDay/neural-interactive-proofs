@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from itertools import repeat
 from multiprocessing import Pool
+from functools import cached_property
+from pathlib import Path
+import pickle
+from dataclasses import dataclass
 
 import torch
 
@@ -16,7 +20,7 @@ from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import NestedArrayDictDataLoader, NestedArrayDictDataset
 from pvg.scenario_base.environment import PureTextEnvironment
-from pvg.code_validation.agents import CodeValidationCombinedWholeAgent
+from pvg.scenario_base.agents import PureTextWholeAgent
 from pvg.trainers.base import Trainer
 from pvg.utils.data import VariableDataCycler, truncated_iterator
 from pvg.utils.nested_array_dict import (
@@ -39,6 +43,64 @@ class PureTextRlTrainer(Trainer, ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    @dataclass
+    class State(Trainer.State):
+        pass
+
+    _state: State
+
+    @property
+    def state(self) -> State:
+
+        if not hasattr(self, "_state"):
+            self._state = self.State()
+
+        # Get the state of the agents to fill out the `agents` field
+        for agent_name, agent_whole in self.scenario_instance.agents.items():
+            self._state.agents[agent_name] = agent_whole.get_state()
+
+        return self._state
+
+    @state.setter
+    def state(self, state: State):
+        self._state = state
+
+        for agent_name, agent in self.scenario_instance.agents.items():
+            if agent_name not in state.agents:
+                raise ValueError(f"Agent {agent_name!r} not found in state.")
+            agent.set_state(state.agents[agent_name])
+
+    @property
+    def train_environment(self) -> PureTextEnvironment:
+        """The training environment."""
+        return self.scenario_instance.train_environment
+
+    @property
+    def test_environment(self) -> PureTextEnvironment:
+        """The test environment."""
+        return self.scenario_instance.test_environment
+
+    @cached_property
+    def agent_wholes(self) -> dict[str, PureTextWholeAgent]:
+        """The 'whole' part of each agent.
+
+        Agents are not split into parts, so an agent consists of only a 'whole' part.
+        """
+        return {
+            agent_name: agent.whole
+            for agent_name, agent in self.scenario_instance.agents.items()
+        }
+
+    @property
+    def combined_agent(self) -> PureTextWholeAgent:
+        """The agents combined into a single operator."""
+        return self.scenario_instance.combined_whole
+
+    @property
+    def checkpoint_rollouts_dir(self) -> Path:
+        """The directory to save the rollouts to."""
+        return self.checkpoint_base_dir.joinpath("rollouts")
+
     def __init__(
         self,
         params: Parameters,
@@ -49,11 +111,6 @@ class PureTextRlTrainer(Trainer, ABC):
 
         # Create a random number generator
         self.rng = torch.Generator()
-
-    @property
-    def combined_agent(self) -> CodeValidationCombinedWholeAgent:
-        """The agents combined into a single operator."""
-        return self.scenario_instance.combined_whole
 
     def sample_rollouts(
         self,
@@ -91,18 +148,55 @@ class PureTextRlTrainer(Trainer, ABC):
             rollout_iterator = pool.imap_unordered(_sample_single_rollout, arg_iterator)
 
             if use_tqdm:
-                rollout_iterator = tqdm(rollout_iterator, total=environment.num_envs)
+                rollout_iterator = tqdm(
+                    rollout_iterator,
+                    total=environment.num_envs,
+                    desc="Sampling rollouts",
+                )
 
             rollout_list: list[NestedArrayDict] = list(rollout_iterator)
 
         return stack_nested_array_dicts(rollout_list, dim=0)
+
+    def save_rollouts(self, rollouts: NestedArrayDict, iteration: int):
+        """Save the rollouts to the checkpoint directory.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The rollouts to save.
+        iteration : int
+            The iteration number.
+        """
+
+        self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt"), "wb") as f:
+            pickle.dump(rollouts, f)
+
+    def load_rollouts(self, iteration: int) -> NestedArrayDict:
+        """Load the rollouts from the checkpoint directory.
+
+        Parameters
+        ----------
+        iteration : int
+            The iteration number.
+
+        Returns
+        -------
+        NestedArrayDict
+            The rollouts.
+        """
+
+        with open(self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt"), "rb") as f:
+            return pickle.load(f)
 
 
 def _sample_single_rollout(
     args: tuple[
         PureTextEnvironment,
         int,
-        CodeValidationCombinedWholeAgent,
+        PureTextWholeAgent,
         Optional[NestedArrayDict],
     ]
 ) -> NestedArrayDict:
@@ -118,11 +212,13 @@ def _sample_single_rollout(
     ----------
     environment : PureTextEnvironment
         The environment to sample a rollout in.
+    max_message_rounds : int
+        The maximum number of message rounds in the rollout.
+    combined_agent : PureTextWholeAgent
+        The combined agent to use for the rollout.
     data_batch : NestedArrayDict, optional
         The data batch to use for the rollout. If None, the data batch will be
         sampled from the dataset.
-    pbar : tqdm, optional
-        The progress bar to update, if any.
 
     Returns
     -------
