@@ -29,6 +29,7 @@ HF_PRETRAINED_MODELS_USER = "SamAdamDay"
 
 # Weights & Biases defaults
 WANDB_PROJECT = "pvg-sandbox"
+WANDB_CV_PROJECT = "pvg-code-validation-sandbox"
 WANDB_ENTITY = "lrhammond-team"
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"
 ROLLOUT_SAMPLE_ARTIFACT_TYPE = "rollout_sample"

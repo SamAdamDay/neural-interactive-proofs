@@ -24,6 +24,7 @@ from pvg.utils.experiments import (
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
 )
+from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
@@ -118,6 +119,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         wandb_project=cmd_args.wandb_project,
         wandb_entity=cmd_args.wandb_entity,
         run_id=arguments.run_id,
+        allow_resuming_wandb_run=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
         num_rollout_workers=cmd_args.num_rollout_workers,
@@ -143,6 +145,8 @@ if __name__ == "__main__":
         run_id_fn=run_id_fn,
         run_preparer_fn=run_preparer_fn,
         experiment_name="EI_VC",
+        default_wandb_project=WANDB_CV_PROJECT,
+        allow_resuming_wandb_run=True,
     )
 
     experiment.parser.add_argument(

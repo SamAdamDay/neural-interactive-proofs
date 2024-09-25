@@ -43,6 +43,7 @@ def run_experiment(
     wandb_entity: str = WANDB_ENTITY,
     run_id: Optional[str] = None,
     allow_auto_generated_run_id: bool = False,
+    allow_resuming_wandb_run: bool = False,
     print_wandb_run_url: bool = False,
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
@@ -84,6 +85,8 @@ def run_experiment(
         is False.
     allow_auto_generated_run_id : bool, default=False
         If True, the run ID can be auto-generated if not specified.
+    allow_resuming_wandb_run : bool, default=False
+        If True, the run can be resumed if the run ID is specified and the run exists.
     print_wandb_run_url : bool, default=False
         If True, print the URL of the W&B run at the start of the experiment.
     wandb_tags : list[str], default=[]
@@ -134,7 +137,7 @@ def run_experiment(
             tags=wandb_tags,
             group=wandb_group,
             id=run_id,
-            resume="never",
+            resume="allow" if allow_resuming_wandb_run else "never",
         )
         wandb_run.config.update(params.to_dict())
         if print_wandb_run_url:
