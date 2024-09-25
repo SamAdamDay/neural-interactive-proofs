@@ -83,8 +83,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
                     )
                     agent_whole.create_fine_tune_job(selected_rollouts)
 
-                assert False
-
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
 
