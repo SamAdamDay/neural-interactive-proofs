@@ -30,7 +30,7 @@ param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    frames_per_batch=[88],
+    frames_per_batch=[None],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
@@ -44,7 +44,7 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    use_dummy_api=[True],
+    use_dummy_api=[False],
 )
 
 
