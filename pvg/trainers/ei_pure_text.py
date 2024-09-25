@@ -142,7 +142,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             The selected rollouts.
         """
 
-        agent_index = list(self.scenario_instance.agents.keys()).index(agent_name)
+        agent_index = self.agent_names.index(agent_name)
 
         # Select the rollouts with a high reward for the given agent
         good_mask = (

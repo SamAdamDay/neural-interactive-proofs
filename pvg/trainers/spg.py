@@ -36,7 +36,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
 
         # Construct the loss module
         stackelberg_sequence_int = [
-            tuple(self._agent_names.index(name) for name in group)
+            tuple(self.agent_names.index(name) for name in group)
             for group in self.params.spg.stackelberg_sequence
         ]
         loss_module = SpgLoss(
@@ -44,7 +44,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
             critic=self.value_operator,
             variant=self.params.spg.variant,
             stackelberg_sequence=stackelberg_sequence_int,
-            names=self._agent_names,
+            names=self.agent_names,
             ihvp={
                 "variant": self.params.spg.ihvp_variant,
                 "num_iterations": self.params.spg.ihvp_num_iterations,
