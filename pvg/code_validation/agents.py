@@ -421,7 +421,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         for batch_id in product(*(range(dim) for dim in batch_size)):
 
             # Get the environment state for the final round
-            rollout_final_state = rollouts[*batch_id, -1]
+            rollout_final_state = rollouts[batch_id][-1]
 
             for channel_id, channel_name in enumerate(
                 self.protocol_handler.message_channel_names
