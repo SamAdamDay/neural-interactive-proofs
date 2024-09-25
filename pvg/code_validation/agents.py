@@ -87,6 +87,14 @@ class UnknownFinishReasonError(GenerationError):
 class InvalidResponseError(GenerationError):
     """Raised when the agent's response is invalid"""
 
+    def __init__(self, num_retries: int, response_text: str):
+        self.response_text = response_text
+        self.num_retries = num_retries
+        super(GenerationError, self).__init__(
+            f"Invalid generation after {num_retries} retries. Response: "
+            "{response_text!r}"
+        )
+
 
 class InvalidDecisionError(InvalidResponseError):
     """Raised when the agent's decision is invalid (i.e. not accept or reject)"""
@@ -531,28 +539,30 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
             # Validate the reason for finishing the generation
             if finish_reason == "content_filter":
-                raise ContentFilterError(retry)
+                raise ContentFilterError(retry=retry)
             elif finish_reason == "length":
                 warning = "max_tokens"
             elif finish_reason != "stop":
-                raise UnknownFinishReasonError(retry, finish_reason)
+                raise UnknownFinishReasonError(retry=retry, reason=finish_reason)
 
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.startswith("Question: ") or completion_text.startswith(
-                "Answer: "
+            if completion_text.startswith("Question:") or completion_text.startswith(
+                "Answer:"
             ):
                 return completion_text, 2, retry, warning
-            elif completion_text.startswith("Decision: "):
+            elif completion_text.startswith("Decision:"):
                 if completion_text == "Decision: accept":
                     return completion_text, 1, retry, warning
                 elif completion_text == "Decision: reject":
                     return completion_text, 0, retry, warning
                 else:
-                    raise InvalidDecisionError(retry)
+                    raise InvalidDecisionError(
+                        retry=retry, response_text=completion_text
+                    )
             else:
-                raise InvalidResponseError(retry)
+                raise InvalidResponseError(retry=retry, response_text=completion_text)
 
         # Try the generation a number of times
         for retry in range(self.agent_params.num_invalid_generation_retries):
