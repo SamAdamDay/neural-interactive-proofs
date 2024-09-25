@@ -610,24 +610,23 @@ def generate_buggy_solutions(
     return buggy_solutions
 
 
-def generate_cv_dataset(
-    config: CodeValidationDatasetConfig | dict,
-    manager: Optional[multiprocessing.Manager] = None,
-):
+def create_empty_dataset():
 
-    if isinstance(config, dict):
-        config = CodeValidationDatasetConfig(**config)
+    return datasets.Dataset.from_dict(
+                {
+                    k: []
+                    for k in [
+                        "apps_split",
+                        "apps_problem_id",
+                        "difficulty",
+                        "question",
+                        "solutions",
+                        "buggy_solutions",
+                    ]
+                }
+            )
 
-    # Create process manager in case we get stuck on any of the problems
-    if manager is None:
-        manager = multiprocessing.Manager()
-    else:
-        process_results = manager.list()
-
-    split = ["train", "test"] if config.split is None else [config.split]
-
-    # Load original data
-    data = datasets.load_dataset("codeparrot/apps", trust_remote_code=True)
+def load_buggy_data(config: CodeValidationDatasetConfig, split: List[str]) -> datasets.Dataset:
 
     # Load existing buggy data (the only split is train, so we specify that)
     if config.pull_repo is not None:
@@ -647,19 +646,29 @@ def generate_cv_dataset(
             buggy_data = datasets.load_dataset(config.local_dir)
         else:
             Path(config.local_dir).mkdir(parents=True, exist_ok=True)
-            buggy_data = datasets.Dataset.from_dict(
-                {
-                    k: []
-                    for k in [
-                        "apps_split",
-                        "apps_problem_id",
-                        "difficulty",
-                        "question",
-                        "solutions",
-                        "buggy_solutions",
-                    ]
-                }
-            )
+            buggy_data = create_empty_dataset()
+
+    return buggy_data
+
+def generate_cv_dataset(
+    config: CodeValidationDatasetConfig | dict,
+    manager: Optional[multiprocessing.Manager] = None,
+):
+
+    if isinstance(config, dict):
+        config = CodeValidationDatasetConfig(**config)
+
+    # Create process manager in case we get stuck on any of the problems
+    if manager is None:
+        manager = multiprocessing.Manager()
+    else:
+        process_results = manager.list()
+
+    split = ["train", "test"] if config.split is None else [config.split]
+
+    # Load existing data
+    data = datasets.load_dataset("codeparrot/apps", trust_remote_code=True)
+    buggy_data = load_buggy_data(config, split)
 
     start_time = datetime.now()
 
@@ -690,6 +699,8 @@ def generate_cv_dataset(
             print(
                 f"Generating {num_buggy_data_to_generate} buggy data for the {d} problems in the {s} split"
             )
+
+            new_data = create_empty_dataset()
 
             for datum in tqdm(data_slice, colour="green"):
 
@@ -785,7 +796,7 @@ def generate_cv_dataset(
                     else:
                         buggy_datum["buggy_solutions"].append(buggy_solutions[i])
 
-                buggy_data = buggy_data.add_item(buggy_datum)
+                new_data = new_data.add_item(buggy_datum)
                 num_data_added += 1
 
                 # Occasionally save if required
@@ -793,11 +804,13 @@ def generate_cv_dataset(
                     continue
                 elif num_data_added % config.save_after == 0 and num_data_added > 0:
                     # buggy_data.to_json(os.path.join(config.local_dir, s, f"{d}.jsonl"))
-                    buggy_data.save_to_disk(
+                    buggy_data = load_buggy_data(config, split)
+                    combined_buggy_data = datasets.concatenate_datasets([buggy_data, new_data])
+                    combined_buggy_data.save_to_disk(
                         os.path.join(config.local_dir, "code_validation.data")
                     )
                     if config.push_repo is not None:
-                        buggy_data.push_to_hub(config.push_repo, token=config.token)
+                        combined_buggy_data.push_to_hub(config.push_repo, token=config.token)
 
             # Calculate the elapsed time, rounding microseconds down
             elapsed_time = datetime.now() - start_time
