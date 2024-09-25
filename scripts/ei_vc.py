@@ -27,13 +27,14 @@ from pvg.utils.experiments import (
 
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
-    dataset_name=["codeparrot/apps"],
+    dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[2],
     frames_per_batch=[160],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
-    prover_model=["gpt-4o-2024-08-06"],
+    prover_model=["gpt-4o-mini-2024-07-18"],
+    # prover_model=["gpt-4o-2024-08-06"],
     prover_temperature=[None],
     prover_top_p=[None],
     fine_tune_from_scratch=[True],

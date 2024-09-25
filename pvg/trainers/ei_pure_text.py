@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
 from time import sleep
-from datetime import timedelta
 
 from tqdm import tqdm
 
@@ -94,13 +93,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 self.settings.logger.info("Awaiting completion of fine-tune jobs...")
 
-                minutes_passed = 0
                 while True:
-
-                    print(
-                        f"Time elapsed: {timedelta(minutes=minutes_passed)!s}",
-                        end="\r",
-                    )
 
                     num_successful_jobs = 0
                     for agent_name, agent_whole in self.agent_wholes.items():
@@ -118,7 +111,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                     # Wait for a minute before checking again
                     sleep(60)
-                    minutes_passed += 1
 
                 # Make all the agents use the new, fine-tuned models
                 for agent_name, agent_whole in self.agent_wholes.items():
