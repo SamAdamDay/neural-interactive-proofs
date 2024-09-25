@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 from time import sleep
 
-from tqdm import tqdm
+import numpy as np
+
+from jaxtyping import Bool
 
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
@@ -31,7 +33,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
         """The state of the experiment."""
 
         train_loop_stage: Literal[
-            "sample_rollouts", "create_fine_tune_jobs", "await_fine_tune_jobs"
+            "sample_rollouts",
+            "log_stats",
+            "create_fine_tune_jobs",
+            "await_fine_tune_jobs",
         ] = "sample_rollouts"
 
     def train(self):
@@ -55,9 +60,23 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 self.save_rollouts(rollouts, self.state.iteration)
 
                 # Advance to the next stage
-                self.state.train_loop_stage = "create_fine_tune_jobs"
+                self.state.train_loop_stage = "log_stats"
 
                 self.save_checkpoint()
+
+            # Log the statistics of the rollouts
+            if self.state.train_loop_stage == "log_stats":
+
+                # Load the rollouts if they are not already set (i.e. if we are resuming
+                # this stage)
+                if rollouts is None:
+                    rollouts = self.load_rollouts(self.state.iteration)
+
+                log_stats = self._get_log_stats(rollouts, train=True)
+                self.settings.stat_logger.log(log_stats, self.state.iteration)
+
+                # Advance to the next stage
+                self.state.train_loop_stage = "create_fine_tune_jobs"
 
             # We don't fine-tune on the last iteration
             if self.state.iteration == self.params.rl.num_iterations - 1:
@@ -124,6 +143,74 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         self.settings.logger.info("Training complete.")
 
+    def _get_log_stats(
+        self,
+        rollouts: NestedArrayDict,
+        *,
+        train=True,
+    ) -> dict:
+        """Get the statistics to log for the given rollouts.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The rollouts to get the statistics for.
+
+        Returns
+        -------
+        stats : dict
+            The statistics to log.
+        """
+
+        if train:
+            prefix = ""
+        else:
+            prefix = "test_"
+
+        done: Bool[np.ndarray, "..."] = rollouts["done"]
+        next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
+
+        log_stats = {}
+
+        for agent_index, agent_name in enumerate(self.agent_names):
+
+            # Get the total episode reward for each agent
+            log_stats[f"{agent_name}.{prefix}mean_episode_reward"] = (
+                rollouts["next", "agents", "reward"][..., agent_index]
+                .sum(axis=-1)
+                .mean()
+                .item()
+            )
+
+            # The proportion of messages that were retried or hit the token limit
+            log_stats[f"{agent_name}.{prefix}retry_proportion"] = (
+                rollouts["agents", "retry_count"][..., agent_index, :][~done]
+                .mean()
+                .item()
+            )
+            log_stats[f"{agent_name}.{prefix}token_limit_proportion"] = (
+                rollouts["agents", "token_limit"][..., agent_index, :][~done]
+                .mean()
+                .item()
+            )
+
+        log_stats[f"{prefix}mean_episode_length"] = (
+            (rollouts["message_history"][..., -1, :, 0] != None)
+            .sum(axis=-1)
+            .mean()
+            .item()
+        )
+
+        # Get the mean accuracy of the verifier
+        verifier_decision = rollouts["agents", "decision"][
+            ..., self.agent_names.index("verifier")
+        ]
+        log_stats[f"{prefix}mean_accuracy"] = (
+            (verifier_decision[next_done] == rollouts["y"][next_done]).mean().item()
+        )
+
+        return log_stats
+
     def _select_good_rollouts(
         self, rollouts: NestedArrayDict, agent_name: str
     ) -> NestedArrayDict:
@@ -146,7 +233,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         # Select the rollouts with a high reward for the given agent
         good_mask = (
-            rollouts["next", "agents", "reward"][..., :, agent_index].sum(axis=-1)
+            rollouts["next", "agents", "reward"][..., agent_index].sum(axis=-1)
             >= self.params.ei.reward_threshold
         )
         return rollouts[good_mask]

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import dataclasses
 import json
 from logging import getLogger
+import sys
 
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
@@ -112,6 +113,10 @@ class Trainer(ABC):
         with open(self.checkpoint_state_path, "w") as f:
             json.dump(dataclasses.asdict(self.state), f, indent=4)
 
+        # Save the parameters to a separate file
+        with open(self.checkpoint_params_path, "w") as f:
+            json.dump(self.params.to_dict(), f, sort_keys=True, indent=4)
+
         if log:
             self.settings.logger.info(
                 f"Saved experiment state to '{self.checkpoint_state_path}'"
@@ -143,6 +148,15 @@ class Trainer(ABC):
 
         return self.checkpoint_base_dir.joinpath("state.json")
 
+    @property
+    def checkpoint_params_path(self) -> Path | None:
+        """The path to the parameters file for the checkpoint."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("params.json")
+
     def _load_checkpoint(self) -> State:
         """Load the experiment state from a checkpoint, if available.
 
@@ -163,6 +177,22 @@ class Trainer(ABC):
             or not self.checkpoint_state_path.is_file()
         ):
             raise CheckPointNotFoundError
+
+        # Check if the parameters in the checkpoint match the current parameters
+        with open(self.checkpoint_params_path, "r") as f:
+            if json.dumps(self.params.to_dict(), sort_keys=True, indent=4) != f.read():
+                print(
+                    "The parameters in the checkpoint do not match the current "
+                    "parameters."
+                )
+                while True:
+                    response = input("Do you want to continue? [Y/n]: ")
+                    if response.lower() == "y" or response == "":
+                        break
+                    elif response.lower() == "n":
+                        sys.exit(1)
+                    else:
+                        print("Invalid response. Please enter 'y' or 'n'.")
 
         with open(self.checkpoint_state_path, "r") as f:
             state_dict = json.load(f)
