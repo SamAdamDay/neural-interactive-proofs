@@ -64,6 +64,11 @@ class Trainer(ABC):
         """The maximum number of message rounds in the protocol."""
         return self.scenario_instance.protocol_handler.max_message_rounds
 
+    @property
+    def agent_names(self) -> list[str]:
+        """The names of the agents in the scenario."""
+        return self.scenario_instance.protocol_handler.agent_names
+
     def __init__(
         self,
         params: Parameters,
@@ -73,8 +78,6 @@ class Trainer(ABC):
         self.params = params
         self.scenario_instance = scenario_instance
         self.settings = settings
-
-        self._agent_names = self.scenario_instance.protocol_handler.agent_names
 
         if settings.logger is None:
             self.settings.logger = getLogger(__name__)

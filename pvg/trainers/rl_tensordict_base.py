@@ -473,7 +473,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             ("agents", "decision_logits")
         )
         message_logits_key = self.scenario_instance.agents[
-            self._agent_names[0]
+            self.agent_names[0]
         ].message_logits_key
         message_logits: Float[Tensor, "... agent channel position logit"] = (
             tensordict_data.get(("agents", message_logits_key))
@@ -485,7 +485,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         mean_episode_length = round[done].float().mean().item()
         log_stats[f"{prefix}mean_episode_length"] = mean_episode_length
 
-        for i, agent_name in enumerate(self._agent_names):
+        for i, agent_name in enumerate(self.agent_names):
             # Compute the mean reward per step and per episode
             mean_reward = reward[..., i].mean().item()
             log_stats[f"{agent_name}.{prefix}mean_step_reward"] = mean_reward
@@ -553,7 +553,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
         # Compute the mean accuracy for the done episodes
         verifier_decision = tensordict_data.get(("agents", "decision"))[
-            ..., self._agent_names.index("verifier")
+            ..., self.agent_names.index("verifier")
         ]
         log_stats[f"{prefix}mean_accuracy"] = (
             (verifier_decision[done] == tensordict_data["y"][done].squeeze())
@@ -567,7 +567,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
             def log_per_agent_losses(agent_losses: TensorDictBase):
                 for key, val in agent_losses.items():
-                    for i, agent_name in enumerate(self._agent_names):
+                    for i, agent_name in enumerate(self.agent_names):
                         log_stats[f"{prefix}{agent_name}.{key}"] = (
                             val[..., i].mean().item()
                         )
@@ -624,7 +624,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         # Create the update schedule iterators
         update_schedule_iterators = [
             update_schedule_iterator(self.params.agents[name].update_schedule)
-            for name in self._agent_names
+            for name in self.agent_names
         ]
 
         iterator = zip(enumerate(self.train_collector), *update_schedule_iterators)
@@ -645,7 +645,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule
-            for agent_name, update in zip(self._agent_names, agent_updates):
+            for agent_name, update in zip(self.agent_names, agent_updates):
                 if update:
                     self.param_group_freezer.unfreeze(agent_name)
                 else:

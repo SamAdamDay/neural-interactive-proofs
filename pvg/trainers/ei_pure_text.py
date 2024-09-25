@@ -83,6 +83,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
                     )
                     agent_whole.create_fine_tune_job(selected_rollouts)
 
+                assert False
+
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
 
@@ -142,7 +144,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             The selected rollouts.
         """
 
-        agent_index = list(self.scenario_instance.agents.keys()).index(agent_name)
+        agent_index = self.agent_names.index(agent_name)
 
         # Select the rollouts with a high reward for the given agent
         good_mask = (
