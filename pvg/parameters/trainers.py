@@ -212,3 +212,17 @@ class SoloAgentParameters(SubParameters):
 
     # Agents
     body_lr_factor_override: bool = False
+
+
+@dataclass
+class EiParameters(SubParameters):
+    """Additional parameters for the Expert Iteration (EI) trainer.
+
+    Parameters
+    ----------
+    reward_threshold : float
+        The threshold on the reward for a rollout to be added to the fine-tuning
+        dataset.
+    """
+
+    reward_threshold: float = 0.9

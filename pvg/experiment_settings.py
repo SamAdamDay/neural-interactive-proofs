@@ -30,6 +30,9 @@ class ExperimentSettings:
     ----------
     device : TorchDevice, default="cpu"
         The device to use for training.
+    run_id : str, optional
+        The ID of the current run. This can be used to save and restore the state of the
+        experiment.
     wandb_run : wandb.wandb_sdk.wandb_run.Run, optional
         The W&B run to log to, if any.
     silence_wandb : bool, default=True
@@ -85,6 +88,7 @@ class ExperimentSettings:
     """
 
     device: TorchDevice = torch.device("cpu")
+    run_id: Optional[str] = None
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)

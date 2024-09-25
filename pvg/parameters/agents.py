@@ -391,6 +391,16 @@ class CodeValidationAgentParameters(AgentParameters):
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
+    temperature : float | None
+        The temperature to use when sampling from the model. If `None`, the model uses
+        the default temperature. Only one of `temperature` and `top_p` should be set.
+    top_p : float | None
+        The top-p value to use when sampling from the model. A value 0.1 means only the
+        top 10% of tokens are considered when sampling. If `None`, the model uses the
+        default top-p value. Only one of `temperature` and `top_p` should be set.
+    fine_tune_from_scratch : bool
+        Whether to fine-tune the model from scratch each iteration, or continue
+        fine-tuning from the previous iteration.
     max_tokens_per_message : int
         The maximum number of tokens which the model is allowed to generate in a single
         message.
@@ -400,8 +410,13 @@ class CodeValidationAgentParameters(AgentParameters):
     """
 
     model_provider: Literal["OpenAI"] = "OpenAI"
-    model_name: str = "gpt-4o-mini"
+    model_name: str = "gpt-4o-mini-2024-07-18"
     use_dummy_api: bool = False
+
+    temperature: float | None = None
+    top_p: float | None = None
+
+    fine_tune_from_scratch: bool = True
 
     max_tokens_per_message: int = 512
     num_invalid_generation_retries: int = 5

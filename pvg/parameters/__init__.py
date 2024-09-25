@@ -86,6 +86,7 @@ from .trainers import (
     SpgParameters,
     ReinforceParameters,
     SoloAgentParameters,
+    EiParameters,
 )
 from .protocol import (
     CommonProtocolParameters,
@@ -231,6 +232,7 @@ class Parameters(BaseParameters):
     spg: Optional[SpgParameters | dict] = None
     reinforce: Optional[ReinforceParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    ei: Optional[EiParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
     code_validation: Optional[CodeValidationParameters | dict] = None
