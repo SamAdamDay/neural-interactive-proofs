@@ -155,3 +155,6 @@ pytorch-image-models-*
 
 # Benchmarking results
 playground/benchmarking/results
+
+# Experiment checkpoints
+experiment_checkpoints/*

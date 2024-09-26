@@ -22,11 +22,14 @@ RESULTS_DIR = os.path.join(_root_dir, "results")
 RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")
 GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents")
 
+EXPERIMENT_STATE_DIR = os.path.join(_root_dir, "experiment_checkpoints")
+
 # The user hosting the pretrained models
 HF_PRETRAINED_MODELS_USER = "SamAdamDay"
 
 # Weights & Biases defaults
 WANDB_PROJECT = "pvg-sandbox"
+WANDB_CV_PROJECT = "pvg-code-validation-sandbox"
 WANDB_ENTITY = "lrhammond-team"
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"
 ROLLOUT_SAMPLE_ARTIFACT_TYPE = "rollout_sample"
@@ -36,3 +39,4 @@ CHECKPOINT_ARTIFACT_TYPE = "checkpoint"
 WANDB_DUMMY_RUN_PROJECT = "pvg-sandbox"
 WANDB_DUMMY_RUN_ENTITY = "lrhammond-team"
 WANDB_DUMMY_RUN_NAME = "dummy_run"
+WANDB_OPENAI_FINETUNE_PROJECT = "pvg-openai-finetune"

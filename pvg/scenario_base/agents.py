@@ -9,7 +9,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Iterable, Callable, ClassVar
+from typing import Optional, Any, Iterable, Callable, ClassVar, Literal
 from dataclasses import dataclass, fields, InitVar
 from functools import partial, cached_property
 import re
@@ -36,6 +36,7 @@ from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
 from pvg.utils.params import get_agent_part_flags
 from pvg.utils.torch import apply_orthogonal_initialisation
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 @dataclass
@@ -81,6 +82,11 @@ class AgentHooks:
         }
 
         return cls(**cls_args)
+
+
+@dataclass
+class AgentState(ABC):
+    """Base class for storing all the data needed to restore an agent."""
 
 
 class AgentPart(ABC):
@@ -216,6 +222,33 @@ class AgentPart(ABC):
         """
         return []
 
+    def set_state(self, checkpoint: AgentState):
+        """Set the state of the agent from a checkpoint.
+
+        This method should be overridden by subclasses to restore the state of the agent
+        from a checkpoint.
+
+        Parameters
+        ----------
+        checkpoint : AgentCheckpoint
+            The checkpoint to restore the state from.
+        """
+
+    def get_state_dict(self) -> dict:
+        """Get the state of the agent part as a dict.
+
+        This method should be implemented by subclasses capable of saving their state.
+
+        Returns
+        -------
+        state_dict : dict
+            The state of the agent part.
+        """
+        raise NotImplementedError(
+            f"Getting the agent state is not implemented for "
+            f"{self.__class__.__name__}"
+        )
+
     def __init__(
         self,
         params: Parameters,
@@ -321,6 +354,42 @@ class TensorDictDummyAgentPartMixin(TensorDictAgentPartMixin, ABC):
 
 class WholeAgent(AgentPart, ABC):
     """Base class for agents which are not split into parts."""
+
+
+class PureTextWholeAgent(WholeAgent, ABC):
+    """Base class for whole agents which process text input and call APIs."""
+
+    _visible_message_channel_mask: Optional[Bool[np.ndarray, "channel"]] = None
+
+    @cached_property
+    def visible_message_channel_mask(self) -> Bool[np.ndarray, "channel"]:
+        """The mask for the message channels visible to the agent."""
+        return super().visible_message_channel_mask.cpu().detach().numpy()
+
+    @abstractmethod
+    def forward(self, data: NestedArrayDict) -> NestedArrayDict:
+        """Forward pass through the agent"""
+
+    def __call__(self, data: NestedArrayDict) -> NestedArrayDict:
+        return self.forward(data)
+
+    @abstractmethod
+    def create_fine_tune_job(self, data: NestedArrayDict):
+        """Create a fine-tune job for the agent given sampled rollouts"""
+
+    @abstractmethod
+    def get_fine_tune_job_status(
+        self,
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+        """Get the status of the fine-tune job"""
+
+    @abstractmethod
+    def get_fine_tune_job_error_repr(self) -> str:
+        """Get a string representation of the error for the fine-tune job"""
+
+    @abstractmethod
+    def switch_to_next_model(self):
+        """Switch to the next model after fine-tuning"""
 
 
 class RandomWholeAgent(WholeAgent, ABC):
@@ -902,6 +971,8 @@ class Agent(ABC):
 
     message_logits_key: ClassVar[str]
 
+    agent_state_class: ClassVar[type[AgentState]] = AgentState
+
     def __post_init__(
         self,
         params: Parameters,
@@ -968,6 +1039,46 @@ class Agent(ABC):
         self.agent_name = agent_name
 
         self.agent_params = params.agents[agent_name]
+
+    def set_state(self, checkpoint: AgentState):
+        """Set the state of the agent from a checkpoint.
+
+        This method restores the state of all the agent parts from the checkpoint.
+
+        Parameters
+        ----------
+        checkpoint : AgentCheckpoint
+            The checkpoint to restore the state from.
+        """
+
+        for part_field in fields(self):
+            part: AgentPart = getattr(self, part_field.name)
+            if part is not None:
+                part.set_state(checkpoint)
+
+    def get_state(self) -> AgentState:
+        """Get a checkpoint of the agent's state.
+
+        This method gets a checkpoint of the state of all the agent parts.
+
+        Returns
+        -------
+        checkpoint : AgentCheckpoint
+            The checkpoint of the agent's state.
+        """
+
+        state_dict = {}
+        for part_field in fields(self):
+            part: AgentPart = getattr(self, part_field.name)
+            if part is not None:
+                for key, value in part.get_state_dict().items():
+                    if key in state_dict:
+                        raise ValueError(
+                            f"Duplicate key {key!r} in agent state checkpoint."
+                        )
+                    state_dict[key] = value
+
+        return self.agent_state_class(**state_dict)
 
     @staticmethod
     def _append_filtered_params(

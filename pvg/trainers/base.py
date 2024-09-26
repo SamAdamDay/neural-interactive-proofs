@@ -5,16 +5,28 @@ from contextlib import ExitStack
 from typing import ContextManager, Callable, Optional
 import functools
 import inspect
+from pathlib import Path
+from dataclasses import dataclass
+import dataclasses
+import json
+from logging import getLogger
+import sys
 
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from tqdm import tqdm
 
+from pvg.scenario_base.agents import AgentState
 from pvg.parameters import Parameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.params import get_agent_part_flags
+from pvg.constants import EXPERIMENT_STATE_DIR
+
+
+class CheckPointNotFoundError(Exception):
+    """Exception raised when a checkpoint is not found."""
 
 
 class Trainer(ABC):
@@ -30,10 +42,33 @@ class Trainer(ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    @dataclass
+    class State:
+        """Base class for storing the state of an experiment.
+
+        This class should hold all the data that needs to be saved and restored when
+        checkpointing an experiment.
+
+        Parameters
+        ----------
+        iteration : int
+            The current iteration number.
+        agents : dict[str, AgentCheckpoint]
+            The checkpoints of the agents.
+        """
+
+        iteration: int = 0
+        agents: dict[str, AgentState] = dataclasses.field(default_factory=dict)
+
     @property
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
         return self.scenario_instance.protocol_handler.max_message_rounds
+
+    @property
+    def agent_names(self) -> list[str]:
+        """The names of the agents in the scenario."""
+        return self.scenario_instance.protocol_handler.agent_names
 
     def __init__(
         self,
@@ -45,12 +80,124 @@ class Trainer(ABC):
         self.scenario_instance = scenario_instance
         self.settings = settings
 
-        self._agent_names = self.scenario_instance.protocol_handler.agent_names
+        if settings.logger is None:
+            self.settings.logger = getLogger(__name__)
+
+        # Try to restore the experiment state from a checkpoint. If no checkpoint is
+        # available, initialise the state.
+        try:
+            self.state = self._load_checkpoint()
+            self.settings.logger.info(
+                f"Restoring experiment state from iteration {self.state.iteration}"
+            )
+        except CheckPointNotFoundError:
+            self._initialise_state()
 
     @abstractmethod
     def train(self):
         """Train the agents."""
         pass
+
+    def save_checkpoint(self, log: bool = True):
+        """Save the state of the experiment to a checkpoint.
+
+        Parameters
+        ----------
+        log : bool, default=True
+            Whether to log the checkpointing.
+        """
+
+        # Create the checkpoint directory if it doesn't exist
+        self.checkpoint_base_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(self.checkpoint_state_path, "w") as f:
+            json.dump(dataclasses.asdict(self.state), f, indent=4)
+
+        # Save the parameters to a separate file
+        with open(self.checkpoint_params_path, "w") as f:
+            json.dump(self.params.to_dict(), f, sort_keys=True, indent=4)
+
+        if log:
+            self.settings.logger.info(
+                f"Saved experiment state to '{self.checkpoint_state_path}'"
+            )
+
+    def _initialise_state(self):
+        """Initialise the state of the experiment.
+
+        This method should be implemented by subclasses to initialise the state of the
+        experiment. This is called at the beginning of training when starting from
+        scratch (i.e. not restoring from a checkpoint).
+        """
+
+    @property
+    def checkpoint_base_dir(self) -> Path | None:
+        """The path to the directory containing the checkpoint."""
+
+        if self.settings.run_id is None:
+            return None
+
+        return Path(EXPERIMENT_STATE_DIR, f"{self.settings.run_id}")
+
+    @property
+    def checkpoint_state_path(self) -> Path | None:
+        """The path to the checkpoint state file."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("state.json")
+
+    @property
+    def checkpoint_params_path(self) -> Path | None:
+        """The path to the parameters file for the checkpoint."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("params.json")
+
+    def _load_checkpoint(self) -> State:
+        """Load the experiment state from a checkpoint, if available.
+
+        Returns
+        -------
+        state : State
+            The state of the experiment.
+
+        Raises
+        ------
+        CheckPointNotFoundError
+            If the checkpoint file is not found.
+        """
+
+        if (
+            self.checkpoint_state_path is None
+            or not self.checkpoint_state_path.exists()
+            or not self.checkpoint_state_path.is_file()
+        ):
+            raise CheckPointNotFoundError
+
+        # Check if the parameters in the checkpoint match the current parameters
+        with open(self.checkpoint_params_path, "r") as f:
+            if json.dumps(self.params.to_dict(), sort_keys=True, indent=4) != f.read():
+                print(
+                    "The parameters in the checkpoint do not match the current "
+                    "parameters."
+                )
+                while True:
+                    response = input("Do you want to continue? [Y/n]: ")
+                    if response.lower() == "y" or response == "":
+                        break
+                    elif response.lower() == "n":
+                        sys.exit(1)
+                    else:
+                        print("Invalid response. Please enter 'y' or 'n'.")
+
+        with open(self.checkpoint_state_path, "r") as f:
+            state_dict = json.load(f)
+
+        return self.State(**state_dict)
 
     def get_total_num_iterations(self) -> int:
         """Get the total number of iterations that the trainer will run for.

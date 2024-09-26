@@ -7,13 +7,16 @@ anything. The body and value head return the input data unchanged.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal, ClassVar
+from typing import Optional, Literal, ClassVar, Any
 from functools import cached_property
 import importlib.resources
 from string import Template
 from itertools import product
 from dataclasses import dataclass
 from random import randrange
+from tempfile import TemporaryDirectory
+from pathlib import Path
+import json
 
 from torch import from_numpy
 
@@ -25,8 +28,16 @@ from einops import rearrange
 from jaxtyping import Float, Int, Bool
 
 from openai import OpenAI
+from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
 
-from pvg.scenario_base import WholeAgent, RandomWholeAgent, CombinedWhole, Agent
+from pvg.scenario_base import (
+    WholeAgent,
+    PureTextWholeAgent,
+    RandomWholeAgent,
+    CombinedWhole,
+    Agent,
+    AgentState,
+)
 from pvg.parameters import (
     Parameters,
     CodeValidationAgentParameters,
@@ -41,6 +52,7 @@ from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype
 from pvg.utils.env import load_env_once
 from pvg.utils.string import random_string
+from pvg.constants import WANDB_OPENAI_FINETUNE_PROJECT
 
 CV_SCENARIO = ScenarioType.CODE_VALIDATION
 
@@ -75,31 +87,37 @@ class UnknownFinishReasonError(GenerationError):
 class InvalidResponseError(GenerationError):
     """Raised when the agent's response is invalid"""
 
+    def __init__(self, num_retries: int, response_text: str):
+        self.response_text = response_text
+        self.num_retries = num_retries
+        super(GenerationError, self).__init__(
+            f"Invalid generation after {num_retries} retries. Response: "
+            "{response_text!r}"
+        )
+
 
 class InvalidDecisionError(InvalidResponseError):
     """Raised when the agent's decision is invalid (i.e. not accept or reject)"""
 
 
-class CodeValidationWholeAgent(WholeAgent, ABC):
-    """Base class for code validation agent parts."""
+@dataclass
+class OpenAiAgentState(AgentState):
+    """The state of an OpenAI agent.
 
-    _visible_message_channel_mask: Optional[Bool[np.ndarray, "channel"]] = None
+    Attributes
+    ----------
+    fine_tune_job_id : Optional[str]
+        The ID of the OpenAI API fine-tune job.
+    fine_tuned_model_name : Optional[str]
+        The name of the most recently fine-tuned model.
+    """
 
-    @cached_property
-    def visible_message_channel_mask(self) -> Bool[np.ndarray, "channel"]:
-        """The mask for the message channels visible to the agent."""
-        return super().visible_message_channel_mask.cpu().detach().numpy()
-
-    @abstractmethod
-    def forward(self, data: NestedArrayDict) -> NestedArrayDict:
-        """Forward pass through the agent"""
-
-    def __call__(self, data: NestedArrayDict) -> NestedArrayDict:
-        return self.forward(data)
+    fine_tune_job_id: Optional[str] = None
+    fine_tuned_model_name: Optional[str] = None
 
 
 @register_scenario_class(CV_SCENARIO, WholeAgent, {"model_provider": "OpenAI"})
-class OpenAiWholeAgent(CodeValidationWholeAgent):
+class OpenAiWholeAgent(PureTextWholeAgent):
     """The whole agent for code validation, using OpenAI's API."""
 
     agent_params: CodeValidationAgentParameters
@@ -114,6 +132,19 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
         if self._openai_client is None:
             self._openai_client = OpenAI()
         return self._openai_client
+
+    @property
+    def base_model_name(self) -> str:
+        """The base OpenAI model name, before any fine-tuning."""
+        return self.agent_params.model_name
+
+    @property
+    def model_name(self) -> str:
+        """The OpenAI model name, including any fine-tuning."""
+        if self.fine_tuned_model_name is not None:
+            return self.fine_tuned_model_name
+        else:
+            return self.base_model_name
 
     def __init__(
         self,
@@ -133,8 +164,6 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
         # OpenAI API key
         load_env_once()
 
-        self.model_name = self.agent_params.model_name
-
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
             "pvg.code_validation.prompt_templates"
@@ -150,6 +179,8 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
         )
 
         self._openai_client: Optional[OpenAI] = None
+        self.fine_tune_job_id: Optional[str] = None
+        self.fine_tuned_model_name: Optional[str] = None
 
     def forward(self, data: NestedArrayDict) -> NestedArrayDict:
         """Forward pass through the agent policy head.
@@ -230,6 +261,208 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
 
         return output_data
 
+    def get_state_dict(self) -> dict:
+        """Get the state dictionary of the agent.
+
+        Returns
+        -------
+        state_dict : dict
+            The state dictionary of the agent.
+        """
+
+        return dict(
+            fine_tune_job_id=self.fine_tune_job_id,
+            fine_tuned_model_name=self.fine_tuned_model_name,
+        )
+
+    def set_state(self, checkpoint: OpenAiAgentState | dict[str, Any]):
+
+        if isinstance(checkpoint, dict):
+            checkpoint = OpenAiAgentState(**checkpoint)
+
+        self.fine_tune_job_id = checkpoint.fine_tune_job_id
+        self.fine_tuned_model_name = checkpoint.fine_tuned_model_name
+
+    def create_fine_tune_job(self, rollouts: NestedArrayDict):
+        """Create a fine-tune job for the agent.
+
+        This method generates a dataset of examples ready to pass to the fine-tune API.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The sampled rollouts. A nested dictionary of arrays with keys:
+
+            - "round" (...): The current round number.
+            - "message_history" (... round channel): The history of messages exchanged
+                between the agents in each channel.
+            - "question" (...): The problem text.
+            - "solution" (...): The proposed solution text.
+
+        """
+
+        fine_tune_dataset = self._build_fine_tune_dataset(rollouts)
+
+        if self.agent_params.use_dummy_api:
+            self.fine_tune_job_id = "dummy_job_id"
+            return
+
+        with TemporaryDirectory() as temp_dir:
+
+            # Write the dataset to a temporary file
+            file_path = Path(temp_dir, "fine_tune_dataset.jsonl")
+            with open(file_path, "w") as f:
+                for example in fine_tune_dataset:
+                    f.write(json.dumps(example) + "\n")
+
+            # Upload the file to OpenAI
+            uploaded_file = self.client.files.create(
+                file=open(file_path, "rb"), purpose="fine-tune"
+            )
+
+        file_id = uploaded_file.id
+
+        if self.agent_params.fine_tune_from_scratch:
+            model_name = self.base_model_name
+        else:
+            model_name = self.model_name
+
+        # Create the fine-tune job
+        job = self.client.fine_tuning.jobs.create(
+            model=model_name,
+            training_file=file_id,
+            integrations=[
+                {
+                    "type": "wandb",
+                    "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
+                }
+            ],
+        )
+
+        self.fine_tune_job_id = job.id
+
+    def get_fine_tune_job_status(
+        self,
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+        """Get the status of the fine-tune job"""
+
+        if self.agent_params.use_dummy_api:
+            return "succeeded"
+
+        status = self._get_fine_tune_job().status
+
+        if status in ["validating_files", "queued"]:
+            return "pending"
+        elif status in ["running", "succeeded", "failed", "cancelled"]:
+            return status
+        else:
+            raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
+
+    def get_fine_tune_job_error_repr(self) -> str:
+        """Get a string representation of the error for the fine-tune job"""
+
+        if self.agent_params.use_dummy_api:
+            raise ValueError("Cannot get error for dummy API")
+
+        job = self._get_fine_tune_job()
+
+        output = f"Code: {job.error.code}. Message: {job.error.message}."
+        if job.error.param is not None:
+            output += f" Parameter: {job.error.param}."
+
+        return output
+
+    def switch_to_next_model(self):
+        """Switch to the next model after fine-tuning"""
+
+        if self.fine_tune_job_id is None:
+            raise ValueError("Fine-tune job ID not set")
+
+        if self.agent_params.use_dummy_api:
+            self.fine_tuned_model_name = "dummy_model_name"
+            return
+
+        job = self._get_fine_tune_job()
+
+        if job.status != "succeeded":
+            raise ValueError(
+                f"Cannot switch to next model: fine-tune job status is {job.status!r}"
+            )
+
+        if job.fine_tuned_model is None:
+            raise ValueError("Fine-tuned model name not set in fine-tune job")
+
+        self.fine_tuned_model_name = job.fine_tuned_model
+
+    def _build_fine_tune_dataset(
+        self, rollouts: NestedArrayDict
+    ) -> list[dict[Literal["messages"], list[dict[Literal["role", "content"], str]]]]:
+        """Build the dataset for fine-tuning the agent given sampled rollouts
+
+        This method generates a dataset of examples ready to pass to the fine-tune API.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The sampled rollouts. A nested dictionary of arrays with keys:
+
+            - "round" (...): The current round number.
+            - "message_history" (... round channel): The history of messages exchanged
+                between the agents in each channel.
+            - "question" (...): The problem text.
+            - "solution" (...): The proposed solution text.
+
+        Returns
+        -------
+        fine_tune_dataset : list[dict[str, list[dict[str, str]]]]
+            The dataset for fine-tuning the agent. This is a list of examples, where
+            each example is a dictionary with key "messages", whose value is a list of
+            dictionaries with keys "role" and "content".
+        """
+
+        batch_size = rollouts.batch_size[:-1]
+
+        fine_tune_dataset: list[
+            dict[Literal["messages"], list[dict[Literal["role", "content"], str]]]
+        ] = []
+
+        for batch_id in product(*(range(dim) for dim in batch_size)):
+
+            # Get the environment state for the final round
+            rollout_final_state = rollouts[batch_id][-1]
+
+            for channel_id, channel_name in enumerate(
+                self.protocol_handler.message_channel_names
+            ):
+
+                if not self.protocol_handler.can_agent_see_channel(
+                    self.agent_name, channel_name
+                ):
+                    continue
+
+                chat_messages_prompt = self._build_chat_messages_prompt(
+                    message_history=rollout_final_state["message_history"][
+                        :, channel_id
+                    ],
+                    round_id=rollout_final_state["round"],
+                    channel_name=channel_name,
+                    question=rollout_final_state["question"],
+                    solution=rollout_final_state["solution"],
+                    ensure_last_message_is_assistant=True,
+                )
+
+                fine_tune_dataset.append(dict(messages=chat_messages_prompt))
+
+        return fine_tune_dataset
+
+    def _get_fine_tune_job(self) -> OpenAIFineTuningJob:
+        """Get the fine-tune job from the OpenAI API"""
+
+        if self.fine_tune_job_id is None:
+            raise ValueError("Fine-tune job ID not set")
+
+        return self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
+
     def _generate_next_message_and_decision(
         self,
         message_history: NDArray,
@@ -298,34 +531,38 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
             retry: int,
         ) -> tuple[str | None, int, Literal["max_tokens"] | None]:
 
-            completion_text, finish_reason = self._call_api(chat_messages_prompt)
+            completion_text, finish_reason = self._make_generation_api_call(
+                chat_messages_prompt
+            )
 
             warning = None
 
             # Validate the reason for finishing the generation
             if finish_reason == "content_filter":
-                raise ContentFilterError(retry)
+                raise ContentFilterError(retry=retry)
             elif finish_reason == "length":
                 warning = "max_tokens"
             elif finish_reason != "stop":
-                raise UnknownFinishReasonError(retry, finish_reason)
+                raise UnknownFinishReasonError(retry=retry, reason=finish_reason)
 
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.startswith("Question: ") or completion_text.startswith(
-                "Answer: "
+            if completion_text.startswith("Question:") or completion_text.startswith(
+                "Answer:"
             ):
                 return completion_text, 2, retry, warning
-            elif completion_text.startswith("Decision: "):
+            elif completion_text.startswith("Decision:"):
                 if completion_text == "Decision: accept":
                     return completion_text, 1, retry, warning
                 elif completion_text == "Decision: reject":
                     return completion_text, 0, retry, warning
                 else:
-                    raise InvalidDecisionError(retry)
+                    raise InvalidDecisionError(
+                        retry=retry, response_text=completion_text
+                    )
             else:
-                raise InvalidResponseError(retry)
+                raise InvalidResponseError(retry=retry, response_text=completion_text)
 
         # Try the generation a number of times
         for retry in range(self.agent_params.num_invalid_generation_retries):
@@ -335,7 +572,7 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
                 if retry == self.agent_params.num_invalid_generation_retries - 1:
                     raise e
 
-    def _call_api(
+    def _make_generation_api_call(
         self,
         chat_messages_prompt: list[dict[Literal["role", "content"], str]],
     ) -> tuple[str, Literal["stop", "content_filter", "length"]]:
@@ -371,6 +608,8 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
                 model=self.model_name,
                 messages=chat_messages_prompt,
                 max_tokens=self.agent_params.max_tokens_per_message,
+                temperature=self.agent_params.temperature,
+                top_p=self.agent_params.top_p,
             )
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
@@ -382,6 +621,7 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
+        ensure_last_message_is_assistant: bool = False,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
 
@@ -397,6 +637,9 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
             The problem text.
         solution : str
             The proposed solution text.
+        ensure_last_message_is_assistant : bool, default=False
+            Whether to ensure the last message is from the assistant, by removing
+            messages from the user.
 
         Returns
         -------
@@ -424,6 +667,10 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
                 role = "user"
             chat_messages.append(dict(role=role, content=str(message)))
 
+        if ensure_last_message_is_assistant:
+            while len(chat_messages) > 0 and chat_messages[-1]["role"] != "assistant":
+                chat_messages.pop()
+
         return chat_messages
 
     def __getstate__(self) -> dict[str, any]:
@@ -444,7 +691,7 @@ class OpenAiWholeAgent(CodeValidationWholeAgent):
 
 
 @register_scenario_class(CV_SCENARIO, RandomWholeAgent)
-class CodeValidationRandomAgentPolicyHead(CodeValidationWholeAgent, RandomWholeAgent):
+class CodeValidationRandomAgentPolicyHead(PureTextWholeAgent, RandomWholeAgent):
     """Random agent for code validation, yielding random strings."""
 
 
@@ -551,4 +798,7 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
 @register_scenario_class(CV_SCENARIO, Agent)
 @dataclass
 class CodeValidationAgent(Agent):
+
     agent_params: ClassVar[CodeValidationAgentParameters | RandomAgentParameters]
+
+    agent_state_class: ClassVar[type[OpenAiAgentState]] = OpenAiAgentState
