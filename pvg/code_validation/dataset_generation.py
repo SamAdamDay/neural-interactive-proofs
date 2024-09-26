@@ -17,6 +17,8 @@ import argparse
 from openai import OpenAI
 from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY, HF_TOKEN
 
+HF_TOKEN = "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"
+
 def suppress_output(func):
     def wrapper(*args, **kwargs):
         with open(os.devnull, 'w') as fnull:
@@ -610,7 +612,6 @@ def generate_buggy_solutions(
 
     return buggy_solutions
 
-
 def create_empty_dataset():
 
     return datasets.Dataset.from_dict(
@@ -693,9 +694,9 @@ def generate_cv_dataset(
                 lambda x: x["difficulty"] == d and x["apps_split"] == s
             ).sort("apps_problem_id")
 
-            num_buggy_data_to_generate = min(config.num_data, len(data_slice)) - len(
+            num_buggy_data_to_generate = max(min(config.num_data, len(data_slice)) - len(
                 buggy_data_slice
-            )
+            ), 0)
             num_data_added = 0
             print(
                 f"Generating {num_buggy_data_to_generate} buggy data for the {d} problems in the {s} split"
@@ -807,6 +808,7 @@ def generate_cv_dataset(
                     # buggy_data.to_json(os.path.join(config.local_dir, s, f"{d}.jsonl"))
                     buggy_data = load_buggy_data(config, split)
                     combined_buggy_data = datasets.concatenate_datasets([buggy_data, new_data])
+                    new_data = create_empty_dataset()
                     combined_buggy_data.save_to_disk(
                         os.path.join(config.local_dir, "code_validation.data")
                     )
@@ -824,11 +826,14 @@ def generate_cv_dataset(
             # Save data
             if num_data_added > 0:
                 # buggy_data.to_json(os.path.join(config.local_dir, s, f"{d}.jsonl"))
-                buggy_data.save_to_disk(
+                buggy_data = load_buggy_data(config, split)
+                combined_buggy_data = datasets.concatenate_datasets([buggy_data, new_data])
+                new_data = create_empty_dataset()
+                combined_buggy_data.save_to_disk(
                     os.path.join(config.local_dir, "code_validation.data")
                 )
                 if config.push_repo is not None:
-                    buggy_data.push_to_hub(
+                    combined_buggy_data.push_to_hub(
                         config.push_repo, commit_message=message, token=config.token
                     )
 
@@ -1145,18 +1150,18 @@ if __name__ == "__main__":
         default=None,
         help="Whether to draw problems from the train or test split of the APPS dataset",
     )
-    # parser.add_argument(
-    #     "--num_data",
-    #     type=int,
-    #     default=10000,
-    #     help="How many problems the dataset should contain (per split per difficulty level)",
-    # )
-    # parser.add_argument(
-    #     "--save_after",
-    #     type=int,
-    #     default=10,
-    #     help="The number of problems added after which to save (and possibly push) the dataset",
-    # )
+    parser.add_argument(
+        "--num_data",
+        type=int,
+        default=100,
+        help="How many problems the dataset should contain (per split per difficulty level)",
+    )
+    parser.add_argument(
+        "--save_after",
+        type=int,
+        default=10,
+        help="The number of problems added after which to save (and possibly push) the dataset",
+    )
     # parser.add_argument(
     #     "--openrouter_api_key",
     #     type=str,
@@ -1170,8 +1175,8 @@ if __name__ == "__main__":
     # Create the config
     config = CodeValidationDatasetConfig(
         split=cmd_args.split,
-        # num_data=cmd_args.num_data,
-        # save_after=cmd_args.save_after,
+        num_data=cmd_args.num_data,
+        save_after=cmd_args.save_after,
         # openrouter_api_key=cmd_args.openrouter_api_key,
     )
 
