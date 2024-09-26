@@ -92,6 +92,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 # Advance to the next stage
                 self.state.train_loop_stage = "create_fine_tune_jobs"
 
+                self.save_checkpoint()
+
             # We don't fine-tune on the last iteration
             if self.state.iteration == self.params.rl.num_iterations - 1:
                 self.state.iteration = self.params.rl.num_iterations
