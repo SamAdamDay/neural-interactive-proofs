@@ -387,6 +387,11 @@ class ProtocolHandler(ABC):
             verifier_guess_mask & ~done & ~terminated
         ] = protocol_params.verifier_no_guess_reward
 
+        if self.params.protocol_common.zk:
+            self._include_simulator_rewards(
+                verifier_decision_made, decision, reward
+            )
+
         # Compute the rewards for the provers and add them
         self._include_prover_rewards(
             verifier_decision_made, decision[verifier_index], reward
@@ -914,6 +919,200 @@ class MerlinArthurProtocol(ProtocolHandler):
         # Since the Arthur-Merlin protocol is non-deterministic, we cannot validate the
         # active agents in the same way as for deterministic protocols
         pass
+
+
+
+
+@register_protocol_handler(InteractionProtocolType.DEBATE)
+class MnipProtocol(PvgProtocol):
+    """Implementation of the MNIP protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    """
+
+    agent_names = ["prover0", "prover1", "verifier"]
+    message_channel_names = ["prover0_channel", "prover1_channel"]
+    agent_channel_visibility = [
+        ("prover0", "prover0_channel"),
+        ("prover1", "prover1_channel"),
+        ("verifier", "prover0_channel"),
+        ("verifier", "prover1_channel"),
+    ]
+
+    def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
+        """Specifies whether an agent is active in a given round and channel.
+
+        In sequential MNIP with verifier first, the order is:
+
+        - Verifier in both channels
+        - First prover (determined by `prover0_first`) in their respective channel
+        - Second prover in their respective channel
+
+        In simultaneous MNIP with verifier first, the order is:
+
+        - Verifier in both channels
+        - Provers in their respective channels at the same time
+
+        Returns
+        -------
+        is_active : bool
+            Whether the agent is active in the given round and channel.
+        """
+
+        if self.params.debate_protocol.prover0_first:
+            first_prover = "prover0"
+            second_prover = "prover1"
+        else:
+            first_prover = "prover1"
+            second_prover = "prover0"
+
+        if self.params.protocol_common.verifier_first:
+
+            # Verifier first, sequential
+            if self.params.debate_protocol.sequential:
+                if agent_name == "verifier":
+                    return round % 3 == 0
+                elif agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 2
+                    else:
+                        return False
+
+            # Verifier first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return (
+                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
+                        )
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 2 == 0
+
+        else:
+
+            # Provers first, sequential
+            if self.params.debate_protocol.sequential:
+                if agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 0
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 3 == 2
+
+            # Provers first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 2 == 0
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 2 == 1
+
+    @property
+    def max_message_rounds(self) -> int:
+        return self.params.mnip_protocol.max_message_rounds
+
+    @property
+    def min_message_rounds(self) -> int:
+        return self.params.mnip_protocol.min_message_rounds
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        if protocol_params.shared_reward:
+            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        else:
+            
+            for prover_num in range(2):
+                reward[..., prover_num] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * protocol_params.prover_reward
+
+
+
+class ZkProtocol(ProtocolHandler, ABC):
+    """Base class for zero-knowledge protocols.
+
+    Introduces a second verifier and a simulator. The simulator tries to mimic the interaction between the second verifier and the prover, and the second verifier tries to prevent this. The prover tries to make sure the simulator can succeed (which implies that it is not `leaking` knowledge).
+    """
+
+    # Keep the same agents apart from adding the second verifier and the simulator
+    agent_names = [name for name in ProtocolHandler.agent_names if name != "verifier"] + ["verifier0", "verifier1", "simulator"]
+    
+    # Duplicate the existing channels (one per verifier) and add the simulator channel
+    message_channel_names = ["simulator_channel"]
+    for channel_name in ProtocolHandler.message_channel_names:
+        message_channel_names.append(channel_name + "_0")
+        message_channel_names.append(channel_name + "_1")
+
+    # Clone the existing visibility settings and add a separate channel for the simulator
+    agent_channel_visibility = [("simulator", "simulator_channel")]
+    for c_v in ProtocolHandler.agent_channel_visibility:     
+        agent_channel_visibility.append((c_v[0] if c_v[0] != "verifier" else "verifier0", c_v[1] + "_0"))
+        agent_channel_visibility.append((c_v[0] if c_v[0] != "verifier" else "verifier1", c_v[1] + "_1"))
+
+
+    def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
+
+        if agent_name != "simulator":
+            if "verifier" in agent_name:
+                return ProtocolHandler.is_agent_active(self, "verifier", round, channel_name[:-2])
+            else:
+                return ProtocolHandler.is_agent_active(self, agent_name, round, channel_name[:-2])
+        else:
+            return True
+        
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+    ):
+
+        # Note that this requires the simulator's rewards to be calculated first
+        simulator_index = (..., self.agent_names.index("simulator"))
+        return ProtocolHandler._include_prover_rewards(self, verifier_decision_made, verifier_decision, reward) + self.params.zk_protocol.aux_prover_reward_coefficient * reward[simulator_index]
+        
+
+    def _include_simulator_rewards(
+        self,
+        verifier1_probs: Float[Tensor, "..."],
+        simulator_probs: Float[Tensor, "..."],
+        reward: Float[Tensor, "... num_agents"],
+    ):
+
+        # Simulator reward
+        simulator_index = (..., self.agent_names.index("simulator"))
+        reward[simulator_index] = (
+            1 - abs(verifier1_probs - simulator_probs).mean(dim=-1)
+        ) * self.params.zk_protocol.simulator_reward
+
+        # Adversarial verifier reward
+        verifier1_index = (..., self.agent_names.index("verifier1"))
+        reward[verifier1_index] = -reward[simulator_index]
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
