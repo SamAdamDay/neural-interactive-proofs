@@ -130,6 +130,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         wandb_entity=cmd_args.wandb_entity,
         run_id=arguments.run_id,
         allow_resuming_wandb_run=True,
+        allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
         num_rollout_workers=cmd_args.num_rollout_workers,
