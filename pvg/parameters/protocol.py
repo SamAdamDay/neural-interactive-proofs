@@ -45,6 +45,8 @@ class CommonProtocolParameters(SubParameters):
 
     force_guess: Optional[Guess] = None
 
+    zk: bool = False
+
 
 @dataclass
 class LongProtocolParameters(SubParameters, ABC):
@@ -122,3 +124,46 @@ class DebateProtocolParameters(LongProtocolParameters):
 
     sequential: bool = False
     prover0_first: bool = True
+
+@dataclass
+class MnipProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the Mnip interaction protocol.
+
+    Parameters
+    ----------
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    sequential: bool = False
+    prover0_first: bool = True
+
+@dataclass
+class ZkProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the debate interaction protocol.
+
+    Parameters
+    ----------
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    zk: bool = True
+    simulator_reward: float = 1.0
+    aux_prover_reward_coefficient: float = 1.0 #LH-TODO may want to change this...
