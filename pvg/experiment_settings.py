@@ -80,6 +80,9 @@ class ExperimentSettings:
         global progress bar.
     pretrained_embeddings_batch_size : int, default=256
         The batch size to use when generating embeddings for the pretrained models.
+    num_api_generation_timeouts : int, default=100
+        The number of timeouts to allow when generating API outputs. If the number of
+        timeouts exceeds this value, the experiment will be stopped.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -106,6 +109,7 @@ class ExperimentSettings:
     enable_efficient_attention: bool = False
     global_tqdm_step_fn: callable = default_global_tqdm_step_fn
     pretrained_embeddings_batch_size: int = 256
+    num_api_generation_timeouts: int = 100
     test_run: bool = False
 
     unpicklable_fields: ClassVar[tuple[str, ...]] = ("global_tqdm_step_fn",)

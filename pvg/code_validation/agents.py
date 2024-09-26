@@ -17,6 +17,7 @@ from random import randrange
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
+from time import sleep
 
 from torch import from_numpy
 
@@ -29,6 +30,7 @@ from jaxtyping import Float, Int, Bool
 
 from openai import OpenAI
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
+from openai import APITimeoutError
 
 from pvg.scenario_base import (
     WholeAgent,
@@ -567,12 +569,27 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 )
 
         # Try the generation a number of times
-        for retry in range(self.agent_params.num_invalid_generation_retries):
+        num_generation_errors = 0
+        num_timeouts = 0
+        while True:
             try:
-                return try_generation(retry)
+                return try_generation(num_generation_errors)
+
+            # Retry if there is a generation error
             except GenerationError as e:
-                if retry == self.agent_params.num_invalid_generation_retries - 1:
+                num_generation_errors += 1
+                if (
+                    num_generation_errors
+                    == self.agent_params.num_invalid_generation_retries
+                ):
                     raise e
+
+            # Retry if there is a timeout, but wait a bit first
+            except APITimeoutError as e:
+                num_timeouts += 1
+                if num_timeouts == self.settings.num_api_generation_timeouts:
+                    raise e
+                sleep(10)
 
     def _make_generation_api_call(
         self,
