@@ -539,11 +539,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
             # Validate the reason for finishing the generation
             if finish_reason == "content_filter":
-                raise ContentFilterError(retry=retry)
+                raise ContentFilterError(num_retries=retry)
             elif finish_reason == "length":
                 warning = "max_tokens"
             elif finish_reason != "stop":
-                raise UnknownFinishReasonError(retry=retry, reason=finish_reason)
+                raise UnknownFinishReasonError(num_retries=retry, reason=finish_reason)
 
             completion_text = completion_text.strip()
 
@@ -559,10 +559,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     return completion_text, 0, retry, warning
                 else:
                     raise InvalidDecisionError(
-                        retry=retry, response_text=completion_text
+                        num_retries=retry, response_text=completion_text
                     )
             else:
-                raise InvalidResponseError(retry=retry, response_text=completion_text)
+                raise InvalidResponseError(
+                    num_retries=retry, response_text=completion_text
+                )
 
         # Try the generation a number of times
         for retry in range(self.agent_params.num_invalid_generation_retries):
