@@ -75,7 +75,7 @@ class ProtocolHandler(ABC):
 
     @property
     @abstractmethod
-    def max_verifier_turns(self) -> int:
+    def max_verifier_turns(self) -> int: #LH-TODO
         """The maximum number of turns the verifier can take."""
 
     @property
@@ -226,7 +226,7 @@ class ProtocolHandler(ABC):
         )
 
     def get_verifier_guess_mask_from_rounds(
-        self, round: Int[Tensor, "..."]
+        self, round: Int[Tensor, "..."], verifier_name: str = "verifier"
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifier can make a guess.
 
@@ -246,7 +246,7 @@ class ProtocolHandler(ABC):
 
         active_agents_mask = self.get_active_agents_mask_from_rounds(round)
         verifier_active_mask = active_agents_mask[
-            ..., self.agent_names.index("verifier"), :
+            ..., self.agent_names.index(verifier_name), :
         ]
         return verifier_active_mask.any(dim=-1)
 
@@ -280,7 +280,7 @@ class ProtocolHandler(ABC):
     @abstractmethod
     def _include_prover_rewards(
         self,
-        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision_made: Bool[Tensor, "..."], #LH-TODO
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
