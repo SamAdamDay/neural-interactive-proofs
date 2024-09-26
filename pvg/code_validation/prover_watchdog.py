@@ -196,9 +196,9 @@ class CodeValidationProverWatchdog:
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.lower().startswith("Yes"):
+            if completion_text.lower().startswith("yes"):
                 return 0
-            elif completion_text.lower().startswith("No"):
+            elif completion_text.lower().startswith("no"):
                 return 1
             else:
                 raise InvalidResponseError(
