@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from time import sleep
 
 import numpy as np
+from numpy import ma
 
 from jaxtyping import Bool
 
@@ -12,6 +13,9 @@ from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
 from pvg.utils.nested_array_dict import NestedArrayDict
+
+# TODO: Abstract this
+from pvg.code_validation.prover_watchdog import CodeValidationProverWatchdog
 
 
 @register_trainer(TrainerType.PURE_TEXT_EI)
@@ -38,6 +42,16 @@ class PureTextEiTrainer(PureTextRlTrainer):
             "create_fine_tune_jobs",
             "await_fine_tune_jobs",
         ] = "sample_rollouts"
+
+    def __init__(self, params, scenario_instance, settings):
+        super().__init__(params, scenario_instance, settings)
+
+        if self.params.ei.use_prover_watchdog:
+            self.prover_watchdog = CodeValidationProverWatchdog(
+                params=self.params,
+                settings=self.settings,
+                protocol_handler=self.scenario_instance.protocol_handler,
+            )
 
     def train(self):
 
@@ -171,6 +185,15 @@ class PureTextEiTrainer(PureTextRlTrainer):
         next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
 
         log_stats = {}
+
+        # If the prover watchdog is enabled, run it to get the evaluations
+        if self.params.ei.use_prover_watchdog:
+            watchdog_evaluations = self.prover_watchdog.forward(rollouts, use_tqdm=True)
+
+            for (agent_name, channel_name), evaluation in watchdog_evaluations.items():
+                log_stats[f"{agent_name}.{channel_name}.{prefix}mean_watchdog_eval"] = (
+                    evaluation.mean().item()
+                )
 
         for agent_index, agent_name in enumerate(self.agent_names):
 
