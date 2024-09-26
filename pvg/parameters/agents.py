@@ -401,6 +401,8 @@ class CodeValidationAgentParameters(AgentParameters):
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
+    freeze_agent : bool
+        Whether to freeze the agent (i.e. not fine-tune it).
     max_tokens_per_message : int
         The maximum number of tokens which the model is allowed to generate in a single
         message.
@@ -417,6 +419,7 @@ class CodeValidationAgentParameters(AgentParameters):
     top_p: float | None = None
 
     fine_tune_from_scratch: bool = True
+    freeze_agent: bool = False
 
     max_tokens_per_message: int = 512
     num_invalid_generation_retries: int = 5
