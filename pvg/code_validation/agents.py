@@ -28,9 +28,8 @@ from einops import rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, APIStatusError, RateLimitError
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
-from openai import APITimeoutError
 
 from pvg.scenario_base import (
     WholeAgent,
@@ -330,16 +329,28 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             model_name = self.model_name
 
         # Create the fine-tune job
-        job = self.client.fine_tuning.jobs.create(
-            model=model_name,
-            training_file=file_id,
-            integrations=[
-                {
-                    "type": "wandb",
-                    "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
-                }
-            ],
-        )
+        while True:
+            try:
+                job = self.client.fine_tuning.jobs.create(
+                    model=model_name,
+                    training_file=file_id,
+                    integrations=[
+                        {
+                            "type": "wandb",
+                            "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
+                        }
+                    ],
+                )
+
+            # If we are day rate limited, sleep for an hour and try again
+            except RateLimitError as e:
+                if e.code == "daily_rate_limit_exceeded":
+                    sleep(60 * 60)
+                    continue
+                else:
+                    raise e
+
+            break
 
         self.fine_tune_job_id = job.id
 
@@ -366,11 +377,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_params.use_dummy_api:
             raise ValueError("Cannot get error for dummy API")
 
-        job = self._get_fine_tune_job()
+        error = self._get_fine_tune_job().error
 
-        output = f"Code: {job.error.code}. Message: {job.error.message}."
-        if job.error.param is not None:
-            output += f" Parameter: {job.error.param}."
+        output = f"Code: {error.code}. Message: {error.message}."
+        if error.param is not None:
+            output += f" Parameter: {error.param}."
+
+        if isinstance(error, APIStatusError):
+            output += f" Headers: {error.response.headers}."
 
         return output
 
