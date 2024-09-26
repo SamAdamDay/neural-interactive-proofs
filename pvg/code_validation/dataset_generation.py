@@ -103,7 +103,8 @@ def get_openrouter_response(
     responses = []
 
     # Crazily, the openrouter API doesn't support multiple completions in a single request, so we have to make multiple requests
-    if "openai" not in model or force_multiple_generations:
+    # Also, we don't seem to have access to the the o1 models via the OpenAI API atb the moment?
+    if "openai" not in model or "o1" in model or force_multiple_generations:
         completions = [
             requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
@@ -142,7 +143,7 @@ def get_openrouter_response(
                         {k: c[k] for k in ["token", "logprob"]}
                         for c in completion["logprobs"]["content"]
                     ]
-                    if log_probs and completion["logprobs"] is not None
+                    if log_probs and "log_probs" in completion and completion["logprobs"] is not None
                     else None
                 ),
                 "top_logprobs": (
@@ -153,7 +154,7 @@ def get_openrouter_response(
                         ]
                         for c in completion["logprobs"]["content"]
                     ]
-                    if top_logprobs and completion["logprobs"] is not None
+                    if top_logprobs and "log_probs" in completion and completion["logprobs"] is not None
                     else None
                 ),
             }

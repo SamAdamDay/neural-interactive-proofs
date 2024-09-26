@@ -86,7 +86,7 @@ def guess_if_correct(
 ):
 
     # When the model only outputs an answer and yet we need multiple attempts, then we re-query the model instead of gathering mutlipe completions with a single API call (otherwise there will be ~no variability in the log probs of the final verdict)
-    force_multiple_generations = not show_working and n_attempts > 1
+    force_multiple_generations = not (show_working or "o1" in model) and n_attempts > 1
     # force_multiple_generations = True
 
     if debug:
@@ -185,6 +185,8 @@ def alt_answer(answer):
 def evaluate_model(
     model,
     api_key=OPENROUTER_API_KEY,
+    splits=["train", "test"],
+    difficulties=["introductory", "interview", "competition"],
     show_working=False,
     temperature=1.0,
     n_attempts=10,
@@ -193,39 +195,39 @@ def evaluate_model(
     save_path=None,
     max_problems=None,
     verbose=False,
-    save_after=10,
+    save_after=5,
 ):
 
     data = load_dataset("lrhammond/buggy-apps", split="train")
 
-    if save_path is None:
-        results = {
-            s: {d: {} for d in ["introductory", "interview", "competition"]}
-            for s in ["train", "test"]
-        }
-    else:
-        model_name = model.split("/")[-1]
-        reasoning = "with_reasoning" if show_working else "without_reasoning"
-        filename = f"{save_path}/{model_name}-{reasoning}-{temperature}-{n_attempts}_attempts-{num_alternatives}_alternatives.json"
-        if os.path.exists(filename):
-            with open(filename, "r") as f:
-                results = json.load(f)
-        else:
-            results = {
-                s: {d: {} for d in ["introductory", "interview", "competition"]}
-                for s in ["train", "test"]
-            }
-
     counter = {
-                s: {d: 0 for d in ["introductory", "interview", "competition"]}
-                for s in ["train", "test"]
+                s: {d: 0 for d in difficulties}
+                for s in splits
             }
 
     num_added = 0
     max_problems = len(data) if max_problems is None else max_problems
 
-    for s in ["train", "test"]:
-        for d in ["introductory", "interview", "competition"]:
+    results = {
+                    s: {d: {} for d in difficulties}
+                    for s in splits
+                }
+
+    for s in splits:
+        for d in difficulties:
+
+            if save_path is None:
+                results[s][d] = {}
+            else:
+                model_name = model.split("/")[-1]
+                reasoning = "with_reasoning" if show_working else "without_reasoning"
+                filename = f"{save_path}/{model_name}-{reasoning}-{temperature}-{n_attempts}_attempts-{num_alternatives}_alternatives-{s}-{d}.json"
+                if os.path.exists(filename):
+                    with open(filename, "r") as f:
+                        results[s][d] = json.load(f)
+                else:
+                    results[s][d] = {}
+
             data_slice = data.filter(lambda x: x["apps_split"] == s and x["difficulty"] == d)
             max_problems = len(data) if max_problems is None else max_problems
 
@@ -353,11 +355,11 @@ def evaluate_model(
 
                 if save_path is not None and num_added % save_after == 0:
                     with open(filename, "w") as f:
-                        json.dump(results, f)
+                        json.dump(results[s][d], f)
 
-    if save_path is not None:
-        with open(filename, "w") as f:
-            json.dump(results, f)
+            if save_path is not None:
+                with open(filename, "w") as f:
+                    json.dump(results[s][d], f)
 
     return results, num_added
 
@@ -370,7 +372,24 @@ def main():
     # Required arguments
     parser.add_argument("model", type=str, help="Model to evaluate")
 
+
+ 
     # Optional arguments
+    # New argument to accept a list of strings
+    parser.add_argument(
+        "--splits",
+        default=["train", "test"],
+        type=str,
+        nargs='+',  # One or more arguments
+        help="The splits to evaluate"
+    )
+    parser.add_argument(
+        "--difficulties",
+        default=["introductory", "interview", "competition"],
+        type=str,
+        nargs='+',  # One or more arguments
+        help="The difficulties to evaluate"
+    )
     parser.add_argument(
         "--max_problems",
         type=int,
@@ -380,7 +399,7 @@ def main():
     parser.add_argument(
         "--save_after",
         type=int,
-        default=10,
+        default=5,
         help="Save results after this many problems",
     )
     parser.add_argument(
@@ -432,6 +451,8 @@ def main():
 
     _, num_added = evaluate_model(
         cmd_args.model,
+        splits=cmd_args.splits,
+        difficulties=cmd_args.difficulties,
         api_key=cmd_args.openrouter_api_key,
         show_working=cmd_args.show_working,
         num_alternatives=cmd_args.num_alternatives,
