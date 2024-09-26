@@ -2131,6 +2131,8 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         - ("agents", "node_selected_logits") (... agent channel position 2*max_nodes): A
           logit for each node, indicating the probability that this node should be sent
           as a message to the verifier.
+        - ("agents", "main_message_logits") (... agents channel position logit): The
+          same as "node_selected_logits".
         - ("agents", "decision_logits") (... agent 3): A logit for each of the three
           options: guess that the graphs are isomorphic, guess that the graphs are not
           isomorphic, or continue exchanging messages. d_linear_message_space)
@@ -2271,6 +2273,9 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
         agents_update["decision_logits"] = self._restrict_decisions(
             body_output["decision_restriction"], agents_update["decision_logits"]
         )
+
+        # Copy the main message logits to the main message logits key
+        agents_update["main_message_logits"] = agents_update["node_selected_logits"]
 
         return body_output.update(
             dict(

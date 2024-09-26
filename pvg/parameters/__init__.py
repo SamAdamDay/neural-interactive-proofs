@@ -313,10 +313,7 @@ class Parameters(BaseParameters):
         # protocol and scenario
         if self.agents is None:
             self.agents = AgentsParameters(
-                **{
-                    name: agent_params_class()
-                    for name in AGENT_NAMES[self.interaction_protocol]
-                }
+                **{name: agent_params_class() for name in get_agent_names(self)}
             )
 
         if not isinstance(self.agents, dict):
@@ -354,9 +351,28 @@ class Parameters(BaseParameters):
 
         # Make sure the agent names match the agent names expected by the protocol
         agent_names = tuple(self.agents.keys())
-        if set(agent_names) != set(AGENT_NAMES[self.interaction_protocol]):
+        if set(agent_names) != set(get_agent_names(self)):
             raise ValueError(
                 f"Agent names {agent_names} do not match the agent names expected"
                 f"by interaction protocol {self.interaction_protocol}: "
-                f"{AGENT_NAMES[self.interaction_protocol]}."
+                f"{get_agent_names(self)}."
             )
+
+
+def get_agent_names(params: Parameters) -> list[str]:
+    """Get the agent names required for the protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+
+    Returns
+    -------
+    list[str]
+        The agent names required for the protocol.
+    """
+    agent_names = list(AGENT_NAMES[params.interaction_protocol])
+    if params.protocol_common.zero_knowledge:
+        agent_names.extend(["simulator", "adversarial_verifier"])
+    return agent_names

@@ -1774,6 +1774,8 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
           latent_height*latent_width): A logit for each latent pixel, indicating the
           probability that this latent pixel should be sent as a message to the
           verifier.
+        - ("agents", "main_message_logits") (... agents channel position logit): The
+          same as "latent_pixel_selected_logits".
         - ("agents", "decision_logits") (... agents 3): A logit for each of the three
           options: guess a classification one way or the other, or continue exchanging
           messages. Set to zeros when the decider is not present.
@@ -1873,6 +1875,11 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         agents_update["decision_logits"] = self._restrict_decisions(
             body_output["decision_restriction"], agents_update["decision_logits"]
         )
+
+        # Copy the main message logits to the main message logits key
+        agents_update["main_message_logits"] = agents_update[
+            "latent_pixel_selected_logits"
+        ]
 
         return body_output.update(
             dict(

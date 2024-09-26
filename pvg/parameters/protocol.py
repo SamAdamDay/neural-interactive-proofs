@@ -32,6 +32,8 @@ class CommonProtocolParameters(SubParameters):
     force_guess: Guess, optional
         The guess to force the verifier to make. If not provided, the verifier makes a
         guess using its policy.
+    zero_knowledge: bool
+        Whether to use a zero-knowledge version of the protocol.
     """
 
     verifier_first: bool = True
@@ -45,7 +47,7 @@ class CommonProtocolParameters(SubParameters):
 
     force_guess: Optional[Guess] = None
 
-    zk: bool = False
+    zero_knowledge: bool = False
 
 
 @dataclass
@@ -125,6 +127,7 @@ class DebateProtocolParameters(LongProtocolParameters):
     sequential: bool = False
     prover0_first: bool = True
 
+
 @dataclass
 class MnipProtocolParameters(LongProtocolParameters):
     """Additional parameters for the Mnip interaction protocol.
@@ -149,21 +152,16 @@ class MnipProtocolParameters(LongProtocolParameters):
     sequential: bool = False
     prover0_first: bool = True
 
+
 @dataclass
 class ZkProtocolParameters(LongProtocolParameters):
     """Additional parameters for the debate interaction protocol.
 
     Parameters
     ----------
-    sequential : bool
-        Whether the provers send messages one after the other, or both simultaneously.
-    prover0_first : bool
-        When the provers send messages sequentially, whether prover 0 goes first.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
+    simulator_reward_coefficient : float
+        The coefficient to multiply the logit closeness by to get the simulator reward.
     """
 
-    zk: bool = True
-    simulator_reward: float = 1.0
-    aux_prover_reward_coefficient: float = 1.0 #LH-TODO may want to change this...
+    simulator_reward_coefficient: float = 1.0
+    aux_prover_reward_coefficient: float = 1.0  # LH-TODO may want to change this...

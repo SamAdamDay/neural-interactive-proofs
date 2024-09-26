@@ -767,7 +767,9 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         Returns
         -------
         policy_output : TensorDict
-            The output of the combined policy head.
+            The output of the combined policy head. This must contain the key ("agents",
+            "main_message_logits"), which has shape "... agents channel position logit"
+            and contains the logits for the agents' messages in the main message space.
         """
         pass
 

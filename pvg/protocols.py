@@ -12,10 +12,11 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from itertools import product
 from math import ceil, floor
+from typing import TypeVar
 
 import torch
 from torch import Tensor
-from typing import TypeVar
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDictBase
 
@@ -23,7 +24,7 @@ from einops import rearrange
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import Parameters, InteractionProtocolType, Guess
+from pvg.parameters import Parameters, InteractionProtocolType, Guess, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -278,8 +279,9 @@ class ProtocolHandler(ABC):
             )
 
     @abstractmethod
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],  # LH-TODO
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
@@ -291,6 +293,9 @@ class ProtocolHandler(ABC):
 
         Parameters
         ----------
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
         verifier_decision_made : Bool[Tensor, "..."]
             A boolean mask indicating whether the verifier has made a decision.
         verifier_decision : Int[Tensor, "..."]
@@ -387,12 +392,9 @@ class ProtocolHandler(ABC):
             verifier_guess_mask & ~done & ~terminated
         ] = protocol_params.verifier_no_guess_reward
 
-        if self.params.protocol_common.zk:
-            self._include_simulator_rewards(verifier_decision_made, decision, reward)
-
         # Compute the rewards for the provers and add them
-        self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_index], reward
+        self._include_non_verifier_rewards(
+            env_td, verifier_decision_made, decision[verifier_index], reward
         )
 
         return done, terminated, reward
@@ -578,16 +580,20 @@ class DeterministicProtocolHandler(ProtocolHandler, ABC):
         return agents_first_active_rounds
 
 
-PROTOCOL_HANDLER_REGISTRY: dict[InteractionProtocolType, type[ProtocolHandler]] = {}
+PROTOCOL_HANDLER_REGISTRY: dict[
+    tuple[InteractionProtocolType, bool], type[ProtocolHandler]
+] = {}
 
 P = TypeVar("P", bound=ProtocolHandler)
 
 
-def register_protocol_handler(protocol_handler: InteractionProtocolType):
+def register_protocol_handler(
+    protocol_handler: InteractionProtocolType, zero_knowledge: bool = False
+):
     """Decorator to register a protocol handler."""
 
     def decorator(cls: type[P]) -> type[P]:
-        PROTOCOL_HANDLER_REGISTRY[protocol_handler] = cls
+        PROTOCOL_HANDLER_REGISTRY[protocol_handler, zero_knowledge] = cls
         return cls
 
     return decorator
@@ -603,7 +609,9 @@ def build_protocol_handler(
     params : Parameters
         The parameters of the experiment.
     """
-    return PROTOCOL_HANDLER_REGISTRY[params.interaction_protocol](params, settings)
+    return PROTOCOL_HANDLER_REGISTRY[
+        params.interaction_protocol, params.protocol_common.zero_knowledge
+    ](params, settings)
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -658,8 +666,9 @@ class PvgProtocol(DeterministicProtocolHandler):
             elif agent_name == "verifier":
                 return round % 2 == 1
 
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
@@ -803,8 +812,9 @@ class DebateProtocol(PvgProtocol):
     def min_message_rounds(self) -> int:
         return self.params.debate_protocol.min_message_rounds
 
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
@@ -912,8 +922,9 @@ class MerlinArthurProtocol(ProtocolHandler):
             elif agent_name == "verifier":
                 return round % 2 == 1
 
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
@@ -1044,8 +1055,9 @@ class MnipProtocol(PvgProtocol):
     def min_message_rounds(self) -> int:
         return self.params.mnip_protocol.min_message_rounds
 
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
@@ -1062,80 +1074,150 @@ class MnipProtocol(PvgProtocol):
                 ).float() * protocol_params.prover_reward
 
 
-class ZkProtocol(ProtocolHandler, ABC):
+@register_protocol_handler(InteractionProtocolType.PVG, zero_knowledge=True)
+class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
     """Base class for zero-knowledge protocols.
 
-    Introduces a second verifier and a simulator. The simulator tries to mimic the interaction between the second verifier and the prover, and the second verifier tries to prevent this. The prover tries to make sure the simulator can succeed (which implies that it is not `leaking` knowledge).
+    Introduces a second verifier and a simulator. The simulator tries to mimic the
+    interaction between the second verifier and the prover, and the second verifier
+    tries to prevent this. The prover tries to make sure the simulator can succeed
+    (which implies that it is not `leaking` knowledge).
     """
 
-    # Keep the same agents apart from adding the second verifier and the simulator
-    agent_names = [
-        name for name in ProtocolHandler.agent_names if name != "verifier"
-    ] + ["verifier0", "verifier1", "simulator"]
+    verifier_names = ["verifier", "adversarial_verifier"]
 
-    # Duplicate the existing channels (one per verifier) and add the simulator channel
-    message_channel_names = ["simulator_channel"]
-    for channel_name in ProtocolHandler.message_channel_names:
-        message_channel_names.append(channel_name + "_0")
-        message_channel_names.append(channel_name + "_1")
+    @property
+    def agent_names(self):
+        # Keep the same agents apart from adding the second verifier and the simulator
+        return super().agent_names + ["adversarial_verifier", "simulator"]
 
-    # Clone the existing visibility settings and add a separate channel for the simulator
-    agent_channel_visibility = [("simulator", "simulator_channel")]
-    for c_v in ProtocolHandler.agent_channel_visibility:
-        agent_channel_visibility.append(
-            (c_v[0] if c_v[0] != "verifier" else "verifier0", c_v[1] + "_0")
-        )
-        agent_channel_visibility.append(
-            (c_v[0] if c_v[0] != "verifier" else "verifier1", c_v[1] + "_1")
-        )
+    @cached_property
+    def message_channel_names(self):
+
+        # Duplicate the existing channels (one per verifier) and add the simulator
+        # channel
+        message_channel_names = ["simulator_channel"]
+        for channel_name in super().message_channel_names:
+            message_channel_names.append(channel_name + "_standard")
+            message_channel_names.append(channel_name + "_adversarial")
+
+        return message_channel_names
+
+    @property
+    def agent_channel_visibility(self):
+
+        # Clone the existing visibility settings and add a separate channel for the
+        # simulator
+        agent_channel_visibility = [("simulator", "simulator_channel")]
+
+        # Make the adversarial channels visible to the all non-verifier agents and the
+        # adversarial verifier
+        for agent_name, channel_name in super().agent_channel_visibility:
+            if agent_name == "verifier":
+                agent_channel_visibility.append(
+                    ("verifier", channel_name + "_standard")
+                )
+                agent_channel_visibility.append(
+                    ("adversarial_verifier", channel_name + "_adversarial")
+                )
+            else:
+                agent_channel_visibility.append(
+                    (agent_name, channel_name + "_standard")
+                )
+                agent_channel_visibility.append(
+                    (agent_name, channel_name + "_adversarial")
+                )
+
+        return agent_channel_visibility
+
+    def __init__(self, params: Parameters, settings: ExperimentSettings):
+        super().__init__(params, settings)
+
+        # We rely on the message logits, so we need to make sure they are available
+        if params.scenario not in [
+            ScenarioType.GRAPH_ISOMORPHISM,
+            ScenarioType.IMAGE_CLASSIFICATION,
+        ]:
+            raise NotImplementedError(
+                "Zero-knowledge protocols are only supported for graph isomorphism and "
+                "image classification scenarios."
+            )
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
 
-        if agent_name != "simulator":
-            if "verifier" in agent_name:
-                return ProtocolHandler.is_agent_active(
-                    self, "verifier", round, channel_name[:-2]
-                )
-            else:
-                return ProtocolHandler.is_agent_active(
-                    self, agent_name, round, channel_name[:-2]
-                )
-        else:
-            return True
+        if agent_name == "simulator":
+            return channel_name == "simulator_channel"
 
-    def _include_prover_rewards(
+        # No other agents are active in the simulator channel
+        if channel_name == "simulator_channel":
+            return False
+
+        # Verifiers are active in their corresponding channels
+        if agent_name in self.verifier_names:
+            if channel_name.endswith("_adversarial"):
+                if agent_name == "verifier":
+                    return False
+                return super().is_agent_active("verifier", round, channel_name[:-12])
+            elif channel_name.endswith("_standard"):
+                if agent_name == "adversarial_verifier":
+                    return False
+                return super().is_agent_active("verifier", round, channel_name[:-9])
+
+        return super().is_agent_active(agent_name, round, channel_name[:-2])
+
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
 
-        # Note that this requires the simulator's rewards to be calculated first
-        simulator_index = (..., self.agent_names.index("simulator"))
-        return (
-            ProtocolHandler._include_prover_rewards(
-                self, verifier_decision_made, verifier_decision, reward
-            )
-            + self.params.zk_protocol.aux_prover_reward_coefficient
-            * reward[simulator_index]
+        protocol_params = self.params.protocol_common
+        prover_index = self.agent_names.index("prover")
+        verifier_index = self.agent_names.index("verifier")
+        adversarial_verifier_index = self.agent_names.index("adversarial_verifier")
+        simulator_index = self.agent_names.index("simulator")
+
+        # Get the main message logits and flatten the channel and position dimensions
+        main_message_logits: Float[Tensor, "... agent channel position logit"] = env_td[
+            "agents", "main_message_logits"
+        ]
+        adversarial_verifier_logits = main_message_logits[
+            ..., adversarial_verifier_index, :, :, :
+        ]
+        adversarial_verifier_logits = rearrange(
+            adversarial_verifier_logits,
+            "... channel position logit -> ... (channel position logit)",
+        )
+        simulator_logits = main_message_logits[..., simulator_index, :, :, :]
+        simulator_logits = rearrange(
+            simulator_logits,
+            "... channel position logit -> ... (channel position logit)",
         )
 
-    def _include_simulator_rewards(
-        self,
-        verifier1_probs: Float[Tensor, "..."],
-        simulator_probs: Float[Tensor, "..."],
-        reward: Float[Tensor, "... num_agents"],
-    ):
-
-        # Simulator reward
-        simulator_index = (..., self.agent_names.index("simulator"))
-        reward[simulator_index] = (
-            1 - abs(verifier1_probs - simulator_probs).mean(dim=-1)
-        ) * self.params.zk_protocol.simulator_reward
+        # Simulator reward, which is the cosine similarity between the adversarial_verifier and
+        # simulator logits, multiplied by a coefficient
+        simulator_reward = (
+            F.cosine_similarity(adversarial_verifier_logits, simulator_logits, dim=-1)
+            * self.params.zk_protocol.simulator_reward_coefficient
+        )
 
         # Adversarial verifier reward
-        verifier1_index = (..., self.agent_names.index("verifier1"))
-        reward[verifier1_index] = -reward[simulator_index]
+        reward[..., adversarial_verifier_index] = -simulator_reward
+
+        # Prover reward
+        if protocol_params.shared_reward:
+            prover_reward = reward[..., verifier_index]
+        else:
+            prover_reward = (verifier_decision_made & (verifier_decision == 1)).float()
+            prover_reward *= protocol_params.prover_reward
+            prover_reward += (
+                self.params.zk_protocol.aux_prover_reward_coefficient * simulator_reward
+            )
+
+        reward[..., prover_index] = prover_reward
+        reward[..., simulator_index] = simulator_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
@@ -1181,8 +1263,9 @@ class MultiChannelTestProtocol(DeterministicProtocolHandler):
             else:
                 return agent_name == "prover2"
 
-    def _include_prover_rewards(
+    def _include_non_verifier_rewards(
         self,
+        env_td: TensorDictBase | NestedArrayDict,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
