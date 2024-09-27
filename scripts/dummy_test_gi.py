@@ -43,9 +43,9 @@ def run(cmd_args: Namespace):
     # Create the parameters object
     interaction_protocol = InteractionProtocolType.DEBATE
     zero_knowledge = True
-    scenario=ScenarioType.GRAPH_ISOMORPHISM
-    trainer=TrainerType.VANILLA_PPO
-    dataset="eru10000"
+    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    trainer = TrainerType.VANILLA_PPO
+    dataset = "eru10000"
 
     params = Parameters(
         scenario=scenario,
@@ -60,11 +60,17 @@ def run(cmd_args: Namespace):
                     agent_lr_factor={"actor": 1.0, "critic": 1.0},
                     use_orthogonal_initialisation=False,
                 )
-                for agent_name in get_agent_names(Parameters(interaction_protocol=interaction_protocol,
-                                                         protocol_common=CommonProtocolParameters(zero_knowledge=zero_knowledge),
-                                                         scenario=scenario,
-                                                         trainer=trainer,
-                                                         dataset=dataset))
+                for agent_name in get_agent_names(
+                    Parameters(
+                        interaction_protocol=interaction_protocol,
+                        protocol_common=CommonProtocolParameters(
+                            zero_knowledge=zero_knowledge
+                        ),
+                        scenario=scenario,
+                        trainer=trainer,
+                        dataset=dataset,
+                    )
+                )
             }
         ),
         rl=RlTrainerParameters(

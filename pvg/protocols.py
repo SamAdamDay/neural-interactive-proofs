@@ -352,7 +352,10 @@ class ProtocolHandler(ABC):
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round)
 
         # If the verifier has made a guess we terminate the episode
-        verifier_indices = (..., [self.agent_names.index(v_n) for v_n in self.verifier_names])
+        verifier_indices = (
+            ...,
+            [self.agent_names.index(v_n) for v_n in self.verifier_names],
+        )
 
         if self.params.protocol_common.force_guess == Guess.ONE:
             decision[verifier_indices] = torch.ones_like(decision[verifier_indices])
@@ -1287,7 +1290,6 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
                 "image classification scenarios."
             )
 
-
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
 
         if agent_name == "simulator":
@@ -1317,11 +1319,11 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
-        
+
         adversarial_verifier_index = self.agent_names.index("adversarial_verifier")
         simulator_index = self.agent_names.index("simulator")
         prover_indices = [self.agent_names.index(p_n) for p_n in self.prover_names]
-        
+
         # Get the main message logits and flatten the channel and position dimensions
         main_message_logits: Float[Tensor, "... agent channel position logit"] = env_td[
             "agents", "main_message_logits"
@@ -1351,37 +1353,50 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
         reward[..., adversarial_verifier_index] = -simulator_reward
 
         # Prover rewards
-        super()._include_non_verifier_rewards(env_td, verifier_decision_made, verifier_decision, reward)
+        super()._include_non_verifier_rewards(
+            env_td, verifier_decision_made, verifier_decision, reward
+        )
         reward[..., prover_indices] += (
-                self._prover_zk_loss_coefficient() * simulator_reward
-            )
-    
-    # Eventually this should dynamically update the coefficient to allow for lexicographic optimisation, as in https://www.ijcai.org/proceedings/2022/0476.pdf 
+            self._prover_zk_loss_coefficient() * simulator_reward
+        )
+
+    # Eventually this should dynamically update the coefficient to allow for lexicographic optimisation, as in https://www.ijcai.org/proceedings/2022/0476.pdf
     def _prover_zk_loss_coefficient(self) -> float:
-        
+
         return self.params.zk_protocol.aux_prover_reward_coefficient
-    
+
 
 # @register_protocol_handler(InteractionProtocolType.PVG, zero_knowledge=True)
 class AltZeroKnowledgePvgProtocol(PvgProtocol, ZeroKnowledgeProtocol[PvgProtocol]):
     pass
 
-@register_protocol_handler(InteractionProtocolType.ABSTRACT_DECISION_PROBLEM, zero_knowledge=True)
+
+@register_protocol_handler(
+    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM, zero_knowledge=True
+)
 class ZeroKnowledgeAdpProtocol(AdpProtocol, ZeroKnowledgeProtocol[AdpProtocol]):
     pass
 
+
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR, zero_knowledge=True)
-class ZeroKnowledgeMerlinArthurProtocol(MerlinArthurProtocol, ZeroKnowledgeProtocol[MerlinArthurProtocol]):
+class ZeroKnowledgeMerlinArthurProtocol(
+    MerlinArthurProtocol, ZeroKnowledgeProtocol[MerlinArthurProtocol]
+):
     pass
+
 
 @register_protocol_handler(InteractionProtocolType.MNIP, zero_knowledge=True)
 class ZeroKnowledgeMnipProtocol(MnipProtocol, ZeroKnowledgeProtocol[MnipProtocol]):
     pass
 
+
 @register_protocol_handler(InteractionProtocolType.DEBATE, zero_knowledge=True)
-class ZeroKnowledgeDebateProtocol(ZeroKnowledgeProtocol[DebateProtocol], DebateProtocol):
+class ZeroKnowledgeDebateProtocol(
+    ZeroKnowledgeProtocol[DebateProtocol], DebateProtocol
+):
     pass
-        
+
+
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
 class MultiChannelTestProtocol(DeterministicProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""
