@@ -72,6 +72,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 temperature=combo["verifier_temperature"],
                 top_p=combo["verifier_top_p"],
                 use_dummy_api=combo["use_dummy_api"],
+                fine_tune_from_scratch=combo["fine_tune_from_scratch"],
             ),
             prover=CodeValidationAgentParameters(
                 model_name=combo["prover_model"],
@@ -79,6 +80,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
                 top_p=combo["prover_top_p"],
                 use_dummy_api=combo["use_dummy_api"],
                 freeze_agent=combo["freeze_prover"],
+                fine_tune_from_scratch=combo["fine_tune_from_scratch"],
             ),
         ),
         interaction_protocol=combo["interaction_protocol"],
