@@ -5,6 +5,7 @@ from typing import Optional, Any, ClassVar
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
+from math import prod
 
 import torch
 from torch import Tensor
@@ -435,6 +436,21 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 shape=(self.num_envs, 1),
                 dtype=torch.long,
                 device=self.device,
+            ),
+            # TODO: this is very janky. Ideally it should be in the action spec, but
+            # this will require modifying the policy operators in the trainer
+            agents=CompositeSpec(
+                main_message_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        self.protocol_handler.num_message_channels,
+                        self.params.message_size,
+                        prod(self.main_message_space_shape),
+                    ),
+                    device=self.device,
+                ),
+                shape=(self.num_envs, self.num_agents),
             ),
             shape=(self.num_envs,),
             device=self.device,

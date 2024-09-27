@@ -1,7 +1,7 @@
 """The image classification RL environment."""
 
 from typing import Optional
-from math import floor
+from math import floor, prod
 from functools import cached_property
 
 import torch
@@ -140,7 +140,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
         """
         action_spec = super()._get_action_spec()
         action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
-            self.latent_height * self.latent_width,
+            prod(self.main_message_space_shape),
             shape=(
                 self.num_envs,
                 self.num_agents,

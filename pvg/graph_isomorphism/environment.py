@@ -2,6 +2,7 @@
 
 from typing import Optional
 from functools import cached_property
+from math import prod
 
 import torch
 from torch import Tensor
@@ -285,7 +286,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
         """
         action_spec = super()._get_action_spec()
         action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
-            2 * self.max_num_nodes,
+            prod(self.main_message_space_shape),
             shape=(
                 self.num_envs,
                 self.num_agents,

@@ -1085,8 +1085,6 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
     (which implies that it is not `leaking` knowledge).
     """
 
-    verifier_names = ["verifier", "adversarial_verifier"]
-
     @property
     def agent_names(self):
         # Keep the same agents apart from adding the second verifier and the simulator
