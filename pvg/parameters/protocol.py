@@ -164,4 +164,4 @@ class ZkProtocolParameters(LongProtocolParameters):
     """
 
     simulator_reward_coefficient: float = 1.0
-    aux_prover_reward_coefficient: float = 1.0  # LH-TODO may want to change this...
+    aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually
