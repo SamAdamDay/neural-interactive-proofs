@@ -1,6 +1,6 @@
 """Utilities for useful mathematical operations."""
 
-from typing import Tuple
+from typing import Tuple, Union, Sequence, Optional
 
 import torch
 from torch import Tensor
@@ -262,6 +262,49 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     probs = F.softmax(logits, dim=-1)
     log_probs = F.log_softmax(logits, dim=-1)
     return -torch.sum(probs * log_probs, dim=-1)
+
+
+def logit_or_2(a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]) -> Float[Tensor, "... logits"]:
+    """
+    Computes the logit OR operation for two input tensors using the log-sum-exp trick.
+
+    The logit OR operation is defined as:
+        max_logit + log1p(exp(min_logit - max_logit))
+    where max_logit is the element-wise maximum of the inputs,
+    and min_logit is the element-wise minimum of the inputs.
+
+    Args:
+        a (torch.Tensor): The first input tensor.
+        b (torch.Tensor): The second input tensor.
+
+    Returns:
+        torch.Tensor: The result of the logit OR operation applied element-wise to the input tensors.
+    """
+
+    max_logit = torch.maximum(a, b)
+    min_logit = torch.minimum(a, b)
+    return max_logit + torch.log1p(torch.exp(min_logit - max_logit))
+
+
+def logit_or_n(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
+    """
+    Compute the logit of the OR of n events given their logits.
+    
+    Args:
+    logits (torch.Tensor): A tensor of logit values.
+    dim (int, optional): The dimension along which to apply the OR operation.
+                         If None, the operation is applied to all elements.
+
+    Returns:
+    torch.Tensor: The logit of the OR of input events along the specified dimension.
+    """
+    if dim is None:
+        max_logit = torch.max(logits)
+        return max_logit + torch.log1p(torch.sum(torch.exp(logits - max_logit)) - 1)
+    else:
+        max_logit = torch.max(logits, dim=dim, keepdim=True).values
+        exp_sum = torch.sum(torch.exp(logits - max_logit), dim=dim, keepdim=False)
+        return max_logit + torch.log1p(exp_sum - 1)
 
 
 def mean_episode_reward(

@@ -27,6 +27,7 @@ from jaxtyping import Int, Bool, Float
 from pvg.parameters import Parameters, InteractionProtocolType, Guess, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
+from pvg.utils.maths import logit_or_2, logit_or_n
 
 
 class ProtocolHandler(ABC):
@@ -227,7 +228,7 @@ class ProtocolHandler(ABC):
         )
 
     def get_verifier_guess_mask_from_rounds(
-        self, round: Int[Tensor, "..."]
+        self, round: Int[Tensor, "..."], adversarial: bool = False
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifiers can make a guess.
 
@@ -238,16 +239,18 @@ class ProtocolHandler(ABC):
         ----------
         round : Int[Tensor, "..."]
             The batch of rounds.
+        adversarial : bool, optional
+            Whether to get the mask for the adversarial verifier, by default False
 
         Returns
         -------
         verifier_turn : Bool[Tensor, "..."]
             Which batch items the verifiers can make a guess in.
         """
-
+        verifier_name = "adversarial_verifier" if adversarial else "verifier"
         active_agents_mask = self.get_active_agents_mask_from_rounds(round)
         verifier_active_mask = active_agents_mask[
-            ..., [self.agent_names.index(v_n) for v_n in self.verifier_names], :
+            ..., self.agent_names.index(verifier_name), :
         ]
         return verifier_active_mask.any(dim=-1)
 
@@ -349,7 +352,7 @@ class ProtocolHandler(ABC):
             done = torch.from_numpy(done)
             terminated = torch.from_numpy(terminated)
 
-        # Get the mask of the batch items where the verifier can make a guess
+        # Get the mask of the batch items where the (non-adversarial) verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round)
 
         # If the verifier has made a guess we terminate the episode. For now we assume that the primary verifier controls when an episode is done, though eventually we should generalise this to allow for different dones per agent so that channels can be terminated independently.
@@ -539,7 +542,7 @@ class DeterministicProtocolHandler(ProtocolHandler, ABC):
         return self.active_agents_mask[round, :, :]
 
     def get_verifier_guess_mask_from_rounds(
-        self, round: Int[Tensor, "..."]
+        self, round: Int[Tensor, "..."], adversarial: bool = False
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifier can make a guess.
 
@@ -550,16 +553,18 @@ class DeterministicProtocolHandler(ProtocolHandler, ABC):
         ----------
         round : Int[Tensor, "..."]
             The batch of rounds.
+        adversarial : bool, optional
+            Whether to get the mask for the adversarial verifier, by default False
 
         Returns
         -------
         verifier_turn : Bool[Tensor, "..."]
             Which batch items the verifier can make a guess in.
         """
-
+        verifier_name = "adversarial_verifier" if adversarial else "verifier"
         active_agents_mask = self.get_active_agents_mask_from_rounds(round)
         verifier_active_mask = active_agents_mask[
-            ..., self.agent_names.index("verifier"), :
+            ..., self.agent_names.index(verifier_name), :
         ]
         return verifier_active_mask.any(dim=-1)
 
@@ -717,23 +722,26 @@ class DebateProtocol(PvgProtocol):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
-    message_channel_names = ["main"]
+    message_channel_names = ["prover0_channel", "prover1_channel"]
     agent_channel_visibility = [
-        ("prover0", "main"),
-        ("prover1", "main"),
-        ("verifier", "main"),
+        ("prover0", "prover0_channel"),
+        ("prover0", "prover1_channel"),
+        ("prover1", "prover0_channel"),
+        ("prover1", "prover1_channel"),
+        ("verifier", "prover0_channel"),
+        ("verifier", "prover1_channel"),
     ]
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
         """Specifies whether an agent is active in a given round and channel.
 
-        In sequential debate with verifier first, the order is:
+        In sequential MNIP with verifier first, the order is:
 
         - Verifier in both channels
         - First prover (determined by `prover0_first`) in their respective channel
         - Second prover in their respective channel
 
-        In simultaneous debate with verifier first, the order is:
+        In simultaneous MNIP with verifier first, the order is:
 
         - Verifier in both channels
         - Provers in their respective channels at the same time
@@ -758,34 +766,54 @@ class DebateProtocol(PvgProtocol):
                 if agent_name == "verifier":
                     return round % 3 == 0
                 elif agent_name == first_prover:
-                    return round % 3 == 1
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
                 elif agent_name == second_prover:
-                    return round % 3 == 2
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 2
+                    else:
+                        return False
 
             # Verifier first, simultaneous
             else:
-                if agent_name == "verifier":
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return (
+                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
+                        )
+                    else:
+                        return False
+                elif agent_name == "verifier":
                     return round % 2 == 0
-                else:
-                    return round % 2 == 1
 
         else:
 
             # Provers first, sequential
             if self.params.debate_protocol.sequential:
                 if agent_name == first_prover:
-                    return round % 3 == 0
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 0
+                    else:
+                        return False
                 elif agent_name == second_prover:
-                    return round % 3 == 1
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
                 elif agent_name == "verifier":
                     return round % 3 == 2
 
             # Provers first, simultaneous
             else:
-                if agent_name == "verifier":
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 2 == 0
+                    else:
+                        return False
+                elif agent_name == "verifier":
                     return round % 2 == 1
-                else:
-                    return round % 2 == 0
 
     @property
     def max_message_rounds(self) -> int:
@@ -1240,12 +1268,10 @@ class ZeroKnowledgeProtocol(ABC):
     @property
     def agent_channel_visibility(self):
 
+        agent_channel_visibility = []
+
         # Clone the existing visibility settings and add a separate channel for the
         # simulator
-        agent_channel_visibility = [("simulator", "simulator_channel")]
-
-        # Make the adversarial channels visible to the all non-verifier agents and the
-        # adversarial verifier
         for agent_name, channel_name in super().agent_channel_visibility:
             if agent_name == "verifier":
                 agent_channel_visibility.append(
@@ -1309,56 +1335,51 @@ class ZeroKnowledgeProtocol(ABC):
         reward: Float[Tensor, "... agent"],
         round: Int[Tensor, "..."],
     ):
-
-        adversarial_verifier_index = self.agent_names.index("adversarial_verifier")
         
-        prover_indices = [self.agent_names.index(p_n) for p_n in self.prover_names]
-
-        # Get the main message logits and flatten the channel and position dimensions
+        # Get the main message logits and decision logits. Possibly we should also include the additional linear meassage logits? #TODO-LH
         main_message_logits: Float[Tensor, "... agent channel position logit"] = env_td[
             "agents", "main_message_logits"
         ]
+        decision_logits: Float[Tensor, "... agent 3"] = env_td["agents", "decision_logits"]
 
+        # Get necessary masks and indices
         active_agents_mask = self.get_active_agents_mask_from_rounds(round)
-
+        adversarial_verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round, adversarial=True)
+        prover_indices = [self.agent_names.index(p_n) for p_n in self.prover_names]
+        adversarial_verifier_index = self.agent_names.index("adversarial_verifier")
         adversarial_channel_indices = [self.message_channel_names.index(m_c_n) for m_c_n in self.message_channel_names if m_c_n.endswith("_adversarial")]
-        
+        simulator_index = self.agent_names.index("simulator")
+        simulator_channel_indices = [self.message_channel_names.index(m_c_n) for m_c_n in self.message_channel_names if m_c_n.endswith("_simulator")]
 
-        adversarial_channel_mask = active_agents_mask[..., adversarial_channel_indices]
-        acm_expanded = adversarial_channel_mask.unsqueeze(-1).unsqueeze(-1).expand_as(adversarial_channel_logits)
-
+        # Get the message logits for the adversarial channels. Note that this currently assumes that in any given channel, only one agent is active. This can be generalised using utils.math.logit_or_n instead of simply summing the logits across the agent dimension.
         adversarial_channel_logits = main_message_logits[
             ..., adversarial_channel_indices, :, :
         ]
-        
-        simulator_index = self.agent_names.index("simulator")
-        simulator_channel_indices = [self.message_channel_names.index(m_c_n) for m_c_n in self.message_channel_names if m_c_n.endswith("_simulator")]
-        simulator_channel_logits = main_message_logits[
-            ..., simulator_index, simulator_channel_indices, :, :
-        ]
-
-
-
-        # verifier_active_mask.any(dim=-1)
-
-
-        adversarial_verifier_logits = main_message_logits[
-            ..., adversarial_verifier_index, :, :, :
-        ]
-        adversarial_verifier_logits = rearrange(
-            adversarial_verifier_logits,
+        adversarial_channel_mask = active_agents_mask[..., adversarial_channel_indices].unsqueeze(-1).unsqueeze(-1).expand_as(adversarial_channel_logits)
+        logits_per_adversarial_channel = (adversarial_channel_logits * adversarial_channel_mask).sum(dim=-4)
+        logits_per_adversarial_channel = rearrange(
+            logits_per_adversarial_channel,
             "... channel position logit -> ... (channel position logit)",
         )
-        simulator_logits = main_message_logits[..., simulator_index, :, :, :]
-        simulator_logits = rearrange(
-            simulator_logits,
+
+        # Get the message logits for the simulator channels
+        logits_per_simulator_channel = main_message_logits[
+            ..., simulator_index, simulator_channel_indices, :, :
+        ]
+        logits_per_simulator_channel = rearrange(
+            logits_per_simulator_channel,
             "... channel position logit -> ... (channel position logit)",
-        ) #TODO-LH
+        )
+
+        # Get the adversarial verifier and simulator decision logits
+        adversarial_verifier_decision_logits = decision_logits[adversarial_verifier_guess_mask, adversarial_verifier_index]
+        simulator_decision_logits = decision_logits[adversarial_verifier_guess_mask, simulator_index]
 
         # Simulator reward, which is the cosine similarity between the adversarial_verifier and
-        # simulator logits, multiplied by a coefficient
+        # simulator logits, multiplied by a coefficient. At the moment we sum the similarities for the message logits and decision logits (because decisons are not necessarily allowed in every round, unlike messages, but we may want to do something esle here). #TODO-LH
         simulator_reward = (
-            F.cosine_similarity(adversarial_verifier_logits, simulator_logits, dim=-1)
+            (F.cosine_similarity(logits_per_adversarial_channel, logits_per_simulator_channel, dim=-1)
+            + F.cosine_similarity(adversarial_verifier_decision_logits, simulator_decision_logits))
             * self.params.zk_protocol.simulator_reward_coefficient
         )
         reward[..., simulator_index] = simulator_reward

@@ -450,7 +450,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     ),
                     device=self.device,
                 ),
-                shape=(self.num_envs, self.num_agents),
+                decision_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        3,
+                    ),
+                    device=self.device,
+                ),
+                shape=(self.num_envs, self.num_agents)
             ),
             shape=(self.num_envs,),
             device=self.device,
