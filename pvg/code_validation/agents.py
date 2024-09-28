@@ -567,23 +567,17 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.startswith("Question:") or completion_text.startswith(
-                "Answer:"
-            ):
-                return completion_text, 2, retry, warning
-            elif completion_text.startswith("Decision:"):
-                if completion_text == "Decision: accept":
+            if "decision:" in completion_text.lower():
+                if "decision: accept" in completion_text.lower():
                     return completion_text, 1, retry, warning
-                elif completion_text == "Decision: reject":
+                elif "decision: reject" in completion_text.lower():
                     return completion_text, 0, retry, warning
                 else:
                     raise InvalidDecisionError(
                         num_retries=retry, response_text=completion_text
                     )
             else:
-                raise InvalidResponseError(
-                    num_retries=retry, response_text=completion_text
-                )
+                return completion_text, 2, retry, warning
 
         # Try the generation a number of times
         num_generation_errors = 0
