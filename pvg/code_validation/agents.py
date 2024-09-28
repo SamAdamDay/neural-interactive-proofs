@@ -65,6 +65,10 @@ from pvg.constants import WANDB_OPENAI_FINETUNE_PROJECT
 CV_SCENARIO = ScenarioType.CODE_VALIDATION
 
 
+class AgentNotActiveInChannelError(Exception):
+    """Error raised when an agent is not active in a channel."""
+
+
 @dataclass
 class OpenAiAgentState(AgentState):
     """The state of an OpenAI agent.
@@ -292,14 +296,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         """
 
+        if self.agent_params.freeze_agent:
+            self.fine_tune_job_id = "frozen_job_id"
+            return
+
         fine_tune_dataset = self._build_fine_tune_dataset(rollouts)
 
         if self.agent_params.use_dummy_api:
             self.fine_tune_job_id = "dummy_job_id"
-            return
-
-        if self.agent_params.freeze_agent:
-            self.fine_tune_job_id = "frozen_job_id"
             return
 
         with TemporaryDirectory() as temp_dir:
@@ -456,17 +460,20 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 ):
                     continue
 
-                chat_messages_prompt = self._build_chat_messages_prompt(
-                    message_history=rollout_final_state["message_history"][
-                        :, channel_id
-                    ],
-                    round_id=rollout_final_state["round"],
-                    channel_name=channel_name,
-                    question=rollout_final_state["question"],
-                    solution=rollout_final_state["solution"],
-                    verdict=rollout_final_state["verdict"],
-                    ensure_last_message_is_assistant=True,
-                )
+                try:
+                    chat_messages_prompt = self._build_chat_messages_prompt(
+                        message_history=rollout_final_state["message_history"][
+                            :, channel_id
+                        ],
+                        round_id=rollout_final_state["round"],
+                        channel_name=channel_name,
+                        question=rollout_final_state["question"],
+                        solution=rollout_final_state["solution"],
+                        verdict=rollout_final_state["verdict"],
+                        ensure_last_message_is_assistant=True,
+                    )
+                except AgentNotActiveInChannelError:
+                    continue
 
                 fine_tune_dataset.append(dict(messages=chat_messages_prompt))
 
@@ -714,6 +721,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         -------
         chat_messages : list[dict[str, str]]
             The chat messages ready to feed to the API.
+
+        Raises
+        ------
+        AgentNotActiveInChannelError
+            If `ensure_last_message_is_assistant` is set to True and the agent is not
+            active in the channel (i.e. there would be no messages in the chat history).
         """
 
         # First add the system prompt
@@ -738,8 +751,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             chat_messages.append(dict(role=role, content=str(message)))
 
         if ensure_last_message_is_assistant:
-            while len(chat_messages) > 0 and chat_messages[-1]["role"] != "assistant":
+            while chat_messages[-1]["role"] != "assistant":
                 chat_messages.pop()
+                if len(chat_messages) == 0:
+                    raise AgentNotActiveInChannelError
 
         return chat_messages
 
