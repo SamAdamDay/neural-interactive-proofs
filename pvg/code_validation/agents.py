@@ -302,6 +302,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         fine_tune_dataset = self._build_fine_tune_dataset(rollouts)
 
+        # OpenAI requires at least 10 examples for fine-tuning
+        if len(fine_tune_dataset) < 10:
+            self.fine_tune_job_id = "insufficient_data_job_id"
+            return
+
         if self.agent_params.use_dummy_api:
             self.fine_tune_job_id = "dummy_job_id"
             return
@@ -360,6 +365,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_params.use_dummy_api or self.agent_params.freeze_agent:
             return "succeeded"
 
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            return "succeeded"
+
         status = self._get_fine_tune_job().status
 
         if status in ["validating_files", "queued"]:
@@ -372,8 +380,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job"""
 
-        if self.agent_params.use_dummy_api or self.agent_params.freeze_agent:
+        if self.agent_params.use_dummy_api:
             raise ValueError("Cannot get error for dummy API")
+
+        if self.agent_params.freeze_agent:
+            raise ValueError("Cannot get fine-tune error for frozen agent")
+
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            raise ValueError("Cannot get error for insufficient data job")
 
         error = self._get_fine_tune_job().error
 
@@ -396,7 +410,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             self.fine_tuned_model_name = "dummy_model_name"
             return
 
-        if self.agent_params.freeze_agent:
+        if (
+            self.agent_params.freeze_agent
+            or self.fine_tune_job_id == "insufficient_data_job_id"
+        ):
             self.fine_tuned_model_name = None
             return
 
