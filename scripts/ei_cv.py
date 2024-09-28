@@ -28,10 +28,10 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
-    interaction_protocol=[InteractionProtocolType.DEBATE],
+    interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    frames_per_batch=[None],
+    frames_per_batch=[200 * 8],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
@@ -39,7 +39,7 @@ param_grid = dict(
     prover_temperature=[None],
     prover_top_p=[None],
     freeze_prover=[False],
-    fine_tune_from_scratch=[True],
+    fine_tune_from_scratch=[False],
     shared_reward=[False],
     min_message_rounds=[2],
     max_message_rounds=[8],
