@@ -88,7 +88,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     agent_params: CodeValidationAgentParameters
 
     agent_level_in_keys = ["active_mask"]
-    env_level_in_keys = ["message_history", "question", "solution", "round"]
+    env_level_in_keys = ["message_history", "question", "solution", "round", "verdict"]
     agent_level_out_keys = ["message", "decision", "retry_count", "token_limit"]
 
     @property
@@ -111,6 +111,27 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         else:
             return self.base_model_name
 
+    @property
+    def prompt_subdirectory(self) -> str:
+        """The sub-directory for the prompt templates, specific to the protocol."""
+
+        interaction_protocol = self.params.interaction_protocol
+
+        if interaction_protocol == InteractionProtocolType.PVG:
+            return "nip"
+        elif interaction_protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM:
+            return "adp"
+        elif interaction_protocol == InteractionProtocolType.DEBATE:
+            return "debate"
+        elif interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+            return "mac"
+        elif interaction_protocol == InteractionProtocolType.MNIP:
+            return "mnip"
+        else:
+            raise NotImplementedError(
+                f"Prompt templates not implemented for {interaction_protocol}"
+            )
+
     def __init__(
         self,
         params: Parameters,
@@ -131,7 +152,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
-            "pvg.code_validation.prompt_templates"
+            f"pvg.code_validation.prompt_templates.{self.prompt_subdirectory}"
         )
         if self.is_verifier:
             template_filename = "verifier_system_prompt.txt"
@@ -160,6 +181,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
             - "active_mask" (... channel): A boolean array indicating whether the agent
                 is active in each channel.
 
@@ -215,6 +238,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         channel_name=channel_name,
                         question=data["question"][batch_id],
                         solution=data["solution"][batch_id],
+                        verdict=data["verdict"][batch_id],
                     )
                 )
                 output_data["message"][(*batch_id, channel_id)] = next_message
@@ -263,6 +287,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         """
 
@@ -399,6 +425,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------
@@ -436,6 +464,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     channel_name=channel_name,
                     question=rollout_final_state["question"],
                     solution=rollout_final_state["solution"],
+                    verdict=rollout_final_state["verdict"],
                     ensure_last_message_is_assistant=True,
                 )
 
@@ -458,6 +487,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
+        verdict: int,
     ) -> tuple[str | None, int, int, Literal["max_tokens"] | None]:
         """Generate the next message and decision for the agent, with retries.
 
@@ -513,6 +543,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             channel_name=channel_name,
             question=question,
             solution=solution,
+            verdict=self._get_verdict_string(verdict),
         )
 
         def try_generation(
@@ -619,6 +650,41 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
 
+    def _get_verdict_string(
+        self, dataset_verdict: int
+    ) -> Literal["accept", "reject", ""]:
+        """Get the verdict the agent is arguing for as a string.
+
+        This is based on the agent's role, the interaction protocol and the "verdict"
+        set in the dataset.
+
+        Parameters
+        ----------
+        dataset_verdict : int
+            The verdict value set in the dataset. For now we don't make use of arbitrary
+            verdict that has been generated and assume that the (first) prover always
+            argues that the solution is correct.
+
+        Returns
+        -------
+        string_verdict : str
+            The verdict string which can be "accept", "reject", or an empty string.
+        """
+
+        if self.agent_name == "verifier":
+            return ""
+
+        if self.params.interaction_protocol in [
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.MERLIN_ARTHUR,
+        ]:
+            if self.agent_name == "prover0":
+                return "accept"
+            else:
+                return "reject"
+
+        return "accept"
+
     def _build_chat_messages_prompt(
         self,
         message_history: NDArray,
@@ -626,6 +692,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
+        verdict: int,
         ensure_last_message_is_assistant: bool = False,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
@@ -642,6 +709,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The problem text.
         solution : str
             The proposed solution text.
+        verdict : int
+            The verdict that the prover is arguing for, where 0 means "reject" and 1
+            means "accept".
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
@@ -656,6 +726,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         system_prompt = self.system_template.substitute(
             question=question,
             solution=solution,
+            verdict=self._get_verdict_string(verdict),
             max_questions=self.protocol_handler.max_verifier_turns - 1,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
@@ -717,6 +788,8 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------
