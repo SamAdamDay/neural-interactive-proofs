@@ -285,6 +285,7 @@ class ProtocolHandler(ABC):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         """Compute the rewards for the other agents and add them to the current reward.
 
@@ -351,10 +352,10 @@ class ProtocolHandler(ABC):
         # Get the mask of the batch items where the verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round)
 
-        # If the verifier has made a guess we terminate the episode
+        # If the verifier has made a guess we terminate the episode. For now we assume that the primary verifier controls when an episode is done, though eventually we should generalise this to allow for different dones per agent so that channels can be terminated independently.
         verifier_indices = (
             ...,
-            [self.agent_names.index(v_n) for v_n in self.verifier_names],
+            self.agent_names.index("verifier"),
         )
 
         if self.params.protocol_common.force_guess == Guess.ONE:
@@ -398,7 +399,7 @@ class ProtocolHandler(ABC):
 
         # Compute the rewards for the other agents and add them
         self._include_non_verifier_rewards(
-            env_td, verifier_decision_made, decision[verifier_index], reward
+            env_td, verifier_decision_made, decision[verifier_index], reward, round
         )
 
         return done, terminated, reward
@@ -676,6 +677,7 @@ class PvgProtocol(DeterministicProtocolHandler):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         protocol_params = self.params.protocol_common
         verifier_index = (..., self.agent_names.index("verifier"))
@@ -715,14 +717,11 @@ class DebateProtocol(PvgProtocol):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
-    message_channel_names = ["prover0_channel", "prover1_channel"]
+    message_channel_names = ["main"]
     agent_channel_visibility = [
-        ("prover0", "prover0_channel"),
-        ("prover0", "prover1_channel"),
-        ("prover1", "prover0_channel"),
-        ("prover1", "prover1_channel"),
-        ("verifier", "prover0_channel"),
-        ("verifier", "prover1_channel"),
+        ("prover0", "main"),
+        ("prover1", "main"),
+        ("verifier", "main"),
     ]
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
@@ -759,54 +758,34 @@ class DebateProtocol(PvgProtocol):
                 if agent_name == "verifier":
                     return round % 3 == 0
                 elif agent_name == first_prover:
-                    if channel_name == f"{agent_name}_channel":
-                        return round % 3 == 1
-                    else:
-                        return False
+                    return round % 3 == 1
                 elif agent_name == second_prover:
-                    if channel_name == f"{agent_name}_channel":
-                        return round % 3 == 2
-                    else:
-                        return False
+                    return round % 3 == 2
 
             # Verifier first, simultaneous
             else:
-                if agent_name in ["prover0", "prover1"]:
-                    if channel_name == f"{agent_name}_channel":
-                        return (
-                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
-                        )
-                    else:
-                        return False
-                elif agent_name == "verifier":
+                if agent_name == "verifier":
                     return round % 2 == 0
+                else:
+                    return round % 2 == 1
 
         else:
 
             # Provers first, sequential
             if self.params.debate_protocol.sequential:
                 if agent_name == first_prover:
-                    if channel_name == f"{agent_name}_channel":
-                        return round % 3 == 0
-                    else:
-                        return False
+                    return round % 3 == 0
                 elif agent_name == second_prover:
-                    if channel_name == f"{agent_name}_channel":
-                        return round % 3 == 1
-                    else:
-                        return False
+                    return round % 3 == 1
                 elif agent_name == "verifier":
                     return round % 3 == 2
 
             # Provers first, simultaneous
             else:
-                if agent_name in ["prover0", "prover1"]:
-                    if channel_name == f"{agent_name}_channel":
-                        return round % 2 == 0
-                    else:
-                        return False
-                elif agent_name == "verifier":
+                if agent_name == "verifier":
                     return round % 2 == 1
+                else:
+                    return round % 2 == 0
 
     @property
     def max_message_rounds(self) -> int:
@@ -822,6 +801,7 @@ class DebateProtocol(PvgProtocol):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         protocol_params = self.params.protocol_common
 
@@ -932,6 +912,7 @@ class MerlinArthurProtocol(ProtocolHandler):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         protocol_params = self.params.protocol_common
 
@@ -1065,6 +1046,7 @@ class MnipProtocol(PvgProtocol):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         protocol_params = self.params.protocol_common
 
@@ -1098,10 +1080,11 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
 
         # Duplicate the existing channels (one per verifier) and add the simulator
         # channel
-        message_channel_names = ["simulator_channel"]
+        message_channel_names = []
         for channel_name in super().message_channel_names:
             message_channel_names.append(channel_name + "_standard")
             message_channel_names.append(channel_name + "_adversarial")
+            message_channel_names.append(channel_name + "_simulator")
 
         return message_channel_names
 
@@ -1121,6 +1104,9 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
                 )
                 agent_channel_visibility.append(
                     ("adversarial_verifier", channel_name + "_adversarial")
+                )
+                agent_channel_visibility.append(
+                    ("simulator", channel_name + "_simulator")
                 )
             else:
                 agent_channel_visibility.append(
@@ -1146,12 +1132,11 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
             )
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
-
+        
+        # Simulators are the only agents active in the simulator channel, and are always active
         if agent_name == "simulator":
-            return channel_name == "simulator_channel"
-
-        # No other agents are active in the simulator channel
-        if channel_name == "simulator_channel":
+            return channel_name.endswith("_simulator")
+        if channel_name.endswith("_simulator"):
             return False
 
         # Verifiers are active in their corresponding channels
@@ -1173,6 +1158,7 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
 
         protocol_params = self.params.protocol_common
@@ -1196,7 +1182,7 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
         simulator_logits = rearrange(
             simulator_logits,
             "... channel position logit -> ... (channel position logit)",
-        )
+        ) #TODO-LH
 
         # Simulator reward, which is the cosine similarity between the adversarial_verifier and
         # simulator logits, multiplied by a coefficient
@@ -1222,12 +1208,12 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
         reward[..., simulator_index] = simulator_reward
 
 
-class ZeroKnowledgeProtocol(Generic[P], ABC):
+class ZeroKnowledgeProtocol(ABC):
     """Mixin for zero-knowledge protocols.
 
     Introduces a second verifier and a simulator. The simulator tries to mimic the
-    interaction between the second verifier and the prover, and the second verifier
-    tries to prevent this. The prover tries to make sure the simulator can succeed
+    interaction between the second verifier and the prover(s), and the second verifier
+    tries to prevent this. The prover(s) tries to make sure the simulator can succeed
     (which implies that it is not `leaking` knowledge).
     """
 
@@ -1243,10 +1229,11 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
 
         # Duplicate the existing channels (one per verifier) and add the simulator
         # channel
-        message_channel_names = ["simulator_channel"]
+        message_channel_names = []
         for channel_name in super().message_channel_names:
             message_channel_names.append(channel_name + "_standard")
             message_channel_names.append(channel_name + "_adversarial")
+            message_channel_names.append(channel_name + "_simulator")
 
         return message_channel_names
 
@@ -1266,6 +1253,9 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
                 )
                 agent_channel_visibility.append(
                     ("adversarial_verifier", channel_name + "_adversarial")
+                )
+                agent_channel_visibility.append(
+                    ("simulator", channel_name + "_simulator")
                 )
             else:
                 agent_channel_visibility.append(
@@ -1291,12 +1281,11 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
             )
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
-
+        
+        # Simulators are the only agents active in the simulator channel, and are always active
         if agent_name == "simulator":
-            return channel_name == "simulator_channel"
-
-        # No other agents are active in the simulator channel
-        if channel_name == "simulator_channel":
+            return channel_name.endswith("_simulator")
+        if channel_name.endswith("_simulator"):
             return False
 
         # Verifiers are active in their corresponding channels
@@ -1318,16 +1307,41 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
 
         adversarial_verifier_index = self.agent_names.index("adversarial_verifier")
-        simulator_index = self.agent_names.index("simulator")
+        
         prover_indices = [self.agent_names.index(p_n) for p_n in self.prover_names]
 
         # Get the main message logits and flatten the channel and position dimensions
         main_message_logits: Float[Tensor, "... agent channel position logit"] = env_td[
             "agents", "main_message_logits"
         ]
+
+        active_agents_mask = self.get_active_agents_mask_from_rounds(round)
+
+        adversarial_channel_indices = [self.message_channel_names.index(m_c_n) for m_c_n in self.message_channel_names if m_c_n.endswith("_adversarial")]
+        
+
+        adversarial_channel_mask = active_agents_mask[..., adversarial_channel_indices]
+        acm_expanded = adversarial_channel_mask.unsqueeze(-1).unsqueeze(-1).expand_as(adversarial_channel_logits)
+
+        adversarial_channel_logits = main_message_logits[
+            ..., adversarial_channel_indices, :, :
+        ]
+        
+        simulator_index = self.agent_names.index("simulator")
+        simulator_channel_indices = [self.message_channel_names.index(m_c_n) for m_c_n in self.message_channel_names if m_c_n.endswith("_simulator")]
+        simulator_channel_logits = main_message_logits[
+            ..., simulator_index, simulator_channel_indices, :, :
+        ]
+
+
+
+        # verifier_active_mask.any(dim=-1)
+
+
         adversarial_verifier_logits = main_message_logits[
             ..., adversarial_verifier_index, :, :, :
         ]
@@ -1339,7 +1353,7 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
         simulator_logits = rearrange(
             simulator_logits,
             "... channel position logit -> ... (channel position logit)",
-        )
+        ) #TODO-LH
 
         # Simulator reward, which is the cosine similarity between the adversarial_verifier and
         # simulator logits, multiplied by a coefficient
@@ -1354,7 +1368,7 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
 
         # Prover rewards
         super()._include_non_verifier_rewards(
-            env_td, verifier_decision_made, verifier_decision, reward
+            env_td, verifier_decision_made, verifier_decision, reward, round
         )
         reward[..., prover_indices] += (
             self._prover_zk_loss_coefficient() * simulator_reward
@@ -1367,32 +1381,32 @@ class ZeroKnowledgeProtocol(Generic[P], ABC):
 
 
 # @register_protocol_handler(InteractionProtocolType.PVG, zero_knowledge=True)
-class AltZeroKnowledgePvgProtocol(PvgProtocol, ZeroKnowledgeProtocol[PvgProtocol]):
+class AltZeroKnowledgePvgProtocol(PvgProtocol, ZeroKnowledgeProtocol):
     pass
 
 
 @register_protocol_handler(
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM, zero_knowledge=True
 )
-class ZeroKnowledgeAdpProtocol(AdpProtocol, ZeroKnowledgeProtocol[AdpProtocol]):
+class ZeroKnowledgeAdpProtocol(AdpProtocol, ZeroKnowledgeProtocol):
     pass
 
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR, zero_knowledge=True)
 class ZeroKnowledgeMerlinArthurProtocol(
-    MerlinArthurProtocol, ZeroKnowledgeProtocol[MerlinArthurProtocol]
+    MerlinArthurProtocol, ZeroKnowledgeProtocol
 ):
     pass
 
 
 @register_protocol_handler(InteractionProtocolType.MNIP, zero_knowledge=True)
-class ZeroKnowledgeMnipProtocol(MnipProtocol, ZeroKnowledgeProtocol[MnipProtocol]):
+class ZeroKnowledgeMnipProtocol(MnipProtocol, ZeroKnowledgeProtocol):
     pass
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE, zero_knowledge=True)
 class ZeroKnowledgeDebateProtocol(
-    ZeroKnowledgeProtocol[DebateProtocol], DebateProtocol
+    ZeroKnowledgeProtocol, DebateProtocol
 ):
     pass
 
@@ -1446,5 +1460,6 @@ class MultiChannelTestProtocol(DeterministicProtocolHandler):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        round: Int[Tensor, "..."],
     ):
         pass

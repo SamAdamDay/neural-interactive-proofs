@@ -27,7 +27,7 @@ from pvg import (
     prepare_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
-from pvg.parameters import get_agent_names
+from pvg.parameters import get_protocol_agent_names
 
 
 def run(cmd_args: Namespace):
@@ -60,7 +60,7 @@ def run(cmd_args: Namespace):
                     agent_lr_factor={"actor": 1.0, "critic": 1.0},
                     use_orthogonal_initialisation=False,
                 )
-                for agent_name in get_agent_names(
+                for agent_name in get_protocol_agent_names(
                     Parameters(
                         interaction_protocol=interaction_protocol,
                         protocol_common=CommonProtocolParameters(
@@ -69,7 +69,8 @@ def run(cmd_args: Namespace):
                         scenario=scenario,
                         trainer=trainer,
                         dataset=dataset,
-                    )
+                    ),
+                    zero_knowledge=zero_knowledge,
                 )
             }
         ),
@@ -97,7 +98,7 @@ def run(cmd_args: Namespace):
         protocol_common=CommonProtocolParameters(
             shared_reward=True,
             force_guess=None,
-            zero_knowledge=True,
+            zero_knowledge=zero_knowledge,
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
