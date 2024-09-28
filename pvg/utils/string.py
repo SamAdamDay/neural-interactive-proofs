@@ -29,7 +29,7 @@ def random_string(length: int, capitalise=True) -> str:
     return random_string
 
 
-def hash_string_and_check_parity(input_string: str) -> int:
+def get_hash_parity(input_string: str) -> int:
     """
     Hashes the input string using SHA-256 and checks the parity of the resulting hash.
 

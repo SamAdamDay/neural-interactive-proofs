@@ -111,6 +111,27 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         else:
             return self.base_model_name
 
+    @property
+    def prompt_subdirectory(self) -> str:
+        """The sub-directory for the prompt templates, specific to the protocol."""
+
+        interaction_protocol = self.params.interaction_protocol
+
+        if interaction_protocol == InteractionProtocolType.PVG:
+            return "nip"
+        elif interaction_protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM:
+            return "adp"
+        elif interaction_protocol == InteractionProtocolType.DEBATE:
+            return "debate"
+        elif interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+            return "mac"
+        elif interaction_protocol == InteractionProtocolType.MNIP:
+            return "mnip"
+        else:
+            raise NotImplementedError(
+                f"Prompt templates not implemented for {interaction_protocol}"
+            )
+
     def __init__(
         self,
         params: Parameters,
@@ -131,7 +152,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
-            f"pvg.code_validation.prompt_templates.{self._get_prompt_directory(protocol_handler)}"
+            f"pvg.code_validation.prompt_templates.{self.prompt_subdirectory}"
         )
         if self.is_verifier:
             template_filename = "verifier_system_prompt.txt"
@@ -160,7 +181,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the agent is arguing for (i.e. "yes" or "no").
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
             - "active_mask" (... channel): A boolean array indicating whether the agent
                 is active in each channel.
 
@@ -265,7 +287,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the agent is arguing for (i.e. "yes" or "no").
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         """
 
@@ -402,7 +425,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the agent is arguing for (i.e. "yes" or "no").
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------
@@ -519,7 +543,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             channel_name=channel_name,
             question=question,
             solution=solution,
-            verdict=self._get_verdict(verdict),
+            verdict=self._get_verdict_string(verdict),
         )
 
         def try_generation(
@@ -626,49 +650,34 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
 
-    def _get_prompt_directory(protocol_handler):
-        """Get the directory for the prompt templates based on the protocol handler.
+    def _get_verdict_string(
+        self, dataset_verdict: int
+    ) -> Literal["accept", "reject", ""]:
+        """Get the verdict the agent is arguing for as a string.
+
+        This is based on the agent's role, the interaction protocol and the "verdict"
+        set in the dataset.
 
         Parameters
         ----------
-        protocol_handler : ProtocolHandler
-            The protocol handler for the scenario.
+        dataset_verdict : int
+            The verdict value set in the dataset. For now we don't make use of arbitrary
+            verdict that has been generated and assume that the (first) prover always
+            argues that the solution is correct.
 
         Returns
         -------
-        prompt_directory : str
-            The directory for the prompt templates.
-        """
-
-        if protocol_handler.name is InteractionProtocolType.PVG:
-            return "nip"
-        elif protocol_handler.name is InteractionProtocolType.ABSTRACT_DECISION_PROBLEM:
-            return "adp"
-        elif protocol_handler.name is InteractionProtocolType.DEBATE:
-            return "debate"
-        elif protocol_handler.name is InteractionProtocolType.MERLIN_ARTHUR:
-            return "mac"
-        elif protocol_handler.name is InteractionProtocolType.MNIP:
-            return "mnip"
-        else:
-            raise ValueError(f"Unknown protocol handler {protocol_handler.name!r}")
-
-    def _get_verdict(self, verdict: int) -> str:
-        """
-        Determines the verdict based on the agent's role and the interaction protocol.
-        Args:
-            verdict (int): The verdict value. For now we don't make use of arbitrary verdict that has been generated and assume that the (first) prover always argues that the solution is correct.
-        Returns:
-            str: The verdict string which can be "accept", "reject", or an empty string.
+        string_verdict : str
+            The verdict string which can be "accept", "reject", or an empty string.
         """
 
         if self.agent_name == "verifier":
             return ""
 
-        if (
-            self.protocol_handler.name is InteractionProtocolType.DEBATE
-            or self.protocol_handler.name is InteractionProtocolType.MERLIN_ARTHUR
-        ):
+        if self.params.interaction_protocol in [
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.MERLIN_ARTHUR,
+        ]:
             if self.agent_name == "prover0":
                 return "accept"
             else:
@@ -701,7 +710,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         solution : str
             The proposed solution text.
         verdict : int
-            The verdict that the agent is arguing for (i.e. "yes" or "no").
+            The verdict that the prover is arguing for, where 0 means "reject" and 1
+            means "accept".
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
@@ -716,7 +726,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         system_prompt = self.system_template.substitute(
             question=question,
             solution=solution,
-            verdict=self._get_verdict(verdict),
+            verdict=self._get_verdict_string(verdict),
             max_questions=self.protocol_handler.max_verifier_turns - 1,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
@@ -778,7 +788,8 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the agent is arguing for (i.e. "yes" or "no").
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------

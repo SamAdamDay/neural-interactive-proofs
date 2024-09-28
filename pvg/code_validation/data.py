@@ -25,7 +25,7 @@ from pvg.factory import register_scenario_class
 from pvg.constants import CV_DATA_DIR
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype
-from pvg.utils.string import hash_string_and_check_parity
+from pvg.utils.string import get_hash_parity
 
 
 class CodeValidationDataset(Dataset, ABC):
@@ -195,7 +195,7 @@ class AppsCodeValidationDataset(CodeValidationDataset):
             solution = bytes(solution, "utf-8").decode("unicode_escape")
 
             # Decide on the verdict that the prover should be arguing for
-            verdict = hash_string_and_check_parity(solution)
+            verdict = get_hash_parity(solution)
 
             return {
                 "question": instance["question"],
@@ -253,7 +253,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["solutions"][solution_index]["solution"],
-                "verdict": hash_string_and_check_parity(
+                "verdict": get_hash_parity(
                     instance["solutions"][solution_index]["solution"]
                 ),
                 "y": 1,
@@ -266,7 +266,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["buggy_solutions"][solution_index]["solution"],
-                "verdict": hash_string_and_check_parity(
+                "verdict": get_hash_parity(
                     instance["buggy_solutions"][solution_index]["solution"]
                 ),
                 "y": 0,

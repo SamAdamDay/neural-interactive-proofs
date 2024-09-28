@@ -34,9 +34,7 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         observation_spec["question"] = StringArraySpec(*self.batch_size, "batch")
         observation_spec["solution"] = StringArraySpec(*self.batch_size, "batch")
-        observation_spec["verdict"] = IntArraySpec(
-            *self.batch_size, "batch"
-        )  # Assuming we want this here, but flagging just in case
+        observation_spec["verdict"] = IntArraySpec(*self.batch_size, "batch")
 
         return observation_spec
 
