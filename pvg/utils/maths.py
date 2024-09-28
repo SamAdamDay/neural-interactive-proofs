@@ -264,7 +264,9 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     return -torch.sum(probs * log_probs, dim=-1)
 
 
-def logit_or_2(a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]) -> Float[Tensor, "... logits"]:
+def logit_or_2(
+    a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]
+) -> Float[Tensor, "... logits"]:
     """
     Computes the logit OR operation for two input tensors using the log-sum-exp trick.
 
@@ -289,7 +291,7 @@ def logit_or_2(a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]) -
 def logit_or_n(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
     """
     Compute the logit of the OR of n events given their logits.
-    
+
     Args:
     logits (torch.Tensor): A tensor of logit values.
     dim (int, optional): The dimension along which to apply the OR operation.

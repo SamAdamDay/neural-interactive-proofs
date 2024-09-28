@@ -458,7 +458,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     ),
                     device=self.device,
                 ),
-                shape=(self.num_envs, self.num_agents)
+                shape=(self.num_envs, self.num_agents),
             ),
             shape=(self.num_envs,),
             device=self.device,
