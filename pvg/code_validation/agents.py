@@ -625,7 +625,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             )
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
-        
+
     def _get_prompt_directory(protocol_handler):
         """Get the directory for the prompt templates based on the protocol handler.
 
@@ -665,12 +665,15 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_name == "verifier":
             return ""
 
-        if self.protocol_handler.name is InteractionProtocolType.DEBATE or self.protocol_handler.name is InteractionProtocolType.MERLIN_ARTHUR:
+        if (
+            self.protocol_handler.name is InteractionProtocolType.DEBATE
+            or self.protocol_handler.name is InteractionProtocolType.MERLIN_ARTHUR
+        ):
             if self.agent_name == "prover0":
                 return "accept"
             else:
                 return "reject"
-        
+
         return "accept"
 
     def _build_chat_messages_prompt(

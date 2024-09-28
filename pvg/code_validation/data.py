@@ -193,7 +193,7 @@ class AppsCodeValidationDataset(CodeValidationDataset):
 
             # Un-escape the solution
             solution = bytes(solution, "utf-8").decode("unicode_escape")
-            
+
             # Decide on the verdict that the prover should be arguing for
             verdict = hash_string_and_check_parity(solution)
 
@@ -253,7 +253,9 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["solutions"][solution_index]["solution"],
-                "verdict": hash_string_and_check_parity(instance["solutions"][solution_index]["solution"]),
+                "verdict": hash_string_and_check_parity(
+                    instance["solutions"][solution_index]["solution"]
+                ),
                 "y": 1,
             }
 
@@ -264,7 +266,9 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["buggy_solutions"][solution_index]["solution"],
-                "verdict": hash_string_and_check_parity(instance["buggy_solutions"][solution_index]["solution"]),
+                "verdict": hash_string_and_check_parity(
+                    instance["buggy_solutions"][solution_index]["solution"]
+                ),
                 "y": 0,
             }
 
