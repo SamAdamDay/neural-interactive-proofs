@@ -28,7 +28,7 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
-    interaction_protocol=[InteractionProtocolType.PVG],
+    interaction_protocol=[InteractionProtocolType.DEBATE],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
     frames_per_batch=[None],
@@ -53,6 +53,43 @@ param_grid = dict(
 
 
 def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+
+    agents_params_dict = dict(
+        verifier=CodeValidationAgentParameters(
+            model_name=combo["verifier_model"],
+            temperature=combo["verifier_temperature"],
+            top_p=combo["verifier_top_p"],
+            use_dummy_api=combo["use_dummy_api"],
+            fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+        ),
+    )
+
+    prover_params_dict = dict(
+        model_name=combo["prover_model"],
+        temperature=combo["prover_temperature"],
+        top_p=combo["prover_top_p"],
+        use_dummy_api=combo["use_dummy_api"],
+        freeze_agent=combo["freeze_prover"],
+        fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+    )
+
+    if combo["interaction_protocol"] == InteractionProtocolType.PVG:
+        agents_params_dict["prover"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+    elif combo["interaction_protocol"] == InteractionProtocolType.DEBATE:
+        agents_params_dict["prover0"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+        agents_params_dict["prover1"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+    else:
+        raise NotImplementedError(
+            f"This script does not currently support the "
+            f"{combo['interaction_protocol']} protocol."
+        )
+
     return Parameters(
         scenario=ScenarioType.CODE_VALIDATION,
         trainer=TrainerType.PURE_TEXT_EI,
@@ -66,23 +103,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             prover_watchdog_model_name=combo["prover_watchdog_model_name"],
             prover_watchdog_use_dummy_api=combo["use_dummy_api"],
         ),
-        agents=AgentsParameters(
-            verifier=CodeValidationAgentParameters(
-                model_name=combo["verifier_model"],
-                temperature=combo["verifier_temperature"],
-                top_p=combo["verifier_top_p"],
-                use_dummy_api=combo["use_dummy_api"],
-                fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-            ),
-            prover=CodeValidationAgentParameters(
-                model_name=combo["prover_model"],
-                temperature=combo["prover_temperature"],
-                top_p=combo["prover_top_p"],
-                use_dummy_api=combo["use_dummy_api"],
-                freeze_agent=combo["freeze_prover"],
-                fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-            ),
-        ),
+        agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
