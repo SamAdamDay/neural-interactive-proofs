@@ -113,6 +113,7 @@ class InteractionProtocolType(StrEnum):
     ABSTRACT_DECISION_PROBLEM = enum_auto()
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
+    MNIP = enum_auto()
     MARKET_MAKING = enum_auto()  # TODO
     MULTI_CHANNEL_TEST = enum_auto()
 

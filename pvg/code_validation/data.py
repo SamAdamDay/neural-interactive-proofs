@@ -25,6 +25,7 @@ from pvg.factory import register_scenario_class
 from pvg.constants import CV_DATA_DIR
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype
+from pvg.utils.string import hash_string_and_check_parity
 
 
 class CodeValidationDataset(Dataset, ABC):
@@ -192,17 +193,21 @@ class AppsCodeValidationDataset(CodeValidationDataset):
 
             # Un-escape the solution
             solution = bytes(solution, "utf-8").decode("unicode_escape")
+            
+            # Decide on the verdict that the prover should be arguing for
+            verdict = hash_string_and_check_parity(solution)
 
             return {
                 "question": instance["question"],
                 "solution": solution,
+                "verdict": verdict,
                 "y": 1,
             }
 
         processed_dataset = raw_dataset.filter(filter_instance)
         processed_dataset = processed_dataset.map(process_instance)
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "y"]
+            ["question", "solution", "verdict", "y"]
         )
 
         return processed_dataset
@@ -248,6 +253,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["solutions"][solution_index]["solution"],
+                "verdict": hash_string_and_check_parity(instance["solutions"][solution_index]["solution"]),
                 "y": 1,
             }
 
@@ -258,6 +264,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["buggy_solutions"][solution_index]["solution"],
+                "verdict": hash_string_and_check_parity(instance["buggy_solutions"][solution_index]["solution"]),
                 "y": 0,
             }
 
@@ -313,7 +320,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         processed_dataset = concatenate_datasets(non_buggy_datasets + buggy_datasets)
 
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "y"]
+            ["question", "solution", "verdict", "y"]
         )
 
         return processed_dataset

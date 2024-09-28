@@ -10,7 +10,7 @@ from pvg.scenario_base import Environment, PureTextEnvironment
 from pvg.factory import register_scenario_class
 from pvg.parameters import ScenarioType
 from pvg.utils.data import VariableDataCycler
-from pvg.utils.nested_array_dict import CompositeSpec, NestedArrayDict, StringArraySpec
+from pvg.utils.nested_array_dict import CompositeSpec, NestedArrayDict, StringArraySpec, IntArraySpec
 
 
 @register_scenario_class(ScenarioType.CODE_VALIDATION, Environment)
@@ -29,6 +29,7 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         observation_spec["question"] = StringArraySpec(*self.batch_size, "batch")
         observation_spec["solution"] = StringArraySpec(*self.batch_size, "batch")
+        observation_spec["verdict"] = IntArraySpec(*self.batch_size, "batch") # Assuming we want this here, but flagging just in case
 
         return observation_spec
 
@@ -43,5 +44,6 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         env_state["question"] = data_batch["question"]
         env_state["solution"] = data_batch["solution"]
+        env_state["verdict"] = data_batch["verdict"]
 
         return env_state
