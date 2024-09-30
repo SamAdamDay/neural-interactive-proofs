@@ -47,14 +47,22 @@ class GraphIsomorphismDataset(TensorDictDataset):
     @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
+
         sub_dir = "train" if self.train else "test"
+
+        if self.train and self.params.dataset_options.max_train_size is not None:
+            max_size_suffix = f"_{self.params.dataset_options.max_train_size}"
+        else:
+            max_size_suffix = ""
+
         return os.path.join(
             GI_DATA_DIR,
             self.params.dataset,
             f"processed"
             f"_{self.protocol_handler.max_message_rounds}"
             f"_{self.protocol_handler.num_message_channels}"
-            f"_{self.params.message_size}",
+            f"_{self.params.message_size}"
+            f"{max_size_suffix}",
             sub_dir,
         )
 
