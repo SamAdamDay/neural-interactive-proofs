@@ -618,6 +618,10 @@ class PvgProtocol(DeterministicProtocolHandler):
     agent_names = ["prover", "verifier"]
 
     @property
+    def verifier_first(self) -> bool:
+        return self.params.protocol_common.verifier_first
+
+    @property
     def max_message_rounds(self) -> int:
         return self.params.pvg_protocol.max_message_rounds
 
@@ -644,7 +648,7 @@ class PvgProtocol(DeterministicProtocolHandler):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.protocol_common.verifier_first:
+        if self.verifier_first:
             if agent_name == "verifier":
                 return round % 2 == 0
             elif agent_name == "prover":
@@ -686,6 +690,7 @@ class AdpProtocol(PvgProtocol):
     agent_names = ["prover", "verifier"]
     max_message_rounds = 2
     min_message_rounds = 2
+    verifier_first = False
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
@@ -736,7 +741,7 @@ class DebateProtocol(PvgProtocol):
             first_prover = "prover1"
             second_prover = "prover0"
 
-        if self.params.protocol_common.verifier_first:
+        if self.verifier_first:
 
             # Verifier first, sequential
             if self.params.debate_protocol.sequential:
