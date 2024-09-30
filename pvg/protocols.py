@@ -376,7 +376,9 @@ class ProtocolHandler(ABC):
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
-        terminated = terminated | (round >= self.max_message_rounds - 1)
+        terminated = terminated | (
+            (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+        )
         reward[verifier_index][
             (round >= self.max_message_rounds - 1) & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
@@ -689,7 +691,7 @@ class AdpProtocol(PvgProtocol):
 
     agent_names = ["prover", "verifier"]
     max_message_rounds = 2
-    min_message_rounds = 2
+    min_message_rounds = 0
     verifier_first = False
 
 
@@ -841,7 +843,7 @@ class MerlinArthurProtocol(ProtocolHandler):
     ]
 
     max_message_rounds = 2
-    min_message_rounds = 2
+    min_message_rounds = 0
     max_verifier_turns = 1
 
     def get_active_agents_mask_from_rounds(
