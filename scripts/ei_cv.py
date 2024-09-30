@@ -48,7 +48,7 @@ param_grid = dict(
     debate_prover0_first=[True],
     use_prover_watchdog=[True],
     prover_watchdog_model_name=["gpt-4o-mini-2024-07-18"],
-    use_dummy_api=[False],
+    use_dummy_api=[True],
 )
 
 
@@ -73,7 +73,10 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
     )
 
-    if combo["interaction_protocol"] == InteractionProtocolType.PVG:
+    if combo["interaction_protocol"] in [
+        InteractionProtocolType.PVG,
+        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+    ]:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
