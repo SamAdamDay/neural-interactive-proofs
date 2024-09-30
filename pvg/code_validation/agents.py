@@ -210,16 +210,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         output_data = NestedArrayDict(
             dict(
                 message=np.full(
-                    (*batch_size, self.num_visible_message_channels),
+                    (*batch_size, self.protocol_handler.num_message_channels),
                     None,
                     dtype=NumpyStringDtype,
                 ),
                 decision=np.full(batch_size, 2, dtype=np.int32),
                 retry_count=np.zeros(
-                    (*batch_size, self.num_visible_message_channels), dtype=np.int32
+                    (*batch_size, self.protocol_handler.num_message_channels),
+                    dtype=np.int32,
                 ),
                 token_limit=np.zeros(
-                    (*batch_size, self.num_visible_message_channels), dtype=np.bool
+                    (*batch_size, self.protocol_handler.num_message_channels),
+                    dtype=np.bool,
                 ),
             ),
             batch_size=batch_size,
@@ -849,14 +851,10 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
             input_dict = {}
             for key in self.wholes[agent_name].in_keys:
 
-                # For the message history, restrict to the visible channels
-                if key == "message_history":
-                    input_dict[key] = self._restrict_input_to_visible_channels(
-                        agent_name, data[key], "... round channel"
-                    )
+                # TODO: Restrict message history to visible channels
 
                 # For the active mask, restrict to the agent
-                elif key == "active_mask":
+                if key == "active_mask":
                     input_dict[key] = active_agent_mask[..., agent_id, :]
 
                 # Everything else is passed through unchanged
@@ -897,6 +895,79 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
         data = data.update(dict(agents=agents_update))
 
         return data
+
+    def _expand_output_to_all_channels(
+        self,
+        agent_name: str,
+        output: NDArray,
+        shape_spec: str,
+        fill_value: Any = None,
+    ) -> NDArray:
+        """Expand an agent's output from its visible message channels to all.
+
+        Agents only output to the channels they can see. This function expands the
+        output to all channels, by filling in `fill_value` for the logits in the
+        channels the agent cannot see.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        output : NDArray
+            An output of an agent. This is a single key in the output of the agent's
+            forward pass.
+        shape_spec : str
+            The shape of the output. This is a space-separated string of the dimensions
+            of the output. One of these must be "channel".
+        fill_value : Any, default=-1e9
+            The value to fill in for the channels the agent cannot see.
+
+        Returns
+        -------
+        expanded_output : NDArray
+            The output expanded to all channels. This has the same shape as `output`,
+            except that the channel dimension is the full set of message channels.
+        """
+        # TODO: Combine this with _expand_logits_to_all_channels
+
+        agent_index = self.agent_names.index(agent_name)
+
+        dim_names = shape_spec.split(" ")
+
+        if dim_names.count("channel") != 1:
+            raise ValueError(
+                f"The output shape must contain exactly one 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = dim_names.index("channel")
+
+        if "..." in dim_names[channel_dim + 1 :]:
+            raise ValueError(
+                f"An ellipsis (...) is not allowed after the 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = channel_dim - len(dim_names)
+
+        # If the output is already expanded, return it
+        if output.shape[channel_dim] == self.protocol_handler.num_message_channels:
+            return output
+
+        # Create a tensor filled with `fill_value` of the correct shape
+        full_shape = list(output.shape)
+        full_shape[channel_dim] = self.protocol_handler.num_message_channels
+        expanded_output = np.full(full_shape, fill_value, dtype=output.dtype)
+
+        # Create an index for the tensor, which selects the visible channels using a
+        # mask along the channel dimension
+        visible_mask = self.protocol_handler.agent_channel_visibility_mask[agent_index]
+        index = (Ellipsis, visible_mask) + (slice(None),) * (-1 - channel_dim)
+
+        # Fill in the visible channels
+        expanded_output[index] = output
+
+        return expanded_output
 
 
 @register_scenario_class(CV_SCENARIO, Agent)
