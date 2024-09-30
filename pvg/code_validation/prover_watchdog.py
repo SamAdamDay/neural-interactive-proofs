@@ -133,7 +133,9 @@ class CodeValidationProverWatchdog:
                 for dim in batch_size:
                     total *= dim
                 iterator = tqdm(
-                    iterator, desc=f"Watchdog evaluating {agent_name!r}", total=total
+                    iterator,
+                    desc=f"Watchdog {agent_name!r} in {channel_name!r}",
+                    total=total,
                 )
             for batch_id in iterator:
 
