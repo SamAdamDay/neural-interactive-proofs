@@ -93,7 +93,6 @@ from .protocol import (
     PvgProtocolParameters,
     DebateProtocolParameters,
     MnipProtocolParameters,
-    ZkProtocolParameters,
 )
 from .scenario import ImageClassificationParameters, CodeValidationParameters
 from .dataset import DatasetParameters
@@ -245,7 +244,6 @@ class Parameters(BaseParameters):
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
     mnip_protocol: Optional[MnipProtocolParameters | dict] = None
-    zk_protocol: Optional[ZkProtocolParameters | dict] = None
 
     message_regression: Optional[MessageRegressionParameters | dict] = None
 

@@ -387,9 +387,6 @@ class ProtocolHandler(ABC):
             verifier_guess_mask & ~done & ~terminated
         ] = protocol_params.verifier_no_guess_reward
 
-        if self.params.protocol_common.zk:
-            self._include_simulator_rewards(verifier_decision_made, decision, reward)
-
         # Compute the rewards for the provers and add them
         self._include_prover_rewards(
             verifier_decision_made, decision[verifier_index], reward
@@ -919,7 +916,7 @@ class MerlinArthurProtocol(ProtocolHandler):
         pass
 
 
-@register_protocol_handler(InteractionProtocolType.DEBATE)
+@register_protocol_handler(InteractionProtocolType.MNIP)
 class MnipProtocol(PvgProtocol):
     """Implementation of the MNIP protocol.
 
@@ -1045,82 +1042,6 @@ class MnipProtocol(PvgProtocol):
                 reward[..., prover_num] = (
                     verifier_decision_made & (verifier_decision == 1)
                 ).float() * protocol_params.prover_reward
-
-
-class ZkProtocol(ProtocolHandler, ABC):
-    """Base class for zero-knowledge protocols.
-
-    Introduces a second verifier and a simulator. The simulator tries to mimic the interaction between the second verifier and the prover, and the second verifier tries to prevent this. The prover tries to make sure the simulator can succeed (which implies that it is not `leaking` knowledge).
-    """
-
-    # Keep the same agents apart from adding the second verifier and the simulator
-    agent_names = [
-        name for name in ProtocolHandler.agent_names if name != "verifier"
-    ] + ["verifier0", "verifier1", "simulator"]
-
-    # Duplicate the existing channels (one per verifier) and add the simulator channel
-    message_channel_names = ["simulator_channel"]
-    for channel_name in ProtocolHandler.message_channel_names:
-        message_channel_names.append(channel_name + "_0")
-        message_channel_names.append(channel_name + "_1")
-
-    # Clone the existing visibility settings and add a separate channel for the simulator
-    agent_channel_visibility = [("simulator", "simulator_channel")]
-    for c_v in ProtocolHandler.agent_channel_visibility:
-        agent_channel_visibility.append(
-            (c_v[0] if c_v[0] != "verifier" else "verifier0", c_v[1] + "_0")
-        )
-        agent_channel_visibility.append(
-            (c_v[0] if c_v[0] != "verifier" else "verifier1", c_v[1] + "_1")
-        )
-
-    def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
-
-        if agent_name != "simulator":
-            if "verifier" in agent_name:
-                return ProtocolHandler.is_agent_active(
-                    self, "verifier", round, channel_name[:-2]
-                )
-            else:
-                return ProtocolHandler.is_agent_active(
-                    self, agent_name, round, channel_name[:-2]
-                )
-        else:
-            return True
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-
-        # Note that this requires the simulator's rewards to be calculated first
-        simulator_index = (..., self.agent_names.index("simulator"))
-        return (
-            ProtocolHandler._include_prover_rewards(
-                self, verifier_decision_made, verifier_decision, reward
-            )
-            + self.params.zk_protocol.aux_prover_reward_coefficient
-            * reward[simulator_index]
-        )
-
-    def _include_simulator_rewards(
-        self,
-        verifier1_probs: Float[Tensor, "..."],
-        simulator_probs: Float[Tensor, "..."],
-        reward: Float[Tensor, "... num_agents"],
-    ):
-
-        # Simulator reward
-        simulator_index = (..., self.agent_names.index("simulator"))
-        reward[simulator_index] = (
-            1 - abs(verifier1_probs - simulator_probs).mean(dim=-1)
-        ) * self.params.zk_protocol.simulator_reward
-
-        # Adversarial verifier reward
-        verifier1_index = (..., self.agent_names.index("verifier1"))
-        reward[verifier1_index] = -reward[simulator_index]
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
