@@ -80,7 +80,10 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
-    elif combo["interaction_protocol"] == InteractionProtocolType.DEBATE:
+    elif combo["interaction_protocol"] in [
+        InteractionProtocolType.DEBATE,
+        InteractionProtocolType.MNIP,
+    ]:
         agents_params_dict["prover0"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
