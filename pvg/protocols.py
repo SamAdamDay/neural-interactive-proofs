@@ -916,6 +916,134 @@ class MerlinArthurProtocol(ProtocolHandler):
         pass
 
 
+@register_protocol_handler(InteractionProtocolType.MNIP)
+class MnipProtocol(PvgProtocol):
+    """Implementation of the MNIP protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    """
+
+    agent_names = ["prover0", "prover1", "verifier"]
+    message_channel_names = ["prover0_channel", "prover1_channel"]
+    agent_channel_visibility = [
+        ("prover0", "prover0_channel"),
+        ("prover1", "prover1_channel"),
+        ("verifier", "prover0_channel"),
+        ("verifier", "prover1_channel"),
+    ]
+
+    def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
+        """Specifies whether an agent is active in a given round and channel.
+
+        In sequential MNIP with verifier first, the order is:
+
+        - Verifier in both channels
+        - First prover (determined by `prover0_first`) in their respective channel
+        - Second prover in their respective channel
+
+        In simultaneous MNIP with verifier first, the order is:
+
+        - Verifier in both channels
+        - Provers in their respective channels at the same time
+
+        Returns
+        -------
+        is_active : bool
+            Whether the agent is active in the given round and channel.
+        """
+
+        if self.params.mnip_protocol.prover0_first:
+            first_prover = "prover0"
+            second_prover = "prover1"
+        else:
+            first_prover = "prover1"
+            second_prover = "prover0"
+
+        if self.params.protocol_common.verifier_first:
+
+            # Verifier first, sequential
+            if self.params.mnip_protocol.sequential:
+                if agent_name == "verifier":
+                    return round % 3 == 0
+                elif agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 2
+                    else:
+                        return False
+
+            # Verifier first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return (
+                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
+                        )
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 2 == 0
+
+        else:
+
+            # Provers first, sequential
+            if self.params.mnip_protocol.sequential:
+                if agent_name == first_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 0
+                    else:
+                        return False
+                elif agent_name == second_prover:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 3 == 1
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 3 == 2
+
+            # Provers first, simultaneous
+            else:
+                if agent_name in ["prover0", "prover1"]:
+                    if channel_name == f"{agent_name}_channel":
+                        return round % 2 == 0
+                    else:
+                        return False
+                elif agent_name == "verifier":
+                    return round % 2 == 1
+
+    @property
+    def max_message_rounds(self) -> int:
+        return self.params.mnip_protocol.max_message_rounds
+
+    @property
+    def min_message_rounds(self) -> int:
+        return self.params.mnip_protocol.min_message_rounds
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+    ):
+        protocol_params = self.params.protocol_common
+
+        if protocol_params.shared_reward:
+            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        else:
+
+            for prover_num in range(2):
+                reward[..., prover_num] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * protocol_params.prover_reward
+
+
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
 class MultiChannelTestProtocol(DeterministicProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""

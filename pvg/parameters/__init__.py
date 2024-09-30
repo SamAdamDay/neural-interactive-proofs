@@ -92,6 +92,7 @@ from .protocol import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    MnipProtocolParameters,
 )
 from .scenario import ImageClassificationParameters, CodeValidationParameters
 from .dataset import DatasetParameters
@@ -110,6 +111,7 @@ AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
+    InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         "verifier",
         "prover0",
@@ -126,6 +128,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
+    InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         ("verifier",),
         ("prover0", "prover1", "prover2"),
@@ -242,6 +245,7 @@ class Parameters(BaseParameters):
     protocol_common: Optional[CommonProtocolParameters | dict] = None
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
+    mnip_protocol: Optional[MnipProtocolParameters | dict] = None
 
     message_regression: Optional[MessageRegressionParameters | dict] = None
 

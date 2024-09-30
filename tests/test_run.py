@@ -76,6 +76,7 @@ param_specs = [
             InteractionProtocolType.DEBATE,
             InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
             InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
         ],
     },
     # Test manual architectures
