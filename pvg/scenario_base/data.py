@@ -131,9 +131,16 @@ class TensorDictDataset(Dataset, ABC):
             if os.path.isdir(self.processed_dir) and settings.ignore_cache:
                 shutil.rmtree(self.processed_dir)
 
-            # Create the tensordict of the dataset and save it to disk as a
-            # memory-mapped file
+            # Create the tensordict of the dataset
             self._main_data = self.build_tensor_dict()
+
+            # Reduce the size of the training set if needed
+            if self.train and self.params.dataset_options.max_train_size is not None:
+                self._main_data = self._main_data[
+                    : self.params.dataset_options.max_train_size
+                ]
+
+            # Save it to disk as a memory-mapped file
             self._main_data.memmap_(
                 self.processed_dir, num_threads=settings.num_dataset_threads
             )
