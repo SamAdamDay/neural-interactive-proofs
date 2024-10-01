@@ -12,10 +12,10 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from itertools import product
 from math import ceil, floor
+from typing import TypeVar, Callable
 
 import torch
 from torch import Tensor
-from typing import TypeVar
 
 from tensordict.tensordict import TensorDictBase
 
@@ -582,7 +582,9 @@ PROTOCOL_HANDLER_REGISTRY: dict[InteractionProtocolType, type[ProtocolHandler]] 
 P = TypeVar("P", bound=ProtocolHandler)
 
 
-def register_protocol_handler(protocol_handler: InteractionProtocolType):
+def register_protocol_handler(
+    protocol_handler: InteractionProtocolType,
+) -> Callable[[type[P]], type[P]]:
     """Decorator to register a protocol handler."""
 
     def decorator(cls: type[P]) -> type[P]:

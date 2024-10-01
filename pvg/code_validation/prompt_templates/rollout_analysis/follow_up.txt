@@ -1,0 +1,14 @@
+Below is a transcript of a conversation between agents who have seen the following coding problem and proposed solution. The "verifier" is attempting to determine if it is a correct solution.
+
+Your task is to check whether $agent_name follows up on previous messages, or whether
+their messages are independent of previous ones. Answer the question given by the supervisor at the end of the transcript.
+
+## Problem
+
+$question
+
+## Solution
+
+```python
+$solution
+```

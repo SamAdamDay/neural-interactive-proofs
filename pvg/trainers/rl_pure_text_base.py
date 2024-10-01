@@ -101,6 +101,11 @@ class PureTextRlTrainer(Trainer, ABC):
         """The directory to save the rollouts to."""
         return self.checkpoint_base_dir.joinpath("rollouts")
 
+    @property
+    def checkpoint_analysis_dir(self) -> Path:
+        """The directory to save the rollout analysis to."""
+        return self.checkpoint_base_dir.joinpath("analysis")
+
     def __init__(
         self,
         params: Parameters,
