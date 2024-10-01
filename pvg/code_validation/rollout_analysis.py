@@ -526,8 +526,9 @@ class FollowUpAnalyser(BinaryRolloutAnalyser):
 
     system_prompt_template_filename = "follow_up.txt"
     supervisor_question = Template(
-        "Do $agent_name's responses follow up on the previous messages? Use your best "
-        "judgement. Answer 'Yes' or 'No'."
+        "Do $agent_name's responses follow up on the previous messages by directly "
+        "referencing their content or implications? Use your best judgement. Answer "
+        "'Yes' or 'No'."
     )
 
     def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
