@@ -203,6 +203,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MERLIN_ARTHUR,
+        InteractionProtocolType.MNIP,
     ):
         prover0_params = dataclasses.replace(
             prover_params, update_schedule=prover0_update_schedule
