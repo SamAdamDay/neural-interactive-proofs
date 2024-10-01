@@ -480,7 +480,7 @@ class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
 
     system_prompt_template_filename = "prover_solution_quotation.txt"
     supervisor_question = Template(
-        "Does $agent_name directly quote from the solution? Answer 'Yes' or 'No'."
+        "Does $agent_name directly directly references the solution code by either quoting or paraphrasing? Answer 'Yes' or 'No'."
     )
 
 
