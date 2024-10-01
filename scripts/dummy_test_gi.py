@@ -65,10 +65,6 @@ def run(cmd_args: Namespace):
             minibatch_size=4,
             frames_per_batch=16,
             use_shared_body=False,
-            num_normalization_steps=10,
-        ),
-        spg=SpgParameters(
-            variant=SpgVariant.PSOS,
         ),
         ppo=CommonPpoParameters(
             loss_type=PpoLossType.CLIP,

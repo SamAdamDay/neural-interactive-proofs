@@ -345,7 +345,11 @@ class ProtocolHandler(ABC):
         elif self.params.protocol_common.force_guess == Guess.Y:
             decision[verifier_index] = env_td["y"].squeeze()
 
-        verifier_decision_made = verifier_guess_mask & (decision[verifier_index] != 2)
+        # verifier_decision_made = verifier_guess_mask & (decision[verifier_index] != 2)
+        # decision[verifier_index] = env_td["y"]
+        # decision[verifier_index] = torch.ones_like(decision[verifier_index])
+
+        verifier_decision_made = verifier_turn_mask & (decision[verifier_index] != 2)
         verifier_decision_made = verifier_decision_made & (
             round >= self.min_message_rounds
         )
