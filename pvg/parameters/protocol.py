@@ -77,7 +77,7 @@ class LongProtocolParameters(SubParameters, ABC):
             self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
         ):
             self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
-                self.min_message_rounds_scheduler
+                self.min_message_rounds_scheduler.upper()
             ]
 
 

@@ -207,11 +207,11 @@ class Parameters(BaseParameters):
         Additional parameters for the dataset.
     """
 
-    scenario: ScenarioType
-    trainer: TrainerType
+    scenario: ScenarioType | str
+    trainer: TrainerType | str
     dataset: str
 
-    interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
+    interaction_protocol: InteractionProtocolType | str = InteractionProtocolType.PVG
 
     seed: int = 6198
 
@@ -252,12 +252,12 @@ class Parameters(BaseParameters):
     def __post_init__(self):
         # Convert any strings to enums
         if not isinstance(self.scenario, ScenarioType):
-            self.scenario = ScenarioType[self.scenario]
+            self.scenario = ScenarioType[self.scenario.upper()]
         if not isinstance(self.trainer, TrainerType):
-            self.trainer = TrainerType[self.trainer]
+            self.trainer = TrainerType[self.trainer.upper()]
         if not isinstance(self.interaction_protocol, InteractionProtocolType):
             self.interaction_protocol = InteractionProtocolType[
-                self.interaction_protocol
+                self.interaction_protocol.upper()
             ]
 
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:

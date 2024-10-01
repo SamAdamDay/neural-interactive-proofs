@@ -13,6 +13,7 @@ from .vanilla_ppo import VanillaPpoTrainer
 from .solo_agent import SoloAgentTrainer
 from .spg import SpgTrainer
 from .reinforce import ReinforceTrainer
+from .rl_pure_text_base import PureTextRlTrainer
 from .ei_pure_text import PureTextEiTrainer
 from .registry import register_trainer, TRAINER_REGISTRY
 

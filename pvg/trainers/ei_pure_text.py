@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
 from time import sleep
+import pickle
 
 import numpy as np
 from numpy import ma
@@ -15,7 +16,7 @@ from pvg.parameters import TrainerType
 from pvg.utils.nested_array_dict import NestedArrayDict
 
 # TODO: Abstract this
-from pvg.code_validation.prover_watchdog import CodeValidationProverWatchdog
+from pvg.code_validation.rollout_analysis import RolloutAnalyser, ROLLOUT_ANALYSERS
 
 
 @register_trainer(TrainerType.PURE_TEXT_EI)
@@ -42,16 +43,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
             "create_fine_tune_jobs",
             "await_fine_tune_jobs",
         ] = "sample_rollouts"
-
-    def __init__(self, params, scenario_instance, settings):
-        super().__init__(params, scenario_instance, settings)
-
-        if self.params.ei.use_prover_watchdog:
-            self.prover_watchdog = CodeValidationProverWatchdog(
-                params=self.params,
-                settings=self.settings,
-                protocol_handler=self.scenario_instance.protocol_handler,
-            )
 
     def train(self):
 
@@ -159,6 +150,84 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         self.settings.logger.info("Training complete.")
 
+    def run_analysers(
+        self,
+        analysers: list[str | type[RolloutAnalyser]],
+        model_name: str,
+        overwrite=False,
+        use_tqdm=True,
+    ):
+        """Run the given analysers on the rollouts of the experiment.
+
+        This method can only be called after the experiment has finished.
+
+        Parameters
+        ----------
+        analysers : list[str | type[RolloutAnalyser]]
+            The analysers to run. Either the name of the analyser or the analyser class
+            itself.
+        model_name : str
+            The name of the model to use for the analysis.
+        overwrite : bool, optional
+            Whether to overwrite the existing analysis files, if they exist.
+        use_tqdm : bool, optional
+            Whether create a progress bar for the analysis.
+        """
+
+        for analyser_cls in analysers:
+
+            if isinstance(analyser_cls, str):
+                try:
+                    analyser_cls = ROLLOUT_ANALYSERS[analyser_cls]
+                except KeyError:
+                    raise ValueError(
+                        f"Analyser {analyser_cls!r} not found in list of analysers."
+                    )
+
+            analyser = analyser_cls(
+                params=self.params,
+                settings=self.settings,
+                protocol_handler=self.scenario_instance.protocol_handler,
+                model_name=model_name,
+            )
+
+            analysis_dir = self.checkpoint_analysis_dir.joinpath(analyser_cls.name)
+            analysis_dir.mkdir(parents=True, exist_ok=True)
+
+            for iteration in range(self.params.rl.num_iterations):
+
+                print(
+                    f"Running analyser {analyser_cls.name!r} on iteration "
+                    f"{iteration+1}/{self.params.rl.num_iterations}"
+                )
+
+                analysis_file = analysis_dir.joinpath(f"{iteration}.pt")
+
+                if analysis_file.exists():
+                    if not overwrite:
+                        self.settings.logger.warning(
+                            f"Analysis file {analysis_file!r} already exists. Skipping."
+                        )
+                        continue
+                    else:
+                        self.settings.logger.warning(
+                            f"Overwriting existing analysis file {analysis_file!r}"
+                        )
+                    analysis_file.unlink()
+
+                try:
+                    rollouts = self.load_rollouts(iteration)
+                except FileNotFoundError:
+                    self.settings.logger.warning(
+                        f"No rollouts found for iteration {iteration+1}. Skipping."
+                    )
+                    continue
+
+                evaluations = analyser.forward(rollouts, use_tqdm=use_tqdm)
+
+                with open(analysis_file, "wb") as f:
+                    pickle.dump(evaluations, f)
+
     def _get_log_stats(
         self,
         rollouts: NestedArrayDict,
@@ -187,15 +256,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
         next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
 
         log_stats = {}
-
-        # If the prover watchdog is enabled, run it to get the evaluations
-        if self.params.ei.use_prover_watchdog:
-            watchdog_evaluations = self.prover_watchdog.forward(rollouts, use_tqdm=True)
-
-            for (agent_name, channel_name), evaluation in watchdog_evaluations.items():
-                log_stats[f"{agent_name}.{channel_name}.{prefix}mean_watchdog_eval"] = (
-                    evaluation.mean().item()
-                )
 
         for agent_index, agent_name in enumerate(self.agent_names):
 

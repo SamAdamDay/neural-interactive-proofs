@@ -83,6 +83,8 @@ class ExperimentSettings:
     num_api_generation_timeouts : int, default=100
         The number of timeouts to allow when generating API outputs. If the number of
         timeouts exceeds this value, the experiment will be stopped.
+    do_not_load_checkpoint : bool, default=False
+        If True, the experiment will not load a checkpoint if one exists.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -110,6 +112,7 @@ class ExperimentSettings:
     global_tqdm_step_fn: callable = default_global_tqdm_step_fn
     pretrained_embeddings_batch_size: int = 256
     num_api_generation_timeouts: int = 100
+    do_not_load_checkpoint: bool = False
     test_run: bool = False
 
     unpicklable_fields: ClassVar[tuple[str, ...]] = ("global_tqdm_step_fn",)
