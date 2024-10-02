@@ -1,7 +1,7 @@
 """Base classes for RL trainers for text-based environments which only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Literal
 from itertools import repeat
 from multiprocessing import Pool
 from functools import cached_property
@@ -163,15 +163,17 @@ class PureTextRlTrainer(Trainer, ABC):
 
         return stack_nested_array_dicts(rollout_list, dim=0)
 
-    def save_rollouts(self, rollouts: NestedArrayDict, iteration: int):
+    def save_rollouts(
+        self, rollouts: NestedArrayDict, iteration: int | Literal["test"]
+    ):
         """Save the rollouts to the checkpoint directory.
 
         Parameters
         ----------
         rollouts : NestedArrayDict
             The rollouts to save.
-        iteration : int
-            The iteration number.
+        iteration : int | Literal["test"]
+            The iteration number, or "test" if the rollouts are from the test set.
         """
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
