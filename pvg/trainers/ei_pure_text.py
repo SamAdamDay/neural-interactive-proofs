@@ -42,6 +42,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
             "log_stats",
             "create_fine_tune_jobs",
             "await_fine_tune_jobs",
+            "test",
+            "done",
         ] = "sample_rollouts"
 
     def train(self):
@@ -87,7 +89,13 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
             # We don't fine-tune on the last iteration
             if self.state.iteration == self.params.rl.num_iterations - 1:
+
+                # Advance to the test stage
                 self.state.iteration = self.params.rl.num_iterations
+                self.state.train_loop_stage = "test"
+
+                self.save_checkpoint()
+
                 break
 
             # Create fine-tune jobs for each agent
@@ -147,6 +155,24 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 self.state.iteration += 1
 
                 self.save_checkpoint()
+
+        if self.state.train_loop_stage == "test":
+
+            # Sample rollouts from the test environment
+            rollouts = self.sample_rollouts(self.test_environment, use_tqdm=True)
+
+            # Log the statistics of the rollouts
+            log_stats = self._get_log_stats(rollouts, train=False)
+            self.settings.stat_logger.log(log_stats)
+
+            # Save the rollouts to the checkpoint directory
+            self.save_rollouts(rollouts, "test")
+
+            # Mark the experiment as done
+            self.state.train_loop_stage = "done"
+
+            # Save the final checkpoint
+            self.save_checkpoint()
 
         self.settings.logger.info("Training complete.")
 
