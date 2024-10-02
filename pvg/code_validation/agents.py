@@ -414,7 +414,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         if (
             self.agent_params.freeze_agent
-            or self.fine_tune_job_id == "insufficient_data_job_id"
+            or self.fine_tune_job_id == "insufficient_data_job_id" # TODO: Fix
         ):
             self.fine_tuned_model_name = None
             return
