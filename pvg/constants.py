@@ -24,6 +24,8 @@ GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents
 
 EXPERIMENT_STATE_DIR = os.path.join(_root_dir, "experiment_checkpoints")
 
+SEEDS = [8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030]
+
 # The user hosting the pretrained models
 HF_PRETRAINED_MODELS_USER = "SamAdamDay"
 
