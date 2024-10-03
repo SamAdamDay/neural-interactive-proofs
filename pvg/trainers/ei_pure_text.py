@@ -6,17 +6,17 @@ from time import sleep
 import pickle
 
 import numpy as np
-from numpy import ma
 
 from jaxtyping import Bool
 
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
+from pvg.scenario_base.rollout_analysis import (
+    PureTextRolloutAnalyser,
+    ROLLOUT_ANALYSERS,
+)
 from pvg.utils.nested_array_dict import NestedArrayDict
-
-# TODO: Abstract this
-from pvg.code_validation.rollout_analysis import RolloutAnalyser, ROLLOUT_ANALYSERS
 
 
 @register_trainer(TrainerType.PURE_TEXT_EI)
@@ -178,7 +178,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
     def run_analysers(
         self,
-        analysers: list[str | type[RolloutAnalyser]],
+        analysers: list[str | type[PureTextRolloutAnalyser]],
         model_name: str,
         overwrite=False,
         use_tqdm=True,
@@ -189,7 +189,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         Parameters
         ----------
-        analysers : list[str | type[RolloutAnalyser]]
+        analysers : list[str | type[PureTextRolloutAnalyser]]
             The analysers to run. Either the name of the analyser or the analyser class
             itself.
         model_name : str
@@ -204,7 +204,9 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
             if isinstance(analyser_cls, str):
                 try:
-                    analyser_cls = ROLLOUT_ANALYSERS[analyser_cls]
+                    analyser_cls: type[PureTextRolloutAnalyser] = ROLLOUT_ANALYSERS[
+                        self.params.scenario, analyser_cls
+                    ]
                 except KeyError:
                     raise ValueError(
                         f"Analyser {analyser_cls!r} not found in list of analysers."

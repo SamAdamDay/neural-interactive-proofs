@@ -3,7 +3,7 @@
 import importlib.resources
 from string import Template
 from itertools import product
-from typing import Literal, Optional, Iterator, TypeVar, Callable, ClassVar
+from typing import Literal, Optional, Iterator, ClassVar
 from random import randrange
 from abc import ABC, abstractmethod
 
@@ -15,10 +15,13 @@ from openai import OpenAI
 
 from tqdm import tqdm
 
-from pvg.parameters import Parameters, InteractionProtocolType
+from pvg.parameters import Parameters, InteractionProtocolType, ScenarioType
 from pvg.protocols import ProtocolHandler
 from pvg.experiment_settings import ExperimentSettings
-from pvg.utils.string import random_string
+from pvg.scenario_base.rollout_analysis import (
+    PureTextRolloutAnalyser,
+    register_rollout_analyser,
+)
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.env import load_env_once
 from pvg.utils.api import (
@@ -29,27 +32,13 @@ from pvg.utils.api import (
 )
 
 
-class RolloutAnalyser(ABC):
-    """Base class for analysing rollouts."""
-
-    name: ClassVar[str]
+class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
+    """Base class for analysing code validation rollouts."""
 
     @property
     @abstractmethod
     def system_prompt_template_filename(self) -> str:
         """The filename of the system prompt template."""
-
-    @abstractmethod
-    def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
-        """The pairs of agent names and channel names that are to be analysed.
-
-        Yields
-        ------
-        agent_name : str
-            The name of the agent.
-        channel_name : str
-            The name of the channel.
-        """
 
     @property
     def client(self) -> OpenAI:
@@ -65,9 +54,7 @@ class RolloutAnalyser(ABC):
         protocol_handler: ProtocolHandler,
         model_name: str,
     ):
-        self.params = params
-        self.settings = settings
-        self.protocol_handler = protocol_handler
+        super().__init__(params, settings, protocol_handler)
         self.model_name = model_name
 
         if params.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
@@ -91,42 +78,8 @@ class RolloutAnalyser(ABC):
 
         self._openai_client: Optional[OpenAI] = None
 
-    @abstractmethod
-    def forward(
-        self, rollouts: NestedArrayDict, use_tqdm: bool = False
-    ) -> dict[tuple[str, str], ma.MaskedArray]:
-        """Evaluate the rollouts.
 
-        Parameters
-        ----------
-        rollouts : NestedArrayDict
-            The rollouts to evaluate.
-        use_tqdm : bool
-            Whether to use tqdm for progress bars.
-
-        Returns
-        -------
-        evaluations : dict[tuple[str, str], ma.MaskedArray]
-            The evaluations. A dictionary indexed by agent name and channel name, where
-            `evaluations[agent_name, channel_name]` is an array of evaluations of shape
-            (...)
-        """
-
-
-ROLLOUT_ANALYSERS: dict[str, type[RolloutAnalyser]] = {}
-
-A = TypeVar("A", bound=RolloutAnalyser)
-
-
-def register_rollout_analyser(cls: type[A]) -> type[A]:
-    """Decorator to register a rollout analyser."""
-
-    ROLLOUT_ANALYSERS[cls.name] = cls
-
-    return cls
-
-
-class BinaryRolloutAnalyser(RolloutAnalyser, ABC):
+class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
     """Base class for rollout analyser which yield a binary classification.
 
     Each rollout is analysed by a language model to generate a binary classification.
@@ -135,7 +88,7 @@ class BinaryRolloutAnalyser(RolloutAnalyser, ABC):
 
     """
 
-    max_generation_retries = 3
+    max_generation_retries: ClassVar[int] = 3
 
     @property
     @abstractmethod
@@ -437,7 +390,7 @@ class ProverAnalyserMixin:
             yield agent_name, channel_name
 
 
-@register_rollout_analyser
+@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
 class ProverRoleConformanceAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """A watchdog to evaluate how well the prover(s) are conforming to their roles.
 
@@ -462,7 +415,7 @@ class ProverRoleConformanceAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     )
 
 
-@register_rollout_analyser
+@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
 class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """Analyse when the prover directly quotes the solution.
 
@@ -484,7 +437,7 @@ class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     )
 
 
-@register_rollout_analyser
+@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
 class ProverAccurateQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """Analyse whether the prover quotes accurately from the solution.
 
@@ -508,7 +461,7 @@ class ProverAccurateQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser
     )
 
 
-@register_rollout_analyser
+@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
 class FollowUpAnalyser(BinaryRolloutAnalyser):
     """Analyse whether the prover quotes accurately from the solution.
 
