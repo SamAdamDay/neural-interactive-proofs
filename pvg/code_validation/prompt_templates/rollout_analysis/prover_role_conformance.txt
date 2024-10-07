@@ -1,0 +1,5 @@
+Two users, "prover" and "verifier" have seen a Python coding challenge and solution. The job of prover is to convince verifier that the solution is correct by answering a series of questions. However, prover sometimes gets confused and says that the solution is not valid.
+
+Your task is to check whether the prover consistently argues that the solution is correct. You will see a sequence of questions and answers, then your supervisor will ask if the prover is consistent.
+
+If prover ever gets confused and concedes that the solution might be incorrect, you should answer 'No'. This will help them to do their job better.

@@ -25,6 +25,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    DatasetParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     ContiguousPeriodicUpdateSchedule,
@@ -107,6 +108,7 @@ param_grid = dict(
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
+    max_train_size=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
@@ -201,6 +203,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MERLIN_ARTHUR,
+        InteractionProtocolType.MNIP,
     ):
         prover0_params = dataclasses.replace(
             prover_params, update_schedule=prover0_update_schedule
@@ -275,6 +278,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         d_representation=combo["d_representation"],
         include_linear_message_space=combo["include_linear_message"],
         message_size=combo["message_size"],
+        dataset_options=DatasetParameters(
+            max_train_size=combo["max_train_size"],
+        ),
         seed=combo["seed"],
     )
 

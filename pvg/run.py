@@ -44,6 +44,7 @@ def run_experiment(
     run_id: Optional[str] = None,
     allow_auto_generated_run_id: bool = False,
     allow_resuming_wandb_run: bool = False,
+    allow_overriding_wandb_config: bool = False,
     print_wandb_run_url: bool = False,
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
@@ -87,6 +88,8 @@ def run_experiment(
         If True, the run ID can be auto-generated if not specified.
     allow_resuming_wandb_run : bool, default=False
         If True, the run can be resumed if the run ID is specified and the run exists.
+    allow_overriding_wandb_config : bool, default=False
+        If True, the W&B config can be overridden when resuming a run.
     print_wandb_run_url : bool, default=False
         If True, print the URL of the W&B run at the start of the experiment.
     wandb_tags : list[str], default=[]
@@ -139,7 +142,9 @@ def run_experiment(
             id=run_id,
             resume="allow" if allow_resuming_wandb_run else "never",
         )
-        wandb_run.config.update(params.to_dict())
+        wandb_run.config.update(
+            params.to_dict(), allow_val_change=allow_overriding_wandb_config
+        )
         if print_wandb_run_url:
             print(f"W&B run URL: {wandb_run.get_url()}")
         stat_logger = WandbStatLogger(wandb_run)

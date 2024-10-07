@@ -17,6 +17,7 @@ from random import randrange
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
+from time import sleep
 
 from torch import from_numpy
 
@@ -27,7 +28,7 @@ from einops import rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, APIStatusError, RateLimitError
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
 
 from pvg.scenario_base import (
@@ -52,52 +53,20 @@ from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype
 from pvg.utils.env import load_env_once
 from pvg.utils.string import random_string
+from pvg.utils.api import (
+    GenerationError,
+    ContentFilterError,
+    UnknownFinishReasonError,
+    InvalidResponseError,
+    InvalidDecisionError,
+)
 from pvg.constants import WANDB_OPENAI_FINETUNE_PROJECT
 
 CV_SCENARIO = ScenarioType.CODE_VALIDATION
 
 
-class GenerationError(Exception, ABC):
-    """Base class for exceptions raised during generation of the next message"""
-
-    def __init__(self, num_retries: int):
-        self.num_retries = num_retries
-        super().__init__(f"Generation failed after {num_retries} retries")
-
-
-class NotGuessedError(GenerationError):
-    """Raised when the agent has not made a decision within the max number of turns"""
-
-
-class ContentFilterError(GenerationError):
-    """Raised when the agent's response is blocked by a content filter"""
-
-
-class UnknownFinishReasonError(GenerationError):
-    """Raised when the agent's finishes generating for an unknown reason"""
-
-    def __init__(self, num_retries: int, reason: str):
-        self.reason = reason
-        self.num_retries = num_retries
-        super(GenerationError, self).__init__(
-            f"Generation failed after {num_retries} retries with reason {reason!r}"
-        )
-
-
-class InvalidResponseError(GenerationError):
-    """Raised when the agent's response is invalid"""
-
-    def __init__(self, num_retries: int, response_text: str):
-        self.response_text = response_text
-        self.num_retries = num_retries
-        super(GenerationError, self).__init__(
-            f"Invalid generation after {num_retries} retries. Response: "
-            "{response_text!r}"
-        )
-
-
-class InvalidDecisionError(InvalidResponseError):
-    """Raised when the agent's decision is invalid (i.e. not accept or reject)"""
+class AgentNotActiveInChannelError(Exception):
+    """Error raised when an agent is not active in a channel."""
 
 
 @dataclass
@@ -123,7 +92,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     agent_params: CodeValidationAgentParameters
 
     agent_level_in_keys = ["active_mask"]
-    env_level_in_keys = ["message_history", "question", "solution", "round"]
+    env_level_in_keys = ["message_history", "question", "solution", "round", "verdict"]
     agent_level_out_keys = ["message", "decision", "retry_count", "token_limit"]
 
     @property
@@ -146,6 +115,27 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         else:
             return self.base_model_name
 
+    @property
+    def prompt_subdirectory(self) -> str:
+        """The sub-directory for the prompt templates, specific to the protocol."""
+
+        interaction_protocol = self.params.interaction_protocol
+
+        if interaction_protocol == InteractionProtocolType.PVG:
+            return "nip"
+        elif interaction_protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM:
+            return "adp"
+        elif interaction_protocol == InteractionProtocolType.DEBATE:
+            return "debate"
+        elif interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+            return "mac"
+        elif interaction_protocol == InteractionProtocolType.MNIP:
+            return "mnip"
+        else:
+            raise NotImplementedError(
+                f"Prompt templates not implemented for {interaction_protocol}"
+            )
+
     def __init__(
         self,
         params: Parameters,
@@ -166,7 +156,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
-            "pvg.code_validation.prompt_templates"
+            f"pvg.code_validation.prompt_templates.{self.prompt_subdirectory}"
         )
         if self.is_verifier:
             template_filename = "verifier_system_prompt.txt"
@@ -195,6 +185,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
             - "active_mask" (... channel): A boolean array indicating whether the agent
                 is active in each channel.
 
@@ -218,16 +210,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         output_data = NestedArrayDict(
             dict(
                 message=np.full(
-                    (*batch_size, self.num_visible_message_channels),
+                    (*batch_size, self.protocol_handler.num_message_channels),
                     None,
                     dtype=NumpyStringDtype,
                 ),
                 decision=np.full(batch_size, 2, dtype=np.int32),
                 retry_count=np.zeros(
-                    (*batch_size, self.num_visible_message_channels), dtype=np.int32
+                    (*batch_size, self.protocol_handler.num_message_channels),
+                    dtype=np.int32,
                 ),
                 token_limit=np.zeros(
-                    (*batch_size, self.num_visible_message_channels), dtype=np.bool
+                    (*batch_size, self.protocol_handler.num_message_channels),
+                    dtype=np.bool,
                 ),
             ),
             batch_size=batch_size,
@@ -250,6 +244,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         channel_name=channel_name,
                         question=data["question"][batch_id],
                         solution=data["solution"][batch_id],
+                        verdict=data["verdict"][batch_id],
                     )
                 )
                 output_data["message"][(*batch_id, channel_id)] = next_message
@@ -298,10 +293,21 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         """
 
+        if self.agent_params.freeze_agent:
+            self.fine_tune_job_id = "frozen_job_id"
+            return
+
         fine_tune_dataset = self._build_fine_tune_dataset(rollouts)
+
+        # OpenAI requires at least 10 examples for fine-tuning
+        if len(fine_tune_dataset) < 10:
+            self.fine_tune_job_id = "insufficient_data_job_id"
+            return
 
         if self.agent_params.use_dummy_api:
             self.fine_tune_job_id = "dummy_job_id"
@@ -328,16 +334,28 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             model_name = self.model_name
 
         # Create the fine-tune job
-        job = self.client.fine_tuning.jobs.create(
-            model=model_name,
-            training_file=file_id,
-            integrations=[
-                {
-                    "type": "wandb",
-                    "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
-                }
-            ],
-        )
+        while True:
+            try:
+                job = self.client.fine_tuning.jobs.create(
+                    model=model_name,
+                    training_file=file_id,
+                    integrations=[
+                        {
+                            "type": "wandb",
+                            "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
+                        }
+                    ],
+                )
+
+            # If we are day rate limited, sleep for an hour and try again
+            except RateLimitError as e:
+                if e.code == "daily_rate_limit_exceeded":
+                    sleep(60 * 60)
+                    continue
+                else:
+                    raise e
+
+            break
 
         self.fine_tune_job_id = job.id
 
@@ -346,7 +364,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
         """Get the status of the fine-tune job"""
 
-        if self.agent_params.use_dummy_api:
+        if self.agent_params.use_dummy_api or self.agent_params.freeze_agent:
+            return "succeeded"
+
+        if self.fine_tune_job_id == "insufficient_data_job_id":
             return "succeeded"
 
         status = self._get_fine_tune_job().status
@@ -364,11 +385,20 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_params.use_dummy_api:
             raise ValueError("Cannot get error for dummy API")
 
-        job = self._get_fine_tune_job()
+        if self.agent_params.freeze_agent:
+            raise ValueError("Cannot get fine-tune error for frozen agent")
 
-        output = f"Code: {job.error.code}. Message: {job.error.message}."
-        if job.error.param is not None:
-            output += f" Parameter: {job.error.param}."
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            raise ValueError("Cannot get error for insufficient data job")
+
+        error = self._get_fine_tune_job().error
+
+        output = f"Code: {error.code}. Message: {error.message}."
+        if error.param is not None:
+            output += f" Parameter: {error.param}."
+
+        if isinstance(error, APIStatusError):
+            output += f" Headers: {error.response.headers}."
 
         return output
 
@@ -380,6 +410,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         if self.agent_params.use_dummy_api:
             self.fine_tuned_model_name = "dummy_model_name"
+            return
+
+        # If we didn't fine-tune due to insufficient data, don't switch models
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            return
+
+        if self.agent_params.freeze_agent:
+            self.fine_tuned_model_name = None
             return
 
         job = self._get_fine_tune_job()
@@ -411,6 +449,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------
@@ -440,16 +480,20 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 ):
                     continue
 
-                chat_messages_prompt = self._build_chat_messages_prompt(
-                    message_history=rollout_final_state["message_history"][
-                        :, channel_id
-                    ],
-                    round_id=rollout_final_state["round"],
-                    channel_name=channel_name,
-                    question=rollout_final_state["question"],
-                    solution=rollout_final_state["solution"],
-                    ensure_last_message_is_assistant=True,
-                )
+                try:
+                    chat_messages_prompt = self._build_chat_messages_prompt(
+                        message_history=rollout_final_state["message_history"][
+                            :, channel_id
+                        ],
+                        round_id=rollout_final_state["round"],
+                        channel_name=channel_name,
+                        question=rollout_final_state["question"],
+                        solution=rollout_final_state["solution"],
+                        verdict=rollout_final_state["verdict"],
+                        ensure_last_message_is_assistant=True,
+                    )
+                except AgentNotActiveInChannelError:
+                    continue
 
                 fine_tune_dataset.append(dict(messages=chat_messages_prompt))
 
@@ -470,6 +514,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
+        verdict: int,
     ) -> tuple[str | None, int, int, Literal["max_tokens"] | None]:
         """Generate the next message and decision for the agent, with retries.
 
@@ -525,6 +570,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             channel_name=channel_name,
             question=question,
             solution=solution,
+            verdict=self._get_verdict_string(verdict),
         )
 
         def try_generation(
@@ -539,38 +585,49 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
             # Validate the reason for finishing the generation
             if finish_reason == "content_filter":
-                raise ContentFilterError(retry=retry)
+                raise ContentFilterError(num_retries=retry)
             elif finish_reason == "length":
                 warning = "max_tokens"
             elif finish_reason != "stop":
-                raise UnknownFinishReasonError(retry=retry, reason=finish_reason)
+                raise UnknownFinishReasonError(num_retries=retry, reason=finish_reason)
 
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            if completion_text.startswith("Question:") or completion_text.startswith(
-                "Answer:"
-            ):
-                return completion_text, 2, retry, warning
-            elif completion_text.startswith("Decision:"):
-                if completion_text == "Decision: accept":
+            if "decision:" in completion_text.lower():
+                if "decision: accept" in completion_text.lower():
                     return completion_text, 1, retry, warning
-                elif completion_text == "Decision: reject":
+                elif "decision: reject" in completion_text.lower():
                     return completion_text, 0, retry, warning
                 else:
                     raise InvalidDecisionError(
-                        retry=retry, response_text=completion_text
+                        num_retries=retry, response_text=completion_text
                     )
             else:
-                raise InvalidResponseError(retry=retry, response_text=completion_text)
+                return completion_text, 2, retry, warning
 
         # Try the generation a number of times
-        for retry in range(self.agent_params.num_invalid_generation_retries):
+        num_generation_errors = 0
+        num_timeouts = 0
+        while True:
             try:
-                return try_generation(retry)
+                return try_generation(num_generation_errors)
+
+            # Retry if there is a generation error
             except GenerationError as e:
-                if retry == self.agent_params.num_invalid_generation_retries - 1:
+                num_generation_errors += 1
+                if (
+                    num_generation_errors
+                    == self.agent_params.num_invalid_generation_retries
+                ):
                     raise e
+
+            # Retry if there is a timeout, but wait a bit first
+            except APITimeoutError as e:
+                num_timeouts += 1
+                if num_timeouts == self.settings.num_api_generation_timeouts:
+                    raise e
+                sleep(10)
 
     def _make_generation_api_call(
         self,
@@ -614,6 +671,41 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
 
+    def _get_verdict_string(
+        self, dataset_verdict: int
+    ) -> Literal["accept", "reject", ""]:
+        """Get the verdict the agent is arguing for as a string.
+
+        This is based on the agent's role, the interaction protocol and the "verdict"
+        set in the dataset.
+
+        Parameters
+        ----------
+        dataset_verdict : int
+            The verdict value set in the dataset. For now we don't make use of arbitrary
+            verdict that has been generated and assume that the (first) prover always
+            argues that the solution is correct.
+
+        Returns
+        -------
+        string_verdict : str
+            The verdict string which can be "accept", "reject", or an empty string.
+        """
+
+        if self.agent_name == "verifier":
+            return ""
+
+        if self.params.interaction_protocol in [
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.MERLIN_ARTHUR,
+        ]:
+            if self.agent_name == "prover0":
+                return "accept"
+            else:
+                return "reject"
+
+        return "accept"
+
     def _build_chat_messages_prompt(
         self,
         message_history: NDArray,
@@ -621,6 +713,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
+        verdict: int,
         ensure_last_message_is_assistant: bool = False,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
@@ -637,6 +730,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The problem text.
         solution : str
             The proposed solution text.
+        verdict : int
+            The verdict that the prover is arguing for, where 0 means "reject" and 1
+            means "accept".
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
@@ -645,12 +741,19 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         -------
         chat_messages : list[dict[str, str]]
             The chat messages ready to feed to the API.
+
+        Raises
+        ------
+        AgentNotActiveInChannelError
+            If `ensure_last_message_is_assistant` is set to True and the agent is not
+            active in the channel (i.e. there would be no messages in the chat history).
         """
 
         # First add the system prompt
         system_prompt = self.system_template.substitute(
             question=question,
             solution=solution,
+            verdict=self._get_verdict_string(verdict),
             max_questions=self.protocol_handler.max_verifier_turns - 1,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
@@ -668,8 +771,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             chat_messages.append(dict(role=role, content=str(message)))
 
         if ensure_last_message_is_assistant:
-            while len(chat_messages) > 0 and chat_messages[-1]["role"] != "assistant":
+            while chat_messages[-1]["role"] != "assistant":
                 chat_messages.pop()
+                if len(chat_messages) == 0:
+                    raise AgentNotActiveInChannelError
 
         return chat_messages
 
@@ -712,6 +817,8 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
+            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
+              "reject" and 1 means "accept".
 
         Returns
         -------
@@ -745,14 +852,10 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
             input_dict = {}
             for key in self.wholes[agent_name].in_keys:
 
-                # For the message history, restrict to the visible channels
-                if key == "message_history":
-                    input_dict[key] = self._restrict_input_to_visible_channels(
-                        agent_name, data[key], "... round channel"
-                    )
+                # TODO: Restrict message history to visible channels
 
                 # For the active mask, restrict to the agent
-                elif key == "active_mask":
+                if key == "active_mask":
                     input_dict[key] = active_agent_mask[..., agent_id, :]
 
                 # Everything else is passed through unchanged
@@ -793,6 +896,79 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
         data = data.update(dict(agents=agents_update))
 
         return data
+
+    def _expand_output_to_all_channels(
+        self,
+        agent_name: str,
+        output: NDArray,
+        shape_spec: str,
+        fill_value: Any = None,
+    ) -> NDArray:
+        """Expand an agent's output from its visible message channels to all.
+
+        Agents only output to the channels they can see. This function expands the
+        output to all channels, by filling in `fill_value` for the logits in the
+        channels the agent cannot see.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        output : NDArray
+            An output of an agent. This is a single key in the output of the agent's
+            forward pass.
+        shape_spec : str
+            The shape of the output. This is a space-separated string of the dimensions
+            of the output. One of these must be "channel".
+        fill_value : Any, default=-1e9
+            The value to fill in for the channels the agent cannot see.
+
+        Returns
+        -------
+        expanded_output : NDArray
+            The output expanded to all channels. This has the same shape as `output`,
+            except that the channel dimension is the full set of message channels.
+        """
+        # TODO: Combine this with _expand_logits_to_all_channels
+
+        agent_index = self.agent_names.index(agent_name)
+
+        dim_names = shape_spec.split(" ")
+
+        if dim_names.count("channel") != 1:
+            raise ValueError(
+                f"The output shape must contain exactly one 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = dim_names.index("channel")
+
+        if "..." in dim_names[channel_dim + 1 :]:
+            raise ValueError(
+                f"An ellipsis (...) is not allowed after the 'channel' dimension. Got "
+                f"{shape_spec!r}."
+            )
+
+        channel_dim = channel_dim - len(dim_names)
+
+        # If the output is already expanded, return it
+        if output.shape[channel_dim] == self.protocol_handler.num_message_channels:
+            return output
+
+        # Create a tensor filled with `fill_value` of the correct shape
+        full_shape = list(output.shape)
+        full_shape[channel_dim] = self.protocol_handler.num_message_channels
+        expanded_output = np.full(full_shape, fill_value, dtype=output.dtype)
+
+        # Create an index for the tensor, which selects the visible channels using a
+        # mask along the channel dimension
+        visible_mask = self.protocol_handler.agent_channel_visibility_mask[agent_index]
+        index = (Ellipsis, visible_mask) + (slice(None),) * (-1 - channel_dim)
+
+        # Fill in the visible channels
+        expanded_output[index] = output
+
+        return expanded_output
 
 
 @register_scenario_class(CV_SCENARIO, Agent)

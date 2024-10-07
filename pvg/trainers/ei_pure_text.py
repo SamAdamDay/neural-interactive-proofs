@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
 from time import sleep
+import pickle
 
 import numpy as np
 
@@ -11,6 +12,10 @@ from jaxtyping import Bool
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
+from pvg.scenario_base.rollout_analysis import (
+    PureTextRolloutAnalyser,
+    ROLLOUT_ANALYSERS,
+)
 from pvg.utils.nested_array_dict import NestedArrayDict
 
 
@@ -37,6 +42,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
             "log_stats",
             "create_fine_tune_jobs",
             "await_fine_tune_jobs",
+            "test",
+            "done",
         ] = "sample_rollouts"
 
     def train(self):
@@ -78,9 +85,17 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 # Advance to the next stage
                 self.state.train_loop_stage = "create_fine_tune_jobs"
 
+                self.save_checkpoint()
+
             # We don't fine-tune on the last iteration
             if self.state.iteration == self.params.rl.num_iterations - 1:
+
+                # Advance to the test stage
                 self.state.iteration = self.params.rl.num_iterations
+                self.state.train_loop_stage = "test"
+
+                self.save_checkpoint()
+
                 break
 
             # Create fine-tune jobs for each agent
@@ -141,7 +156,112 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 self.save_checkpoint()
 
+        if self.state.train_loop_stage == "test":
+
+            # Sample rollouts from the test environment
+            rollouts = self.sample_rollouts(self.test_environment, use_tqdm=True)
+
+            # Log the statistics of the rollouts
+            log_stats = self._get_log_stats(rollouts, train=False)
+            self.settings.stat_logger.log(log_stats)
+
+            # Save the rollouts to the checkpoint directory
+            self.save_rollouts(rollouts, "test")
+
+            # Mark the experiment as done
+            self.state.train_loop_stage = "done"
+
+            # Save the final checkpoint
+            self.save_checkpoint()
+
         self.settings.logger.info("Training complete.")
+
+    def run_analysers(
+        self,
+        analysers: list[str | type[PureTextRolloutAnalyser]],
+        model_name: str,
+        *,
+        overwrite=False,
+        use_tqdm=True,
+        dry_run=False,
+    ):
+        """Run the given analysers on the rollouts of the experiment.
+
+        This method can only be called after the experiment has finished.
+
+        Parameters
+        ----------
+        analysers : list[str | type[PureTextRolloutAnalyser]]
+            The analysers to run. Either the name of the analyser or the analyser class
+            itself.
+        model_name : str
+            The name of the model to use for the analysis.
+        overwrite : bool, default=False
+            Whether to overwrite the existing analysis files, if they exist.
+        use_tqdm : bool, default=True
+            Whether create a progress bar for the analysis.
+        dry_run : bool, default=False
+            Whether to do a dry run using a dummy API, not saving the results.
+        """
+
+        for analyser_cls in analysers:
+
+            if isinstance(analyser_cls, str):
+                try:
+                    analyser_cls: type[PureTextRolloutAnalyser] = ROLLOUT_ANALYSERS[
+                        self.params.scenario, analyser_cls
+                    ]
+                except KeyError:
+                    raise ValueError(
+                        f"Analyser {analyser_cls!r} not found in list of analysers."
+                    )
+
+            analyser = analyser_cls(
+                params=self.params,
+                settings=self.settings,
+                protocol_handler=self.scenario_instance.protocol_handler,
+                model_name=model_name,
+                use_dummy_api=dry_run,
+            )
+
+            analysis_dir = self.checkpoint_analysis_dir.joinpath(analyser_cls.name)
+            analysis_dir.mkdir(parents=True, exist_ok=True)
+
+            for iteration in range(self.params.rl.num_iterations):
+
+                print(
+                    f"Running analyser {analyser_cls.name!r} on iteration "
+                    f"{iteration+1}/{self.params.rl.num_iterations}"
+                )
+
+                analysis_file = analysis_dir.joinpath(f"{iteration}.pt")
+
+                if analysis_file.exists():
+                    if not overwrite:
+                        self.settings.logger.warning(
+                            f"Analysis file {analysis_file!r} already exists. Skipping."
+                        )
+                        continue
+                    else:
+                        self.settings.logger.warning(
+                            f"Overwriting existing analysis file {analysis_file!r}"
+                        )
+                    if not dry_run:
+                        analysis_file.unlink()
+
+                try:
+                    rollouts = self.load_rollouts(iteration)
+                except FileNotFoundError:
+                    self.settings.logger.warning(
+                        f"No rollouts found for iteration {iteration+1}. Skipping."
+                    )
+                    continue
+
+                evaluations = analyser.forward(rollouts, use_tqdm=use_tqdm)
+
+                if not dry_run:
+                    with open(analysis_file, "wb") as f:
+                        pickle.dump(evaluations, f)
 
     def _get_log_stats(
         self,

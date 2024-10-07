@@ -85,13 +85,16 @@ class Trainer(ABC):
 
         # Try to restore the experiment state from a checkpoint. If no checkpoint is
         # available, initialise the state.
-        try:
-            self.state = self._load_checkpoint()
-            self.settings.logger.info(
-                f"Restoring experiment state from iteration {self.state.iteration}"
-            )
-        except CheckPointNotFoundError:
+        if settings.do_not_load_checkpoint:
             self._initialise_state()
+        else:
+            try:
+                self.state = self._load_checkpoint()
+                self.settings.logger.info(
+                    f"Restoring experiment state from iteration {self.state.iteration}"
+                )
+            except CheckPointNotFoundError:
+                self._initialise_state()
 
     @abstractmethod
     def train(self):
@@ -130,6 +133,22 @@ class Trainer(ABC):
         scratch (i.e. not restoring from a checkpoint).
         """
 
+    @classmethod
+    def get_checkpoint_base_dir_from_run_id(cls, run_id: str) -> Path:
+        """Get the base directory for a checkpoint from a run ID.
+
+        Parameters
+        ----------
+        run_id : str
+            The run ID.
+
+        Returns
+        -------
+        checkpoint_base_dir : Path
+            The path to the base directory for the checkpoint.
+        """
+        return Path(EXPERIMENT_STATE_DIR, run_id)
+
     @property
     def checkpoint_base_dir(self) -> Path | None:
         """The path to the directory containing the checkpoint."""
@@ -137,7 +156,7 @@ class Trainer(ABC):
         if self.settings.run_id is None:
             return None
 
-        return Path(EXPERIMENT_STATE_DIR, f"{self.settings.run_id}")
+        return self.get_checkpoint_base_dir_from_run_id(self.settings.run_id)
 
     @property
     def checkpoint_state_path(self) -> Path | None:

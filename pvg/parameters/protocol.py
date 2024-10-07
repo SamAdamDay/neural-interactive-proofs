@@ -4,10 +4,11 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.base import SubParameters, register_parameter_class
 from pvg.parameters.types import Guess, MinMessageRoundsSchedulerType
 
 
+@register_parameter_class
 @dataclass
 class CommonProtocolParameters(SubParameters):
     """Common additional parameters for the interaction protocol.
@@ -81,10 +82,11 @@ class LongProtocolParameters(SubParameters, ABC):
             self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
         ):
             self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
-                self.min_message_rounds_scheduler
+                self.min_message_rounds_scheduler.upper()
             ]
 
 
+@register_parameter_class
 @dataclass
 class PvgProtocolParameters(LongProtocolParameters):
     """Additional parameters for the PVG interaction protocol.
@@ -103,6 +105,7 @@ class PvgProtocolParameters(LongProtocolParameters):
     """
 
 
+@register_parameter_class
 @dataclass
 class DebateProtocolParameters(LongProtocolParameters):
     """Additional parameters for the debate interaction protocol.
@@ -128,6 +131,7 @@ class DebateProtocolParameters(LongProtocolParameters):
     prover0_first: bool = True
 
 
+@register_parameter_class
 @dataclass
 class MnipProtocolParameters(LongProtocolParameters):
     """Additional parameters for the Mnip interaction protocol.

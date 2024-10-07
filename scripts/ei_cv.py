@@ -12,6 +12,7 @@ from pvg import (
     RlTrainerParameters,
     ScenarioType,
     TrainerType,
+    EiParameters,
     InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
@@ -30,25 +31,71 @@ param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    frames_per_batch=[None],
+    frames_per_batch=[200 * 8],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
     prover_model=["gpt-4o-2024-08-06"],
     prover_temperature=[None],
     prover_top_p=[None],
-    fine_tune_from_scratch=[True],
+    freeze_prover=[False],
+    fine_tune_from_scratch=[False],
     shared_reward=[False],
     min_message_rounds=[2],
     max_message_rounds=[8],
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    use_dummy_api=[False],
+    use_prover_watchdog=[True],
+    prover_watchdog_model_name=["gpt-4o-mini-2024-07-18"],
+    use_dummy_api=[True],
 )
 
 
 def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+
+    agents_params_dict = dict(
+        verifier=CodeValidationAgentParameters(
+            model_name=combo["verifier_model"],
+            temperature=combo["verifier_temperature"],
+            top_p=combo["verifier_top_p"],
+            use_dummy_api=combo["use_dummy_api"],
+            fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+        ),
+    )
+
+    prover_params_dict = dict(
+        model_name=combo["prover_model"],
+        temperature=combo["prover_temperature"],
+        top_p=combo["prover_top_p"],
+        use_dummy_api=combo["use_dummy_api"],
+        freeze_agent=combo["freeze_prover"],
+        fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+    )
+
+    if combo["interaction_protocol"] in [
+        InteractionProtocolType.PVG,
+        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+    ]:
+        agents_params_dict["prover"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+    elif combo["interaction_protocol"] in [
+        InteractionProtocolType.DEBATE,
+        InteractionProtocolType.MNIP,
+    ]:
+        agents_params_dict["prover0"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+        agents_params_dict["prover1"] = CodeValidationAgentParameters(
+            **prover_params_dict
+        )
+    else:
+        raise NotImplementedError(
+            f"This script does not currently support the "
+            f"{combo['interaction_protocol']} protocol."
+        )
+
     return Parameters(
         scenario=ScenarioType.CODE_VALIDATION,
         trainer=TrainerType.PURE_TEXT_EI,
@@ -57,20 +104,12 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
         ),
-        agents=AgentsParameters(
-            verifier=CodeValidationAgentParameters(
-                model_name=combo["verifier_model"],
-                temperature=combo["verifier_temperature"],
-                top_p=combo["verifier_top_p"],
-                use_dummy_api=combo["use_dummy_api"],
-            ),
-            prover=CodeValidationAgentParameters(
-                model_name=combo["prover_model"],
-                temperature=combo["prover_temperature"],
-                top_p=combo["prover_top_p"],
-                use_dummy_api=combo["use_dummy_api"],
-            ),
+        ei=EiParameters(
+            use_prover_watchdog=combo["use_prover_watchdog"],
+            prover_watchdog_model_name=combo["prover_watchdog_model_name"],
+            prover_watchdog_use_dummy_api=combo["use_dummy_api"],
         ),
+        agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
@@ -120,6 +159,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         wandb_entity=cmd_args.wandb_entity,
         run_id=arguments.run_id,
         allow_resuming_wandb_run=True,
+        allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
         num_rollout_workers=cmd_args.num_rollout_workers,

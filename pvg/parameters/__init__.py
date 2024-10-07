@@ -55,7 +55,12 @@ Examples
 from typing import Optional
 from dataclasses import dataclass, fields
 
-from .base import BaseParameters, SubParameters, ParameterValue
+from .base import (
+    BaseParameters,
+    SubParameters,
+    ParameterValue,
+    register_parameter_class,
+)
 from .types import (
     ScenarioType,
     SpgVariant,
@@ -112,6 +117,7 @@ AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
+    InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         "verifier",
         "prover0",
@@ -128,6 +134,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
     InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
+    InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         ("verifier",),
         ("prover0", "prover1", "prover2"),
@@ -135,6 +142,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
 }
 
 
+@register_parameter_class
 @dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
@@ -206,11 +214,11 @@ class Parameters(BaseParameters):
         Additional parameters for the dataset.
     """
 
-    scenario: ScenarioType
-    trainer: TrainerType
+    scenario: ScenarioType | str
+    trainer: TrainerType | str
     dataset: str
 
-    interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
+    interaction_protocol: InteractionProtocolType | str = InteractionProtocolType.PVG
 
     seed: int = 6198
 
@@ -252,12 +260,12 @@ class Parameters(BaseParameters):
     def __post_init__(self):
         # Convert any strings to enums
         if not isinstance(self.scenario, ScenarioType):
-            self.scenario = ScenarioType[self.scenario]
+            self.scenario = ScenarioType[self.scenario.upper()]
         if not isinstance(self.trainer, TrainerType):
-            self.trainer = TrainerType[self.trainer]
+            self.trainer = TrainerType[self.trainer.upper()]
         if not isinstance(self.interaction_protocol, InteractionProtocolType):
             self.interaction_protocol = InteractionProtocolType[
-                self.interaction_protocol
+                self.interaction_protocol.upper()
             ]
 
         # TODO: do this better

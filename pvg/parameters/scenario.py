@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.base import SubParameters, register_parameter_class
 
 
+@register_parameter_class
 @dataclass
 class ImageClassificationParameters(SubParameters):
     """Additional parameters for the image classification task.
@@ -22,6 +23,7 @@ class ImageClassificationParameters(SubParameters):
     initial_num_channels: int = 16
 
 
+@register_parameter_class
 @dataclass
 class CodeValidationParameters(SubParameters):
     """Additional parameters for the code validation task.

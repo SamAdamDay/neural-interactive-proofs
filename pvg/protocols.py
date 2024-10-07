@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from itertools import product
 from math import ceil, floor
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Callable
 
 import torch
 from torch import Tensor
@@ -389,7 +389,9 @@ class ProtocolHandler(ABC):
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
-        terminated = terminated | (round >= self.max_message_rounds - 1)
+        terminated = terminated | (
+            (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+        )
         reward[verifier_index][
             (round >= self.max_message_rounds - 1) & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
@@ -598,8 +600,9 @@ P = TypeVar("P", bound=ProtocolHandler)
 
 
 def register_protocol_handler(
-    protocol_handler: InteractionProtocolType, zero_knowledge: bool = False
-):
+    protocol_handler: InteractionProtocolType,
+    zero_knowledge: bool = False,
+) -> Callable[[type[P]], type[P]]:
     """Decorator to register a protocol handler."""
 
     def decorator(cls: type[P]) -> type[P]:
@@ -639,6 +642,10 @@ class PvgProtocol(DeterministicProtocolHandler):
     agent_names = ["prover", "verifier"]
 
     @property
+    def verifier_first(self) -> bool:
+        return self.params.protocol_common.verifier_first
+
+    @property
     def max_message_rounds(self) -> int:
         return self.params.pvg_protocol.max_message_rounds
 
@@ -665,7 +672,7 @@ class PvgProtocol(DeterministicProtocolHandler):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.protocol_common.verifier_first:
+        if self.verifier_first:
             if agent_name == "verifier":
                 return round % 2 == 0
             elif agent_name == "prover":
@@ -708,7 +715,8 @@ class AdpProtocol(PvgProtocol):
 
     agent_names = ["prover", "verifier"]
     max_message_rounds = 2
-    min_message_rounds = 2
+    min_message_rounds = 0
+    verifier_first = False
 
 
 @register_protocol_handler(InteractionProtocolType.DEBATE)
@@ -759,7 +767,7 @@ class DebateProtocol(PvgProtocol):
             first_prover = "prover1"
             second_prover = "prover0"
 
-        if self.params.protocol_common.verifier_first:
+        if self.verifier_first:
 
             # Verifier first, sequential
             if self.params.debate_protocol.sequential:
@@ -861,7 +869,7 @@ class MerlinArthurProtocol(ProtocolHandler):
     ]
 
     max_message_rounds = 2
-    min_message_rounds = 2
+    min_message_rounds = 0
     max_verifier_turns = 1
 
     def get_active_agents_mask_from_rounds(
@@ -881,26 +889,15 @@ class MerlinArthurProtocol(ProtocolHandler):
         active_agents : Bool[Tensor, "... agent channel"]
             A boolean mask indicating which agents are active in the given round.
         """
-        if self.params.protocol_common.verifier_first:
-            prover1_first = torch.randint_like(round, 2).bool()
-            return rearrange(
-                [
-                    (round % 2 == 1) & prover1_first,
-                    (round % 2 == 1) & ~prover1_first,
-                    round % 2 == 0,
-                ],
-                "agent ... -> ... agent 1",
-            )
-        else:
-            prover1_first = torch.randint_like(round, 2).bool()
-            return rearrange(
-                [
-                    (round % 2 == 0) & prover1_first,
-                    (round % 2 == 0) & ~prover1_first,
-                    round % 2 == 1,
-                ],
-                "agent ... -> ... agent 1",
-            )
+        prover1_first = torch.randint_like(round, 2).bool()
+        return rearrange(
+            [
+                (round % 2 == 0) & prover1_first,
+                (round % 2 == 0) & ~prover1_first,
+                round % 2 == 1,
+            ],
+            "agent ... -> ... agent 1",
+        )
 
     def can_agent_be_active(
         self, agent_name: str, round: int, channel_name: str
@@ -951,7 +948,7 @@ class MerlinArthurProtocol(ProtocolHandler):
         pass
 
 
-@register_protocol_handler(InteractionProtocolType.DEBATE)
+@register_protocol_handler(InteractionProtocolType.MNIP)
 class MnipProtocol(PvgProtocol):
     """Implementation of the MNIP protocol.
 
@@ -1004,12 +1001,12 @@ class MnipProtocol(PvgProtocol):
                 if agent_name == "verifier":
                     return round % 3 == 0
                 elif agent_name == first_prover:
-                    if channel_name.startswith(f"{agent_name}_channel"):
+                    if channel_name == f"{agent_name}_channel":
                         return round % 3 == 1
                     else:
                         return False
                 elif agent_name == second_prover:
-                    if channel_name.startswith(f"{agent_name}_channel"):
+                    if channel_name == f"{agent_name}_channel":
                         return round % 3 == 2
                     else:
                         return False
@@ -1017,9 +1014,9 @@ class MnipProtocol(PvgProtocol):
             # Verifier first, simultaneous
             else:
                 if agent_name in ["prover0", "prover1"]:
-                    if channel_name.startswith(f"{agent_name}_channel"):
-                        return round % 2 == 1 and channel_name.startswith(
-                            f"{agent_name}_channel"
+                    if channel_name == f"{agent_name}_channel":
+                        return (
+                            round % 2 == 1 and channel_name == f"{agent_name}_channel"
                         )
                     else:
                         return False
@@ -1031,12 +1028,12 @@ class MnipProtocol(PvgProtocol):
             # Provers first, sequential
             if self.params.mnip_protocol.sequential:
                 if agent_name == first_prover:
-                    if channel_name.startswith(f"{agent_name}_channel"):
+                    if channel_name == f"{agent_name}_channel":
                         return round % 3 == 0
                     else:
                         return False
                 elif agent_name == second_prover:
-                    if channel_name.startswith(f"{agent_name}_channel"):
+                    if channel_name == f"{agent_name}_channel":
                         return round % 3 == 1
                     else:
                         return False
@@ -1046,20 +1043,12 @@ class MnipProtocol(PvgProtocol):
             # Provers first, simultaneous
             else:
                 if agent_name in ["prover0", "prover1"]:
-                    if channel_name.startswith(f"{agent_name}_channel"):
+                    if channel_name == f"{agent_name}_channel":
                         return round % 2 == 0
                     else:
                         return False
                 elif agent_name == "verifier":
                     return round % 2 == 1
-
-    @property
-    def max_message_rounds(self) -> int:
-        return self.params.mnip_protocol.max_message_rounds
-
-    @property
-    def min_message_rounds(self) -> int:
-        return self.params.mnip_protocol.min_message_rounds
 
     def _include_non_verifier_rewards(
         self,
@@ -1085,19 +1074,19 @@ class MnipProtocol(PvgProtocol):
 class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
     """Base class for zero-knowledge protocols.
 
-    Introduces a second verifier and a simulator. The simulator tries to mimic the
-    interaction between the second verifier and the prover, and the second verifier
-    tries to prevent this. The prover tries to make sure the simulator can succeed
-    (which implies that it is not `leaking` knowledge).
+    Introduces an adversarial verifier and a simulator. The simulator tries to mimic the
+    interaction between the adversarial verifier and the prover, and the adversarial
+    verifier tries to prevent this. The prover tries to make sure the simulator can
+    succeed (which implies that it is not `leaking` knowledge).
     """
 
     @property
-    def agent_names(self):
+    def agent_names(self) -> list[str]:
         # Keep the same agents apart from adding the second verifier and the simulator
         return super().agent_names + ["adversarial_verifier", "simulator"]
 
     @cached_property
-    def message_channel_names(self):
+    def message_channel_names(self) -> list[str]:
 
         # Duplicate the existing channels (one per verifier) and add the simulator
         # channel
@@ -1110,11 +1099,9 @@ class ZeroKnowledgePvgProtocol(PvgProtocol, ABC):
         return message_channel_names
 
     @property
-    def agent_channel_visibility(self):
+    def agent_channel_visibility(self) -> list[tuple[str, str]]:
 
-        # Clone the existing visibility settings and add a separate channel for the
-        # simulator
-        agent_channel_visibility = [("simulator", "simulator_channel")]
+        agent_channel_visibility = []
 
         # Make the adversarial channels visible to the all non-verifier agents and the
         # adversarial verifier

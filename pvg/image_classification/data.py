@@ -313,6 +313,9 @@ class ImageClassificationDataset(TensorDictDataset):
         ):
             processed_name += f"_{self.binarification_seed}"
 
+        if self.train and self.params.dataset_options.max_train_size is not None:
+            processed_name += f"_{self.params.dataset_options.max_train_size}"
+
         sub_dir = "train" if self.train else "test"
 
         return os.path.join(

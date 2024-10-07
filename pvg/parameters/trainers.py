@@ -3,11 +3,12 @@
 from typing import NamedTuple, Optional
 from dataclasses import dataclass
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.base import SubParameters, register_parameter_class
 from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
 from pvg.parameters.agents import LrFactors
 
 
+@register_parameter_class
 @dataclass
 class RlTrainerParameters(SubParameters):
     """Additional parameters common to all RL trainers.
@@ -91,6 +92,7 @@ class RlTrainerParameters(SubParameters):
     num_test_iterations: int = 10
 
 
+@register_parameter_class
 @dataclass
 class CommonPpoParameters(SubParameters):
     """Common parameters for PPO trainers.
@@ -129,6 +131,7 @@ class CommonPpoParameters(SubParameters):
     normalize_advantage: bool = True
 
 
+@register_parameter_class
 @dataclass
 class VanillaPpoParameters(SubParameters):
     """Additional parameters for the vanilla PPO trainer."""
@@ -137,6 +140,7 @@ class VanillaPpoParameters(SubParameters):
 SosParams = NamedTuple("SosParams", [("a", float), ("b", float)])
 
 
+@register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
     """Additional parameters for SPG and its variants.
@@ -176,6 +180,7 @@ class SpgParameters(SubParameters):
     ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
 
 
+@register_parameter_class
 @dataclass
 class ReinforceParameters(SubParameters):
     """Additional parameters for the REINFORCE trainer.
@@ -190,6 +195,7 @@ class ReinforceParameters(SubParameters):
     use_advantage_and_critic: bool = False
 
 
+@register_parameter_class
 @dataclass
 class SoloAgentParameters(SubParameters):
     """Additional parameters for running agents in isolation.
@@ -214,6 +220,7 @@ class SoloAgentParameters(SubParameters):
     body_lr_factor_override: bool = False
 
 
+@register_parameter_class
 @dataclass
 class EiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
@@ -223,6 +230,20 @@ class EiParameters(SubParameters):
     reward_threshold : float
         The threshold on the reward for a rollout to be added to the fine-tuning
         dataset.
+    use_prover_watchdog : bool
+        Whether to use a language model to evaluate how well the prover(s) are
+        conforming to their roles.
+    prover_watchdog_model_name : str
+        The name of the language model to use as the watchdog.
+    prover_watchdog_use_dummy_api : bool
+        Whether to use a dummy API to generate responses from the watchdog.
+    prover_watchdog_num_invalid_generation_retries : int
+        The number of retries to allow when the watchdog generates an invalid response.
     """
 
     reward_threshold: float = 0.9
+
+    use_prover_watchdog: bool = False
+    prover_watchdog_model_name: str = "gpt-4o-mini-2024-07-18"
+    prover_watchdog_use_dummy_api: bool = False
+    prover_watchdog_num_invalid_generation_retries: int = 3
