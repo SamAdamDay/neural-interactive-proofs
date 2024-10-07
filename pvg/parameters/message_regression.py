@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.base import SubParameters, register_parameter_class
 from pvg.parameters.types import MessageRegressionMethodType, ActivationType
 
 
+@register_parameter_class
 @dataclass
 class MessageRegressionParameters(SubParameters):
     """Additional parameters for doing regression analysis on the messages.

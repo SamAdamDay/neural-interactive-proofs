@@ -412,10 +412,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             self.fine_tuned_model_name = "dummy_model_name"
             return
 
-        if (
-            self.agent_params.freeze_agent
-            or self.fine_tune_job_id == "insufficient_data_job_id"
-        ):
+        # If we didn't fine-tune due to insufficient data, don't switch models
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            return
+
+        if self.agent_params.freeze_agent:
             self.fine_tuned_model_name = None
             return
 

@@ -55,7 +55,12 @@ Examples
 from typing import Optional
 from dataclasses import dataclass
 
-from .base import BaseParameters, SubParameters, ParameterValue
+from .base import (
+    BaseParameters,
+    SubParameters,
+    ParameterValue,
+    register_parameter_class,
+)
 from .types import (
     ScenarioType,
     SpgVariant,
@@ -136,6 +141,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
 }
 
 
+@register_parameter_class
 @dataclass
 class Parameters(BaseParameters):
     """Parameters of the experiment.
