@@ -31,7 +31,7 @@ from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 def run(cmd_args: Namespace):
     if cmd_args.use_cpu or not torch.cuda.is_available():
-        print("Using CPU")
+        print("Using CPU")  # noqa: T201
         device = torch.device("cpu")
     else:
         device = torch.device("cuda")

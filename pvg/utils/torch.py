@@ -780,15 +780,15 @@ class Print(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self.name is not None:
-            print(f"{self.name}:")
+            print(f"{self.name}:")  # noqa: T201
         if self.mode == "value":
             if self.transform is not None:
                 x = self.transform(x)
-            print(x)
+            print(x)  # noqa: T201
         elif self.mode == "nan":
-            print(x.isnan().float().mean())
+            print(x.isnan().float().mean())  # noqa: T201
         else:
-            print(x.shape)
+            print(x.shape)  # noqa: T201
         return x
 
 
@@ -823,12 +823,12 @@ class TensorDictPrint(TensorDictModuleBase):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.name is not None:
-            print(f"{type(self).__name__} {self.name!r}:")
+            print(f"{type(self).__name__} {self.name!r}:")  # noqa: T201
         for key in self.in_keys:
             to_print = f"{key}: ({tensordict[key].shape})"
             if self.print_nan_proportion:
                 to_print += (
                     f", NaN proportion: {tensordict[key].isnan().float().mean()!s}"
                 )
-            print(to_print)
+            print(to_print)  # noqa: T201
         return tensordict

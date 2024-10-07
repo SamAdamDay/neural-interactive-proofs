@@ -200,7 +200,7 @@ class Trainer(ABC):
         # Check if the parameters in the checkpoint match the current parameters
         with open(self.checkpoint_params_path, "r") as f:
             if json.dumps(self.params.to_dict(), sort_keys=True, indent=4) != f.read():
-                print(
+                print(  # noqa: T201
                     "The parameters in the checkpoint do not match the current "
                     "parameters."
                 )
@@ -211,7 +211,9 @@ class Trainer(ABC):
                     elif response.lower() == "n":
                         sys.exit(1)
                     else:
-                        print("Invalid response. Please enter 'y' or 'n'.")
+                        print(  # noqa: T201
+                            "Invalid response. Please enter 'y' or 'n'."
+                        )
 
         with open(self.checkpoint_state_path, "r") as f:
             state_dict = json.load(f)
