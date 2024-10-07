@@ -146,7 +146,7 @@ def run_experiment(
             params.to_dict(), allow_val_change=allow_overriding_wandb_config
         )
         if print_wandb_run_url:
-            print(f"W&B run URL: {wandb_run.get_url()}")
+            print(f"W&B run URL: {wandb_run.get_url()}")  # noqa: T201
         stat_logger = WandbStatLogger(wandb_run)
     else:
         wandb_run = None

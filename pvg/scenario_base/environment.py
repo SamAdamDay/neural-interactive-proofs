@@ -673,7 +673,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         """
 
         # If no tensordict is given, we're starting afresh
-        if env_td is None or not "done" in env_td.keys():
+        if env_td is None or "done" not in env_td.keys():
             observation_zeros = self.observation_spec.zero()
             state_zeros = self.state_spec.zero()
             done_zeros = self.done_spec.zero()
@@ -923,7 +923,7 @@ class PureTextEnvironment(Environment, ABC):
     ) -> NestedArrayDict:
 
         # If no state is provided, create a new one
-        if env_state is None or not "done" in env_state.keys():
+        if env_state is None or "done" not in env_state.keys():
             env_state = self.zero()
             new_mask = np.ones(*self.batch_size, dtype=bool)
 

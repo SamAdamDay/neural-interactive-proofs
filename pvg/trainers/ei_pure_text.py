@@ -229,7 +229,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
             for iteration in range(self.params.rl.num_iterations):
 
-                print(
+                print(  # noqa: T201
                     f"Running analyser {analyser_cls.name!r} on iteration "
                     f"{iteration+1}/{self.params.rl.num_iterations}"
                 )
@@ -315,7 +315,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             )
 
         log_stats[f"{prefix}mean_episode_length"] = (
-            (rollouts["message_history"][..., -1, :, 0] != None)
+            (rollouts["message_history"][..., -1, :, 0] != None)  # noqa: E711
             .sum(axis=-1)
             .mean()
             .item()
