@@ -33,18 +33,17 @@ class ParameterValue(ABC):
         """Create a parameter value from a serialised dictionary."""
 
     @classmethod
-    def _extract_param_class_from_dict(
+    def _get_param_class_from_dict(
         cls, param_dict: dict
     ) -> type["ParameterValue"] | None:
         """Try to get the parameter class from a dictionary of serialised parameters.
-
-        This method removes the `_type` key from the dictionary.
 
         Parameters
         ----------
         param_dict : dict
             A dictionary of parameters, which may have come from a `to_dict` method.
-            This dictionary may contain a `_type` key, which is removed.
+            This dictionary may contain a `_type` key, which is used to determine the
+            class of the parameter.
 
         Returns
         -------
@@ -57,9 +56,9 @@ class ParameterValue(ABC):
             If the class specified in the dictionary is not a valid parameter class.
         """
 
-        try:
-            class_name = param_dict.pop("_type")
-        except KeyError:
+        class_name = param_dict.get("_type", None)
+
+        if class_name is None:
             return None
 
         # Get the class of the parameter
@@ -110,6 +109,17 @@ class BaseParameters(ParameterValue, ABC):
             The parameters object.
         """
 
+        # Remove the `_type` key from the dictionary, checking that it is the correct
+        # type
+        param_class_name = params_dict.pop("_type", None)
+        if param_class_name is not None:
+            param_class = get_parameter_or_parameter_value_class(param_class_name)
+            if not issubclass(param_class, cls):
+                raise ValueError(
+                    f"Invalid parameter class: {param_class_name!r} is not a subclass "
+                    f"of {cls.__name__!r}"
+                )
+
         # Call `from_dict` on all fields that are ParameterValues
         for param in dataclasses.fields(cls):
 
@@ -136,9 +146,9 @@ class BaseParameters(ParameterValue, ABC):
             # Get the specific class name of the parameter. TODO: It would be better if
             # this class could be inferred from the other parameters, rather than being
             # specified in the dictionary.
-            class_name = cls._extract_param_class_from_dict(param_value)
+            param_class = cls._get_param_class_from_dict(param_value)
 
-            if class_name is None:
+            if param_class is None:
                 param_class = param_base_class
 
             else:
@@ -146,8 +156,8 @@ class BaseParameters(ParameterValue, ABC):
                 # Make sure the class is a subclass of the base class
                 if not issubclass(param_class, param_base_class):
                     raise ValueError(
-                        f"Invalid parameter class: {class_name!r} is not a subclass of "
-                        f"{param_base_class}"
+                        f"Invalid parameter class: {type(param_class).__name__!r} is "
+                        f"not a subclass of {type(param_base_class).__name__!r}"
                     )
 
             # Replace the dictionary with the `ParameterValue` subclass

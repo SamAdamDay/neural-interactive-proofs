@@ -48,7 +48,7 @@ param_grid = dict(
     debate_prover0_first=[True],
     use_prover_watchdog=[True],
     prover_watchdog_model_name=["gpt-4o-mini-2024-07-18"],
-    use_dummy_api=[False],
+    use_dummy_api=[True],
 )
 
 

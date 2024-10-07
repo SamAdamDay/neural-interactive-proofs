@@ -515,7 +515,7 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
         for agent_name, agent_params_dict in params_dict.items():
             if agent_name == "agents_update_repr":
                 continue
-            class_name: AgentParameters = cls._extract_param_class_from_dict(
+            class_name: AgentParameters = cls._get_param_class_from_dict(
                 agent_params_dict
             )
             agent_params = class_name.from_dict(agent_params_dict)
