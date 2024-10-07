@@ -113,9 +113,12 @@ class PureTextRolloutAnalyser(RolloutAnalyser, ABC):
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         model_name: str,
+        *,
+        use_dummy_api: bool = False,
     ):
         super().__init__(params, settings, protocol_handler)
         self.model_name = model_name
+        self.use_dummy_api = use_dummy_api
 
     @abstractmethod
     def forward(

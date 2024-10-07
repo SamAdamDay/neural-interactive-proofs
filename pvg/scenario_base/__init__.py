@@ -56,3 +56,9 @@ from .pretrained_models import (
     register_pretrained_model_class,
     get_pretrained_model_class,
 )
+from .rollout_analysis import (
+    RolloutAnalyser,
+    ROLLOUT_ANALYSERS,
+    register_rollout_analyser,
+    PureTextRolloutAnalyser,
+)

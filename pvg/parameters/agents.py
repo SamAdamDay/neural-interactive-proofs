@@ -13,7 +13,12 @@ from dataclasses import dataclass
 import dataclasses
 
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
-from pvg.parameters.base import BaseParameters, SubParameters, ParameterValue
+from pvg.parameters.base import (
+    SubParameters,
+    ParameterValue,
+    register_parameter_class,
+    register_parameter_value_class,
+)
 from pvg.parameters.types import ActivationType, ImageBuildingBlockType
 from pvg.parameters.update_schedule import (
     AgentUpdateSchedule,
@@ -22,6 +27,7 @@ from pvg.parameters.update_schedule import (
 )
 
 
+@register_parameter_class
 @dataclass
 class LrFactors(SubParameters, ABC):
     """
@@ -36,6 +42,7 @@ class LrFactors(SubParameters, ABC):
     critic: float = 1.0
 
 
+@register_parameter_class
 @dataclass
 class AgentParameters(SubParameters, ABC):
     """Base class for sub-parameters objects which define agents
@@ -128,6 +135,27 @@ class AgentParameters(SubParameters, ABC):
 
         return params_dict
 
+    @classmethod
+    def from_dict(cls, params_dict: dict) -> "AgentsParameters":
+        """Create a parameters object from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the parameters.
+
+        Returns
+        -------
+        params : AgentsParameters
+            The parameters object.
+        """
+
+        # Remove the is_random parameter from the dictionary
+        if "is_random" in params_dict:
+            params_dict.pop("is_random")
+
+        return super().from_dict(params_dict)
+
     def load_from_wandb_config(self, wandb_config: dict):
         """Load the parameters from a W&B config dictionary.
 
@@ -145,6 +173,7 @@ class AgentParameters(SubParameters, ABC):
         setattr(self, "is_random", wandb_config["is_random"])
 
 
+@register_parameter_class
 @dataclass
 class RandomAgentParameters(AgentParameters):
     """Parameters which specify a random agent"""
@@ -152,6 +181,7 @@ class RandomAgentParameters(AgentParameters):
     is_random: ClassVar[bool] = True
 
 
+@register_parameter_class
 @dataclass
 class GraphIsomorphismAgentParameters(AgentParameters):
     """Additional parameters for agents in the graph isomorphism experiment.
@@ -281,6 +311,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         )
 
 
+@register_parameter_class
 @dataclass
 class ImageClassificationAgentParameters(AgentParameters):
     """Additional parameters for agents in the image classification experiment.
@@ -378,6 +409,7 @@ class ImageClassificationAgentParameters(AgentParameters):
         )
 
 
+@register_parameter_class
 @dataclass
 class CodeValidationAgentParameters(AgentParameters):
     """Additional parameters for agents in the code validation experiment.
@@ -429,6 +461,7 @@ class CodeValidationAgentParameters(AgentParameters):
         return cls(use_dummy_api=True)
 
 
+@register_parameter_value_class
 class AgentsParameters(dict[str, AgentParameters], ParameterValue):
     """Parameters which specify the agents in the experiment.
 
@@ -460,6 +493,37 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
         params_dict["agents_update_repr"] = self._agents_update_repr()
 
         return params_dict
+
+    @classmethod
+    def from_dict(cls, params_dict: dict) -> "AgentsParameters":
+        """Create a parameters object from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the parameters.
+
+        Returns
+        -------
+        params : AgentsParameters
+            The parameters object.
+        """
+
+        # Build each agent parameters object from the dictionary, excluding the combined
+        # agents update schedule representation
+        agents_params = {}
+        for agent_name, agent_params_dict in params_dict.items():
+            if agent_name == "agents_update_repr":
+                continue
+            class_name: AgentParameters = cls._extract_param_class_from_dict(
+                agent_params_dict
+            )
+            agent_params = class_name.from_dict(agent_params_dict)
+            agents_params[agent_name] = agent_params
+
+        agents_params_obj = cls(**agents_params)
+
+        return agents_params_obj
 
     def _agents_update_repr(self) -> str:
         """Return a string representation of the combined agents update schedule.

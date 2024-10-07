@@ -180,8 +180,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
         self,
         analysers: list[str | type[PureTextRolloutAnalyser]],
         model_name: str,
+        *,
         overwrite=False,
         use_tqdm=True,
+        dry_run=False,
     ):
         """Run the given analysers on the rollouts of the experiment.
 
@@ -194,10 +196,12 @@ class PureTextEiTrainer(PureTextRlTrainer):
             itself.
         model_name : str
             The name of the model to use for the analysis.
-        overwrite : bool, optional
+        overwrite : bool, default=False
             Whether to overwrite the existing analysis files, if they exist.
-        use_tqdm : bool, optional
+        use_tqdm : bool, default=True
             Whether create a progress bar for the analysis.
+        dry_run : bool, default=False
+            Whether to do a dry run using a dummy API, not saving the results.
         """
 
         for analyser_cls in analysers:
@@ -217,6 +221,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 settings=self.settings,
                 protocol_handler=self.scenario_instance.protocol_handler,
                 model_name=model_name,
+                use_dummy_api=dry_run,
             )
 
             analysis_dir = self.checkpoint_analysis_dir.joinpath(analyser_cls.name)
@@ -241,7 +246,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
                         self.settings.logger.warning(
                             f"Overwriting existing analysis file {analysis_file!r}"
                         )
-                    analysis_file.unlink()
+                    if not dry_run:
+                        analysis_file.unlink()
 
                 try:
                     rollouts = self.load_rollouts(iteration)
@@ -253,8 +259,9 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 evaluations = analyser.forward(rollouts, use_tqdm=use_tqdm)
 
-                with open(analysis_file, "wb") as f:
-                    pickle.dump(evaluations, f)
+                if not dry_run:
+                    with open(analysis_file, "wb") as f:
+                        pickle.dump(evaluations, f)
 
     def _get_log_stats(
         self,

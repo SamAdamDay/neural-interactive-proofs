@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import dataclasses
 import typing
-from typing import Union, Any
+from typing import Union, Any, TypeVar
 from types import UnionType
 
 try:
@@ -18,7 +18,52 @@ class ParameterValue(ABC):
 
     @abstractmethod
     def to_dict(self) -> dict:
-        """Convert the parameter value to a dictionary."""
+        """Serialise the parameter value to a dictionary.
+
+        The original parameter value must be able to be reconstructed from the
+        dictionary using the from_dict method.
+
+        The dictionary may contain a `_type` key, which is used to specify the exact
+        class of the parameter value.
+        """
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, params_dict: dict) -> "ParameterValue":
+        """Create a parameter value from a serialised dictionary."""
+
+    @classmethod
+    def _extract_param_class_from_dict(
+        cls, param_dict: dict
+    ) -> type["ParameterValue"] | None:
+        """Try to get the parameter class from a dictionary of serialised parameters.
+
+        This method removes the `_type` key from the dictionary.
+
+        Parameters
+        ----------
+        param_dict : dict
+            A dictionary of parameters, which may have come from a `to_dict` method.
+            This dictionary may contain a `_type` key, which is removed.
+
+        Returns
+        -------
+        param_class : type[ParameterValue] | None
+            The class of the parameter, if it can be determined.
+
+        Raises
+        ------
+        ValueError
+            If the class specified in the dictionary is not a valid parameter class.
+        """
+
+        try:
+            class_name = param_dict.pop("_type")
+        except KeyError:
+            return None
+
+        # Get the class of the parameter
+        return get_parameter_or_parameter_value_class(class_name)
 
 
 class BaseParameters(ParameterValue, ABC):
@@ -46,7 +91,70 @@ class BaseParameters(ParameterValue, ABC):
                 value = value.to_dict()
             params_dict[field.name] = value
 
+        params_dict["_type"] = type(self).__name__
+
         return params_dict
+
+    @classmethod
+    def from_dict(cls, params_dict: dict) -> "BaseParameters":
+        """Create a parameters object from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the parameters.
+
+        Returns
+        -------
+        params : BaseParameters
+            The parameters object.
+        """
+
+        # Call `from_dict` on all fields that are ParameterValues
+        for param in dataclasses.fields(cls):
+
+            param_value = params_dict.get(param.name, None)
+
+            # Skip if the parameter is not a dictionary or is None
+            if not isinstance(param_value, dict) or param_value is None:
+                continue
+
+            # Make sure the field is a Union and contains a `ParameterValue` subclass
+            origin_type = typing.get_origin(param.type)
+            if origin_type is not Union and origin_type is not UnionType:
+                continue
+            for union_element in typing.get_args(param.type):
+                try:
+                    if issubclass(union_element, ParameterValue):
+                        param_base_class = union_element
+                        break
+                except TypeError:
+                    continue
+            else:
+                continue
+
+            # Get the specific class name of the parameter. TODO: It would be better if
+            # this class could be inferred from the other parameters, rather than being
+            # specified in the dictionary.
+            class_name = cls._extract_param_class_from_dict(param_value)
+
+            if class_name is None:
+                param_class = param_base_class
+
+            else:
+
+                # Make sure the class is a subclass of the base class
+                if not issubclass(param_class, param_base_class):
+                    raise ValueError(
+                        f"Invalid parameter class: {class_name!r} is not a subclass of "
+                        f"{param_base_class}"
+                    )
+
+            # Replace the dictionary with the `ParameterValue` subclass
+            params_dict[param.name] = param_class.from_dict(param_value)
+
+        # Create the parameters object from the modified dictionary
+        return cls(**params_dict)
 
     def get(self, address: str) -> Any:
         """Get a value from the parameters object using a dot-separated address.
@@ -110,6 +218,75 @@ class BaseParameters(ParameterValue, ABC):
                 setattr(self, param.name, param_class())
             else:
                 setattr(self, param.name, param_class(**param_value))
+
+
+PARAMETER_VALUE_CLASSES: dict[str, type[ParameterValue]] = {}
+PARAMETER_CLASSES: dict[str, type[BaseParameters]] = {}
+
+V = TypeVar("V", bound=ParameterValue)
+P = TypeVar("P", bound=BaseParameters)
+
+
+def register_parameter_value_class(cls: type[V]) -> type[V]:
+    """Decorator to register a parameter value class."""
+
+    PARAMETER_VALUE_CLASSES[cls.__name__] = cls
+    return cls
+
+
+def register_parameter_class(cls: type[P]) -> type[P]:
+    """Decorator to register a parameter class."""
+
+    PARAMETER_CLASSES[cls.__name__] = cls
+    return cls
+
+
+def get_parameter_or_parameter_value_class(
+    name: str,
+) -> type[ParameterValue] | type[BaseParameters]:
+    """Get a parameter class or parameter value class by name.
+
+    If the class is not found in the parameter value classes, it is assumed to be a
+    parameter class.
+
+    Parameters
+    ----------
+    name : str
+        The name of the class.
+
+    Returns
+    -------
+    cls : type[ParameterValue] | type[BaseParameters]
+        The class of the parameter.
+
+    Raises
+    ------
+    ValueError
+        If the class is not found.
+    """
+    try:
+        return PARAMETER_VALUE_CLASSES[name]
+    except KeyError:
+        try:
+            return PARAMETER_CLASSES[name]
+        except KeyError:
+            raise ValueError(f"Parameter class {name!r} not found.")
+
+
+def get_parameter_class(name: str) -> type[BaseParameters]:
+    """Get a parameter class by name.
+
+    Parameters
+    ----------
+    name : str
+        The name of the class.
+
+    Returns
+    -------
+    cls : type[BaseParameters]
+        The class of the parameter.
+    """
+    return PARAMETER_CLASSES[name]
 
 
 @dataclass

@@ -53,9 +53,16 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         model_name: str,
+        *,
+        use_dummy_api: bool = False,
     ):
-        super().__init__(params, settings, protocol_handler)
-        self.model_name = model_name
+        super().__init__(
+            params=params,
+            settings=settings,
+            protocol_handler=protocol_handler,
+            model_name=model_name,
+            use_dummy_api=use_dummy_api,
+        )
 
         if params.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
             raise NotImplementedError(
@@ -286,7 +293,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
             The reason for finishing the generation.
         """
 
-        if self.params.ei.prover_watchdog_use_dummy_api:
+        if self.use_dummy_api:
             output_type = randrange(2)
             if output_type == 0:
                 return "Yes", "stop"
