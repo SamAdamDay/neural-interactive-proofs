@@ -15,6 +15,6 @@ if __name__ == "__main__":
         dataset="test",
     )
     for dataset_name in DATASET_WRAPPER_CLASSES.keys():
-        print(f"Downloading dataset {dataset_name}...")
+        print(f"Downloading dataset {dataset_name}...")  # noqa: T201
         params.dataset = dataset_name
         prepare_experiment(params=params, ignore_cache=True)

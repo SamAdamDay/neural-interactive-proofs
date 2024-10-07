@@ -21,9 +21,6 @@ class AgentUpdateSchedule(ParameterValue, ABC):
     the optimizer. On all other iterations, the agent is frozen and does not update.
     """
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}()"
-
     def to_dict(self) -> dict:
 
         as_dict = dict(_type=type(self).__name__)

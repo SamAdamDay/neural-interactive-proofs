@@ -30,9 +30,7 @@ import torch
 import wandb
 
 from wandb import AlertLevel as WandbAlertLevel
-import wandb
 
-from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
@@ -706,9 +704,14 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         )
 
         if fine_grained_global_tqdm:
-            global_tqdm_step_fn = lambda: global_tqdm.update(1)
+
+            def global_tqdm_step_fn():
+                global_tqdm.update(1)
+
         else:
-            global_tqdm_step_fn = lambda: ...
+
+            def global_tqdm_step_fn():
+                pass
 
         # Run the experiment
         self.experiment_fn(

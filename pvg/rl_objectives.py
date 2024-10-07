@@ -682,7 +682,7 @@ class SpgLoss(ClipPPOLossImproved):
                 score_coefficient = {}
                 pg_coefficient = {}
 
-                for l in self.leaders[j]:
+                for l in self.leaders[j]:  # noqa E741
                     p = jacobian_terms(i, l)
 
                     # Score coefficient
