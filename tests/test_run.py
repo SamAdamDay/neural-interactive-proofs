@@ -83,6 +83,13 @@ param_specs = [
     # Test the zero-knowledge protocols
     {
         "zero_knowledge": [True],
+        "protocol": [
+            InteractionProtocolType.PVG,
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+            InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
+        ],
     },
     # Test manual architectures
     {
