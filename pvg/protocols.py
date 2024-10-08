@@ -1579,8 +1579,13 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         reward[..., self.adversarial_verifier_index] = -simulator_reward
 
         # Prover rewards
+        expanded_simulator_reward = repeat(
+            simulator_reward,
+            "... -> ... agent",
+            agent=len(self.base_protocol.prover_names),
+        )
         reward[..., prover_indices] += (
-            self.prover_zk_loss_coefficient * simulator_reward
+            self.prover_zk_loss_coefficient * expanded_simulator_reward
         )
 
         return verifier_decision_made, verifier_decision, reward
