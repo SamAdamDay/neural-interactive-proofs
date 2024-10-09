@@ -303,10 +303,10 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
             - "y" (... 1): The target value.
             - "round" (...): The current round.
-            - ("agents", "decision") (... agent): The decision of each agent.
             - "done" (...): A boolean mask indicating whether the episode is done.
             - "terminated" (...): A boolean mask indicating whether the episode has been
                 terminated.
+            - ("agents", "decision") (... agent): The decision of each agent.
             - ("agents", "main_message_logits") (... agent channel position logit): The
                 main message logits for each agent.
             - ("agents", "decision_logits") (... agent 3): The decision logits for each
