@@ -290,7 +290,12 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     def step_interaction_protocol(
         self,
         env_td: TensorDictBase | NestedArrayDict,
-    ) -> tuple[Bool[Tensor, "..."], Bool[Tensor, "..."], Float[Tensor, "... agent"]]:
+    ) -> tuple[
+        Bool[Tensor, "..."],
+        Bool[Tensor, "... agent"],
+        Bool[Tensor, "..."],
+        Float[Tensor, "... agent"],
+    ]:
         """Take a step in the interaction protocol.
 
         Computes the done signals and reward. Used in the `_step` method of the environment.
@@ -304,6 +309,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             - "y" (... 1): The target value.
             - "round" (...): The current round.
             - "done" (...): A boolean mask indicating whether the episode is done.
+            - ("agents", "done") (... agent): A boolean mask indicating whether each
+                agent is done.
             - "terminated" (...): A boolean mask indicating whether the episode has been
                 terminated.
             - ("agents", "decision") (... agent): The decision of each agent.
@@ -314,15 +321,27 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         Returns
         -------
-        done : Bool[Tensor, "..."]
-            A boolean mask indicating whether the episode is done because the verifier
-            has guessed.
+        shared_done : Bool[Tensor, "..."]
+            A boolean mask indicating whether the episode is done because all relevant
+            agents have made a decision.
+        agent_done : Bool[Tensor, "... agent"]
+            A boolean mask indicating whether each agent is done, because they have made
+            a decision. This can only be `True` for agents that can make decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
         """
+
+        y: Int[Tensor, "... 1"] = env_td["y"]
+        round: Int[Tensor, "..."] = env_td["round"]
+        decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
+
+        if isinstance(env_td, NestedArrayDict):
+            y = torch.from_numpy(y)
+            round = torch.from_numpy(round)
+            decision = torch.from_numpy(decision)
 
         # Create a copy of the environment tensor dict with the agents restricted to the
         # base protocol agents
@@ -332,8 +351,36 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         ]
 
         # Get the base protocol rewards
-        verifier_decision_made, verifier_decision, reward = (
+        shared_done, agent_done, terminated, reward = (
             self.base_protocol.step_interaction_protocol(env_td_restricted)
+        )
+
+        # Get the mask of the batch items where the adversarial verifier can make a
+        # guess
+        adversarial_verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(
+            round
+        )
+
+        # Determine if the adversarial verifier has made a decision
+        adversarial_verifier_decision_made = self._get_agent_decision_made_mask(
+            round=round,
+            y=y,
+            guess_mask=adversarial_verifier_guess_mask,
+            decision=decision[..., self.adversarial_verifier_index],
+        )
+
+        # The episode is only done if the adversarial verifier has made a decision
+        shared_done = shared_done & adversarial_verifier_decision_made
+
+        # Set the verifier and adversarial verifier dones to their respective values,
+        # and set the dones for the other agents to the shared done signal
+        verifier_done = agent_done[..., self.verifier_index]
+        agent_done = repeat(
+            shared_done, "... -> ... agent", agent=len(self.agent_names)
+        )
+        agent_done[..., self.verifier_index] = verifier_done
+        agent_done[..., self.adversarial_verifier_index] = (
+            adversarial_verifier_decision_made
         )
 
         # Expand the reward tensor to include the new agents
@@ -345,8 +392,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             ],
             dim=-1,
         )
-
-        round = env_td["round"]
 
         # Get the main message logits and decision logits. Possibly we should also
         # include the additional linear message logits? #TODO-LH
@@ -454,7 +499,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             self.prover_zk_loss_coefficient * expanded_simulator_reward
         )
 
-        return verifier_decision_made, verifier_decision, reward
+        return shared_done, agent_done, terminated, reward
 
     # Eventually this should dynamically update the coefficient to allow for
     # lexicographic optimisation, as in https://www.ijcai.org/proceedings/2022/0476.pdf

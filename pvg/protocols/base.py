@@ -274,7 +274,12 @@ class ProtocolHandler(ABC):
     def step_interaction_protocol(
         self,
         env_td: TensorDictBase | NestedArrayDict,
-    ) -> tuple[Bool[Tensor, "..."], Bool[Tensor, "..."], Float[Tensor, "... agent"]]:
+    ) -> tuple[
+        Bool[Tensor, "..."],
+        Bool[Tensor, "... agent"],
+        Bool[Tensor, "..."],
+        Float[Tensor, "... agent"],
+    ]:
         """Take a step in the interaction protocol.
 
         Computes the done signals and reward.
@@ -289,15 +294,60 @@ class ProtocolHandler(ABC):
 
         Returns
         -------
-        done : Bool[Tensor, "..."]
-            A boolean mask indicating whether the episode is done because the verifier
-            has guessed.
+        shared_done : Bool[Tensor, "..."]
+            A boolean mask indicating whether the episode is done because all relevant
+            agents have made a decision.
+        agent_done : Bool[Tensor, "... agent"]
+            A boolean mask indicating whether each agent is done, because they have made
+            a decision. This is the same as `shared_done` for agents which don't make
+            decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
         """
+
+    def _get_agent_decision_made_mask(
+        self,
+        round: Int[Tensor, "..."],
+        y: Int[Tensor, "... 1"],
+        guess_mask: Bool[Tensor, "..."],
+        decision: Int[Tensor, "..."],
+        *,
+        follow_force_guess: bool = True,
+    ) -> Bool[Tensor, "..."]:
+        """Get a mask indicating whether an agent has made a decision
+
+        Parameters
+        ----------
+        round : Int[Tensor, "..."]
+            The round number.
+        y : Int[Tensor, "... 1"]
+            The target value.
+        guess_mask : Bool[Tensor, "..."]
+            A mask indicating whether the agent is allowed to make a guess.
+        decision : Int[Tensor, "..."]
+            The decision output of the agent.
+        follow_force_guess : bool, default=True
+            Whether to follow the `force_guess` parameter, which forces the agent to
+            make a certain decision.
+        """
+
+        if follow_force_guess:
+            if self.params.protocol_common.force_guess == Guess.ONE:
+                decision = torch.ones_like(decision)
+            elif self.params.protocol_common.force_guess == Guess.ZERO:
+                decision = torch.zeros_like(decision)
+            elif self.params.protocol_common.force_guess == Guess.Y:
+                decision = y.squeeze(-1)
+
+        verifier_decision_made = guess_mask & (decision != 2)
+        verifier_decision_made = verifier_decision_made & (
+            round >= self.min_message_rounds
+        )
+
+        return verifier_decision_made
 
 
 class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
@@ -323,6 +373,11 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         super().__init__(params, settings)
 
         self.verifier_name = verifier_name
+
+    @property
+    def verifier_index(self) -> int:
+        """The index of the verifier in the list of agent names."""
+        return self.agent_names.index(self.verifier_name)
 
     @property
     def verifier_names(self) -> list[str]:
@@ -356,7 +411,12 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     def step_interaction_protocol(
         self,
         env_td: TensorDictBase | NestedArrayDict,
-    ) -> tuple[Bool[Tensor, "..."], Bool[Tensor, "..."], Float[Tensor, "... agent"]]:
+    ) -> tuple[
+        Bool[Tensor, "..."],
+        Bool[Tensor, "... agent"],
+        Bool[Tensor, "..."],
+        Float[Tensor, "... agent"],
+    ]:
         """Take a step in the interaction protocol.
 
         Computes the done signals and reward.
@@ -373,14 +433,20 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             - "round" (...): The current round.
             - ("agents", "decision") (... agent): The decision of each agent.
             - "done" (...): A boolean mask indicating whether the episode is done.
+            - ("agents", "done") (... agent): A boolean mask indicating whether each
+                agent is done.
             - "terminated" (...): A boolean mask indicating whether the episode has been
                 terminated.
 
         Returns
         -------
-        done : Bool[Tensor, "..."]
-            A boolean mask indicating whether the episode is done because the verifier
-            has guessed.
+        shared_done : Bool[Tensor, "..."]
+            A boolean mask indicating whether the episode is done because all relevant
+            agents have made a decision.
+        agent_done : Bool[Tensor, "... agent"]
+            A boolean mask indicating whether each agent is done, because they have made
+            a decision. This is the same as `shared_done` for agents which don't make
+            decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
             the max number of rounds has been reached and the verifier has not guessed.
@@ -393,53 +459,44 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         y: Int[Tensor, "... 1"] = env_td["y"]
         round: Int[Tensor, "..."] = env_td["round"]
         decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
-        done: Bool[Tensor, "..."] = env_td["done"]
+        shared_done: Bool[Tensor, "..."] = env_td["done"]
+        agent_done: Bool[Tensor, "... agent"] = env_td["agents", "done"]
         terminated: Bool[Tensor, "..."] = env_td["terminated"]
 
         if isinstance(env_td, NestedArrayDict):
             y = torch.from_numpy(y)
             round = torch.from_numpy(round)
             decision = torch.from_numpy(decision)
-            done = torch.from_numpy(done)
+            shared_done = torch.from_numpy(shared_done)
             terminated = torch.from_numpy(terminated)
 
-        # Get the mask of the batch items where the (non-adversarial) verifier can make
-        # a guess
+        # Get the mask of the batch items where the verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds(round)
 
-        # If the verifier has made a guess we terminate the episode. For now we assume
-        # that the primary verifier controls when an episode is done, though eventually
-        # we should generalise this to allow for different dones per agent so that
-        # channels can be terminated independently.
-        verifier_indices = (
-            ...,
-            self.agent_names.index("verifier"),
+        # Determine if the verifier has made a decision
+        verifier_decision_made = self._get_agent_decision_made_mask(
+            round=round,
+            y=y,
+            guess_mask=verifier_guess_mask,
+            decision=decision[..., self.verifier_index],
         )
 
-        if self.params.protocol_common.force_guess == Guess.ONE:
-            decision[verifier_indices] = torch.ones_like(decision[verifier_indices])
-        elif self.params.protocol_common.force_guess == Guess.ZERO:
-            decision[verifier_indices] = torch.zeros_like(decision[verifier_indices])
-        elif self.params.protocol_common.force_guess == Guess.Y:
-            decision[verifier_indices] = env_td["y"].squeeze()
-
-        verifier_decision_made = verifier_guess_mask & (decision[verifier_indices] != 2)
-        verifier_decision_made = verifier_decision_made & (
-            round >= self.min_message_rounds
-        )
-        done = done | verifier_decision_made
+        # When the verifier has made a decision, the shared done is set to `True`.
+        shared_done = shared_done | verifier_decision_made
 
         # Compute the reward for the verifier when they make a guess
-        verifier_index = (..., self.agent_names.index("verifier"))
+        verifier_idx = (..., self.verifier_index)
         reward = torch.empty(
-            (*done.shape, len(self.agent_names)), dtype=torch.float, device=done.device
+            (*shared_done.shape, len(self.agent_names)),
+            dtype=torch.float,
+            device=shared_done.device,
         )
-        reward[verifier_index] = torch.zeros_like(done, dtype=torch.float)
-        reward[verifier_index][
-            verifier_decision_made & (decision[verifier_index] == y.squeeze())
+        reward[verifier_idx] = torch.zeros_like(shared_done, dtype=torch.float)
+        reward[verifier_idx][
+            verifier_decision_made & (decision[verifier_idx] == y.squeeze(-1))
         ] = protocol_params.verifier_reward
-        reward[verifier_index][
-            verifier_decision_made & (decision[verifier_index] != y.squeeze())
+        reward[verifier_idx][
+            verifier_decision_made & (decision[verifier_idx] != y.squeeze(-1))
         ] = protocol_params.verifier_incorrect_penalty
 
         # If we reach the end of the episode and the verifier has not made a guess,
@@ -447,22 +504,25 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         terminated = terminated | (
             (round >= self.max_message_rounds - 1) & ~verifier_decision_made
         )
-        reward[verifier_index][
+        reward[verifier_idx][
             (round >= self.max_message_rounds - 1) & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
         # reward for continuing
-        reward[verifier_index][
-            verifier_guess_mask & ~done & ~terminated
+        reward[verifier_idx][
+            verifier_guess_mask & ~shared_done & ~terminated
         ] = protocol_params.verifier_no_guess_reward
 
         # Compute the rewards for the other agents and add them
         self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_index], reward
+            verifier_decision_made, decision[verifier_idx], reward
         )
 
-        return done, terminated, reward
+        # The agent-specific done signal is the same as the shared done signal
+        agent_done = agent_done | shared_done[..., None]
+
+        return shared_done, agent_done, terminated, reward
 
     @abstractmethod
     def _include_prover_rewards(
@@ -638,9 +698,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             Which batch items the verifier can make a guess in.
         """
         active_agents_mask = self.get_active_agents_mask_from_rounds(round)
-        verifier_active_mask = active_agents_mask[
-            ..., self.agent_names.index("verifier"), :
-        ]
+        verifier_active_mask = active_agents_mask[..., self.verifier_index, :]
         return verifier_active_mask.any(dim=-1)
 
     @cached_property
