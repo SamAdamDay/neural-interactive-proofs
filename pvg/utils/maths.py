@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 from pvg.parameters import IhvpVariant
 
@@ -363,3 +363,42 @@ def mean_episode_reward(
     episode_rewards = episode_rewards[not_first_done_mask]
 
     return episode_rewards.mean().item()
+
+
+def minstd_generate_pseudo_random_sequence(
+    seed: Int[Tensor, "..."], length: int
+) -> Int[Tensor, "... length"]:
+    """Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
+
+    The MINSTD algorithm is a simple linear congruential generator (LCG) that is defined
+    by the following recurrence relation:
+
+        x_{n+1} = (48271 * x_n) % 2147483647
+
+    where x_0 is the seed value.
+
+    Parameters
+    ----------
+    seed : Int[Tensor, ...]
+        The seed value for the pseudo-random number generator. This is a tensor of
+        arbitrary shape.
+    length : int
+        The length of the pseudo-random sequence to generate.
+
+    Returns
+    -------
+    pseudo_random_sequence : Int[Tensor, "... length"]
+        The pseudo-random sequence of numbers (x_1, \ldots, x_{length}) generated using
+        the MINSTD algorithm. An extra dimension is added to the output tensor to
+        represent the sequence length.
+    """
+
+    pseudo_random_sequence = torch.empty(
+        (*seed.shape, length), dtype=seed.dtype, device=seed.device
+    )
+
+    for i in range(length):
+        seed = (48271 * seed) % 2147483647
+        pseudo_random_sequence[..., i] = seed
+
+    return pseudo_random_sequence

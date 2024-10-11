@@ -306,6 +306,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             * 1: The verifier can only decide to continue interacting.
             * 2: The verifier can only make a guess.
         - `x`: The message history.
+        - `seed`: A shared seed for the environment.
         - `message`: The next message.
         - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
@@ -333,6 +334,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             x=UnboundedContinuousTensorSpec(
                 shape=self.message_history_shape,
                 dtype=torch.float,
+                device=self.device,
+            ),
+            seed=DiscreteTensorSpec(
+                2**16,
+                shape=(self.num_envs,),
+                dtype=torch.long,
                 device=self.device,
             ),
             message_history=BinaryDiscreteTensorSpec(
@@ -648,14 +655,17 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # ... round channel position {message_shape_str}
         message_history = env_td.get(message_history_key)
         round: Int[Tensor, "..."] = env_td.get("round")
+        seed: Int[Tensor, "..."] = env_td.get("seed")
         message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
         )
 
         # Get the mask for the active agents per channel in the current round
         # (... agent channel)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
-            round
+        active_agents_mask = (
+            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+                round, seed
+            )
         )
 
         # Sum up the messages from the agents whose turn it is. If two agents select the
@@ -770,6 +780,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The reset environment tensordict.
         """
 
+        env_td["seed"][mask] = torch.randint(
+            0, self.observation_spec["seed"].n, (mask.sum().item(),), device=self.device
+        )
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
         env_td["message_history"][mask] = torch.zeros_like(
             env_td["message_history"][mask]
@@ -805,6 +818,7 @@ class PureTextEnvironment(Environment, ABC):
         """The specification for the observation keys."""
         return CompositeArraySpec(
             round=IntArraySpec(*self.batch_size, "batch"),
+            seed=IntArraySpec(*self.batch_size, "batch"),
             message_history=StringArraySpec(
                 (
                     *self.batch_size,
@@ -1104,6 +1118,7 @@ class PureTextEnvironment(Environment, ABC):
         """
 
         env_state["y"][mask] = data_batch["y"]
+        env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
         env_state["round"][mask] = 0
         env_state["done"][mask] = False

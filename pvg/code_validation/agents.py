@@ -813,6 +813,7 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
             The input data. A nested dictionary of arrays with keys:
 
             - "round" (...): The current round number.
+            - "seed" (...): The per-environment seed.
             - "message_history" (... round channel): The history of messages exchanged
                 between the agents in each channel.
             - "question" (...): The problem text.
@@ -838,8 +839,10 @@ class CodeValidationCombinedWholeAgent(CombinedWhole):
         """
 
         # Get the active agent mask for the batch
-        active_agent_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
-            from_numpy(data["round"])
+        active_agent_mask = (
+            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+                from_numpy(data["round"]), from_numpy(data["seed"])
+            )
         )
         active_agent_mask: Bool[np.ndarray, "... agent channel"] = (
             active_agent_mask.cpu().detach().numpy()

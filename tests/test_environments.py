@@ -136,6 +136,7 @@ def test_graph_isomorphism_environment_step():
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
+            seed=torch.zeros(batch_size, dtype=torch.int64),
             message_history=torch.zeros(
                 batch_size,
                 max_message_rounds,
@@ -329,6 +330,7 @@ def test_image_classification_environment_step():
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
+            seed=torch.zeros(batch_size, dtype=torch.int64),
             message_history=torch.zeros(
                 batch_size,
                 max_message_rounds,

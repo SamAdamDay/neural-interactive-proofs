@@ -44,6 +44,7 @@ from pvg.protocols.base import (
     DeterministicSingleVerifierProtocolHandler,
 )
 from pvg.protocols.registry import register_protocol_handler
+from pvg.utils.maths import minstd_generate_pseudo_random_sequence
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -301,8 +302,8 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     min_message_rounds = 0
     max_verifier_turns = 1
 
-    def get_active_agents_mask_from_rounds(
-        self, round: Int[Tensor, "..."]
+    def get_active_agents_mask_from_rounds_and_seed(
+        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "... agent channel"]:
         """Get a boolean mask indicating which agents are active in a given round.
 
@@ -312,13 +313,26 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
         ----------
         round : Int[Tensor, "..."]
             The round of the protocol.
+        seed : Int[Tensor, "..."]
+            The per-environment seed.
 
         Returns
         -------
         active_agents : Bool[Tensor, "... agent channel"]
             A boolean mask indicating which agents are active in the given round.
         """
-        prover1_first = torch.randint_like(round, 2).bool()
+
+        # Generate a random sequence for each batch element
+        random_sequence = minstd_generate_pseudo_random_sequence(
+            seed, self.max_message_rounds
+        )
+
+        # Use the round-th element of the random sequence to determine which prover goes
+        # first
+        prover1_first = (
+            random_sequence.gather(-1, round[..., None]).squeeze(-1) % 2 == 0
+        )
+
         return rearrange(
             [
                 (round % 2 == 0) & prover1_first,
