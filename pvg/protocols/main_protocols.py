@@ -146,6 +146,11 @@ class AdpProtocol(PvgProtocol):
 class DebateProtocol(PvgProtocol):
     """Implementation of the Debate protocol[^1].
 
+    The protocol consists of two provers and a verifier. The provers debate a question
+    with the verifier, who decides which prover is correct. "prover0" attempts to
+    convince the verifier of a negative answer, while "prover1" attempts to convince the
+    verifier of a positive answer.
+
     Parameters
     ----------
     params : Parameters
@@ -264,6 +269,22 @@ class DebateProtocol(PvgProtocol):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
+        """Include rewards for the provers based on the verifier's decision.
+
+        Normally, "prover0" is rewarded if the verifier decides 0, and "prover1" is
+        rewarded if the verifier decides 1.
+
+        If `shared_reward` is set, both provers get the same reward as the verifier.
+
+        Parameters
+        ----------
+        verifier_decision_made : Bool[Tensor, "..."]
+            A boolean mask indicating whether the verifier has made a decision.
+        verifier_decision : Int[Tensor, "..."]
+            The verifier's decision.
+        reward : Float[Tensor, "... agent"]
+            The reward tensor to update. This will be updated in-place.
+        """
         protocol_params = self.params.protocol_common
 
         if protocol_params.shared_reward:

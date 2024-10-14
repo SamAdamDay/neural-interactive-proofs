@@ -116,25 +116,13 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             return self.base_model_name
 
     @property
-    def prompt_subdirectory(self) -> str:
-        """The sub-directory for the prompt templates, specific to the protocol."""
+    def system_prompt_directory(self) -> str:
+        """The dot-separated path to the directory containing the system prompts."""
 
-        interaction_protocol = self.params.interaction_protocol
-
-        if interaction_protocol == InteractionProtocolType.PVG:
-            return "nip"
-        elif interaction_protocol == InteractionProtocolType.ABSTRACT_DECISION_PROBLEM:
-            return "adp"
-        elif interaction_protocol == InteractionProtocolType.DEBATE:
-            return "debate"
-        elif interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
-            return "mac"
-        elif interaction_protocol == InteractionProtocolType.MNIP:
-            return "mnip"
-        else:
-            raise NotImplementedError(
-                f"Prompt templates not implemented for {interaction_protocol}"
-            )
+        return (
+            f"pvg.code_validation.prompt_templates.system_prompts"
+            f".{self.params.interaction_protocol!s}"
+        )
 
     def __init__(
         self,
@@ -155,15 +143,16 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         load_env_once()
 
         # Load the system prompt template
-        prompt_template_traversable = importlib.resources.files(
-            f"pvg.code_validation.prompt_templates.{self.prompt_subdirectory}"
-        )
-        if self.is_verifier:
-            template_filename = "verifier_system_prompt.txt"
-        elif self.is_prover:
-            template_filename = "prover_system_prompt.txt"
-        else:
-            raise ValueError(f"Unable to get system prompt for agent {agent_name!r}")
+        try:
+            prompt_template_traversable = importlib.resources.files(
+                self.system_prompt_directory
+            )
+        except ModuleNotFoundError:
+            raise NotImplementedError(
+                f"System prompt directory for protocol "
+                f"{self.params.interaction_protocol!s} not found."
+            )
+        template_filename = f"{agent_name}.txt"
         self.system_template = Template(
             prompt_template_traversable.joinpath(template_filename).read_text()
         )
@@ -570,7 +559,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             channel_name=channel_name,
             question=question,
             solution=solution,
-            verdict=self._get_verdict_string(verdict),
         )
 
         def try_generation(
@@ -671,41 +659,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
 
-    def _get_verdict_string(
-        self, dataset_verdict: int
-    ) -> Literal["accept", "reject", ""]:
-        """Get the verdict the agent is arguing for as a string.
-
-        This is based on the agent's role, the interaction protocol and the "verdict"
-        set in the dataset.
-
-        Parameters
-        ----------
-        dataset_verdict : int
-            The verdict value set in the dataset. For now we don't make use of arbitrary
-            verdict that has been generated and assume that the (first) prover always
-            argues that the solution is correct.
-
-        Returns
-        -------
-        string_verdict : str
-            The verdict string which can be "accept", "reject", or an empty string.
-        """
-
-        if self.agent_name == "verifier":
-            return ""
-
-        if self.params.interaction_protocol in [
-            InteractionProtocolType.DEBATE,
-            InteractionProtocolType.MERLIN_ARTHUR,
-        ]:
-            if self.agent_name == "prover0":
-                return "accept"
-            else:
-                return "reject"
-
-        return "accept"
-
     def _build_chat_messages_prompt(
         self,
         message_history: NDArray,
@@ -753,7 +706,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         system_prompt = self.system_template.substitute(
             question=question,
             solution=solution,
-            verdict=self._get_verdict_string(verdict),
             max_questions=self.protocol_handler.max_verifier_turns - 1,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
