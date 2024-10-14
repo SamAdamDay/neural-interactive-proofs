@@ -7,7 +7,7 @@ zero-knowledge. It does this by creating a child protocol handler instance.
 from functools import cached_property
 
 import torch
-from torch import Tensor
+from torch import Tensor, as_tensor
 
 from tensordict.tensordict import TensorDictBase
 
@@ -364,24 +364,16 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             The reward for the agents.
         """
 
-        y: Int[Tensor, "... 1"] = env_td["y"]
-        round: Int[Tensor, "..."] = env_td["round"]
-        seed: Int[Tensor, "..."] = env_td["seed"]
-        decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
-        main_message_logits: Float[Tensor, "... agent channel position logit"] = env_td[
-            "agents", "main_message_logits"
-        ]
-        decision_logits: Float[Tensor, "... agent 3"] = env_td[
-            "agents", "decision_logits"
-        ]
-
-        if isinstance(env_td, NestedArrayDict):
-            y = torch.from_numpy(y)
-            round = torch.from_numpy(round)
-            seed = torch.from_numpy(seed)
-            decision = torch.from_numpy(decision)
-            main_message_logits = torch.from_numpy(main_message_logits)
-            decision_logits = torch.from_numpy(decision_logits)
+        y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
+        round: Int[Tensor, "..."] = as_tensor(env_td["round"])
+        seed: Int[Tensor, "..."] = as_tensor(env_td["seed"])
+        decision: Int[Tensor, "... agent"] = as_tensor(env_td["agents", "decision"])
+        main_message_logits: Float[Tensor, "... agent channel position logit"] = (
+            as_tensor(env_td["agents", "main_message_logits"])
+        )
+        decision_logits: Float[Tensor, "... agent 3"] = as_tensor(
+            env_td["agents", "decision_logits"]
+        )
 
         # Create a copy of the environment tensor dict with the agents restricted to the
         # base protocol agents

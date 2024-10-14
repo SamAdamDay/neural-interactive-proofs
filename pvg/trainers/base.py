@@ -85,7 +85,7 @@ class Trainer(ABC):
 
         # Try to restore the experiment state from a checkpoint. If no checkpoint is
         # available, initialise the state.
-        if settings.do_not_load_checkpoint:
+        if settings.do_not_load_checkpoint or settings.test_run:
             self._initialise_state()
         else:
             try:
@@ -109,6 +109,10 @@ class Trainer(ABC):
         log : bool, default=True
             Whether to log the checkpointing.
         """
+
+        # If we are running a test run, we don't want to save the rollouts
+        if self.settings.test_run:
+            return
 
         # Create the checkpoint directory if it doesn't exist
         self.checkpoint_base_dir.mkdir(parents=True, exist_ok=True)

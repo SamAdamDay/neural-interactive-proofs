@@ -61,7 +61,7 @@ class ExperimentSettings:
         The number of threads to use for saving the memory-mapped tensordict.
     num_rollout_workers : int, default=4
         The number of workers to use for collecting rollout samples, when this is done
-        in parallel.
+        in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training. When the device if the

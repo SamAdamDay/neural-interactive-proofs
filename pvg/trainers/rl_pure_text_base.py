@@ -1,7 +1,7 @@
 """Base classes for RL trainers for text-based environments which only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal
+from typing import Optional, Literal, Iterable
 from itertools import repeat
 from multiprocessing import Pool
 from functools import cached_property
@@ -144,13 +144,12 @@ class PureTextRlTrainer(Trainer, ABC):
             dataloader, default_batch_size=environment.batch_size[0]
         )
 
-        with Pool(self.settings.num_rollout_workers) as pool:
-            arg_iterator = (
-                (environment, self.max_message_rounds, self.combined_agent, data_batch)
-                for data_batch in truncated_iterator(data_cycler, environment.num_envs)
-            )
+        arg_iterator = (
+            (environment, self.max_message_rounds, self.combined_agent, data_batch)
+            for data_batch in truncated_iterator(data_cycler, environment.num_envs)
+        )
 
-            rollout_iterator = pool.imap_unordered(_sample_single_rollout, arg_iterator)
+        def get_rollouts(rollout_iterator: Iterable) -> list[NestedArrayDict]:
 
             if use_tqdm:
                 rollout_iterator = tqdm(
@@ -159,7 +158,21 @@ class PureTextRlTrainer(Trainer, ABC):
                     desc="Sampling rollouts",
                 )
 
-            rollout_list: list[NestedArrayDict] = list(rollout_iterator)
+            return list(rollout_iterator)
+
+        # When the number of rollout workers is set to 0, we sample the rollouts
+        # sequentially, without using a pool
+        if self.settings.num_rollout_workers == 0:
+            rollout_iterator = map(_sample_single_rollout, arg_iterator)
+            rollout_list = get_rollouts(rollout_iterator)
+
+        # If we have multiple workers, we can use a pool to parallelize the rollouts
+        else:
+            with Pool(self.settings.num_rollout_workers) as pool:
+                rollout_iterator = pool.imap_unordered(
+                    _sample_single_rollout, arg_iterator
+                )
+                rollout_list = get_rollouts(rollout_iterator)
 
         return stack_nested_array_dicts(rollout_list, dim=0)
 
@@ -175,6 +188,10 @@ class PureTextRlTrainer(Trainer, ABC):
         iteration : int | Literal["test"]
             The iteration number, or "test" if the rollouts are from the test set.
         """
+
+        # If we are running a test run, we don't want to save the rollouts
+        if self.settings.test_run:
+            return
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -194,6 +211,10 @@ class PureTextRlTrainer(Trainer, ABC):
         NestedArrayDict
             The rollouts.
         """
+
+        # If we are running a test run, we shouldn't be loading rollouts
+        if self.settings.test_run:
+            raise RuntimeError("Attempted to load rollouts in test run.")
 
         with open(self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt"), "rb") as f:
             return pickle.load(f)

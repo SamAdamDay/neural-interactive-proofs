@@ -12,7 +12,7 @@ from pvg import (
     RlTrainerParameters,
     ScenarioType,
     TrainerType,
-    EiParameters,
+    PureTextEiParameters,
     InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
@@ -48,7 +48,7 @@ param_grid = dict(
     debate_prover0_first=[True],
     use_prover_watchdog=[True],
     prover_watchdog_model_name=["gpt-4o-mini-2024-07-18"],
-    use_dummy_api=[True],
+    use_dummy_api=[False],
 )
 
 
@@ -104,7 +104,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
         ),
-        ei=EiParameters(
+        pure_text_ei=PureTextEiParameters(
             use_prover_watchdog=combo["use_prover_watchdog"],
             prover_watchdog_model_name=combo["prover_watchdog_model_name"],
             prover_watchdog_use_dummy_api=combo["use_dummy_api"],

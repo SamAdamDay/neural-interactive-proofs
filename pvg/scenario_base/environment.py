@@ -1050,7 +1050,7 @@ class PureTextEnvironment(Environment, ABC):
             self.state_spec.keys(recurse=True),
             self.done_spec.keys(recurse=True),
         ):
-            next_state[key] = state_env["next", key]
+            next_state[key] = state_env["next", *key]
 
         return next_state
 

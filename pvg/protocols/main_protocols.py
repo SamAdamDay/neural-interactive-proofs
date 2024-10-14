@@ -300,6 +300,11 @@ class DebateProtocol(PvgProtocol):
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """Implementation of the Merlin-Arthur protocol.
 
+    The protocol consists of two provers and a verifier. Only one prover is active at a
+    time, and this is determined randomly. "prover0" attempts to convince the verifier
+    of a negative answer, while "prover1" attempts to convince the verifier of a
+    positive answer.
+
     Parameters
     ----------
     params : Parameters

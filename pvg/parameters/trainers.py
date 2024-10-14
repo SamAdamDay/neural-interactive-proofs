@@ -222,7 +222,7 @@ class SoloAgentParameters(SubParameters):
 
 @register_parameter_class
 @dataclass
-class EiParameters(SubParameters):
+class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 
     Parameters

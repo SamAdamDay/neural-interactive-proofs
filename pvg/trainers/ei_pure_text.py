@@ -46,6 +46,8 @@ class PureTextEiTrainer(PureTextRlTrainer):
             "done",
         ] = "sample_rollouts"
 
+    state: State
+
     def train(self):
 
         rollouts: Optional[NestedArrayDict] = None
@@ -61,7 +63,9 @@ class PureTextEiTrainer(PureTextRlTrainer):
             if self.state.train_loop_stage == "sample_rollouts":
 
                 # Sample rollouts
-                rollouts = self.sample_rollouts(self.train_environment, use_tqdm=True)
+                rollouts = self.sample_rollouts(
+                    self.train_environment, use_tqdm=not self.settings.test_run
+                )
 
                 # Save the rollouts to the checkpoint directory
                 self.save_rollouts(rollouts, self.state.iteration)
@@ -354,6 +358,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
         # Select the rollouts with a high reward for the given agent
         good_mask = (
             rollouts["next", "agents", "reward"][..., agent_index].sum(axis=-1)
-            >= self.params.ei.reward_threshold
+            >= self.params.pure_text_ei.reward_threshold
         )
         return rollouts[good_mask]

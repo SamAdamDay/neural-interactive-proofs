@@ -478,7 +478,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         channel_name=channel_name,
                         question=rollout_final_state["question"],
                         solution=rollout_final_state["solution"],
-                        verdict=rollout_final_state["verdict"],
                         ensure_last_message_is_assistant=True,
                     )
                 except AgentNotActiveInChannelError:
@@ -666,7 +665,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         channel_name: str,
         question: str,
         solution: str,
-        verdict: int,
         ensure_last_message_is_assistant: bool = False,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
@@ -681,11 +679,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The name of the message channel.
         question : str
             The problem text.
-        solution : str
-            The proposed solution text.
-        verdict : int
-            The verdict that the prover is arguing for, where 0 means "reject" and 1
-            means "accept".
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
@@ -707,6 +700,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             question=question,
             solution=solution,
             max_questions=self.protocol_handler.max_verifier_turns - 1,
+            verdict="accept",
         )
         chat_messages = [dict(role="system", content=system_prompt)]
 

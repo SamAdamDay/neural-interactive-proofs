@@ -91,7 +91,7 @@ from .trainers import (
     SpgParameters,
     ReinforceParameters,
     SoloAgentParameters,
-    EiParameters,
+    PureTextEiParameters,
 )
 from .protocol import (
     CommonProtocolParameters,
@@ -206,6 +206,9 @@ class Parameters(BaseParameters):
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
+    pure_text_ei : PureTextEiParameters, optional
+        Additional parameters for the expert iteration trainer which works with agents
+        that call a text-based APIs.
     image_classification : ImageClassificationParameters, optional
         Additional parameters for the image classification task.
     code_validation : CodeValidationParameters, optional
@@ -242,7 +245,7 @@ class Parameters(BaseParameters):
     spg: Optional[SpgParameters | dict] = None
     reinforce: Optional[ReinforceParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
-    ei: Optional[EiParameters | dict] = None
+    pure_text_ei: Optional[PureTextEiParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
     code_validation: Optional[CodeValidationParameters | dict] = None

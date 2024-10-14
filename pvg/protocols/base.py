@@ -10,7 +10,7 @@ from itertools import product
 from typing import ClassVar, Optional
 
 import torch
-from torch import Tensor
+from torch import Tensor, as_tensor
 
 from tensordict.tensordict import TensorDictBase
 
@@ -464,21 +464,13 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         protocol_params = self.params.protocol_common
 
-        y: Int[Tensor, "... 1"] = env_td["y"]
-        round: Int[Tensor, "..."] = env_td["round"]
-        seed: Int[Tensor, "..."] = env_td["seed"]
-        decision: Int[Tensor, "... agent"] = env_td["agents", "decision"]
-        shared_done: Bool[Tensor, "..."] = env_td["done"]
-        agent_done: Bool[Tensor, "... agent"] = env_td["agents", "done"]
-        terminated: Bool[Tensor, "..."] = env_td["terminated"]
-
-        if isinstance(env_td, NestedArrayDict):
-            y = torch.from_numpy(y)
-            round = torch.from_numpy(round)
-            seed = torch.from_numpy(seed)
-            decision = torch.from_numpy(decision)
-            shared_done = torch.from_numpy(shared_done)
-            terminated = torch.from_numpy(terminated)
+        y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
+        round: Int[Tensor, "..."] = as_tensor(env_td["round"])
+        seed: Int[Tensor, "..."] = as_tensor(env_td["seed"])
+        decision: Int[Tensor, "... agent"] = as_tensor(env_td["agents", "decision"])
+        shared_done: Bool[Tensor, "..."] = as_tensor(env_td["done"])
+        agent_done: Bool[Tensor, "... agent"] = as_tensor(env_td["agents", "done"])
+        terminated: Bool[Tensor, "..."] = as_tensor(env_td["terminated"])
 
         # Get the mask of the batch items where the verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds_and_seed(
