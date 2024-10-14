@@ -5,6 +5,7 @@ from typing import Optional, Any, ClassVar
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
+from math import prod
 
 import torch
 from torch import Tensor
@@ -305,6 +306,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             * 1: The verifier can only decide to continue interacting.
             * 2: The verifier can only make a guess.
         - `x`: The message history.
+        - `seed`: A shared seed for the environment.
         - `message`: The next message.
         - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
@@ -332,6 +334,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             x=UnboundedContinuousTensorSpec(
                 shape=self.message_history_shape,
                 dtype=torch.float,
+                device=self.device,
+            ),
+            seed=DiscreteTensorSpec(
+                2**16,
+                shape=(self.num_envs,),
+                dtype=torch.long,
                 device=self.device,
             ),
             message_history=BinaryDiscreteTensorSpec(
@@ -395,6 +403,24 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     3,
                     shape=(self.num_envs, self.num_agents),
                     dtype=self._int_dtype,
+                    device=self.device,
+                ),
+                main_message_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        self.protocol_handler.num_message_channels,
+                        self.params.message_size,
+                        prod(self.main_message_space_shape),
+                    ),
+                    device=self.device,
+                ),
+                decision_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        3,
+                    ),
                     device=self.device,
                 ),
                 shape=(self.num_envs, self.num_agents),
@@ -464,12 +490,26 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     def _get_done_spec(self) -> TensorSpec:
         """Get the specification of the agent done signals.
 
+        We have both shared and agent-specific done signals. This is for convenience,
+        where the shared done signal indicates that all relevant agents are done and so
+        the environment should be reset.
+
         Returns
         -------
         done_spec : TensorSpec
             The done specification.
         """
         return CompositeSpec(
+            agents=CompositeSpec(
+                done=BinaryDiscreteTensorSpec(
+                    self.num_agents,
+                    shape=(self.num_envs, self.num_agents),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                shape=(self.num_envs, self.num_agents),
+                device=self.device,
+            ),
             done=BinaryDiscreteTensorSpec(
                 self.num_envs,
                 shape=(self.num_envs,),
@@ -552,15 +592,16 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         next_td["x"] = next_td["message_history"].clone()
 
         # Compute the done signal and reward
-        done, terminated, reward = self.protocol_handler.step_interaction_protocol(
-            env_td
+        shared_done, agent_done, terminated, reward = (
+            self.protocol_handler.step_interaction_protocol(env_td)
         )
-        done = done | terminated  # TODO: Improve handling of terminated
-        next_td.set("done", done)
+        shared_done = shared_done | terminated  # TODO: Improve handling of terminated
+        next_td.set("done", shared_done)
+        next_td.set(("agents", "done"), agent_done)
         next_td.set("terminated", terminated)
         next_td.set(("agents", "reward"), reward)
         next_td.set(
-            "decision_restriction", torch.zeros_like(done, dtype=self._int_dtype)
+            "decision_restriction", torch.zeros_like(shared_done, dtype=self._int_dtype)
         )
 
         return next_td
@@ -614,14 +655,17 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # ... round channel position {message_shape_str}
         message_history = env_td.get(message_history_key)
         round: Int[Tensor, "..."] = env_td.get("round")
+        seed: Int[Tensor, "..."] = env_td.get("seed")
         message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
         )
 
         # Get the mask for the active agents per channel in the current round
         # (... agent channel)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
-            round
+        active_agents_mask = (
+            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+                round, seed
+            )
         )
 
         # Sum up the messages from the agents whose turn it is. If two agents select the
@@ -736,6 +780,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The reset environment tensordict.
         """
 
+        env_td["seed"][mask] = torch.randint(
+            0, self.observation_spec["seed"].n, (mask.sum().item(),), device=self.device
+        )
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
         env_td["message_history"][mask] = torch.zeros_like(
             env_td["message_history"][mask]
@@ -744,6 +791,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0
         env_td["done"][mask] = False
+        env_td["agents", "done"][mask] = False
         env_td["terminated"][mask] = False
         env_td["decision_restriction"][mask] = 0
 
@@ -770,6 +818,7 @@ class PureTextEnvironment(Environment, ABC):
         """The specification for the observation keys."""
         return CompositeArraySpec(
             round=IntArraySpec(*self.batch_size, "batch"),
+            seed=IntArraySpec(*self.batch_size, "batch"),
             message_history=StringArraySpec(
                 (
                     *self.batch_size,
@@ -847,8 +896,18 @@ class PureTextEnvironment(Environment, ABC):
 
     @cached_property
     def done_spec(self) -> CompositeArraySpec:
-        """The specification for the done keys (done and terminated)."""
+        """The specification for the done keys (done and terminated).
+
+        We have both shared and agent-specific done signals. This is for convenience,
+        where the shared done signal indicates that all relevant agents are done and so
+        the environment should be reset.
+        """
         return CompositeArraySpec(
+            agents=CompositeArraySpec(
+                done=BoolArraySpec((*self.batch_size, self.num_agents), "batch agent"),
+                shape=(*self.batch_size, self.num_agents),
+                dim_names="batch agent",
+            ),
             done=BoolArraySpec(*self.batch_size, "batch"),
             terminated=BoolArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
@@ -904,10 +963,11 @@ class PureTextEnvironment(Environment, ABC):
         next_state["message_history"] = message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
-        done, terminated, reward = self.protocol_handler.step_interaction_protocol(
-            env_state
+        shared_done, agent_done, terminated, reward = (
+            self.protocol_handler.step_interaction_protocol(env_state)
         )
-        next_state["done"] = done.numpy()
+        next_state["done"] = shared_done.numpy()
+        next_state["agents", "done"] = agent_done.numpy()
         next_state["terminated"] = terminated.numpy()
         next_state["agents", "reward"] = reward.numpy()
 
@@ -1058,9 +1118,11 @@ class PureTextEnvironment(Environment, ABC):
         """
 
         env_state["y"][mask] = data_batch["y"]
+        env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
         env_state["round"][mask] = 0
         env_state["done"][mask] = False
+        env_state["agents", "done"][mask] = False
         env_state["terminated"][mask] = False
 
         return env_state

@@ -6,6 +6,7 @@ from pvg import (
     Parameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CommonProtocolParameters,
     SoloAgentParameters,
     RlTrainerParameters,
     CommonPpoParameters,
@@ -79,6 +80,17 @@ param_specs = [
             InteractionProtocolType.MNIP,
         ],
     },
+    # Test the zero-knowledge protocols
+    {
+        "zero_knowledge": [True],
+        "protocol": [
+            InteractionProtocolType.PVG,
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+            InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
+        ],
+    },
     # Test manual architectures
     {
         "manual_architecture": [
@@ -141,6 +153,7 @@ def test_prepare_run_experiment(param_spec: dict):
     trainer_type = param_spec.get("trainer", TrainerType.VANILLA_PPO)
     ppo_loss_type = param_spec.get("ppo_loss", PpoLossType.CLIP)
     protocol_type = param_spec.get("protocol", InteractionProtocolType.PVG)
+    zero_knowledge = param_spec.get("zero_knowledge", False)
     is_random = param_spec.get("is_random", False)
     pretrain_agents = param_spec.get("pretrain_agents", False)
     manual_architecture = param_spec.get("manual_architecture", None)
@@ -156,7 +169,10 @@ def test_prepare_run_experiment(param_spec: dict):
 
     # Construct the agent parameters
     agents_param = {}
-    for agent_name in AGENT_NAMES[protocol_type]:
+    agent_names = list(AGENT_NAMES[protocol_type])
+    if zero_knowledge:
+        agent_names.extend(["simulator", "adversarial_verifier"])
+    for agent_name in agent_names:
         if is_random and agent_name != "verifier":
             agents_param[agent_name] = {"is_random": True}
         else:
@@ -177,6 +193,9 @@ def test_prepare_run_experiment(param_spec: dict):
             "trainer": trainer_type,
             "dataset": "test",
             "interaction_protocol": protocol_type,
+            "protocol_common": CommonProtocolParameters(
+                zero_knowledge=zero_knowledge,
+            ),
             "agents": agents_param,
             "pretrain_agents": pretrain_agents,
             "rl": rl_params,

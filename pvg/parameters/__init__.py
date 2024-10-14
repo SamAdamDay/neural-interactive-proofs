@@ -53,7 +53,7 @@ Examples
 """
 
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from .base import (
     BaseParameters,
@@ -98,6 +98,7 @@ from .protocol import (
     PvgProtocolParameters,
     DebateProtocolParameters,
     MnipProtocolParameters,
+    ZkProtocolParameters,
 )
 from .scenario import ImageClassificationParameters, CodeValidationParameters
 from .dataset import DatasetParameters
@@ -252,6 +253,7 @@ class Parameters(BaseParameters):
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
     mnip_protocol: Optional[MnipProtocolParameters | dict] = None
+    zk_protocol: Optional[ZkProtocolParameters | dict] = None
 
     message_regression: Optional[MessageRegressionParameters | dict] = None
 
@@ -266,22 +268,38 @@ class Parameters(BaseParameters):
                 self.interaction_protocol.upper()
             ]
 
+        # TODO: do this better
+        for protocol_common_field in fields(CommonProtocolParameters):
+            if protocol_common_field.name == "zero_knowledge":
+                default_zero_knowledge = protocol_common_field.default
+        if isinstance(self.protocol_common, CommonProtocolParameters):
+            zero_knowledge = self.protocol_common.zero_knowledge
+        elif isinstance(self.protocol_common, dict):
+            zero_knowledge = self.protocol_common.get(
+                "zero_knowledge", default_zero_knowledge
+            )
+        else:
+            zero_knowledge = default_zero_knowledge
+
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
             self._process_agents_params(
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.CODE_VALIDATION:
             self._process_agents_params(
                 CodeValidationAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         # Add PPO parameters for specific variants to the appropriate class
@@ -299,6 +317,7 @@ class Parameters(BaseParameters):
         self,
         agent_params_class: type[AgentParameters],
         random_agent_params_class: type[RandomAgentParameters],
+        zero_knowledge: bool,
     ) -> AgentsParameters:
         """Process agent parameters passed to `Parameters`.
 
@@ -311,8 +330,8 @@ class Parameters(BaseParameters):
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-        protocol_params_class : type[ProtocolParameters]
-            The class of the interaction protocol parameters for the scenario.
+        zero_knowledge : bool
+            Whether the protocol is zero-knowledge.
         """
 
         # If no agent parameters are provided, use the default parameters for the
@@ -321,7 +340,7 @@ class Parameters(BaseParameters):
             self.agents = AgentsParameters(
                 **{
                     name: agent_params_class()
-                    for name in AGENT_NAMES[self.interaction_protocol]
+                    for name in get_protocol_agent_names(self, zero_knowledge)
                 }
             )
 
@@ -360,9 +379,30 @@ class Parameters(BaseParameters):
 
         # Make sure the agent names match the agent names expected by the protocol
         agent_names = tuple(self.agents.keys())
-        if set(agent_names) != set(AGENT_NAMES[self.interaction_protocol]):
+        if set(agent_names) != set(get_protocol_agent_names(self, zero_knowledge)):
             raise ValueError(
                 f"Agent names {agent_names} do not match the agent names expected"
                 f"by interaction protocol {self.interaction_protocol}: "
-                f"{AGENT_NAMES[self.interaction_protocol]}."
+                f"{get_protocol_agent_names(self, zero_knowledge)}."
             )
+
+
+def get_protocol_agent_names(params: Parameters, zero_knowledge: bool) -> list[str]:
+    """Get the agent names required for the protocol.
+
+    Parameters
+    ----------
+    params : Parameters
+        The parameters of the experiment.
+    zero_knowledge : bool
+        Whether the protocol is zero-knowledge.
+
+    Returns
+    -------
+    list[str]
+        The agent names required for the protocol.
+    """
+    agent_names = list(AGENT_NAMES[params.interaction_protocol])
+    if zero_knowledge:
+        agent_names.extend(["simulator", "adversarial_verifier"])
+    return agent_names

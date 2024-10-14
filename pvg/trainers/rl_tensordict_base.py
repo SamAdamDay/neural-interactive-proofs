@@ -651,18 +651,8 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
                 else:
                     self.param_group_freezer.freeze(agent_name)
 
-            # Expand the done and terminated to match the reward shape (this is expected
-            # by the value estimator)
-            tensordict_data.set(
-                ("next", "agents", "done"),
-                tensordict_data.get(("next", "done"))
-                .unsqueeze(-1)
-                .expand(
-                    tensordict_data.get_item_shape(
-                        ("next", self.train_environment.reward_key)
-                    )
-                ),
-            )
+            # Expand the terminated to match the reward shape (this is expected by the
+            # value estimator)
             tensordict_data.set(
                 ("next", "agents", "terminated"),
                 tensordict_data.get(("next", "terminated"))

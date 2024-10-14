@@ -33,6 +33,8 @@ class CommonProtocolParameters(SubParameters):
     force_guess: Guess, optional
         The guess to force the verifier to make. If not provided, the verifier makes a
         guess using its policy.
+    zero_knowledge: bool
+        Whether to use a zero-knowledge version of the protocol.
     """
 
     verifier_first: bool = True
@@ -45,6 +47,8 @@ class CommonProtocolParameters(SubParameters):
     shared_reward: bool = False
 
     force_guess: Optional[Guess] = None
+
+    zero_knowledge: bool = False
 
 
 @dataclass
@@ -151,3 +155,17 @@ class MnipProtocolParameters(LongProtocolParameters):
 
     sequential: bool = False
     prover0_first: bool = True
+
+
+@dataclass
+class ZkProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the debate interaction protocol.
+
+    Parameters
+    ----------
+    simulator_reward_coefficient : float
+        The coefficient to multiply the logit closeness by to get the simulator reward.
+    """
+
+    simulator_reward_coefficient: float = 1.0
+    aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually

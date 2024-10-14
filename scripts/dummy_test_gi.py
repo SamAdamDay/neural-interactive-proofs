@@ -27,6 +27,7 @@ from pvg import (
     prepare_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
+from pvg.parameters import get_protocol_agent_names
 
 
 def run(cmd_args: Namespace):
@@ -40,11 +41,16 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = InteractionProtocolType.PVG
+    interaction_protocol = InteractionProtocolType.DEBATE
+    zero_knowledge = True
+    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    trainer = TrainerType.VANILLA_PPO
+    dataset = "eru10000"
+
     params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
-        dataset="eru10000",
+        scenario=scenario,
+        trainer=trainer,
+        dataset=dataset,
         agents=AgentsParameters(
             **{
                 agent_name: GraphIsomorphismAgentParameters(
@@ -54,7 +60,18 @@ def run(cmd_args: Namespace):
                     agent_lr_factor={"actor": 1.0, "critic": 1.0},
                     use_orthogonal_initialisation=False,
                 )
-                for agent_name in AGENT_NAMES[interaction_protocol]
+                for agent_name in get_protocol_agent_names(
+                    Parameters(
+                        interaction_protocol=interaction_protocol,
+                        protocol_common=CommonProtocolParameters(
+                            zero_knowledge=zero_knowledge
+                        ),
+                        scenario=scenario,
+                        trainer=trainer,
+                        dataset=dataset,
+                    ),
+                    zero_knowledge=zero_knowledge,
+                )
             }
         ),
         rl=RlTrainerParameters(
@@ -81,6 +98,7 @@ def run(cmd_args: Namespace):
         protocol_common=CommonProtocolParameters(
             shared_reward=True,
             force_guess=None,
+            zero_knowledge=zero_knowledge,
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
