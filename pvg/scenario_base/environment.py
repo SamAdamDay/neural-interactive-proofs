@@ -827,6 +827,14 @@ class PureTextEnvironment(Environment, ABC):
                 ),
                 "batch round channel",
             ),
+            message_agent_id=IntArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_message_channels,
+                ),
+                "batch round channel",
+            ),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -846,6 +854,13 @@ class PureTextEnvironment(Environment, ABC):
                         self.protocol_handler.num_message_channels,
                     ),
                     "batch agent channel",
+                ),
+                raw_message=StringArraySpec(
+                    (
+                        *self.batch_size,
+                        self.num_agents,
+                    ),
+                    "batch agent",
                 ),
                 retry_count=IntArraySpec(
                     (
@@ -944,6 +959,7 @@ class PureTextEnvironment(Environment, ABC):
 
         # Add the latest messages to the message history
         message_history = env_state["message_history"].copy()
+        message_agent_id = env_state["message_agent_id"].copy()
         for channel_id, channel_name in enumerate(
             self.protocol_handler.message_channel_names
         ):
@@ -954,13 +970,15 @@ class PureTextEnvironment(Environment, ABC):
                 if message is not None:
                     if who_messaged is not None:
                         raise RuntimeError(
-                            f"Agents {who_messaged} and {agent_name} both messaged on "
-                            f"channel {channel_name}. "
+                            f"Agents {who_messaged!r} and {agent_name!r} both messaged "
+                            f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
                     message_history[0, round, channel_id] = message
+                    message_agent_id[0, round, channel_id] = agent_id
 
         next_state["message_history"] = message_history
+        next_state["message_agent_id"] = message_agent_id
 
         # Step the interaction protocol to obtain the next done and reward signals
         shared_done, agent_done, terminated, reward = (
@@ -1120,6 +1138,7 @@ class PureTextEnvironment(Environment, ABC):
         env_state["y"][mask] = data_batch["y"]
         env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
+        env_state["message_agent_id"][mask] = -1
         env_state["round"][mask] = 0
         env_state["done"][mask] = False
         env_state["agents", "done"][mask] = False

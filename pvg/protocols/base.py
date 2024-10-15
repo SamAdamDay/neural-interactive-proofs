@@ -7,7 +7,7 @@ a base implementation for deterministic protocols with a single verifier.
 from abc import ABC, abstractmethod
 from functools import cached_property
 from itertools import product
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import torch
 from torch import Tensor, as_tensor

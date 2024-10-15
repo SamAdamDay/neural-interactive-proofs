@@ -42,7 +42,7 @@ from pvg.scenario_base import TensorDictEnvironment
 from pvg.factory import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
 from pvg.rl_objectives import Objective
-from pvg.utils.maths import logit_entropy
+from pvg.utils.maths import logit_entropy, set_seed
 from pvg.utils.torch import DummyOptimizer
 from pvg.utils.training import ParamGroupFreezer
 from pvg.utils.distributions import CompositeCategoricalDistribution
@@ -135,8 +135,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         """Train the agents."""
 
         # Set the seed
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.params.seed)
 
         # Add the observation normalization transforms if requested
         if self.params.rl.normalize_observations:
@@ -165,8 +164,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         """Add observation normalization transforms to the environments."""
 
         # Set the seed before computing the normalization statistics
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.params.seed)
 
         self.train_environment = TransformedEnv(self.train_environment)
         self.test_environment = TransformedEnv(self.test_environment)
@@ -589,8 +587,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         """Run generic RL training and test loops."""
 
         # Set the seed
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.params.seed)
 
         # Run the training loop with the appropriate context managers
         with ExitStack() as stack:

@@ -317,6 +317,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
+    agent_human_names = ["Expert 1", "Expert 2", "Verifier"]
     message_channel_names = ["main"]
     agent_channel_visibility = [
         ("prover0", "main"),
@@ -359,14 +360,24 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             random_sequence.gather(-1, round[..., None]).squeeze(-1) % 2 == 0
         )
 
-        return rearrange(
-            [
-                (round % 2 == 0) & prover1_first,
-                (round % 2 == 0) & ~prover1_first,
-                round % 2 == 1,
-            ],
-            "agent ... -> ... agent 1",
-        )
+        if self.params.protocol_common.verifier_first:
+            return rearrange(
+                [
+                    (round % 2 == 1) & prover1_first,
+                    (round % 2 == 1) & ~prover1_first,
+                    round % 2 == 0,
+                ],
+                "agent ... -> ... agent 1",
+            )
+        else:
+            return rearrange(
+                [
+                    (round % 2 == 0) & prover1_first,
+                    (round % 2 == 0) & ~prover1_first,
+                    round % 2 == 1,
+                ],
+                "agent ... -> ... agent 1",
+            )
 
     def can_agent_be_active(
         self, agent_name: str, round: int, channel_name: str
@@ -421,6 +432,7 @@ class MnipProtocol(PvgProtocol):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
+    agent_human_names = ["Expert 1", "Expert 2", "Verifier"]
     message_channel_names = ["prover0_channel", "prover1_channel"]
     agent_channel_visibility = [
         ("prover0", "prover0_channel"),
@@ -535,6 +547,7 @@ class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""
 
     agent_names = ["prover0", "prover1", "prover2", "verifier"]
+    agent_human_names = ["Expert 1", "Expert 2", "Expert 3", "Verifier"]
     message_channel_names = ["main", "prover0_verifier", "prover_chat"]
     agent_channel_visibility = [
         ("prover0", "main"),

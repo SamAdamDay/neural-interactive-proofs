@@ -30,6 +30,7 @@ from pvg.image_classification import (
     ImageClassificationDataset,
 )
 from pvg.protocols import build_protocol_handler
+from pvg.utils.maths import set_seed
 
 
 @pytest.mark.parametrize(
@@ -305,7 +306,7 @@ def test_image_classification_environment_step():
     num_message_channels = protocol_handler.num_message_channels
 
     # Build the tensor of latent pixels selected by the agents.
-    torch.manual_seed(0)
+    set_seed(0)
     latent_pixel_selected = torch.randint(
         0,
         latent_height * latent_width,

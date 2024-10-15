@@ -1,14 +1,24 @@
 """Utilities for useful mathematical operations."""
 
 from typing import Tuple, Union, Sequence, Optional
+import random
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
+import numpy as np
+
 from jaxtyping import Float, Int
 
 from pvg.parameters import IhvpVariant
+
+
+def set_seed(seed: int):
+    """Set the seed in Python, NumPy, and PyTorch."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def dot_td(td1, td2):

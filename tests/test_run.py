@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from sklearn.model_selection import ParameterGrid
@@ -222,6 +224,7 @@ def test_prepare_run_experiment(param_spec: dict):
             "d_representation": 1,
             "include_linear_message_space": include_linear_message,
             "message_size": message_size,
+            "seed": 109,
         }
     )
 

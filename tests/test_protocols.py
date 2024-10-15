@@ -23,6 +23,7 @@ from pvg.parameters import (
     ZkProtocolParameters,
 )
 from pvg.protocols import build_protocol_handler, ZeroKnowledgeProtocol
+from pvg.utils.maths import set_seed
 
 
 @pytest.mark.parametrize(
@@ -248,7 +249,7 @@ def test_zero_knowledge_pvg_step_method():
 
     batch_size = (32, 8)
 
-    torch.manual_seed(0)
+    set_seed(0)
 
     env_td = TensorDict(
         dict(
