@@ -6,8 +6,7 @@ classification, the split is not necessary, so only the policy head actually doe
 anything. The body and value head return the input data unchanged.
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, Literal, ClassVar, Any, Annotated as String
+from typing import Optional, Literal, ClassVar, Any
 from string import Template
 from itertools import product
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from numpy.typing import NDArray
 
 from einops import rearrange
 
-from jaxtyping import Float, Int, Bool
+from jaxtyping import Bool
 
 from openai import OpenAI, APITimeoutError, APIStatusError, RateLimitError
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
@@ -43,21 +42,18 @@ from pvg.parameters import (
     CodeValidationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
-    InteractionProtocolType,
 )
 from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.utils.nested_array_dict import NestedArrayDict
-from pvg.utils.types import NumpyStringDtype
+from pvg.utils.types import NumpyStringDtype, String
 from pvg.utils.env import load_env_once
 from pvg.utils.string import random_string
 from pvg.utils.api import (
     GenerationError,
     ContentFilterError,
     UnknownFinishReasonError,
-    InvalidResponseError,
-    InvalidDecisionError,
 )
 from pvg.constants import WANDB_OPENAI_FINETUNE_PROJECT
 from pvg.code_validation.protocols import (
