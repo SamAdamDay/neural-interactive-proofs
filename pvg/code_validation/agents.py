@@ -277,7 +277,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 output_data["message"][batch_id] = None
             else:
                 output_data["message"][batch_id] = np.array(
-                    list(parsed_completion.next_messages.values()), dtype=NumpyStringDtype
+                    list(parsed_completion.next_messages.values()),
+                    dtype=NumpyStringDtype,
                 )
             output_data["raw_message"][batch_id] = parsed_completion.raw_message
             output_data["decision"][batch_id] = parsed_completion.decision
@@ -688,18 +689,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The dummy response generated.
         """
 
-        if chat_messages_prompt[-1]["content"].startswith("Question: "):
-
-            if self.agent_spec.response_channel_headers is None:
-                return f"Answer: {random_string(20)}"
-            else:
-                response = [
-                    f"{header} {random_string(20)}"
-                    for header in self.agent_spec.response_channel_headers.values()
-                ]
-                return "\n".join(response)
-            
-        else:
+        if self.is_verifier:
 
             output_type = randrange(5)
 
@@ -716,6 +706,17 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         for header in self.agent_spec.response_channel_headers.values()
                     ]
                     return "\n".join(response)
+
+        else:
+
+            if self.agent_spec.response_channel_headers is None:
+                return f"Answer: {random_string(20)}"
+            else:
+                response = [
+                    f"{header} {random_string(20)}"
+                    for header in self.agent_spec.response_channel_headers.values()
+                ]
+                return "\n".join(response)
 
     def _build_chat_messages_prompt(
         self,

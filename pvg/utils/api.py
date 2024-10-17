@@ -17,7 +17,7 @@ class GenerationError(Exception, ABC):
 
     def copy_with_retries(self, num_retries: int) -> "GenerationError":
         """Return a copy of the error with the number of retries updated.
-        
+
         Parameters
         ----------
         num_retries : int
@@ -28,7 +28,7 @@ class GenerationError(Exception, ABC):
         GenerationError
             A copy of the error with the number of retries set to `num_retries`.
         """
-        
+
         kwargs = {
             key: getattr(self, key)
             for key in signature(self.__class__).parameters.keys()

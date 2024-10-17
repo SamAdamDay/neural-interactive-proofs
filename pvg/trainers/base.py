@@ -15,6 +15,9 @@ import sys
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
+import wandb
+from wandb import Artifact
+
 from tqdm import tqdm
 
 from pvg.scenario_base.agents import AgentState
@@ -22,7 +25,11 @@ from pvg.parameters import Parameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.params import get_agent_part_flags
-from pvg.constants import EXPERIMENT_STATE_DIR
+from pvg.constants import (
+    EXPERIMENT_STATE_DIR,
+    CHECKPOINT_STATE_ARTIFACT_PREFIX,
+    CHECKPOINT_STATE_ARTIFACT_TYPE,
+)
 
 
 class CheckPointNotFoundError(Exception):
@@ -124,6 +131,15 @@ class Trainer(ABC):
         with open(self.checkpoint_params_path, "w") as f:
             json.dump(self.params.to_dict(), f, sort_keys=True, indent=4)
 
+        # If using W&B, also log the checkpoint as an artifact
+        if self.settings.wandb_run is not None:
+            artifact = wandb.Artifact(
+                f"{CHECKPOINT_STATE_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                CHECKPOINT_STATE_ARTIFACT_TYPE,
+            )
+            artifact.add_file(self.checkpoint_state_path)
+            self.settings.wandb_run.log_artifact(artifact)
+
         if log:
             self.settings.logger.info(
                 f"Saved experiment state to '{self.checkpoint_state_path}'"
@@ -194,6 +210,28 @@ class Trainer(ABC):
             If the checkpoint file is not found.
         """
 
+        # If using W&B, try to download the state from the artifact first
+        if (
+            self.settings.wandb_run is not None
+            and not self.checkpoint_state_path.is_file()
+        ):
+            artifact_name = (
+                f"{CHECKPOINT_STATE_ARTIFACT_PREFIX}{self.settings.wandb_run.name}"
+                f":latest"
+            )
+            try:
+                artifact: Artifact = self.settings.wandb_run.use_artifact(
+                    artifact_name,
+                    type=CHECKPOINT_STATE_ARTIFACT_TYPE,
+                )
+                artifact.download(self.checkpoint_base_dir)
+            except wandb.errors.CommError as e:
+                # W&B doesn't use subclasses for errors, so we have to check the
+                # message. If the error was not that the artifact was not found, we
+                # re-raise it.
+                if f"artifact '{artifact_name}' not found in" not in e.message:
+                    raise e
+
         if (
             self.checkpoint_state_path is None
             or not self.checkpoint_state_path.exists()
@@ -223,6 +261,41 @@ class Trainer(ABC):
             state_dict = json.load(f)
 
         return self.State(**state_dict)
+
+    def _add_file_to_wandb_artifact(
+        self, artifact_name: str, artifact_type: str, file_path: Path
+    ):
+        """Add a file to a W&B artifact, creating the artifact if it doesn't exist.
+
+        If the artifact already exists, we add the file to the existing artifact,
+        creating a new version.
+
+        Parameters
+        ----------
+        artifact_name : str
+            The name of the artifact to add the file to. This should not contain an
+            alias or version, as we always add to the latest version.
+        artifact_type : str
+            The type of the artifact.
+        file_path : Path
+            The path to the file to add to the artifact.
+        """
+
+        try:
+            saved_artifact: Artifact = self.settings.wandb_run.use_artifact(
+                f"{artifact_name}:latest",
+                type=artifact_type,
+            )
+            artifact = saved_artifact.new_draft()
+        except wandb.errors.CommError as e:
+            # W&B doesn't use subclasses for errors, so we have to check the message. If
+            # the error was not that the artifact was not found, we re-raise it.
+            if f"artifact '{artifact_name}:latest' not found in" not in e.message:
+                raise e
+            artifact = Artifact(name=artifact_name, type=artifact_type)
+
+        artifact.add_file(file_path)
+        self.settings.wandb_run.log_artifact(artifact)
 
     def get_total_num_iterations(self) -> int:
         """Get the total number of iterations that the trainer will run for.

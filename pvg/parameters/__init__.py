@@ -92,6 +92,7 @@ from .trainers import (
     ReinforceParameters,
     SoloAgentParameters,
     PureTextEiParameters,
+    TextRlParameters,
 )
 from .protocol import (
     CommonProtocolParameters,
@@ -245,6 +246,7 @@ class Parameters(BaseParameters):
     spg: Optional[SpgParameters | dict] = None
     reinforce: Optional[ReinforceParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
+    text_rl: Optional[TextRlParameters | dict] = None
     pure_text_ei: Optional[PureTextEiParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None

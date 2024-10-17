@@ -8,12 +8,17 @@ from functools import cached_property
 from pathlib import Path
 import pickle
 from dataclasses import dataclass
+import json
 
 import torch
 
 import numpy as np
 
+from wandb import Artifact
+import wandb
+
 from tqdm import tqdm
+import wandb.errors
 
 from pvg.parameters import Parameters
 from pvg.factory import ScenarioInstance
@@ -27,6 +32,14 @@ from pvg.utils.nested_array_dict import (
     NestedArrayDict,
     stack_nested_array_dicts,
     concatenate_nested_array_dicts,
+)
+from pvg.constants import (
+    ROLLOUTS_ARTIFACT_PREFIX,
+    ROLLOUTS_ARTIFACT_TYPE,
+    RAW_TRANSCRIPT_ARTIFACT_PREFIX,
+    RAW_TRANSCRIPT_ARTIFACT_TYPE,
+    PROCESSED_TRANSCRIPT_ARTIFACT_PREFIX,
+    PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
 )
 
 
@@ -102,6 +115,16 @@ class PureTextRlTrainer(Trainer, ABC):
         return self.checkpoint_base_dir.joinpath("rollouts")
 
     @property
+    def raw_transcripts_dir(self) -> Path:
+        """The directory to save the raw transcripts to."""
+        return self.checkpoint_base_dir.joinpath("raw_transcripts")
+
+    @property
+    def processed_transcripts_dir(self) -> Path:
+        """The directory to save the processed transcripts to."""
+        return self.checkpoint_base_dir.joinpath("processed_transcripts")
+
+    @property
     def checkpoint_analysis_dir(self) -> Path:
         """The directory to save the rollout analysis to."""
         return self.checkpoint_base_dir.joinpath("analysis")
@@ -124,6 +147,10 @@ class PureTextRlTrainer(Trainer, ABC):
     ) -> NestedArrayDict:
         """Sample rollouts in the environment.
 
+        We sample `environment.num_envs` rollouts from the environment. A rollout is a
+        sequence of length `max_message_rounds` of states in the environment. The
+        sampled rollout nested array dict thus has shape (num_envs, max_message_rounds).
+
         Parameters
         ----------
         dataset : NestedArrayDictDataset
@@ -132,6 +159,12 @@ class PureTextRlTrainer(Trainer, ABC):
             The environment to sample rollouts in.
         use_tqdm : bool
             Whether to create a tqdm progress bar for the rollouts.
+
+        Returns
+        -------
+        rollouts : NestedArrayDict
+            The rollouts in the environment. Has batch size (num_envs,
+            max_message_rounds)
         """
 
         dataloader = NestedArrayDictDataLoader(
@@ -189,14 +222,58 @@ class PureTextRlTrainer(Trainer, ABC):
             The iteration number, or "test" if the rollouts are from the test set.
         """
 
+        if self.params.text_rl.save_transcripts:
+            raw_transcripts, processed_transcripts = self._extract_transcripts(rollouts)
+
         # If we are running a test run, we don't want to save the rollouts
         if self.settings.test_run:
             return
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt"), "wb") as f:
+        rollout_path = self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt")
+
+        with open(rollout_path, "wb") as f:
             pickle.dump(rollouts, f)
+
+        # If using W&B, also log the rollouts as an artifact
+        if self.settings.wandb_run is not None:
+            self._add_file_to_wandb_artifact(
+                f"{ROLLOUTS_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                ROLLOUTS_ARTIFACT_TYPE,
+                rollout_path,
+            )
+
+        # Save the raw and processed transcripts
+        if self.params.text_rl.save_transcripts:
+
+            self.raw_transcripts_dir.mkdir(parents=True, exist_ok=True)
+            self.processed_transcripts_dir.mkdir(parents=True, exist_ok=True)
+
+            raw_transcript_path = self.raw_transcripts_dir.joinpath(f"{iteration}.json")
+            processed_transcript_path = self.processed_transcripts_dir.joinpath(
+                f"{iteration}.json"
+            )
+
+            with open(raw_transcript_path, "w") as f:
+                json.dump(raw_transcripts, f, indent=4)
+
+            with open(processed_transcript_path, "w") as f:
+                json.dump(processed_transcripts, f, indent=4)
+
+            # If using W&B, also log the transcripts as artifacts
+            if self.settings.wandb_run is not None:
+                self._add_file_to_wandb_artifact(
+                    f"{RAW_TRANSCRIPT_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                    RAW_TRANSCRIPT_ARTIFACT_TYPE,
+                    raw_transcript_path,
+                )
+                self._add_file_to_wandb_artifact(
+                    f"{PROCESSED_TRANSCRIPT_ARTIFACT_PREFIX}"
+                    f"{self.settings.wandb_run.name}",
+                    PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
+                    processed_transcript_path,
+                )
 
     def load_rollouts(self, iteration: int) -> NestedArrayDict:
         """Load the rollouts from the checkpoint directory.
@@ -216,8 +293,123 @@ class PureTextRlTrainer(Trainer, ABC):
         if self.settings.test_run:
             raise RuntimeError("Attempted to load rollouts in test run.")
 
-        with open(self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt"), "rb") as f:
+        self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
+
+        checkpoint_filepath = self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt")
+
+        # If using W&B, try to download the rollouts from the artifact first
+        if self.settings.wandb_run is not None and not checkpoint_filepath.is_file():
+            artifact_name = (
+                f"{ROLLOUTS_ARTIFACT_PREFIX}{self.settings.wandb_run.name}:latest"
+            )
+            try:
+                artifact: Artifact = self.settings.wandb_run.use_artifact(
+                    artifact_name,
+                    type=ROLLOUTS_ARTIFACT_TYPE,
+                )
+                artifact.download(self.checkpoint_rollouts_dir)
+            except wandb.errors.CommError as e:
+                # W&B doesn't use subclasses for errors, so we have to check the
+                # message. If the error was not that the artifact was not found, we
+                # re-raise it.
+                if f"artifact '{artifact_name}' not found in" not in e.message:
+                    raise e
+
+        with open(checkpoint_filepath, "rb") as f:
             return pickle.load(f)
+
+    def _extract_transcripts(
+        self, rollouts: NestedArrayDict
+    ) -> tuple[list[list[dict[str, str]]], list[list[dict[str, str]]]]:
+        """Extract the raw and processed transcripts from the rollouts.
+
+        The raw transcript is the sequence of outputs generated by the models, per
+        agent, while the processed transcript is the result of processing these and
+        extracting the message per channel.
+
+        Note that in the raw transcripts the messages are per agent, while in the
+        processed transcripts the messages are per channel.
+
+        The transcripts have variable length, where if a round has no messages from any
+        agent, we declare that the end of the transcript.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The rollouts to extract the transcripts from. A NestedArrayDict with keys:
+
+            - "message_history" (batch round round channel) : The message history for
+              each rollout. In each timestep this gives the history of all messages
+              generated up to that point.
+            - "message_agent_id" (batch round round channel) : The ID of the agent that
+              generated each message in the message history.
+            - ("agents", "raw_message") (batch round agent) : The raw message generated
+              by each model in each timestep.
+
+        Returns
+        -------
+        raw_transcripts : list[list[dict[str, str]]]
+            The raw transcripts. This is a list of transcripts, where each transcript is
+            a list of dictionaries whose keys are the agent names and values are the
+            messages generated by the agents.
+        processed_transcripts : list[list[dict[str, str]]]
+            The processed transcripts. This is a list of transcripts, where each
+            transcript is a list of dictionaries whose keys are
+            `f"{active_agent_name}@{channel_name}"` and values are the messages in each
+            channel.
+        """
+
+        message_history = rollouts["message_history"]
+        message_agent_id = rollouts["message_agent_id"]
+        raw_message = rollouts["agents", "raw_message"]
+        num_rollouts = rollouts.batch_size[0]
+
+        channel_names = self.scenario_instance.protocol_handler.message_channel_names
+        agent_names = self.scenario_instance.protocol_handler.agent_names
+
+        raw_transcripts = []
+        processed_transcripts = []
+
+        for rollout_id in range(num_rollouts):
+
+            raw_transcript = []
+            processed_transcript = []
+
+            for round_id in range(self.max_message_rounds):
+
+                raw_transcript_round = {}
+                for agent_id, agent_name in enumerate(agent_names):
+                    if raw_message[rollout_id, round_id, agent_id] is not None:
+                        raw_transcript_round[agent_name] = raw_message[
+                            rollout_id, round_id, agent_id
+                        ]
+
+                # If we ever have a round where no agent messaged, we are done for the
+                # whole rollout
+                if not raw_transcript_round:
+                    break
+
+                raw_transcript.append(raw_transcript_round)
+
+                # To get the processed transcript, we look at the last message history
+                # in the rollout. The key is the active agent name and channel name,
+                # with an "@" in between.
+                processed_transcript_round = {}
+                for channel_id, channel_name in enumerate(channel_names):
+                    agent_name = agent_names[
+                        message_agent_id[rollout_id, -1, round_id, channel_id]
+                    ]
+                    key = f"{agent_name}@{channel_name}"
+                    processed_transcript_round[key] = message_history[
+                        rollout_id, -1, round_id, channel_id
+                    ]
+                if processed_transcript_round:
+                    processed_transcript.append(processed_transcript_round)
+
+            raw_transcripts.append(raw_transcript)
+            processed_transcripts.append(processed_transcript)
+
+        return raw_transcripts, processed_transcripts
 
 
 def _sample_single_rollout(

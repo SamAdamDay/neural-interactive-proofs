@@ -222,6 +222,22 @@ class SoloAgentParameters(SubParameters):
 
 @register_parameter_class
 @dataclass
+class TextRlParameters(SubParameters):
+    """Additional parameters for the text-based RL trainers.
+
+    Parameters
+    ----------
+    save_transcripts : bool
+        Whether to save the transcripts of the rollouts. Note that the raw rollouts are
+        always saved, and the transcripts can be extracted from them. So this is mostly
+        for convenience (and comes with a small processing overhead).
+    """
+
+    save_transcripts: bool = True
+
+
+@register_parameter_class
+@dataclass
 class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 

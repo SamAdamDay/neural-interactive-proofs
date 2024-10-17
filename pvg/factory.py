@@ -53,7 +53,7 @@ from pvg.scenario_base.environment import Environment
 from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.message_regression import MessageRegressor, build_message_regressor
-from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
+from pvg.constants import MODEL_CHECKPOINT_ARTIFACT_PREFIX
 from pvg.utils.params import get_agent_part_flags
 from pvg.utils.maths import set_seed
 
@@ -430,7 +430,7 @@ def _build_agents(
         if agent_params.load_checkpoint_and_parameters:
             # Select the artifact to load
             artifact = checkpoint_wandb_run.use_artifact(
-                f"{CHECKPOINT_ARTIFACT_PREFIX}{agent_params.checkpoint_run_id}:"
+                f"{MODEL_CHECKPOINT_ARTIFACT_PREFIX}{agent_params.checkpoint_run_id}:"
                 f"{agent_params.checkpoint_version}"
             )
 
