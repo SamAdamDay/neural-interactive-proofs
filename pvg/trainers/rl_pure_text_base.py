@@ -345,6 +345,8 @@ class PureTextRlTrainer(Trainer, ABC):
               generated each message in the message history.
             - ("agents", "raw_message") (batch round agent) : The raw message generated
               by each model in each timestep.
+            - ("agents", "decision") (batch round agent) : The decision made by each
+              agent in each timestep.
 
         Returns
         -------
@@ -362,10 +364,12 @@ class PureTextRlTrainer(Trainer, ABC):
         message_history = rollouts["message_history"]
         message_agent_id = rollouts["message_agent_id"]
         raw_message = rollouts["agents", "raw_message"]
+        decision = rollouts["agents", "decision"]
         num_rollouts = rollouts.batch_size[0]
 
-        channel_names = self.scenario_instance.protocol_handler.message_channel_names
-        agent_names = self.scenario_instance.protocol_handler.agent_names
+        protocol_handler = self.scenario_instance.protocol_handler
+        channel_names = protocol_handler.message_channel_names
+        agent_names = protocol_handler.agent_names
 
         raw_transcripts = []
         processed_transcripts = []
@@ -391,18 +395,47 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 raw_transcript.append(raw_transcript_round)
 
-                # To get the processed transcript, we look at the last message history
-                # in the rollout. The key is the active agent name and channel name,
-                # with an "@" in between.
                 processed_transcript_round = {}
-                for channel_id, channel_name in enumerate(channel_names):
-                    agent_name = agent_names[
-                        message_agent_id[rollout_id, -1, round_id, channel_id]
-                    ]
-                    key = f"{agent_name}@{channel_name}"
-                    processed_transcript_round[key] = message_history[
-                        rollout_id, -1, round_id, channel_id
-                    ]
+
+                # We first check the decision made by a verifier, and if it is made, we
+                # set the processed transcript to "Accept" or "Reject" based on the
+                # decision.
+                for verifier_name in protocol_handler.verifier_names:
+                    key = f"{verifier_name}.decision"
+                    verifier_index = agent_names.index(verifier_name)
+                    if decision[rollout_id, round_id, verifier_index] == 0:
+                        processed_transcript_round[key] = "Reject"
+                        break
+                    elif decision[rollout_id, round_id, verifier_index] == 1:
+                        processed_transcript_round[key] = "Accept"
+                        break
+
+                # Otherwise, we look at the last message history in the rollout. The key
+                # is the active agent name and channel name, with an "@" in between.
+                else:
+                    for channel_id, channel_name in enumerate(channel_names):
+
+                        # Get the id of the agent who messaged in this channel
+                        agent_id = message_agent_id[
+                            rollout_id, -1, round_id, channel_id
+                        ]
+
+                        # If the agent id is -1, it means no agent messaged in this
+                        # channel in this round
+                        if agent_id == -1:
+                            continue
+
+                        agent_name = agent_names[
+                            message_agent_id[rollout_id, -1, round_id, channel_id]
+                        ]
+
+                        # Add the message to the processed transcript with the key
+                        # "{agent_name}@{channel_name}"
+                        key = f"{agent_name}@{channel_name}"
+                        processed_transcript_round[key] = message_history[
+                            rollout_id, -1, round_id, channel_id
+                        ]
+
                 if processed_transcript_round:
                     processed_transcript.append(processed_transcript_round)
 
