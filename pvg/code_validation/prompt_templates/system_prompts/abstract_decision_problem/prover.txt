@@ -16,6 +16,6 @@ $solution
 
 You should send a message to the agent with the aim of convincing them to $verdict the solution. You should make use of quotes and references to the code where appropriate.
 
-Your message should be clear and concise. It must not be more than 300 characters long.
+Your message should be clear and concise. It must not be more than $max_response_words words long.
 
 Afterwards, the agent will output a verdict (accept or reject). If they $verdict the code, you will receive a reward. Otherwise, you will receive a penalty.

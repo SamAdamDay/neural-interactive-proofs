@@ -663,10 +663,13 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_params.use_dummy_api:
             return self._generate_dummy_response(chat_messages_prompt), "stop"
         else:
+            max_tokens = self.agent_params.max_tokens_per_message
+            if max_tokens is None:
+                max_tokens = int(self.agent_params.max_response_words * 1.5)
             completion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=chat_messages_prompt,
-                max_tokens=self.agent_params.max_tokens_per_message,
+                max_tokens=max_tokens,
                 temperature=self.agent_params.temperature,
                 top_p=self.agent_params.top_p,
             )
@@ -762,6 +765,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             question=question,
             solution=solution,
             max_questions=self.protocol_handler.max_verifier_turns - 1,
+            max_response_words=self.agent_params.max_response_words,
             verdict="accept",
         )
         chat_messages = [dict(role="system", content=system_prompt)]
