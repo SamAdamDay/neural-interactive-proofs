@@ -300,10 +300,10 @@ class DebateProtocol(PvgProtocol):
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """Implementation of the Merlin-Arthur protocol.
 
-    The protocol consists of two provers and a verifier. Only one prover is active at a
-    time, and this is determined randomly. "prover0" attempts to convince the verifier
-    of a negative answer, while "prover1" attempts to convince the verifier of a
-    positive answer.
+    The protocol consists of two provers and a verifier. One of the two provers sends a
+    message to the verifier, who then makes a decision. Which prover sends the message
+    is determined randomly. "prover0" attempts to convince the verifier of a negative
+    answer, while "prover1" attempts to convince the verifier of a positive answer.
 
     Parameters
     ----------
@@ -349,43 +349,24 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             A boolean mask indicating which agents are active in the given round.
         """
 
-        # Generate a random sequence for each batch element
-        random_sequence = minstd_generate_pseudo_random_sequence(
-            seed, self.max_message_rounds
+        # Determine which of the two provers sends the message
+        prover1_goes = (seed % 2) == 0
+        return rearrange(
+            [
+                (round == 0) & prover1_goes,
+                (round == 0) & ~prover1_goes,
+                round == 1,
+            ],
+            "agent ... -> ... agent 1",
         )
-
-        # Use the round-th element of the random sequence to determine which prover goes
-        # first
-        prover1_first = (
-            random_sequence.gather(-1, round[..., None]).squeeze(-1) % 2 == 0
-        )
-
-        if self.params.protocol_common.verifier_first:
-            return rearrange(
-                [
-                    (round % 2 == 1) & prover1_first,
-                    (round % 2 == 1) & ~prover1_first,
-                    round % 2 == 0,
-                ],
-                "agent ... -> ... agent 1",
-            )
-        else:
-            return rearrange(
-                [
-                    (round % 2 == 0) & prover1_first,
-                    (round % 2 == 0) & ~prover1_first,
-                    round % 2 == 1,
-                ],
-                "agent ... -> ... agent 1",
-            )
 
     def can_agent_be_active(
         self, agent_name: str, round: int, channel_name: str
     ) -> bool:
         """Specifies whether an agent can be active in a given round.
 
-        When the verifier goes second, both provers can be active in (zero-based) even
-        rounds, and the verifier is active in odd rounds.
+        The provers can only be active in the first round, and the verifier can only be
+        active in the second round.
 
         Returns
         -------
@@ -393,16 +374,10 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             Whether the agent can be active in the given round.
         """
 
-        if self.params.protocol_common.verifier_first:
-            if agent_name in ["prover0", "prover1"]:
-                return round % 2 == 1
-            elif agent_name == "verifier":
-                return round % 2 == 0
-        else:
-            if agent_name in ["prover0", "prover1"]:
-                return round % 2 == 0
-            elif agent_name == "verifier":
-                return round % 2 == 1
+        if agent_name in ["prover0", "prover1"]:
+            return round == 0
+        elif agent_name == "verifier":
+            return round == 1
 
     def _include_prover_rewards(
         self,
