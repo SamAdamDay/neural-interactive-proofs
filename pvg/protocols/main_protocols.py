@@ -44,7 +44,6 @@ from pvg.protocols.base import (
     DeterministicSingleVerifierProtocolHandler,
 )
 from pvg.protocols.registry import register_protocol_handler
-from pvg.utils.maths import minstd_generate_pseudo_random_sequence
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -317,7 +316,6 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
-    agent_human_names = ["Expert 1", "Expert 2", "Verifier"]
     message_channel_names = ["main"]
     agent_channel_visibility = [
         ("prover0", "main"),
@@ -407,7 +405,6 @@ class MnipProtocol(PvgProtocol):
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
-    agent_human_names = ["Expert 1", "Expert 2", "Verifier"]
     message_channel_names = ["prover0_channel", "prover1_channel"]
     agent_channel_visibility = [
         ("prover0", "prover0_channel"),
@@ -522,7 +519,6 @@ class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""
 
     agent_names = ["prover0", "prover1", "prover2", "verifier"]
-    agent_human_names = ["Expert 1", "Expert 2", "Expert 3", "Verifier"]
     message_channel_names = ["main", "prover0_verifier", "prover_chat"]
     agent_channel_visibility = [
         ("prover0", "main"),
