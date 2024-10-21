@@ -16,8 +16,15 @@ class RlTrainerParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int | None
-        The number of frames to sample per training iteration. If `None` we sample the
-        amount of frames needed so that every training datapoint appears exactly once.
+        The number of frames to sample per training iteration. If `None` we set the
+        number of frames so that `rollouts_per_iteration` rollouts are sampled per
+        iteration.
+    rollouts_per_iteration : int | None
+        If `frames_per_batch` is `None`, we use this parameter to determine the number
+        of rollouts to sample per iteration. `frames_per_batch` is then set to
+        `rollouts_per_iteration * steps_per_env_per_iteration`. If `None`, this defaults
+        to the dataset size, so that every training datapoint appears exactly once in
+        each iteration.
     steps_per_env_per_iteration : int | None
         Each batch is divided into a number of environments which run trajectories for
         this many steps. Note that when a trajectory ends, a new one is started
@@ -66,6 +73,7 @@ class RlTrainerParameters(SubParameters):
 
     # Sampling
     frames_per_batch: int | None = 1000
+    rollouts_per_iteration: int | None = None
     steps_per_env_per_iteration: int | None = None
     num_iterations: int = 1000
 

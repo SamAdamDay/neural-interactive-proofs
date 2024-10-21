@@ -101,10 +101,21 @@ class Environment(ABC):
 
     @property
     def frames_per_batch(self) -> int:
+        """The number of frames to sample per training iteration.
+        
+        This can be set directly with `rl.frames_per_batch`, or it can be determined by
+        `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
+        """
         if self.params.rl.frames_per_batch is not None:
             return self.params.rl.frames_per_batch
         else:
-            return len(self.dataset) * self.steps_per_env_per_iteration
+            if self.params.rl.rollouts_per_iteration is not None:
+                return (
+                    self.params.rl.rollouts_per_iteration
+                    * self.steps_per_env_per_iteration
+                )
+            else:
+                return len(self.dataset) * self.steps_per_env_per_iteration
 
     @property
     def num_envs(self) -> int:
