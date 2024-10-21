@@ -102,7 +102,7 @@ class Environment(ABC):
     @property
     def frames_per_batch(self) -> int:
         """The number of frames to sample per training iteration.
-        
+
         This can be set directly with `rl.frames_per_batch`, or it can be determined by
         `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
         """

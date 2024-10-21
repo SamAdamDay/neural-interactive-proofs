@@ -144,6 +144,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self,
         environment: PureTextEnvironment,
         use_tqdm: bool = False,
+        tqdm_desc: str = "Sampling rollouts",
     ) -> NestedArrayDict:
         """Sample rollouts in the environment.
 
@@ -159,6 +160,8 @@ class PureTextRlTrainer(Trainer, ABC):
             The environment to sample rollouts in.
         use_tqdm : bool
             Whether to create a tqdm progress bar for the rollouts.
+        tqdm_desc : str
+            The description to use for the tqdm progress bar.
 
         Returns
         -------
@@ -188,7 +191,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 rollout_iterator = tqdm(
                     rollout_iterator,
                     total=environment.num_envs,
-                    desc="Sampling rollouts",
+                    desc=tqdm_desc,
                 )
 
             return list(rollout_iterator)

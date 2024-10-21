@@ -44,6 +44,17 @@ class RlTrainerParameters(SubParameters):
         Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
+    loss_critic_type : str
+        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+    clip_value : float or bool, optional
+        If a ``float`` is provided, it will be used to compute a clipped version of the
+        value prediction with respect to the input tensordict value estimate and use it
+        to calculate the value loss. The purpose of clipping is to limit the impact of
+        extreme value predictions, helping stabilize training and preventing large
+        updates. However, it will have no impact if the value estimate was done by the
+        current version of the value estimator. If instead ``True`` is provided, the
+        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
+        provided or ``False``, no clipping will be performed. Defaults to ``False``.
     normalize_observations : bool
         Whether to normalise the observations in the environment.
     num_normalization_steps : int
@@ -58,17 +69,6 @@ class RlTrainerParameters(SubParameters):
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
         The number of iterations to run the test for.
-    loss_critic_type : str
-        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-    clip_value : float or bool, optional
-        If a ``float`` is provided, it will be used to compute a clipped version of the
-        value prediction with respect to the input tensordict value estimate and use it
-        to calculate the value loss. The purpose of clipping is to limit the impact of
-        extreme value predictions, helping stabilize training and preventing large
-        updates. However, it will have no impact if the value estimate was done by the
-        current version of the value estimator. If instead ``True`` is provided, the
-        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
-        provided or ``False``, no clipping will be performed. Defaults to ``False``.
     """
 
     # Sampling
@@ -254,6 +254,10 @@ class PureTextEiParameters(SubParameters):
     reward_threshold : float
         The threshold on the reward for a rollout to be added to the fine-tuning
         dataset.
+    run_test_loop : bool
+        Whether to run the test loop after training.
     """
 
     reward_threshold: float = 0.9
+
+    run_test_loop: bool = False

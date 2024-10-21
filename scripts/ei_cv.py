@@ -16,6 +16,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    PureTextEiParameters,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -29,7 +30,7 @@ from pvg.constants import WANDB_CV_PROJECT
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
-    num_iterations=[10],
+    num_iterations=[1],
     rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
@@ -45,7 +46,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    use_dummy_api=[False],
+    run_test_loop=[False],
+    use_dummy_api=[True],
 )
 
 
@@ -102,6 +104,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             rollouts_per_iteration=combo["rollouts_per_iteration"],
             frames_per_batch=None,
             num_iterations=combo["num_iterations"],
+        ),
+        pure_text_ei=PureTextEiParameters(
+            run_test_loop=combo["run_test_loop"],
         ),
         agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],

@@ -162,15 +162,19 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         if self.state.train_loop_stage == "test":
 
-            # Sample rollouts from the test environment
-            rollouts = self.sample_rollouts(self.test_environment, use_tqdm=True)
+            if self.params.pure_text_ei.run_test_loop:
 
-            # Log the statistics of the rollouts
-            log_stats = self._get_log_stats(rollouts, train=False)
-            self.settings.stat_logger.log(log_stats)
+                # Sample rollouts from the test environment
+                rollouts = self.sample_rollouts(
+                    self.test_environment, use_tqdm=True, tqdm_desc="Testing"
+                )
 
-            # Save the rollouts to the checkpoint directory
-            self.save_rollouts(rollouts, "test")
+                # Log the statistics of the rollouts
+                log_stats = self._get_log_stats(rollouts, train=False)
+                self.settings.stat_logger.log(log_stats)
+
+                # Save the rollouts to the checkpoint directory
+                self.save_rollouts(rollouts, "test")
 
             # Mark the experiment as done
             self.state.train_loop_stage = "done"
