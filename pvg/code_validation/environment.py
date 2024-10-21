@@ -38,6 +38,16 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         return observation_spec
 
+    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+
+        datapoint = super().get_datapoint_from_env_state_as_dict(env_state)
+
+        datapoint["question"] = str(env_state["question"])
+        datapoint["solution"] = str(env_state["solution"])
+        datapoint["verdict"] = int(env_state["verdict"])
+
+        return datapoint
+
     def _masked_reset(
         self,
         env_state: NestedArrayDict,

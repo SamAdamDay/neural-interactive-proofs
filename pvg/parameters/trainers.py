@@ -1,6 +1,6 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Literal
 from dataclasses import dataclass
 
 from pvg.parameters.base import SubParameters, register_parameter_class
@@ -239,9 +239,12 @@ class TextRlParameters(SubParameters):
         Whether to save the transcripts of the rollouts. Note that the raw rollouts are
         always saved, and the transcripts can be extracted from them. So this is mostly
         for convenience (and comes with a small processing overhead).
+    transcript_format : Literal["json", "yaml"]
+        The format to save the transcripts in.
     """
 
     save_transcripts: bool = True
+    transcript_format: Literal["json", "yaml"] = "yaml"
 
 
 @register_parameter_class

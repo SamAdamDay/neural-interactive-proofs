@@ -12,6 +12,7 @@ numpy==2.1.0
 openai==1.44.0
 pandas==2.2.2
 plotly==5.22.0
+pyyaml==5.4.1
 safetensors==0.4.3
 scikit-learn==1.5.0
 tensordict==0.4.0
