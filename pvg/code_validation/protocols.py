@@ -35,24 +35,29 @@ class CodeValidationAgentSpec:
     ----------
     human_name : str
         The human-friendly name of the agent, used in prompts.
-    response_channel_headers : Optional[dict[str, str]], optional
+    response_channel_headers : dict[str, str], optional
         In multi-channel protocols, the completion from the model should contain
         messages for all channels in which the agent is active. Each message is prefaced
         by a header that specifies the channel. This dictionary maps channel names to
         headers. This can be `None` if the agent is active in only one channel.
-    channel_order : Optional[list[str]], optional
+    channel_order : list[str], optional
         When making a request to the model, in each round the channels are ordered
         according to this list. It is recommended to put the channels in which the agent
         is active last. If `None`, the order is determined by the protocol handler.
     anonymous : bool, optional
         Whether the agent is anonymous. If True, the agent's name will not be used in
         prompts. Default is False.
+    last_round_system_message : str, optional
+        If set, this message will be sent as a system message at the beginning of the
+        last round of the interaction to the agent. This can be used to tell the agent
+        to make a decision.
     """
 
     human_name: str
     response_channel_headers: Optional[dict[str, str]] = None
     channel_order: Optional[list[str]] = None
     anonymous: bool = False
+    last_round_system_message: Optional[str] = None
 
 
 class CodeValidationProtocolHandler(ProtocolHandler, ABC):
@@ -327,7 +332,11 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 class PvgCodeValidationProtocol(CodeValidationProtocolHandler, PvgProtocol):
 
     agent_specs = {
-        "verifier": CodeValidationAgentSpec("Verifier"),
+        "verifier": CodeValidationAgentSpec(
+            "Verifier",
+            last_round_system_message="You cannot ask any more questions. You must now "
+            "make a decision.",
+        ),
         "prover": CodeValidationAgentSpec("Expert"),
     }
 
@@ -351,6 +360,8 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
                 "prover0_channel": "Question for Expert_1:",
                 "prover1_channel": "Question for Expert_2:",
             },
+            last_round_system_message="You cannot ask any more questions. You must now "
+            "make a decision.",
         ),
         "prover0": CodeValidationAgentSpec(
             "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
@@ -383,6 +394,8 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
                 "prover0_channel": "Question for Expert_1:",
                 "prover1_channel": "Question for Expert_2:",
             },
+            last_round_system_message="You cannot ask any more questions. You must now "
+            "make a decision.",
         ),
         "prover0": CodeValidationAgentSpec(
             "Expert_1", channel_order=["prover1_channel", "prover0_channel"]

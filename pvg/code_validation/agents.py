@@ -633,6 +633,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     num_generation_errors
                     == self.agent_params.num_invalid_generation_retries
                 ):
+                    from pprint import pprint
+
+                    pprint(chat_messages_prompt)
                     raise e.copy_with_retries(num_generation_errors) from e
 
             # Retry if there is a timeout, but wait a bit first
@@ -773,9 +776,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         chat_messages = [dict(role="system", content=system_prompt)]
 
         # Then add the chat history, with messages from the current agent
+        message_history_length = 0
         for round_id in range(self.max_message_rounds):
-            for channel_name in enumerate(
-                self.protocol_handler.get_agent_ordered_channels(self.agent_name)
+            for channel_name in self.protocol_handler.get_agent_ordered_channels(
+                self.agent_name
             ):
 
                 if not self.protocol_handler.can_agent_see_channel(
@@ -796,10 +800,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 chat_item = dict(content=str(message))
 
                 # Determine which agent sent the message
-                message_agent_id = message_agent_id[round_id, channel_id]
-                if message_agent_id == -1:
+                if message_agent_id[round_id, channel_id] == -1:
                     raise ValueError(f"Agent ID is -1 in round {round_id}")
-                message_agent_name = self.protocol_handler.agent_names[message_agent_id]
+                message_agent_name = self.protocol_handler.agent_names[
+                    message_agent_id[round_id, channel_id]
+                ]
 
                 # Determine the role of the message
                 if self.agent_name == message_agent_name:
@@ -815,6 +820,19 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     chat_item["name"] = message_agent_spec.human_name
 
                 chat_messages.append(chat_item)
+
+            else:
+                message_history_length = round_id + 1
+
+        # If the next message will be the last, add the last-round system message if
+        # applicable
+        if (
+            message_history_length == self.max_message_rounds - 1
+            and self.agent_spec.last_round_system_message is not None
+        ):
+            chat_messages.append(
+                dict(role="system", content=self.agent_spec.last_round_system_message)
+            )
 
         if ensure_last_message_is_assistant:
             while chat_messages[-1]["role"] != "assistant":
