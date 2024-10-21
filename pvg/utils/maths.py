@@ -378,7 +378,7 @@ def mean_episode_reward(
 def minstd_generate_pseudo_random_sequence(
     seed: Int[Tensor, "..."], length: int
 ) -> Int[Tensor, "... length"]:
-    """Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
+    r"""Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
 
     The MINSTD algorithm is a simple linear congruential generator (LCG) that is defined
     by the following recurrence relation:
