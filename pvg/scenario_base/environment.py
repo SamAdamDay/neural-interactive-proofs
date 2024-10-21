@@ -846,6 +846,14 @@ class PureTextEnvironment(Environment, ABC):
                 ),
                 "batch round channel",
             ),
+            raw_message_history=StringArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_agents,
+                ),
+                "batch round agent",
+            ),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -990,6 +998,11 @@ class PureTextEnvironment(Environment, ABC):
 
         next_state["message_history"] = message_history
         next_state["message_agent_id"] = message_agent_id
+
+        # Add the raw messages to the raw message history
+        raw_message_history = env_state["raw_message_history"].copy()
+        raw_message_history[0, round] = env_state["agents", "raw_message"][0]
+        next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
         shared_done, agent_done, terminated, reward = (

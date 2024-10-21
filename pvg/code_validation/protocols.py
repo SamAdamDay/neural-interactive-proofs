@@ -51,6 +51,15 @@ class CodeValidationAgentSpec:
         If set, this message will be sent as a system message at the beginning of the
         last round of the interaction to the agent. This can be used to tell the agent
         to make a decision.
+    use_raw_message_for_self_prompt : bool, default=True
+        When prompting the agent for a message, whether messages sent from this agent
+        should be included in the chat history as raw messages (rather than being split
+        by channel). This agent's messages will still be split by channel in the chat
+        histories used to prompt other agents. When prompting a model with its own past
+        messages, it makes sense to use the raw messages, since the model will do some
+        in-context learning. If the model always sees the messages split by channel, it
+        will eventually learn to generate messages that are split by channel, which is
+        not what we want.
     """
 
     human_name: str
@@ -58,6 +67,7 @@ class CodeValidationAgentSpec:
     channel_order: Optional[list[str]] = None
     anonymous: bool = False
     last_round_system_message: Optional[str] = None
+    use_raw_message_for_self_prompt: bool = True
 
 
 class CodeValidationProtocolHandler(ProtocolHandler, ABC):
