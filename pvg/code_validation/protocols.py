@@ -321,12 +321,12 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
         "verifier": CodeValidationAgentSpec(
             "Verifier",
             response_channel_headers={
-                "prover0_channel": "Question for Expert 1:",
-                "prover1_channel": "Question for Expert 2:",
+                "prover0_channel": "Question for Expert_1:",
+                "prover1_channel": "Question for Expert_2:",
             },
         ),
-        "prover0": CodeValidationAgentSpec("Expert 1"),
-        "prover1": CodeValidationAgentSpec("Expert 2"),
+        "prover0": CodeValidationAgentSpec("Expert_1"),
+        "prover1": CodeValidationAgentSpec("Expert_2"),
     }
 
 
@@ -337,8 +337,8 @@ class MerlinArthurCodeValidationProtocol(
 
     agent_specs = {
         "verifier": CodeValidationAgentSpec("Verifier"),
-        "prover0": CodeValidationAgentSpec("Expert 1", anonymous=True),
-        "prover1": CodeValidationAgentSpec("Expert 2", anonymous=True),
+        "prover0": CodeValidationAgentSpec("Expert_1", anonymous=True),
+        "prover1": CodeValidationAgentSpec("Expert_2", anonymous=True),
     }
 
 
@@ -349,10 +349,10 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
         "verifier": CodeValidationAgentSpec(
             "Verifier",
             response_channel_headers={
-                "prover0_channel": "Question for Expert 1:",
-                "prover1_channel": "Question for Expert 2:",
+                "prover0_channel": "Question for Expert_1:",
+                "prover1_channel": "Question for Expert_2:",
             },
         ),
-        "prover0": CodeValidationAgentSpec("Expert 1"),
-        "prover1": CodeValidationAgentSpec("Expert 2"),
+        "prover0": CodeValidationAgentSpec("Expert_1"),
+        "prover1": CodeValidationAgentSpec("Expert_2"),
     }
