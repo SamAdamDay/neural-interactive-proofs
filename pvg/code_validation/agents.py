@@ -480,6 +480,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             - "round" (...): The current round number.
             - "message_history" (... round channel): The history of messages exchanged
                 between the agents in each channel.
+            - "message_agent_id" (... round channel): The id of the agent who messaged
+                at a round-channel pair.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
             - "verdict" (...): The verdict that the prover is arguing for, where 0 means
@@ -772,9 +774,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         # Then add the chat history, with messages from the current agent
         for round_id in range(self.max_message_rounds):
-            for channel_id, channel_name in enumerate(
-                self.protocol_handler.message_channel_names
+            for channel_name in enumerate(
+                self.protocol_handler.get_agent_ordered_channels(self.agent_name)
             ):
+
+                if not self.protocol_handler.can_agent_see_channel(
+                    self.agent_name, channel_name
+                ):
+                    continue
+
+                channel_id = self.protocol_handler.message_channel_names.index(
+                    channel_name
+                )
 
                 message = message_history[round_id, channel_id]
 
@@ -784,22 +795,24 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 # Build the item in the chat history
                 chat_item = dict(content=str(message))
 
+                # Determine which agent sent the message
+                message_agent_id = message_agent_id[round_id, channel_id]
+                if message_agent_id == -1:
+                    raise ValueError(f"Agent ID is -1 in round {round_id}")
+                message_agent_name = self.protocol_handler.agent_names[message_agent_id]
+
                 # Determine the role of the message
-                if self.protocol_handler.can_agent_be_active(
-                    self.agent_name, round_id, channel_name
-                ):
+                if self.agent_name == message_agent_name:
                     chat_item["role"] = "assistant"
                 else:
                     chat_item["role"] = "user"
 
                 # Add the name of the agent if it is not anonymous
-                agent_id = message_agent_id[round_id, channel_id]
-                if agent_id == -1:
-                    raise ValueError(f"Agent ID is -1 in round {round_id}")
-                agent_name = self.protocol_handler.agent_names[agent_id]
-                agent_spec = self.protocol_handler.agent_specs[agent_name]
-                if not agent_spec.anonymous:
-                    chat_item["name"] = agent_spec.human_name
+                message_agent_spec = self.protocol_handler.agent_specs[
+                    message_agent_name
+                ]
+                if not message_agent_spec.anonymous:
+                    chat_item["name"] = message_agent_spec.human_name
 
                 chat_messages.append(chat_item)
 

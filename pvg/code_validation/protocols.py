@@ -40,6 +40,10 @@ class CodeValidationAgentSpec:
         messages for all channels in which the agent is active. Each message is prefaced
         by a header that specifies the channel. This dictionary maps channel names to
         headers. This can be `None` if the agent is active in only one channel.
+    channel_order : Optional[list[str]], optional
+        When making a request to the model, in each round the channels are ordered
+        according to this list. It is recommended to put the channels in which the agent
+        is active last. If `None`, the order is determined by the protocol handler.
     anonymous : bool, optional
         Whether the agent is anonymous. If True, the agent's name will not be used in
         prompts. Default is False.
@@ -47,6 +51,7 @@ class CodeValidationAgentSpec:
 
     human_name: str
     response_channel_headers: Optional[dict[str, str]] = None
+    channel_order: Optional[list[str]] = None
     anonymous: bool = False
 
 
@@ -99,6 +104,28 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             f"pvg.code_validation.prompt_templates.system_prompts"
             f".{self.params.interaction_protocol!s}"
         )
+
+    def get_agent_ordered_channels(self, agent_name: str) -> list[str]:
+        """Get the the channels ordered for the agent.
+
+        Channels can be ordered differently for each agent, when creating the request to
+        the model.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+
+        Returns
+        -------
+        channel_order : list[str]
+            The order of channels for the agent.
+        """
+
+        if self.agent_specs[agent_name].channel_order is not None:
+            return self.agent_specs[agent_name].channel_order
+
+        return self.message_channel_names
 
     def parse_chat_completion(
         self, completion_text: str, agent_name: str, round: int
@@ -325,8 +352,12 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
                 "prover1_channel": "Question for Expert_2:",
             },
         ),
-        "prover0": CodeValidationAgentSpec("Expert_1"),
-        "prover1": CodeValidationAgentSpec("Expert_2"),
+        "prover0": CodeValidationAgentSpec(
+            "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
+        ),
+        "prover1": CodeValidationAgentSpec(
+            "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
+        ),
     }
 
 
@@ -353,6 +384,10 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
                 "prover1_channel": "Question for Expert_2:",
             },
         ),
-        "prover0": CodeValidationAgentSpec("Expert_1"),
-        "prover1": CodeValidationAgentSpec("Expert_2"),
+        "prover0": CodeValidationAgentSpec(
+            "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
+        ),
+        "prover1": CodeValidationAgentSpec(
+            "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
+        ),
     }
