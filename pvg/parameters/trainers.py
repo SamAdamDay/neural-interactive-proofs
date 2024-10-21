@@ -246,20 +246,6 @@ class PureTextEiParameters(SubParameters):
     reward_threshold : float
         The threshold on the reward for a rollout to be added to the fine-tuning
         dataset.
-    use_prover_watchdog : bool
-        Whether to use a language model to evaluate how well the prover(s) are
-        conforming to their roles.
-    prover_watchdog_model_name : str
-        The name of the language model to use as the watchdog.
-    prover_watchdog_use_dummy_api : bool
-        Whether to use a dummy API to generate responses from the watchdog.
-    prover_watchdog_num_invalid_generation_retries : int
-        The number of retries to allow when the watchdog generates an invalid response.
     """
 
     reward_threshold: float = 0.9
-
-    use_prover_watchdog: bool = False
-    prover_watchdog_model_name: str = "gpt-4o-mini-2024-07-18"
-    prover_watchdog_use_dummy_api: bool = False
-    prover_watchdog_num_invalid_generation_retries: int = 3
