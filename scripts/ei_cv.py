@@ -167,8 +167,8 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
 def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
     if combo_index is None:
-        return f"ei_vc_{cmd_args.run_infix}"
-    return f"ei_vc_{cmd_args.run_infix}_{combo_index}"
+        return f"ei_cv_{cmd_args.run_infix}"
+    return f"ei_cv_{cmd_args.run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
