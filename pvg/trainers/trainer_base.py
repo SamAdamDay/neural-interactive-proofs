@@ -21,10 +21,10 @@ from wandb import Artifact
 from tqdm import tqdm
 
 from pvg.scenario_base.agents import AgentState
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
-from pvg.utils.params import get_agent_part_flags
+from pvg.utils.hyper_params import get_agent_part_flags
 from pvg.constants import (
     EXPERIMENT_STATE_DIR,
     CHECKPOINT_STATE_ARTIFACT_PREFIX,
@@ -41,7 +41,7 @@ class Trainer(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -79,11 +79,11 @@ class Trainer(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.scenario_instance = scenario_instance
         self.settings = settings
 
@@ -129,7 +129,7 @@ class Trainer(ABC):
 
         # Save the parameters to a separate file
         with open(self.checkpoint_params_path, "w") as f:
-            json.dump(self.params.to_dict(), f, sort_keys=True, indent=4)
+            json.dump(self.hyper_params.to_dict(), f, sort_keys=True, indent=4)
 
         # If using W&B, also log the checkpoint as an artifact
         if self.settings.wandb_run is not None:
@@ -194,7 +194,7 @@ class Trainer(ABC):
         if self.checkpoint_base_dir is None:
             return None
 
-        return self.checkpoint_base_dir.joinpath("params.json")
+        return self.checkpoint_base_dir.joinpath("hyper_params.json")
 
     def _load_checkpoint(self) -> State:
         """Load the experiment state from a checkpoint, if available.
@@ -241,7 +241,10 @@ class Trainer(ABC):
 
         # Check if the parameters in the checkpoint match the current parameters
         with open(self.checkpoint_params_path, "r") as f:
-            if json.dumps(self.params.to_dict(), sort_keys=True, indent=4) != f.read():
+            if (
+                json.dumps(self.hyper_params.to_dict(), sort_keys=True, indent=4)
+                != f.read()
+            ):
                 print(  # noqa: T201
                     "The parameters in the checkpoint do not match the current "
                     "parameters."
@@ -320,16 +323,16 @@ class TensorDictTrainer(Trainer, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
-        super().__init__(params, scenario_instance, settings)
+        super().__init__(hyper_params, scenario_instance, settings)
 
         self.device = self.settings.device
 
         # Check if we need a critic and if it shares a body with the actor
-        self.use_critic, self.use_single_body, _ = get_agent_part_flags(params)
+        self.use_critic, self.use_single_body, _ = get_agent_part_flags(hyper_params)
 
     def _build_train_context(self, stack: ExitStack) -> list[ContextManager]:
         """Builds the context manager ExitStack for training.
@@ -520,7 +523,7 @@ def attach_progress_bar(
     Example
     -------
     >>> class MyTrainer(Trainer):
-    ...     @attach_progress_bar(lambda self: self.params.num_iterations)
+    ...     @attach_progress_bar(lambda self: self.hyper_params.num_iterations)
     ...     def train(self, iteration_context: IterationContext):
     ...         for i in range(iteration_context.num_iterations):
     ...             iteration_context.step()

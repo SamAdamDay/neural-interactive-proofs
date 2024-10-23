@@ -65,7 +65,7 @@ class ParameterValue(ABC):
         return get_parameter_or_parameter_value_class(class_name)
 
 
-class BaseParameters(ParameterValue, ABC):
+class BaseHyperParameters(ParameterValue, ABC):
     """Base class for parameters objects."""
 
     def to_dict(self) -> dict:
@@ -95,7 +95,7 @@ class BaseParameters(ParameterValue, ABC):
         return params_dict
 
     @classmethod
-    def from_dict(cls, params_dict: dict) -> "BaseParameters":
+    def from_dict(cls, params_dict: dict) -> "BaseHyperParameters":
         """Create a parameters object from a dictionary.
 
         Parameters
@@ -105,7 +105,7 @@ class BaseParameters(ParameterValue, ABC):
 
         Returns
         -------
-        params : BaseParameters
+        hyper_params : BaseParameters
             The parameters object.
         """
 
@@ -190,7 +190,7 @@ class BaseParameters(ParameterValue, ABC):
         for field in dataclasses.fields(self):
             if field.name == first_key:
                 value = getattr(self, first_key)
-                if isinstance(value, BaseParameters):
+                if isinstance(value, BaseHyperParameters):
                     try:
                         return value.get(remainder)
                     except KeyError:
@@ -202,7 +202,7 @@ class BaseParameters(ParameterValue, ABC):
         raise KeyError(f"Address {address!r} not found in parameters object.")
 
     @classmethod
-    def construct_test_params(cls) -> "BaseParameters":
+    def construct_test_params(cls) -> "BaseHyperParameters":
         """Construct a set of basic parameters for testing."""
         raise NotImplementedError
 
@@ -231,10 +231,10 @@ class BaseParameters(ParameterValue, ABC):
 
 
 PARAMETER_VALUE_CLASSES: dict[str, type[ParameterValue]] = {}
-PARAMETER_CLASSES: dict[str, type[BaseParameters]] = {}
+PARAMETER_CLASSES: dict[str, type[BaseHyperParameters]] = {}
 
 V = TypeVar("V", bound=ParameterValue)
-P = TypeVar("P", bound=BaseParameters)
+P = TypeVar("P", bound=BaseHyperParameters)
 
 
 def register_parameter_value_class(cls: type[V]) -> type[V]:
@@ -253,7 +253,7 @@ def register_parameter_class(cls: type[P]) -> type[P]:
 
 def get_parameter_or_parameter_value_class(
     name: str,
-) -> type[ParameterValue] | type[BaseParameters]:
+) -> type[ParameterValue] | type[BaseHyperParameters]:
     """Get a parameter class or parameter value class by name.
 
     If the class is not found in the parameter value classes, it is assumed to be a
@@ -283,7 +283,7 @@ def get_parameter_or_parameter_value_class(
             raise ValueError(f"Parameter class {name!r} not found.")
 
 
-def get_parameter_class(name: str) -> type[BaseParameters]:
+def get_parameter_class(name: str) -> type[BaseHyperParameters]:
     """Get a parameter class by name.
 
     Parameters
@@ -300,5 +300,5 @@ def get_parameter_class(name: str) -> type[BaseParameters]:
 
 
 @dataclass
-class SubParameters(BaseParameters, ABC):
+class SubParameters(BaseHyperParameters, ABC):
     """Base class for sub-parameters objects."""

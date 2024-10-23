@@ -27,7 +27,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -46,23 +46,23 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
 
     @property
     def num_block_groups(self):
-        return self.params.image_classification.num_block_groups
+        return self.hyper_params.image_classification.num_block_groups
 
     @property
     def initial_num_channels(self):
-        return self.params.image_classification.initial_num_channels
+        return self.hyper_params.image_classification.initial_num_channels
 
     @property
     def dataset_num_channels(self):
-        return DATASET_WRAPPER_CLASSES[self.params.dataset].num_channels
+        return DATASET_WRAPPER_CLASSES[self.hyper_params.dataset].num_channels
 
     @property
     def image_width(self):
-        return DATASET_WRAPPER_CLASSES[self.params.dataset].width
+        return DATASET_WRAPPER_CLASSES[self.hyper_params.dataset].width
 
     @property
     def image_height(self):
-        return DATASET_WRAPPER_CLASSES[self.params.dataset].height
+        return DATASET_WRAPPER_CLASSES[self.hyper_params.dataset].height
 
     @property
     def latent_width(self):
@@ -116,7 +116,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
             shape=(
                 self.num_envs,
                 self.protocol_handler.num_message_channels,
-                self.params.message_size,
+                self.hyper_params.message_size,
                 self.latent_height,
                 self.latent_width,
             ),
@@ -145,7 +145,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
                 self.num_envs,
                 self.num_agents,
                 self.protocol_handler.num_message_channels,
-                self.params.message_size,
+                self.hyper_params.message_size,
             ),
             dtype=torch.long,
             device=self.device,

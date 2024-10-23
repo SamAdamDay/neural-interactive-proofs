@@ -103,7 +103,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         except ModuleNotFoundError:
             raise NotImplementedError(
                 f"System prompt directory for protocol "
-                f"{self.params.interaction_protocol!s} not found."
+                f"{self.hyper_params.interaction_protocol!s} not found."
             )
 
         template_filename = f"{agent_name}.txt"
@@ -117,7 +117,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         return (
             f"pvg.code_validation.prompt_templates.system_prompts"
-            f".{self.params.interaction_protocol!s}"
+            f".{self.hyper_params.interaction_protocol!s}"
         )
 
     def get_agent_ordered_channels(self, agent_name: str) -> list[str]:

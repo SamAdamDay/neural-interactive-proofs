@@ -146,7 +146,7 @@ class AgentParameters(SubParameters, ABC):
 
         Returns
         -------
-        params : AgentsParameters
+        hyper_params : AgentsParameters
             The parameters object.
         """
 
@@ -336,7 +336,7 @@ class ImageClassificationAgentParameters(AgentParameters):
         If not None, specifies a pretrained model to load. This is usually either of the
         form "{hf_user}/{model_name}_{dataset}", where `hf_user` is a HuggingFace Hub
         username, or "{model_name}", which resolves to
-        "{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}", where
+        "{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}", where
         `HF_PRETRAINED_MODELS_USER` is defined in the `constants` module. The last-layer
         embeddings will be included in the model architecture.
     pretrained_embedding_channels : int
@@ -510,7 +510,7 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
 
         Returns
         -------
-        params : AgentsParameters
+        hyper_params : AgentsParameters
             The parameters object.
         """
 

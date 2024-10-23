@@ -196,7 +196,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -261,7 +261,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
             shape=(
                 self.num_envs,
                 self.protocol_handler.num_message_channels,
-                self.params.message_size,
+                self.hyper_params.message_size,
                 2,
                 self.max_num_nodes,
             ),
@@ -291,7 +291,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
                 self.num_envs,
                 self.num_agents,
                 self.protocol_handler.num_message_channels,
-                self.params.message_size,
+                self.hyper_params.message_size,
             ),
             dtype=torch.long,
             device=self.device,

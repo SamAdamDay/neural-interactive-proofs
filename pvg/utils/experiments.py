@@ -480,7 +480,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
         )
 
-        # Print the run_id and the Parameters
+        # Print the run_id and the hyper-parameters
         if not cmd_args.quiet:
             base_logger.info("")
             base_logger.info("=" * self.output_width)

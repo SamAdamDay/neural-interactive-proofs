@@ -5,7 +5,7 @@ import pytest
 from sklearn.model_selection import ParameterGrid
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     CodeValidationAgentParameters,
@@ -207,7 +207,7 @@ def test_prepare_run_experiment(param_spec: dict):
         trainer_param.variant = param_spec["spg_variant"]
 
     # Construct the parameters
-    params = Parameters(
+    hyper_params = HyperParameters(
         **{
             "scenario": scenario_type,
             "trainer": trainer_type,
@@ -229,11 +229,11 @@ def test_prepare_run_experiment(param_spec: dict):
     )
 
     # Prepare the experiment
-    prepare_experiment(params=params, test_run=True, ignore_cache=True)
+    prepare_experiment(hyper_params=hyper_params, test_run=True, ignore_cache=True)
 
     # Run the experiment in test mode
     run_experiment(
-        params,
+        hyper_params,
         tqdm_func=DummyTqdm,
         test_run=True,
         ignore_cache=True,

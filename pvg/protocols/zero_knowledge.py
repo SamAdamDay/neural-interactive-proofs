@@ -15,7 +15,7 @@ from einops import rearrange, repeat, reduce
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import HyperParameters, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -35,7 +35,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -46,12 +46,12 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         base_protocol_cls: type[SingleVerifierProtocolHandler],
     ):
 
-        super().__init__(params, settings)
+        super().__init__(hyper_params, settings)
 
         if not base_protocol_cls.can_be_zero_knowledge:
             raise ValueError(
@@ -59,7 +59,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 f"protocol (`can_be_zero_knowledge=False`)."
             )
 
-        self.base_protocol = base_protocol_cls(params, settings)
+        self.base_protocol = base_protocol_cls(hyper_params, settings)
 
         if self.base_protocol.verifier_names != ["verifier"]:
             raise ValueError(
@@ -69,7 +69,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             )
 
         # We rely on the message logits, so we need to make sure they are available
-        if params.scenario not in [
+        if hyper_params.scenario not in [
             ScenarioType.GRAPH_ISOMORPHISM,
             ScenarioType.IMAGE_CLASSIFICATION,
         ]:
@@ -575,7 +575,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         )
 
         # Scale the reward by the coefficient
-        simulator_reward *= self.params.zk_protocol.simulator_reward_coefficient
+        simulator_reward *= self.hyper_params.zk_protocol.simulator_reward_coefficient
 
         return simulator_reward
 
@@ -593,4 +593,4 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         https://www.ijcai.org/proceedings/2022/0476.pdf
         """
 
-        return self.params.zk_protocol.aux_prover_reward_coefficient
+        return self.hyper_params.zk_protocol.aux_prover_reward_coefficient

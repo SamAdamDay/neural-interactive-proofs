@@ -166,7 +166,7 @@ class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
-    by `params.image_classification.selected_classes`).
+    by `hyper_params.image_classification.selected_classes`).
 
     Shapes
     ------
@@ -183,7 +183,7 @@ class ImageClassificationDataset(TensorDictDataset):
     def build_torch_dataset(
         self, *, transform: Optional[Any]
     ) -> TorchVisionDatasetWrapper:
-        dataset_class = DATASET_WRAPPER_CLASSES[self.params.dataset]
+        dataset_class = DATASET_WRAPPER_CLASSES[self.hyper_params.dataset]
         return dataset_class(
             root=self.raw_dir, train=self.train, transform=transform, download=True
         )
@@ -213,7 +213,7 @@ class ImageClassificationDataset(TensorDictDataset):
         binurification_generator.manual_seed(self.binarification_seed)
 
         if (
-            self.params.dataset_options.binarification_method
+            self.hyper_params.dataset_options.binarification_method
             == BinarificationMethodType.MERGE
         ):
             # Shuffle the classes and merge them into two classes
@@ -225,7 +225,7 @@ class ImageClassificationDataset(TensorDictDataset):
             labels = torch.where(shuffled_labels < num_classes // 2, 0, 1)
 
         elif (
-            self.params.dataset_options.binarification_method
+            self.hyper_params.dataset_options.binarification_method
             == BinarificationMethodType.SELECT_TWO
         ):
             # Select the classes we want for binary classification
@@ -238,7 +238,7 @@ class ImageClassificationDataset(TensorDictDataset):
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
 
         elif (
-            self.params.dataset_options.binarification_method
+            self.hyper_params.dataset_options.binarification_method
             == BinarificationMethodType.RANDOM
         ):
             # Select labels at random
@@ -253,11 +253,11 @@ class ImageClassificationDataset(TensorDictDataset):
         else:
             raise ValueError(
                 f"Unknown binarification method: "
-                f"{self.params.dataset_options.binarification_method}"
+                f"{self.hyper_params.dataset_options.binarification_method}"
             )
 
         # Make the dataset balanced if requested
-        if self.params.dataset_options.make_balanced:
+        if self.hyper_params.dataset_options.make_balanced:
             permuted_indices = torch.randperm(len(labels))
             images = images[permuted_indices]
             labels = labels[permuted_indices]
@@ -280,7 +280,7 @@ class ImageClassificationDataset(TensorDictDataset):
             images.shape[0],
             self.protocol_handler.max_message_rounds,
             self.protocol_handler.num_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             *images.shape[-2:],
             dtype=self.x_dtype,
         )
@@ -293,7 +293,7 @@ class ImageClassificationDataset(TensorDictDataset):
     @property
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        return os.path.join(IC_DATA_DIR, self.params.dataset, "raw")
+        return os.path.join(IC_DATA_DIR, self.hyper_params.dataset, "raw")
 
     @property
     def processed_dir(self) -> str:
@@ -302,7 +302,7 @@ class ImageClassificationDataset(TensorDictDataset):
         processed_name = f"processed"
         processed_name += f"_{self.protocol_handler.max_message_rounds}"
         processed_name += f"_{self.protocol_handler.num_message_channels}"
-        processed_name += f"_{self.params.message_size}"
+        processed_name += f"_{self.hyper_params.message_size}"
 
         processed_name = str(self.binarification_method).lower()
         if self.binarification_method == BinarificationMethodType.SELECT_TWO:
@@ -313,14 +313,14 @@ class ImageClassificationDataset(TensorDictDataset):
         ):
             processed_name += f"_{self.binarification_seed}"
 
-        if self.train and self.params.dataset_options.max_train_size is not None:
-            processed_name += f"_{self.params.dataset_options.max_train_size}"
+        if self.train and self.hyper_params.dataset_options.max_train_size is not None:
+            processed_name += f"_{self.hyper_params.dataset_options.max_train_size}"
 
         sub_dir = "train" if self.train else "test"
 
         return os.path.join(
             IC_DATA_DIR,
-            self.params.dataset,
+            self.hyper_params.dataset,
             processed_name,
             sub_dir,
         )
@@ -330,26 +330,28 @@ class ImageClassificationDataset(TensorDictDataset):
         """The path to the directory containing cached pretrained model embeddings."""
         sub_dir = "train" if self.train else "test"
         return os.path.join(
-            IC_DATA_DIR, self.params.dataset, "pretrained_embeddings", sub_dir
+            IC_DATA_DIR, self.hyper_params.dataset, "pretrained_embeddings", sub_dir
         )
 
     @property
     def binarification_method(self) -> BinarificationMethodType:
         """The method used to binarify the dataset."""
-        return self.params.dataset_options.binarification_method
+        return self.hyper_params.dataset_options.binarification_method
 
     @property
     def binarification_seed(self) -> int:
         """The seed to use for shuffling the dataset before merging."""
-        if self.params.dataset_options.binarification_seed is not None:
-            return self.params.dataset_options.binarification_seed
+        if self.hyper_params.dataset_options.binarification_seed is not None:
+            return self.hyper_params.dataset_options.binarification_seed
         else:
-            return DATASET_WRAPPER_CLASSES[self.params.dataset].binarification_seed
+            return DATASET_WRAPPER_CLASSES[
+                self.hyper_params.dataset
+            ].binarification_seed
 
     @property
     def selected_classes(self) -> tuple[int, int]:
         """The two classes selected for binary classification."""
-        if self.params.dataset_options.selected_classes is not None:
-            return self.params.dataset_options.selected_classes
+        if self.hyper_params.dataset_options.selected_classes is not None:
+            return self.hyper_params.dataset_options.selected_classes
         else:
-            return DATASET_WRAPPER_CLASSES[self.params.dataset].selected_classes
+            return DATASET_WRAPPER_CLASSES[self.hyper_params.dataset].selected_classes

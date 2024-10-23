@@ -38,7 +38,7 @@ from pvg.scenario_base import (
     AgentState,
 )
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     CodeValidationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
@@ -167,7 +167,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler | CodeValidationProtocolHandler,
@@ -176,12 +176,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if not isinstance(protocol_handler, CodeValidationProtocolHandler):
             raise NotImplementedError(
                 f"The code validation scenario is not implemented for "
-                f"{params.scenario}, because a `CodeValidationProtocolHandler` "
+                f"{hyper_params.scenario}, because a `CodeValidationProtocolHandler` "
                 f"subclass has not been registered."
             )
 
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,

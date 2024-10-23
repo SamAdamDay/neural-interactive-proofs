@@ -51,7 +51,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment
     settings : ExperimentSettings
         The settings for the experiment

@@ -52,7 +52,7 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     """
 
@@ -62,23 +62,23 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
 
     @property
     def verifier_first(self) -> bool:
-        return self.params.protocol_common.verifier_first
+        return self.hyper_params.protocol_common.verifier_first
 
     @property
     def max_message_rounds(self) -> int:
-        return self.params.pvg_protocol.max_message_rounds
+        return self.hyper_params.pvg_protocol.max_message_rounds
 
     @property
     def max_verifier_turns(self) -> int:
         """The maximum number of turns the verifier can take."""
-        if self.params.protocol_common.verifier_first:
+        if self.hyper_params.protocol_common.verifier_first:
             return ceil(self.max_message_rounds / 2)
         else:
             return floor(self.max_message_rounds / 2)
 
     @property
     def min_message_rounds(self) -> int:
-        return self.params.pvg_protocol.min_message_rounds
+        return self.hyper_params.pvg_protocol.min_message_rounds
 
     def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
         """Specifies whether an agent is active in a given round and channel.
@@ -108,7 +108,7 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
-        protocol_params = self.params.protocol_common
+        protocol_params = self.hyper_params.protocol_common
         verifier_index = (..., self.agent_names.index("verifier"))
         prover_index = (..., self.agent_names.index("prover"))
 
@@ -126,7 +126,7 @@ class AdpProtocol(PvgProtocol):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
 
     References
@@ -152,7 +152,7 @@ class DebateProtocol(PvgProtocol):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
 
     References
@@ -191,7 +191,7 @@ class DebateProtocol(PvgProtocol):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.debate_protocol.prover0_first:
+        if self.hyper_params.debate_protocol.prover0_first:
             first_prover = "prover0"
             second_prover = "prover1"
         else:
@@ -201,7 +201,7 @@ class DebateProtocol(PvgProtocol):
         if self.verifier_first:
 
             # Verifier first, sequential
-            if self.params.debate_protocol.sequential:
+            if self.hyper_params.debate_protocol.sequential:
                 if agent_name == "verifier":
                     return round % 3 == 0
                 elif agent_name == first_prover:
@@ -230,7 +230,7 @@ class DebateProtocol(PvgProtocol):
         else:
 
             # Provers first, sequential
-            if self.params.debate_protocol.sequential:
+            if self.hyper_params.debate_protocol.sequential:
                 if agent_name == first_prover:
                     if channel_name == f"{agent_name}_channel":
                         return round % 3 == 0
@@ -256,11 +256,11 @@ class DebateProtocol(PvgProtocol):
 
     @property
     def max_message_rounds(self) -> int:
-        return self.params.debate_protocol.max_message_rounds
+        return self.hyper_params.debate_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
-        return self.params.debate_protocol.min_message_rounds
+        return self.hyper_params.debate_protocol.min_message_rounds
 
     def _include_prover_rewards(
         self,
@@ -284,7 +284,7 @@ class DebateProtocol(PvgProtocol):
         reward : Float[Tensor, "... agent"]
             The reward tensor to update. This will be updated in-place.
         """
-        protocol_params = self.params.protocol_common
+        protocol_params = self.hyper_params.protocol_common
 
         if protocol_params.shared_reward:
             reward[..., 0] = reward[..., 1] = reward[..., 2]
@@ -306,7 +306,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
 
     References
@@ -383,7 +383,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
-        protocol_params = self.params.protocol_common
+        protocol_params = self.hyper_params.protocol_common
 
         if protocol_params.shared_reward:
             reward[..., 0] = reward[..., 1] = reward[..., 2]
@@ -400,7 +400,7 @@ class MnipProtocol(PvgProtocol):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     """
 
@@ -433,17 +433,17 @@ class MnipProtocol(PvgProtocol):
             Whether the agent is active in the given round and channel.
         """
 
-        if self.params.mnip_protocol.prover0_first:
+        if self.hyper_params.mnip_protocol.prover0_first:
             first_prover = "prover0"
             second_prover = "prover1"
         else:
             first_prover = "prover1"
             second_prover = "prover0"
 
-        if self.params.protocol_common.verifier_first:
+        if self.hyper_params.protocol_common.verifier_first:
 
             # Verifier first, sequential
-            if self.params.mnip_protocol.sequential:
+            if self.hyper_params.mnip_protocol.sequential:
                 if agent_name == "verifier":
                     return round % 3 == 0
                 elif agent_name == first_prover:
@@ -472,7 +472,7 @@ class MnipProtocol(PvgProtocol):
         else:
 
             # Provers first, sequential
-            if self.params.mnip_protocol.sequential:
+            if self.hyper_params.mnip_protocol.sequential:
                 if agent_name == first_prover:
                     if channel_name == f"{agent_name}_channel":
                         return round % 3 == 0
@@ -502,7 +502,7 @@ class MnipProtocol(PvgProtocol):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
-        protocol_params = self.params.protocol_common
+        protocol_params = self.hyper_params.protocol_common
 
         if protocol_params.shared_reward:
             reward[..., 0] = reward[..., 1] = reward[..., 2]

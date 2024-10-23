@@ -12,7 +12,7 @@ from einops import rearrange, repeat
 
 from pvg.scenario_base import Environment, TensorDictDataset
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     ScenarioType,
     TrainerType,
     AgentsParameters,
@@ -66,13 +66,15 @@ def test_environment_specs(
         The environment class to use for the scenario.
     """
 
-    params = Parameters(scenario_type, TrainerType.VANILLA_PPO, "test", message_size=3)
+    hyper_params = HyperParameters(
+        scenario_type, TrainerType.VANILLA_PPO, "test", message_size=3
+    )
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True
     )
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = dataset_class(params, settings, protocol_handler)
-    env = environment_class(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = dataset_class(hyper_params, settings, protocol_handler)
+    env = environment_class(hyper_params, settings, dataset, protocol_handler)
     check_env_specs(env)
 
 
@@ -84,7 +86,7 @@ def test_graph_isomorphism_environment_step():
     message_size = 1
 
     # Set up the environment.
-    params = Parameters(
+    hyper_params = HyperParameters(
         ScenarioType.GRAPH_ISOMORPHISM,
         TrainerType.VANILLA_PPO,
         "test",
@@ -111,9 +113,9 @@ def test_graph_isomorphism_environment_step():
         message_size=message_size,
     )
     settings = ExperimentSettings(device="cpu", test_run=True, ignore_cache=True)
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = GraphIsomorphismDataset(params, settings, protocol_handler)
-    env = GraphIsomorphismEnvironment(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = GraphIsomorphismDataset(hyper_params, settings, protocol_handler)
+    env = GraphIsomorphismEnvironment(hyper_params, settings, dataset, protocol_handler)
 
     max_num_nodes = env.max_num_nodes
     num_message_channels = protocol_handler.num_message_channels
@@ -266,7 +268,7 @@ def test_image_classification_environment_step():
     message_size = 1
 
     # Set up the environment.
-    params = Parameters(
+    hyper_params = HyperParameters(
         ScenarioType.IMAGE_CLASSIFICATION,
         TrainerType.VANILLA_PPO,
         "test",
@@ -293,9 +295,11 @@ def test_image_classification_environment_step():
         image_classification=ImageClassificationParameters(num_block_groups=2),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = ImageClassificationDataset(params, settings, protocol_handler)
-    env = ImageClassificationEnvironment(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = ImageClassificationDataset(hyper_params, settings, protocol_handler)
+    env = ImageClassificationEnvironment(
+        hyper_params, settings, dataset, protocol_handler
+    )
 
     image_width = env.image_width
     image_height = env.image_height

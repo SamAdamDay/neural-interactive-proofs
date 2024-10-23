@@ -6,7 +6,7 @@ import os
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     RlTrainerParameters,
@@ -47,7 +47,7 @@ def run(cmd_args: Namespace):
     trainer = TrainerType.VANILLA_PPO
     dataset = "eru10000"
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=scenario,
         trainer=trainer,
         dataset=dataset,
@@ -61,7 +61,7 @@ def run(cmd_args: Namespace):
                     use_orthogonal_initialisation=False,
                 )
                 for agent_name in get_protocol_agent_names(
-                    Parameters(
+                    HyperParameters(
                         interaction_protocol=interaction_protocol,
                         protocol_common=CommonProtocolParameters(
                             zero_knowledge=zero_knowledge
@@ -117,7 +117,7 @@ def run(cmd_args: Namespace):
 
     # Prepare the experiment if necessary
     if cmd_args.prepare_experiment:
-        prepare_experiment(params)
+        prepare_experiment(hyper_params)
 
     # Train and test the agents
     if cmd_args.use_wandb and cmd_args.run_id != "" and cmd_args.run_id is not None:
@@ -125,7 +125,7 @@ def run(cmd_args: Namespace):
     else:
         run_id = None
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,

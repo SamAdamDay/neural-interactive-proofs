@@ -8,7 +8,7 @@ import dataclasses
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
@@ -113,7 +113,7 @@ param_grid = dict(
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     # Set the pretrain_agents flag. This can be forced to False with the --no-pretrain
     # flag.
@@ -218,7 +218,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         raise NotImplementedError(
             f"Unknown interaction protocol: {combo['interaction_protocol']}"
         )
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
@@ -284,7 +284,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         seed=combo["seed"],
     )
 
-    return params
+    return hyper_params
 
 
 def experiment_fn(arguments: ExperimentFunctionArguments):
@@ -297,7 +297,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
@@ -310,7 +310,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         dataset_on_device=cmd_args.dataset_on_device,
         enable_efficient_attention=cmd_args.enable_efficient_attention,
@@ -334,8 +334,10 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

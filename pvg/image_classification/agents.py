@@ -68,7 +68,7 @@ from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     ImageClassificationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
@@ -103,7 +103,7 @@ class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -120,26 +120,28 @@ class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
         )
 
         # Get some parameters
-        self.num_block_groups = self.params.image_classification.num_block_groups
+        self.num_block_groups = self.hyper_params.image_classification.num_block_groups
         self.initial_num_channels = (
-            self.params.image_classification.initial_num_channels
+            self.hyper_params.image_classification.initial_num_channels
         )
-        self.dataset_num_channels = DATASET_WRAPPER_CLASSES[params.dataset].num_channels
-        self.image_width = DATASET_WRAPPER_CLASSES[params.dataset].width
-        self.image_height = DATASET_WRAPPER_CLASSES[params.dataset].height
+        self.dataset_num_channels = DATASET_WRAPPER_CLASSES[
+            hyper_params.dataset
+        ].num_channels
+        self.image_width = DATASET_WRAPPER_CLASSES[hyper_params.dataset].width
+        self.image_height = DATASET_WRAPPER_CLASSES[hyper_params.dataset].height
         self.latent_width = self.image_width // 2**self.num_block_groups
         self.latent_height = self.image_height // 2**self.num_block_groups
         self.latent_num_channels = 2**self.num_block_groups * self.initial_num_channels
@@ -184,7 +186,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -217,7 +219,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 ("pretrained_embeddings", self.pretrained_model_name),
             )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
         return env_level_in_keys
@@ -233,13 +235,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -406,7 +408,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         in_channels = (
             self.max_message_rounds
             * self.num_visible_message_channels
-            * self.params.message_size
+            * self.hyper_params.message_size
         )
         in_channels += self.dataset_num_channels
 
@@ -484,7 +486,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         stride = self.agent_params.stride
-        track_running_stats = self.params.functionalize_modules
+        track_running_stats = self.hyper_params.functionalize_modules
 
         cnn_encoder = []
 
@@ -622,7 +624,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         image_level_num_channels = latent_pixel_level_num_channels = (
             self.latent_num_channels
-            + self.num_visible_message_channels * self.params.message_size
+            + self.num_visible_message_channels * self.hyper_params.message_size
         )
 
         final_encoder = []
@@ -645,14 +647,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             TensorDictModule(
                 Linear(
                     in_features=latent_pixel_level_num_channels,
-                    out_features=self.params.d_representation,
+                    out_features=self.hyper_params.d_representation,
                 ),
                 in_keys="latent_pixel_level_repr",
                 out_keys="latent_pixel_level_repr",
             )
         )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             # Flatten the linear message history
             final_encoder.append(
                 TensorDictModule(
@@ -675,9 +677,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             )
 
             image_level_num_channels += (
-                self.params.d_linear_message_space
+                self.hyper_params.d_linear_message_space
                 * self.num_visible_message_channels
-                * self.params.message_size
+                * self.hyper_params.message_size
                 * self.protocol_handler.max_message_rounds
             )
 
@@ -686,7 +688,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             TensorDictModule(
                 Linear(
                     in_features=image_level_num_channels,
-                    out_features=self.params.d_representation,
+                    out_features=self.hyper_params.d_representation,
                 ),
                 in_keys="image_level_repr",
                 out_keys="image_level_repr",
@@ -749,7 +751,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             message = torch.zeros(
                 (
                     *data.batch_size,
-                    self.num_visible_message_channels * self.params.message_size,
+                    self.num_visible_message_channels * self.hyper_params.message_size,
                     self.latent_height,
                     self.latent_width,
                 ),
@@ -806,7 +808,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         if self.include_pretrained_embeddings:
             if self._pretrained_model_class is None:
                 self._pretrained_model_class = get_pretrained_model_class(
-                    self.agent_params.pretrained_embeddings_model, self.params
+                    self.agent_params.pretrained_embeddings_model, self.hyper_params
                 )
             return self._pretrained_model_class
         else:
@@ -868,7 +870,7 @@ class ImageClassificationDummyAgentBody(
         # The dummy image-level representations
         image_level_repr = torch.zeros(
             *data.batch_size,
-            self.params.d_representation,
+            self.hyper_params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -878,7 +880,7 @@ class ImageClassificationDummyAgentBody(
             *data.batch_size,
             self.latent_width,
             self.latent_height,
-            self.params.d_representation,
+            self.hyper_params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -1096,7 +1098,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             include_round = self.agent_params.include_round_in_decider
 
         return self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_decider,
             d_out=d_out,
             num_layers=self.agent_params.num_decider_layers,
@@ -1136,7 +1138,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1162,7 +1164,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agent_level_out_keys = (
                 *agent_level_out_keys,
                 "linear_message_selected_logits",
@@ -1172,13 +1174,13 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1194,7 +1196,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             self.decider = None
 
         # Build the linear message selector if necessary
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             self.linear_message_selector = self._build_linear_message_selector()
         else:
             self.linear_message_selector = None
@@ -1211,9 +1213,9 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         """
 
         latent_pixel_mlp = self._build_latent_pixel_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_latent_pixel_selector,
-            d_out=self.num_visible_message_channels * self.params.message_size,
+            d_out=self.num_visible_message_channels * self.hyper_params.message_size,
             flatten_output=True,
             num_layers=self.agent_params.num_latent_pixel_selector_layers,
             out_key="latent_pixel_selected_logits",
@@ -1240,11 +1242,11 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         """
 
         image_level_mlp = self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_linear_message_selector,
-            d_out=self.params.d_linear_message_space
+            d_out=self.hyper_params.d_linear_message_space
             * self.num_visible_message_channels
-            * self.params.message_size,
+            * self.hyper_params.message_size,
             num_layers=self.agent_params.num_linear_message_selector_layers,
             include_round=False,
             out_key="linear_message_selected_logits",
@@ -1254,7 +1256,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             Rearrange(
                 "... (channel position logit) -> ... channel position logit",
                 channel=self.num_visible_message_channels,
-                logit=self.params.d_linear_message_space,
+                logit=self.hyper_params.d_linear_message_space,
             ),
             in_keys="linear_message_selected_logits",
             out_keys="linear_message_selected_logits",
@@ -1309,7 +1311,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
                 dtype=torch.float32,
             )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             out_dict["linear_message_selected_logits"] = self.linear_message_selector(
                 body_output
             )["linear_message_selected_logits"]
@@ -1318,8 +1320,8 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
                 (
                     *body_output.batch_size,
                     self.num_visible_message_channels,
-                    self.params.message_size,
-                    self.params.d_linear_message_space,
+                    self.hyper_params.message_size,
+                    self.hyper_params.d_linear_message_space,
                 ),
                 device=self.device,
                 dtype=torch.float32,
@@ -1368,7 +1370,7 @@ class ImageClassificationRandomAgentPolicyHead(
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agent_level_out_keys = (
                 *agent_level_out_keys,
                 "linear_message_selected_logits",
@@ -1393,7 +1395,7 @@ class ImageClassificationRandomAgentPolicyHead(
         latent_pixel_selected_logits = torch.zeros(
             *body_output.batch_size,
             self.num_visible_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             self.latent_width * self.latent_height,
             device=self.device,
             dtype=torch.float32,
@@ -1438,7 +1440,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1463,13 +1465,13 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1486,7 +1488,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
             The value module.
         """
         return self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_value,
             d_out=1,
             num_layers=self.agent_params.num_value_layers,
@@ -1597,13 +1599,13 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1665,7 +1667,7 @@ class ImageClassificationCombinedBody(CombinedBody):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1786,7 +1788,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1862,7 +1864,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
             [policy_outputs[name]["decision_logits"] for name in self.agent_names],
             "agent ... logit -> ... agent logit",
         )
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agents_update["linear_message_selected_logits"] = rearrange(
                 [
                     policy_outputs[name]["linear_message_selected_logits"]
@@ -1909,7 +1911,7 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.

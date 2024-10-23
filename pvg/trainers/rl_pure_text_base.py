@@ -22,7 +22,7 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import NestedArrayDictDataLoader, NestedArrayDictDataset
@@ -50,7 +50,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -165,7 +165,7 @@ class PureTextRlTrainer(Trainer, ABC):
         """
 
         generator = torch.Generator()
-        generator.manual_seed(self.params.seed)
+        generator.manual_seed(self.hyper_params.seed)
         dataloader = NestedArrayDictDataLoader(
             environment.dataset,
             batch_size=environment.batch_size[0],
@@ -222,7 +222,7 @@ class PureTextRlTrainer(Trainer, ABC):
             The iteration number, or "test" if the rollouts are from the test set.
         """
 
-        if self.params.text_rl.save_transcripts:
+        if self.hyper_params.text_rl.save_transcripts:
             raw_transcripts, processed_transcripts = self._extract_transcripts(rollouts)
 
         # If we are running a test run, we don't want to save the rollouts
@@ -245,19 +245,19 @@ class PureTextRlTrainer(Trainer, ABC):
             )
 
         # Save the raw and processed transcripts
-        if self.params.text_rl.save_transcripts:
+        if self.hyper_params.text_rl.save_transcripts:
 
             self.raw_transcripts_dir.mkdir(parents=True, exist_ok=True)
             self.processed_transcripts_dir.mkdir(parents=True, exist_ok=True)
 
-            if self.params.text_rl.transcript_format == "yaml":
+            if self.hyper_params.text_rl.transcript_format == "yaml":
                 file_extension = "yaml"
-            elif self.params.text_rl.transcript_format == "json":
+            elif self.hyper_params.text_rl.transcript_format == "json":
                 file_extension = "json"
             else:
                 raise NotImplementedError(
                     f"Invalid transcript format "
-                    f"{self.params.text_rl.transcript_format!r}"
+                    f"{self.hyper_params.text_rl.transcript_format!r}"
                 )
 
             raw_transcript_path = self.raw_transcripts_dir.joinpath(
@@ -268,15 +268,15 @@ class PureTextRlTrainer(Trainer, ABC):
             )
 
             with open(raw_transcript_path, "w") as f:
-                if self.params.text_rl.transcript_format == "yaml":
+                if self.hyper_params.text_rl.transcript_format == "yaml":
                     yaml.dump(raw_transcripts, f)
-                elif self.params.text_rl.transcript_format == "json":
+                elif self.hyper_params.text_rl.transcript_format == "json":
                     json.dump(raw_transcripts, f, indent=4)
 
             with open(processed_transcript_path, "w") as f:
-                if self.params.text_rl.transcript_format == "yaml":
+                if self.hyper_params.text_rl.transcript_format == "yaml":
                     yaml.dump(processed_transcripts, f)
-                elif self.params.text_rl.transcript_format == "json":
+                elif self.hyper_params.text_rl.transcript_format == "json":
                     json.dump(processed_transcripts, f, indent=4)
 
             # If using W&B, also log the transcripts as artifacts

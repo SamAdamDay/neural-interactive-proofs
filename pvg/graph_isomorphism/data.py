@@ -24,7 +24,7 @@ class GraphIsomorphismDataset(TensorDictDataset):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -42,7 +42,7 @@ class GraphIsomorphismDataset(TensorDictDataset):
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
         sub_dir = "train" if self.train else "test"
-        return os.path.join(GI_DATA_DIR, self.params.dataset, "raw", sub_dir)
+        return os.path.join(GI_DATA_DIR, self.hyper_params.dataset, "raw", sub_dir)
 
     @property
     def processed_dir(self) -> str:
@@ -50,18 +50,18 @@ class GraphIsomorphismDataset(TensorDictDataset):
 
         sub_dir = "train" if self.train else "test"
 
-        if self.train and self.params.dataset_options.max_train_size is not None:
-            max_size_suffix = f"_{self.params.dataset_options.max_train_size}"
+        if self.train and self.hyper_params.dataset_options.max_train_size is not None:
+            max_size_suffix = f"_{self.hyper_params.dataset_options.max_train_size}"
         else:
             max_size_suffix = ""
 
         return os.path.join(
             GI_DATA_DIR,
-            self.params.dataset,
+            self.hyper_params.dataset,
             f"processed"
             f"_{self.protocol_handler.max_message_rounds}"
             f"_{self.protocol_handler.num_message_channels}"
-            f"_{self.params.message_size}"
+            f"_{self.hyper_params.message_size}"
             f"{max_size_suffix}",
             sub_dir,
         )
@@ -120,7 +120,7 @@ class GraphIsomorphismDataset(TensorDictDataset):
                 num_graph_pairs,
                 self.protocol_handler.max_message_rounds,
                 self.protocol_handler.num_message_channels,
-                self.params.message_size,
+                self.hyper_params.message_size,
                 max_num_nodes,
                 dtype=self.x_dtype,
             )

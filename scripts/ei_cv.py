@@ -6,7 +6,7 @@ import logging
 
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     CodeValidationAgentParameters,
     RlTrainerParameters,
@@ -51,7 +51,7 @@ param_grid = dict(
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     agents_params_dict = dict(
         verifier=CodeValidationAgentParameters(
@@ -96,7 +96,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             f"{combo['interaction_protocol']} protocol."
         )
 
-    return Parameters(
+    return HyperParameters(
         scenario=ScenarioType.CODE_VALIDATION,
         trainer=TrainerType.PURE_TEXT_EI,
         dataset=combo["dataset_name"],
@@ -136,7 +136,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
@@ -149,7 +149,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         logger=logger,
         tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
@@ -172,8 +172,10 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

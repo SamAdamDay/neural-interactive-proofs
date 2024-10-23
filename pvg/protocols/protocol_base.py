@@ -16,7 +16,7 @@ from tensordict.tensordict import TensorDictBase
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import Parameters, Guess
+from pvg.parameters import HyperParameters, Guess
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -29,14 +29,14 @@ class ProtocolHandler(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     """
 
     can_be_zero_knowledge: ClassVar[bool] = True
 
-    def __init__(self, params: Parameters, settings: ExperimentSettings):
-        self.params = params
+    def __init__(self, hyper_params: HyperParameters, settings: ExperimentSettings):
+        self.hyper_params = hyper_params
         self.settings = settings
 
     @property
@@ -339,11 +339,11 @@ class ProtocolHandler(ABC):
         """
 
         if follow_force_guess:
-            if self.params.protocol_common.force_guess == Guess.ONE:
+            if self.hyper_params.protocol_common.force_guess == Guess.ONE:
                 decision = torch.ones_like(decision)
-            elif self.params.protocol_common.force_guess == Guess.ZERO:
+            elif self.hyper_params.protocol_common.force_guess == Guess.ZERO:
                 decision = torch.zeros_like(decision)
-            elif self.params.protocol_common.force_guess == Guess.Y:
+            elif self.hyper_params.protocol_common.force_guess == Guess.Y:
                 decision = y.squeeze(-1)
 
         verifier_decision_made = guess_mask & (decision != 2)
@@ -359,7 +359,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -369,12 +369,12 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         *,
         verifier_name: str = "verifier",
     ):
-        super().__init__(params, settings)
+        super().__init__(hyper_params, settings)
 
         self.verifier_name = verifier_name
 
@@ -462,7 +462,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             The reward for the agents.
         """
 
-        protocol_params = self.params.protocol_common
+        protocol_params = self.hyper_params.protocol_common
 
         y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
         round: Int[Tensor, "..."] = as_tensor(env_td["round"])
@@ -563,7 +563,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -571,12 +571,12 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         *,
         verifier_name: str = "verifier",
     ):
-        super().__init__(params, settings, verifier_name=verifier_name)
+        super().__init__(hyper_params, settings, verifier_name=verifier_name)
 
         self._validate_active_agents()
 

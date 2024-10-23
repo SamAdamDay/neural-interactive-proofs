@@ -15,7 +15,7 @@ from openai import OpenAI
 
 from tqdm import tqdm
 
-from pvg.parameters import Parameters, InteractionProtocolType, ScenarioType
+from pvg.parameters import HyperParameters, InteractionProtocolType, ScenarioType
 from pvg.protocols import ProtocolHandler
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.rollout_analysis import (
@@ -49,7 +49,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         model_name: str,
@@ -57,14 +57,14 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
         use_dummy_api: bool = False,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             model_name=model_name,
             use_dummy_api=use_dummy_api,
         )
 
-        if params.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+        if hyper_params.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
             raise NotImplementedError(
                 "Rollout analysers are not implemented for the Merlin-Arthur protocol."
             )
@@ -405,7 +405,7 @@ class ProverRoleConformanceAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
@@ -428,7 +428,7 @@ class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
@@ -450,7 +450,7 @@ class ProverAccurateQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
@@ -474,7 +474,7 @@ class FollowUpAnalyser(BinaryRolloutAnalyser):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.

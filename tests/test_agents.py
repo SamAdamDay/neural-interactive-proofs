@@ -8,7 +8,7 @@ from tensordict.nn import TensorDictSequential
 from einops import repeat
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     ScenarioType,
     TrainerType,
     InteractionProtocolType,
@@ -52,7 +52,7 @@ def test_graph_isomorphism_combined_agents():
         num_value_layers=1,
         normalize_message_history=False,
     )
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="eru10000",
@@ -72,7 +72,7 @@ def test_graph_isomorphism_combined_agents():
 
     # Build the scenario instance
     scenario_instance = build_scenario_instance(
-        params=params,
+        hyper_params=hyper_params,
         settings=settings,
     )
 
@@ -124,7 +124,7 @@ def test_channel_visibility(
 
     # Build the experiment components
     basic_agent_params = agent_params_class.construct_test_params()
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario_type,
         TrainerType.VANILLA_PPO,
         "test",
@@ -142,7 +142,7 @@ def test_channel_visibility(
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True
     )
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     protocol_handler = scenario_instance.protocol_handler
     channel_names = protocol_handler.message_channel_names
@@ -198,7 +198,7 @@ def test_channel_visibility(
     # Replace the bodies with the test bodies
     for agent_name in combined_body.bodies.keys():
         combined_body.bodies[agent_name] = TestBody(
-            params, settings, agent_name, protocol_handler
+            hyper_params, settings, agent_name, protocol_handler
         )
 
     # The protocol should have 3 channels and 8 rounds for the test to work. If this

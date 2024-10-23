@@ -14,7 +14,7 @@ from jaxtyping import Int, Bool, Float
 
 from pvg.experiment_settings import ExperimentSettings
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     InteractionProtocolType,
     ScenarioType,
     TrainerType,
@@ -49,7 +49,7 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
         The base protocol to use. This is extended to a zero-knowledge protocol.
     """
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="test",
@@ -57,7 +57,9 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(params, settings)
+    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(
+        hyper_params, settings
+    )
 
     base_protocol_handler = protocol_handler.base_protocol
 
@@ -95,7 +97,7 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
         The base protocol to use. This is extended to a zero-knowledge protocol.
     """
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="test",
@@ -103,7 +105,9 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(params, settings)
+    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(
+        hyper_params, settings
+    )
 
     base_protocol_handler = protocol_handler.base_protocol
 
@@ -135,7 +139,7 @@ def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType
         The base protocol to use. This is extended to a zero-knowledge protocol.
     """
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="test",
@@ -143,7 +147,9 @@ def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(params, settings)
+    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(
+        hyper_params, settings
+    )
 
     agent_names = protocol_handler.agent_names
     channel_names = protocol_handler.message_channel_names
@@ -217,7 +223,7 @@ def test_zero_knowledge_pvg_step_method():
     simulator_reward_coefficient = 0.342
     aux_prover_reward_coefficient = 0.123
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=TrainerType.VANILLA_PPO,
         dataset="test",
@@ -233,7 +239,9 @@ def test_zero_knowledge_pvg_step_method():
         ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(params, settings)
+    protocol_handler: ZeroKnowledgeProtocol = build_protocol_handler(
+        hyper_params, settings
+    )
 
     agent_names = protocol_handler.agent_names
     channel_names = protocol_handler.message_channel_names
