@@ -19,7 +19,7 @@ from pvg.parameters import Parameters, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
-from pvg.protocols.base import ProtocolHandler, SingleVerifierProtocolHandler
+from pvg.protocols.protocol_base import ProtocolHandler, SingleVerifierProtocolHandler
 
 
 class ZeroKnowledgeProtocol(ProtocolHandler):

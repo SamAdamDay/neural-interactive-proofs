@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import dataclasses
 
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
-from pvg.parameters.base import (
+from pvg.parameters.parameters_base import (
     SubParameters,
     ParameterValue,
     register_parameter_class,

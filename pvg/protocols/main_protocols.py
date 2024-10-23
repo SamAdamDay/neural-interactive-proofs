@@ -39,7 +39,7 @@ from einops import rearrange
 from jaxtyping import Int, Bool, Float
 
 from pvg.parameters import InteractionProtocolType
-from pvg.protocols.base import (
+from pvg.protocols.protocol_base import (
     SingleVerifierProtocolHandler,
     DeterministicSingleVerifierProtocolHandler,
 )

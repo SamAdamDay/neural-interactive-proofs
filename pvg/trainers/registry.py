@@ -7,7 +7,7 @@ automatically based on the parameters.
 from typing import TypeVar
 
 from pvg.parameters import TrainerType
-from pvg.trainers.base import Trainer
+from pvg.trainers.trainer_base import Trainer
 
 TRAINER_REGISTRY: dict[TrainerType, type[Trainer]] = {}
 

@@ -18,7 +18,11 @@ from tensordict.nn import TensorDictSequential
 
 from pvg.scenario_base.data import TensorDictDataLoader, Dataset
 from pvg.scenario_base.agents import Agent
-from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
+from pvg.trainers.trainer_base import (
+    TensorDictTrainer,
+    attach_progress_bar,
+    IterationContext,
+)
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
 from pvg.utils.maths import set_seed

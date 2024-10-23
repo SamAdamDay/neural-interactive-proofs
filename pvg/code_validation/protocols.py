@@ -13,7 +13,7 @@ from functools import cache
 from collections import OrderedDict
 
 from pvg.parameters import InteractionProtocolType
-from pvg.protocols.base import ProtocolHandler
+from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.protocols.registry import register_protocol_handler
 from pvg.protocols.main_protocols import (
     PvgProtocol,

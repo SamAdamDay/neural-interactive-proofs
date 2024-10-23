@@ -28,7 +28,7 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import NestedArrayDictDataLoader, NestedArrayDictDataset
 from pvg.scenario_base.environment import PureTextEnvironment
 from pvg.scenario_base.agents import PureTextWholeAgent
-from pvg.trainers.base import Trainer
+from pvg.trainers.trainer_base import Trainer
 from pvg.utils.data import VariableDataCycler, truncated_iterator
 from pvg.utils.nested_array_dict import (
     NestedArrayDict,

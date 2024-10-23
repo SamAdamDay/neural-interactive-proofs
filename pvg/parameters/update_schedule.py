@@ -7,7 +7,7 @@ and does not update.
 
 from abc import ABC, abstractmethod
 
-from pvg.parameters.base import (
+from pvg.parameters.parameters_base import (
     ParameterValue,
     register_parameter_value_class,
     get_parameter_or_parameter_value_class,

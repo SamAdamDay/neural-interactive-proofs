@@ -31,7 +31,11 @@ from pvg.parameters import (
     ContiguousPeriodicUpdateSchedule,
 )
 from pvg.experiment_settings import ExperimentSettings
-from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
+from pvg.trainers.trainer_base import (
+    TensorDictTrainer,
+    attach_progress_bar,
+    IterationContext,
+)
 from pvg.trainers.solo_agent import SoloAgentTrainer
 from pvg.model_cache import (
     cached_models_exist,

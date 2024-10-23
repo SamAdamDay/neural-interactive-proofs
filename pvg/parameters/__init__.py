@@ -55,7 +55,7 @@ Examples
 from typing import Optional
 from dataclasses import dataclass, fields
 
-from .base import (
+from .parameters_base import (
     BaseParameters,
     SubParameters,
     ParameterValue,

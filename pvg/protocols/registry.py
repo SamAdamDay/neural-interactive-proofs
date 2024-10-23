@@ -4,7 +4,7 @@ from typing import TypeVar, Callable, Optional
 
 from pvg.parameters import Parameters, InteractionProtocolType, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.protocols.base import ProtocolHandler
+from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.protocols.zero_knowledge import ZeroKnowledgeProtocol
 
 
