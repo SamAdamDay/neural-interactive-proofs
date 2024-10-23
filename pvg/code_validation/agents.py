@@ -638,8 +638,21 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         chat_messages = [dict(role="system", content=system_prompt)]
 
         # Then add the chat history, with messages from the current agent
-        message_history_length = 0
         for round_id in range(self.max_message_rounds):
+
+            no_message = True
+
+            # Add the last-round system message if applicable
+            if (
+                round_id == self.max_message_rounds - 1
+                and self.agent_spec.last_round_system_message is not None
+            ):
+                chat_messages.append(
+                    dict(
+                        role="system", content=self.agent_spec.last_round_system_message
+                    )
+                )
+                no_message = False
 
             # Add the current agent's raw message if we're doing that, and the message
             # is not None
@@ -653,7 +666,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         content=raw_message_history[round_id, self.agent_index],
                     )
                 )
-                message_history_length = round_id + 1
+                no_message = False
 
             for channel_name in self.protocol_handler.get_agent_ordered_channels(
                 self.agent_name
@@ -671,9 +684,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
                 message = message_history[round_id, channel_id]
 
-                # Message is None if no agent sent a message
+                # Message is None if no agent sent a message in this channel in this
+                # round
                 if message is None:
-                    break
+                    continue
 
                 # Determine which agent sent the message
                 if message_agent_id[round_id, channel_id] == -1:
@@ -707,19 +721,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     chat_item["name"] = message_agent_spec.human_name
 
                 chat_messages.append(chat_item)
+                no_message = False
 
-            else:
-                message_history_length = round_id + 1
-
-        # If the next message will be the last, add the last-round system message if
-        # applicable
-        if (
-            message_history_length == self.max_message_rounds - 1
-            and self.agent_spec.last_round_system_message is not None
-        ):
-            chat_messages.append(
-                dict(role="system", content=self.agent_spec.last_round_system_message)
-            )
+            # If we didn't add any message this round, this is the end of the history
+            if no_message:
+                break
 
         if ensure_last_message_is_assistant:
             while chat_messages[-1]["role"] != "assistant":
