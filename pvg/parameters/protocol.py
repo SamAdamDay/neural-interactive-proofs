@@ -4,7 +4,7 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
 
-from pvg.parameters.base import SubParameters, register_parameter_class
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import Guess, MinMessageRoundsSchedulerType
 
 

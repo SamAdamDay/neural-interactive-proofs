@@ -20,7 +20,7 @@ from datasets import (
 )
 
 from pvg.experiment_settings import ExperimentSettings
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import HyperParameters, ScenarioType
 from pvg.protocols import ProtocolHandler
 from pvg.scenario_base.data import Dataset
 from pvg.factory import register_scenario_class
@@ -47,7 +47,7 @@ class CodeValidationDataset(Dataset, ABC):
     @property
     def dataset_filepath_name(self) -> str:
         """The name of the dataset file."""
-        return self.params.dataset.replace("/", "_")
+        return self.hyper_params.dataset.replace("/", "_")
 
     @property
     def raw_dir(self) -> str:
@@ -92,12 +92,12 @@ class CodeValidationDataset(Dataset, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
-        super().__init__(params, settings, protocol_handler, train)
+        super().__init__(hyper_params, settings, protocol_handler, train)
 
         if not os.path.isdir(self.processed_dir) or settings.ignore_cache:
 
@@ -197,8 +197,8 @@ class AppsCodeValidationDataset(CodeValidationDataset):
     def _load_raw_dataset(self) -> HuggingFaceDataset:
         split = "train" if self.train else "test"
         return load_dataset(
-            self.params.dataset,
-            self.params.code_validation.apps_difficulty,
+            self.hyper_params.dataset,
+            self.hyper_params.code_validation.apps_difficulty,
             split=split,
             data_dir=self.raw_dir,
         )
@@ -220,7 +220,9 @@ class AppsCodeValidationDataset(CodeValidationDataset):
                 raise ValueError(f"Failed to decode the solutions JSON. {instance}")
 
             # Get the solution at the specified index
-            solution = solutions_list[self.params.code_validation.apps_solution_number]
+            solution = solutions_list[
+                self.hyper_params.code_validation.apps_solution_number
+            ]
 
             # Un-escape the solution
             solution = bytes(solution, "utf-8").decode("unicode_escape")
@@ -261,21 +263,24 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
 
     def _load_raw_dataset(self) -> HuggingFaceDataset:
         return load_dataset(
-            self.params.dataset,
+            self.hyper_params.dataset,
             split="train",
         )
 
     def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
 
         def filter_instance(instance: dict[str, str | int]) -> bool:
-            """Filter based on the params and split"""
+            """Filter based on the hyper_params and split"""
 
             if instance["apps_split"] == "train" and not self.train:
                 return False
             if instance["apps_split"] == "test" and self.train:
                 return False
 
-            return instance["difficulty"] == self.params.code_validation.apps_difficulty
+            return (
+                instance["difficulty"]
+                == self.hyper_params.code_validation.apps_difficulty
+            )
 
         def get_non_buggy_solution(
             instance: dict[str, str | int], solution_index: int

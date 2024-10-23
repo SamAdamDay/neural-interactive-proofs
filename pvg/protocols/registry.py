@@ -2,9 +2,9 @@
 
 from typing import TypeVar, Callable, Optional
 
-from pvg.parameters import Parameters, InteractionProtocolType, ScenarioType
+from pvg.parameters import HyperParameters, InteractionProtocolType, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
-from pvg.protocols.base import ProtocolHandler
+from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.protocols.zero_knowledge import ZeroKnowledgeProtocol
 
 
@@ -35,27 +35,32 @@ def register_protocol_handler(
 
 
 def build_protocol_handler(
-    params: Parameters, settings: ExperimentSettings
+    hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ProtocolHandler:
     """Factory function for building a trainer from parameters.
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     """
 
     # Get the base protocol class, using the one specific to the scenario if available
-    if (params.interaction_protocol, params.scenario) in PROTOCOL_HANDLER_REGISTRY:
+    if (
+        hyper_params.interaction_protocol,
+        hyper_params.scenario,
+    ) in PROTOCOL_HANDLER_REGISTRY:
         base_protocol_cls = PROTOCOL_HANDLER_REGISTRY[
-            params.interaction_protocol, params.scenario
+            hyper_params.interaction_protocol, hyper_params.scenario
         ]
     else:
-        base_protocol_cls = PROTOCOL_HANDLER_REGISTRY[params.interaction_protocol, None]
+        base_protocol_cls = PROTOCOL_HANDLER_REGISTRY[
+            hyper_params.interaction_protocol, None
+        ]
 
-    if params.protocol_common.zero_knowledge:
+    if hyper_params.protocol_common.zero_knowledge:
         return ZeroKnowledgeProtocol(
-            params, settings, base_protocol_cls=base_protocol_cls
+            hyper_params, settings, base_protocol_cls=base_protocol_cls
         )
     else:
-        return base_protocol_cls(params, settings)
+        return base_protocol_cls(hyper_params, settings)

@@ -13,7 +13,7 @@ from functools import cache
 from collections import OrderedDict
 
 from pvg.parameters import InteractionProtocolType
-from pvg.protocols.base import ProtocolHandler
+from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.protocols.registry import register_protocol_handler
 from pvg.protocols.main_protocols import (
     PvgProtocol,
@@ -103,7 +103,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         except ModuleNotFoundError:
             raise NotImplementedError(
                 f"System prompt directory for protocol "
-                f"{self.params.interaction_protocol!s} not found."
+                f"{self.hyper_params.interaction_protocol!s} not found."
             )
 
         template_filename = f"{agent_name}.txt"
@@ -117,7 +117,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         return (
             f"pvg.code_validation.prompt_templates.system_prompts"
-            f".{self.params.interaction_protocol!s}"
+            f".{self.hyper_params.interaction_protocol!s}"
         )
 
     def get_agent_ordered_channels(self, agent_name: str) -> list[str]:
@@ -143,7 +143,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         return self.message_channel_names
 
     def parse_chat_completion(
-        self, completion_text: str, agent_name: str, round: int
+        self, completion_text: str, agent_name: str, round_id: int
     ) -> tuple[OrderedDict[str, str] | None, int]:
         """Parse a chat completion into a message to each channel and a decision
 
@@ -153,7 +153,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             The completion to parse.
         agent_name : str
             The name of the agent that generated the completion.
-        round : int
+        round_id : int
             The current round of the interaction.
 
         Returns
@@ -182,12 +182,12 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         active_channels = [
             channel_name
             for channel_name in self.message_channel_names
-            if self.can_agent_be_active(agent_name, round, channel_name)
+            if self.can_agent_be_active(agent_name, round_id, channel_name)
         ]
 
         if len(active_channels) == 0:
             raise ValueError(
-                f"Tried to parse response for {agent_name!r} in round {round}, but it "
+                f"Tried to parse response for {agent_name!r} in round {round_id}, but it "
                 f"is not active in any channel."
             )
 

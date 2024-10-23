@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from pvg.parameters.base import SubParameters, register_parameter_class
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import MessageRegressionMethodType, ActivationType
 
 

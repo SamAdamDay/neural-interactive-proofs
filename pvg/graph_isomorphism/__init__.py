@@ -9,10 +9,12 @@ Has classes for:
 
 Examples
 --------
->>> from pvg.parameters import Parameters, Scenario, Trainer
+>>> from pvg.parameters import HyperParameters, Scenario, Trainer
 >>> from pvg.graph_isomorphism import GraphIsomorphismAgentsBuilder
->>> params = Parameters(Scenario.GRAPH_ISOMORPHISM, Trainer.SOLO_AGENT, "eru10000")
->>> agents = GraphIsomorphismAgentsBuilder.build(params, "cpu")
+>>> hyper_params = HyperParameters(
+...     Scenario.GRAPH_ISOMORPHISM, Trainer.SOLO_AGENT, "eru10000"
+... )
+>>> agents = GraphIsomorphismAgentsBuilder.build(hyper_params, "cpu")
 """
 
 from .data import GraphIsomorphismDataset

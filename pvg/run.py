@@ -17,7 +17,7 @@ import wandb
 
 from tqdm import tqdm
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
@@ -32,7 +32,7 @@ import pvg.code_validation
 
 
 def run_experiment(
-    params: Parameters,
+    hyper_params: HyperParameters,
     device: TorchDevice = "cpu",
     logger: Optional[LoggingType] = None,
     profiler: Optional[torch.profiler.profile] = None,
@@ -63,7 +63,7 @@ def run_experiment(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     device : TorchDevice, default="cpu"
         The device to use for training.
@@ -143,7 +143,7 @@ def run_experiment(
             resume="allow" if allow_resuming_wandb_run else "never",
         )
         wandb_run.config.update(
-            params.to_dict(), allow_val_change=allow_overriding_wandb_config
+            hyper_params.to_dict(), allow_val_change=allow_overriding_wandb_config
         )
         if print_wandb_run_url:
             print(f"W&B run URL: {wandb_run.get_url()}")  # noqa: T201
@@ -172,10 +172,10 @@ def run_experiment(
     )
 
     # Build the scenario components of the experiment.
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     # Build the trainer.
-    trainer = build_trainer(params, scenario_instance, settings)
+    trainer = build_trainer(hyper_params, scenario_instance, settings)
 
     # Suppress warnings about a batching rule not being implemented by PyTorch for
     # aten::_scaled_dot_product_efficient_attention and
@@ -220,7 +220,7 @@ class PreparedExperimentInfo:
 
 
 def prepare_experiment(
-    params: Parameters,
+    hyper_params: HyperParameters,
     profiler: Optional[torch.profiler.profile] = None,
     ignore_cache: bool = False,
     num_dataset_threads: int = 8,
@@ -235,7 +235,7 @@ def prepare_experiment(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
@@ -275,10 +275,10 @@ def prepare_experiment(
     )
 
     # Build the scenario components of the experiment.
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     # Build the trainer.
-    trainer = build_trainer(params, scenario_instance, settings)
+    trainer = build_trainer(hyper_params, scenario_instance, settings)
 
     # Get the total number of training iterations.
     total_num_iterations = trainer.get_total_num_iterations()

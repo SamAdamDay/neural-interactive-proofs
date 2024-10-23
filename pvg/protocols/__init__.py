@@ -8,7 +8,7 @@ use of the `register_protocol_handler` decorator. The `build_protocol_handler` f
 function can then be used to build a protocol handler from parameters.
 """
 
-from .base import (
+from .protocol_base import (
     ProtocolHandler,
     SingleVerifierProtocolHandler,
     DeterministicSingleVerifierProtocolHandler,

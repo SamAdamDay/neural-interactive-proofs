@@ -3,7 +3,7 @@
 from typing import NamedTuple, Optional, Literal
 from dataclasses import dataclass
 
-from pvg.parameters.base import SubParameters, register_parameter_class
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
 from pvg.parameters.agents import LrFactors
 

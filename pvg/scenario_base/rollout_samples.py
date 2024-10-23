@@ -13,7 +13,7 @@ from typing import TypeVar
 
 import wandb
 
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import HyperParameters, ScenarioType
 from pvg.constants import (
     ROLLOUT_SAMPLE_ARTIFACT_PREFIX,
     WANDB_ENTITY,
@@ -183,12 +183,12 @@ def register_rollout_samples_class(scenario: ScenarioType):
     return decorator
 
 
-def build_rollout_samples(params: Parameters):
+def build_rollout_samples(hyper_params: HyperParameters):
     """Build a subclass of RolloutSamples based on the parameters.
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
 
     Returns
@@ -196,4 +196,4 @@ def build_rollout_samples(params: Parameters):
     RolloutSamples
         The subclass of RolloutSamples for the experiment.
     """
-    return ROLLOUT_SAMPLES_CLASS_REGISTRY[params.scenario](params)
+    return ROLLOUT_SAMPLES_CLASS_REGISTRY[hyper_params.scenario](hyper_params)

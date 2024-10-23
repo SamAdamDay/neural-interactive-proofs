@@ -38,7 +38,7 @@ from pvg.scenario_base import (
     NestedArrayDictDataset,
 )
 from pvg.protocols import ProtocolHandler
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
 from pvg.utils.nested_array_dict import (
@@ -57,7 +57,7 @@ class Environment(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -73,29 +73,33 @@ class Environment(ABC):
     def steps_per_env_per_iteration(self) -> int:
         """The number of steps per batched environment in each iteration."""
         # The number of environments is the number of episodes we can fit in a batch
-        if self.params.rl.steps_per_env_per_iteration is not None:
-            steps_per_env_per_iteration = self.params.rl.steps_per_env_per_iteration
+        if self.hyper_params.rl.steps_per_env_per_iteration is not None:
+            steps_per_env_per_iteration = (
+                self.hyper_params.rl.steps_per_env_per_iteration
+            )
             if (
-                self.params.rl.frames_per_batch is not None
-                and self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0
+                self.hyper_params.rl.frames_per_batch is not None
+                and self.hyper_params.rl.frames_per_batch % steps_per_env_per_iteration
+                != 0
             ):
                 raise ValueError(
                     f"The parameter `rl.steps_per_env_per_iteration` must divide "
                     f"`rl.frames_per_batch` without remainder, but got "
                     f"{steps_per_env_per_iteration} and "
-                    f"{self.params.rl.frames_per_batch}."
+                    f"{self.hyper_params.rl.frames_per_batch}."
                 )
         else:
             steps_per_env_per_iteration = self.protocol_handler.max_message_rounds
             if (
-                self.params.rl.frames_per_batch is not None
-                and self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0
+                self.hyper_params.rl.frames_per_batch is not None
+                and self.hyper_params.rl.frames_per_batch % steps_per_env_per_iteration
+                != 0
             ):
                 raise ValueError(
                     f"The maximum number of message rounds must divide "
                     f"`rl.frames_per_batch` without remainder, but got "
                     f"{steps_per_env_per_iteration} and "
-                    f"{self.params.rl.frames_per_batch}."
+                    f"{self.hyper_params.rl.frames_per_batch}."
                 )
         return steps_per_env_per_iteration
 
@@ -106,12 +110,12 @@ class Environment(ABC):
         This can be set directly with `rl.frames_per_batch`, or it can be determined by
         `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
         """
-        if self.params.rl.frames_per_batch is not None:
-            return self.params.rl.frames_per_batch
+        if self.hyper_params.rl.frames_per_batch is not None:
+            return self.hyper_params.rl.frames_per_batch
         else:
-            if self.params.rl.rollouts_per_iteration is not None:
+            if self.hyper_params.rl.rollouts_per_iteration is not None:
                 return (
-                    self.params.rl.rollouts_per_iteration
+                    self.hyper_params.rl.rollouts_per_iteration
                     * self.steps_per_env_per_iteration
                 )
             else:
@@ -154,14 +158,14 @@ class Environment(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: Dataset,
         protocol_handler: ProtocolHandler,
         *,
         train: bool = True,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.train = train
@@ -221,7 +225,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -237,7 +241,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: TensorDictDataset,
         protocol_handler: ProtocolHandler,
@@ -248,7 +252,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         # Call the `EnvBase` constructor
         super(nn.Module, self).__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             dataset=dataset,
@@ -301,7 +305,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             self.num_envs,
             self.protocol_handler.max_message_rounds,
             self.protocol_handler.num_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             *self.main_message_space_shape,
         )
 
@@ -380,15 +384,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             )
 
         # Add the linear message history, if it is included
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
-                self.params.d_linear_message_space,
+                self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
                     self.protocol_handler.max_message_rounds,
                     self.protocol_handler.num_message_channels,
-                    self.params.message_size,
-                    self.params.d_linear_message_space,
+                    self.hyper_params.message_size,
+                    self.hyper_params.d_linear_message_space,
                 ),
                 dtype=torch.float,
                 device=self.device,
@@ -421,7 +425,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                         self.num_envs,
                         self.num_agents,
                         self.protocol_handler.num_message_channels,
-                        self.params.message_size,
+                        self.hyper_params.message_size,
                         prod(self.main_message_space_shape),
                     ),
                     device=self.device,
@@ -441,14 +445,14 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             device=self.device,
         )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
-                self.params.d_linear_message_space,
+                self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
                     self.num_agents,
                     self.protocol_handler.num_message_channels,
-                    self.params.message_size,
+                    self.hyper_params.message_size,
                 ),
                 dtype=torch.long,
                 device=self.device,
@@ -589,13 +593,13 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         # Do the same for the linear message space, if it is included
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             next_td = self._compute_message_history_and_next_message(
                 env_td,
                 next_td,
                 message_out_key="linear_message_selected",
                 message_in_key="linear_message",
-                message_shape=(self.params.d_linear_message_space,),
+                message_shape=(self.hyper_params.d_linear_message_space,),
                 message_history_key="linear_message_history",
             )
 
@@ -665,7 +669,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         # ... round channel position {message_shape_str}
         message_history = env_td.get(message_history_key)
-        round: Int[Tensor, "..."] = env_td.get("round")
+        round_id: Int[Tensor, "..."] = env_td.get("round")
         seed: Int[Tensor, "..."] = env_td.get("seed")
         message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
@@ -675,7 +679,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # (... agent channel)
         active_agents_mask = (
             self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
-                round, seed
+                round_id, seed
             )
         )
 
@@ -693,7 +697,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         # Get a mask for which round it is
-        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+        round_mask = F.one_hot(
+            round_id, self.protocol_handler.max_message_rounds
+        ).bool()
 
         # Reshape it so that it looks like the message history with 1's for the message
         # space dims and channel and position dim
@@ -974,8 +980,8 @@ class PureTextEnvironment(Environment, ABC):
             if key not in [("round",), ("message_history",)]:
                 next_state[key] = env_state[key]
 
-        round = env_state["round"]
-        next_state["round"] = round + 1
+        round_id = env_state["round"]
+        next_state["round"] = round_id + 1
 
         # Add the latest messages to the message history
         message_history = env_state["message_history"].copy()
@@ -994,15 +1000,15 @@ class PureTextEnvironment(Environment, ABC):
                             f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
-                    message_history[0, round, channel_id] = message
-                    message_agent_id[0, round, channel_id] = agent_id
+                    message_history[0, round_id, channel_id] = message
+                    message_agent_id[0, round_id, channel_id] = agent_id
 
         next_state["message_history"] = message_history
         next_state["message_agent_id"] = message_agent_id
 
         # Add the raw messages to the raw message history
         raw_message_history = env_state["raw_message_history"].copy()
-        raw_message_history[0, round] = env_state["agents", "raw_message"][0]
+        raw_message_history[0, round_id] = env_state["agents", "raw_message"][0]
         next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals

@@ -4,17 +4,17 @@ This is useful to ensure that all datasets are already in the Docker image. This
 can be called from the Dockerfile.
 """
 
-from pvg import Parameters, ScenarioType, TrainerType, prepare_experiment
+from pvg import HyperParameters, ScenarioType, TrainerType, prepare_experiment
 from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 
 if __name__ == "__main__":
 
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.SOLO_AGENT,
         dataset="test",
     )
     for dataset_name in DATASET_WRAPPER_CLASSES.keys():
         print(f"Downloading dataset {dataset_name}...")  # noqa: T201
-        params.dataset = dataset_name
-        prepare_experiment(params=params, ignore_cache=True)
+        hyper_params.dataset = dataset_name
+        prepare_experiment(hyper_params=hyper_params, ignore_cache=True)

@@ -1,14 +1,14 @@
-"""The parameters of the experiment.
+"""The hyper-parameters of the experiment.
 
-An experiment should be completely reproducible from its parameters (up to hardware
-quirks).
+An experiment should be completely reproducible from its hyper-parameters (up to
+hardware quirks).
 
-The parameters are initialised by constructing a `Parameters` object. This object
+The parameters are initialised by constructing a `HyperParameters` object. This object
 completely defines the experiment, and is passed around to all experiment components.
 
 Some experiment parameters are sub-parameters, which are defined in separate classes.
-When the `Parameters` object is initialised, these sub-parameters may be initialised as
-well, according to the values of the main parameters.
+When the `HyperParameters` object is initialised, these sub-parameters may be
+initialised as well, according to the values of the main parameters.
 
 When creating sub-parameters, you can either pass then as an object of the appropriate
 sub-parameter class, or as a dictionary. The advantage of the former is that you can use
@@ -16,13 +16,13 @@ symbol inspection (e.g. in VS Code) to have easy access to the parameter names a
 descriptions. If you pass a dictionary, it will be converted to the appropriate
 sub-parameter class.
 
-The parameters object can be converted to a dictionary using `Parameters.to_dict`.
+The parameters object can be converted to a dictionary using `HyperParameters.to_dict`.
 
 Examples
 --------
 1. Create a parameters object, using default values for ppo parameters, and others
 
->>> params = Parameters(
+>>> hyper_params = HyperParameters(
 ...     scenario=Scenario.GRAPH_ISOMORPHISM,
 ...     trainer=Trainer.PPO,
 ...     dataset="eru10000",
@@ -36,12 +36,12 @@ Examples
 
 2. Convert the parameters object to a dictionary
 
->>> params.to_dict()
+>>> hyper_params.to_dict()
 {'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
 
 3. Create a parameters object using a dictionary for the ppo parameters
 
->>> params = Parameters(
+>>> hyper_params = HyperParameters(
 ...     scenario=Scenario.GRAPH_ISOMORPHISM,
 ...     trainer=Trainer.PPO,
 ...     dataset="eru10000",
@@ -55,8 +55,8 @@ Examples
 from typing import Optional
 from dataclasses import dataclass, fields
 
-from .base import (
-    BaseParameters,
+from .parameters_base import (
+    BaseHyperParameters,
     SubParameters,
     ParameterValue,
     register_parameter_class,
@@ -145,8 +145,11 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
 
 @register_parameter_class
 @dataclass
-class Parameters(BaseParameters):
-    """Parameters of the experiment.
+class HyperParameters(BaseHyperParameters):
+    """The hyper-parameters of the experiment.
+
+    An experiment should be completely reproducible from its hyper-parameters (up to
+    hardware quirks).
 
     Parameters
     ----------
@@ -324,7 +327,7 @@ class Parameters(BaseParameters):
         random_agent_params_class: type[RandomAgentParameters],
         zero_knowledge: bool,
     ) -> AgentsParameters:
-        """Process agent parameters passed to `Parameters`.
+        """Process agent parameters passed to `HyperParameters`.
 
         Fills in missing agent parameters with the default parameters for the scenario.
         Also validates the agent parameters.
@@ -392,12 +395,14 @@ class Parameters(BaseParameters):
             )
 
 
-def get_protocol_agent_names(params: Parameters, zero_knowledge: bool) -> list[str]:
+def get_protocol_agent_names(
+    hyper_params: HyperParameters, zero_knowledge: bool
+) -> list[str]:
     """Get the agent names required for the protocol.
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     zero_knowledge : bool
         Whether the protocol is zero-knowledge.
@@ -407,7 +412,7 @@ def get_protocol_agent_names(params: Parameters, zero_knowledge: bool) -> list[s
     list[str]
         The agent names required for the protocol.
     """
-    agent_names = list(AGENT_NAMES[params.interaction_protocol])
+    agent_names = list(AGENT_NAMES[hyper_params.interaction_protocol])
     if zero_knowledge:
         agent_names.extend(["simulator", "adversarial_verifier"])
     return agent_names

@@ -18,7 +18,11 @@ from tensordict.nn import TensorDictSequential
 
 from pvg.scenario_base.data import TensorDictDataLoader, Dataset
 from pvg.scenario_base.agents import Agent
-from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
+from pvg.trainers.trainer_base import (
+    TensorDictTrainer,
+    attach_progress_bar,
+    IterationContext,
+)
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import AgentsParameters, TrainerType
 from pvg.utils.maths import set_seed
@@ -30,7 +34,7 @@ class SoloAgentTrainer(TensorDictTrainer):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ComponentHolder
         The components of the experiment.
@@ -48,8 +52,8 @@ class SoloAgentTrainer(TensorDictTrainer):
             output and what we log to W&B.
         """
 
-        set_seed(self.params.seed)
-        torch_generator = torch.Generator().manual_seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
+        torch_generator = torch.Generator().manual_seed(self.hyper_params.seed)
 
         if self.settings.logger is None:
             self.settings.logger = logging.getLogger(__name__)
@@ -61,15 +65,15 @@ class SoloAgentTrainer(TensorDictTrainer):
         dataset = self.scenario_instance.train_dataset
         train_dataset, test_dataset = random_split(
             dataset,
-            (1 - self.params.test_size, self.params.test_size),
+            (1 - self.hyper_params.test_size, self.hyper_params.test_size),
         )
 
         # Select the non-random agents
         agents_params = AgentsParameters(
             **{
-                name: params
-                for name, params in self.params.agents.items()
-                if not params.is_random
+                name: hyper_params
+                for name, hyper_params in self.hyper_params.agents.items()
+                if not hyper_params.is_random
             }
         )
         agents = {
@@ -115,7 +119,7 @@ class SoloAgentTrainer(TensorDictTrainer):
                 logger,
             )
 
-    @attach_progress_bar(lambda self: self.params.solo_agent.num_epochs)
+    @attach_progress_bar(lambda self: self.hyper_params.solo_agent.num_epochs)
     def _run_train_loop(
         self,
         train_dataset: Dataset,
@@ -151,15 +155,15 @@ class SoloAgentTrainer(TensorDictTrainer):
         optimizers: dict[str, Optimizer] = {}
         for agent_name, agent in agents.items():
             model_param_dict = agent.get_model_parameter_dicts(
-                base_lr=self.params.solo_agent.learning_rate,
-                body_lr_factor_override=self.params.solo_agent.body_lr_factor_override,
+                base_lr=self.hyper_params.solo_agent.learning_rate,
+                body_lr_factor_override=self.hyper_params.solo_agent.body_lr_factor_override,
             )
             optimizers[agent_name] = Adam(model_param_dict, eps=1e-5)
 
         # Create the data loaders
         train_dataloader = TensorDictDataLoader(
             train_dataset,
-            batch_size=self.params.solo_agent.batch_size,
+            batch_size=self.hyper_params.solo_agent.batch_size,
             shuffle=True,
             generator=torch_generator,
         )
@@ -169,7 +173,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         iteration_context.set_description(desc)
 
         # Train the agents
-        for epoch in range(self.params.solo_agent.num_epochs):
+        for epoch in range(self.hyper_params.solo_agent.num_epochs):
             # Step the profiler if it's being used
             if self.settings.profiler is not None:
                 self.settings.profiler.step()
@@ -251,7 +255,7 @@ class SoloAgentTrainer(TensorDictTrainer):
 
         test_loader = TensorDictDataLoader(
             test_dataset,
-            batch_size=self.params.solo_agent.batch_size,
+            batch_size=self.hyper_params.solo_agent.batch_size,
             shuffle=False,
         )
 

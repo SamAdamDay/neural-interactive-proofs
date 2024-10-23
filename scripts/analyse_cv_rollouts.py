@@ -5,7 +5,7 @@ import json
 
 import numpy as np
 
-from pvg import Parameters, ExperimentSettings, ScenarioType
+from pvg import HyperParameters, ExperimentSettings, ScenarioType
 from pvg.factory import build_scenario_instance
 from pvg.trainers import PureTextEiTrainer, build_trainer
 from pvg.scenario_base import ROLLOUT_ANALYSERS
@@ -65,18 +65,18 @@ cmd_args = arg_parser.parse_args()
 checkpoint_dir = PureTextEiTrainer.get_checkpoint_base_dir_from_run_id(
     cmd_args.checkpoint_name
 )
-params_path = checkpoint_dir.joinpath("params.json")
+params_path = checkpoint_dir.joinpath("hyper_params.json")
 with open(params_path, "r") as params_file:
     params_dict = json.load(params_file)
 
-params = Parameters.from_dict(params_dict)
+hyper_params = HyperParameters.from_dict(params_dict)
 
 # Build the experiment
 settings = ExperimentSettings(
     run_id=cmd_args.checkpoint_name, do_not_load_checkpoint=True
 )
-scenario_instance = build_scenario_instance(params, settings)
-trainer = build_trainer(params, scenario_instance, settings)
+scenario_instance = build_scenario_instance(hyper_params, settings)
+trainer = build_trainer(hyper_params, scenario_instance, settings)
 
 if not isinstance(trainer, PureTextEiTrainer):
     raise ValueError("This script is only for the PureTextEiTrainer.")

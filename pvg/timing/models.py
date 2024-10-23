@@ -8,7 +8,12 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictSequential
 
-from pvg.parameters import Parameters, SoloAgentParameters, ScenarioType, TrainerType
+from pvg.parameters import (
+    HyperParameters,
+    SoloAgentParameters,
+    ScenarioType,
+    TrainerType,
+)
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import TensorDictDataLoader
 from pvg.factory import build_scenario_instance
@@ -61,17 +66,19 @@ class ModelTimeable(Timeable, ABC):
         self.num_batches = num_batches
 
         # Set up the components of the experiment
-        self.params = self._get_params()
+        self.hyper_params = self._get_params()
         if torch.cuda.is_available() and not force_cpu:
             self.device = "cuda"
         else:
             self.device = "cpu"
         self.settings = ExperimentSettings(device=self.device)
-        self.scenario_instance = build_scenario_instance(self.params, self.settings)
+        self.scenario_instance = build_scenario_instance(
+            self.hyper_params, self.settings
+        )
 
         # Set the random seeds
-        set_seed(self.params.seed)
-        self.generator = torch.Generator().manual_seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
+        self.generator = torch.Generator().manual_seed(self.hyper_params.seed)
 
         # Set up the full model as the body and head
         self.model = TensorDictSequential(
@@ -81,15 +88,15 @@ class ModelTimeable(Timeable, ABC):
         self.model.to(self.device)
         self.model.eval()
 
-    def _get_params(self) -> Parameters:
+    def _get_params(self) -> HyperParameters:
         """Get the parameters which define the experiment containing the model.
 
         Returns
         -------
-        params : Parameters
+        hyper_params : HyperParameters
             The parameters of the experiment.
         """
-        return Parameters(
+        return HyperParameters(
             scenario=self.scenario,
             trainer=TrainerType.SOLO_AGENT,
             dataset=self.dataset,

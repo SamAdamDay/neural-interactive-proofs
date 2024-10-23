@@ -27,7 +27,7 @@ from tensordict.utils import _td_fields, IndexType
 from numpy.typing import NDArray
 
 from pvg.protocols import ProtocolHandler
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.types import TorchDevice
 from pvg.utils.data import is_nested_key
@@ -48,7 +48,7 @@ class Dataset(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -60,12 +60,12 @@ class Dataset(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.train = train
@@ -95,7 +95,7 @@ class TensorDictDataset(Dataset, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -109,13 +109,13 @@ class TensorDictDataset(Dataset, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             train=train,
@@ -136,9 +136,12 @@ class TensorDictDataset(Dataset, ABC):
             self._main_data = self.build_tensor_dict()
 
             # Reduce the size of the training set if needed
-            if self.train and self.params.dataset_options.max_train_size is not None:
+            if (
+                self.train
+                and self.hyper_params.dataset_options.max_train_size is not None
+            ):
                 self._main_data = self._main_data[
-                    : self.params.dataset_options.max_train_size
+                    : self.hyper_params.dataset_options.max_train_size
                 ]
 
             # Save it to disk as a memory-mapped file
@@ -455,7 +458,7 @@ class NestedArrayDictDataset(Dataset, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.

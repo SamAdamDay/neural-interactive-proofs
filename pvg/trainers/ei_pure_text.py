@@ -25,7 +25,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -52,10 +52,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         rollouts: Optional[NestedArrayDict] = None
 
-        while self.state.iteration < self.params.rl.num_iterations:
+        while self.state.iteration < self.hyper_params.rl.num_iterations:
 
             self.settings.logger.info(
-                f"[{self.state.iteration+1}/{self.params.rl.num_iterations}] Iteration "
+                f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] Iteration "
                 f"begins."
             )
 
@@ -94,10 +94,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 self.save_checkpoint()
 
             # We don't fine-tune on the last iteration
-            if self.state.iteration == self.params.rl.num_iterations - 1:
+            if self.state.iteration == self.hyper_params.rl.num_iterations - 1:
 
                 # Advance to the test stage
-                self.state.iteration = self.params.rl.num_iterations
+                self.state.iteration = self.hyper_params.rl.num_iterations
                 self.state.train_loop_stage = "test"
 
                 self.save_checkpoint()
@@ -164,7 +164,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         if self.state.train_loop_stage == "test":
 
-            if self.params.pure_text_ei.run_test_loop:
+            if self.hyper_params.pure_text_ei.run_test_loop:
 
                 # Sample rollouts from the test environment
                 rollouts = self.sample_rollouts(
@@ -219,7 +219,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             if isinstance(analyser_cls, str):
                 try:
                     analyser_cls: type[PureTextRolloutAnalyser] = ROLLOUT_ANALYSERS[
-                        self.params.scenario, analyser_cls
+                        self.hyper_params.scenario, analyser_cls
                     ]
                 except KeyError:
                     raise ValueError(
@@ -227,7 +227,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
                     )
 
             analyser = analyser_cls(
-                params=self.params,
+                hyper_params=self.hyper_params,
                 settings=self.settings,
                 protocol_handler=self.scenario_instance.protocol_handler,
                 model_name=model_name,
@@ -237,11 +237,11 @@ class PureTextEiTrainer(PureTextRlTrainer):
             analysis_dir = self.checkpoint_analysis_dir.joinpath(analyser_cls.name)
             analysis_dir.mkdir(parents=True, exist_ok=True)
 
-            for iteration in range(self.params.rl.num_iterations):
+            for iteration in range(self.hyper_params.rl.num_iterations):
 
                 print(  # noqa: T201
                     f"Running analyser {analyser_cls.name!r} on iteration "
-                    f"{iteration+1}/{self.params.rl.num_iterations}"
+                    f"{iteration+1}/{self.hyper_params.rl.num_iterations}"
                 )
 
                 analysis_file = analysis_dir.joinpath(f"{iteration}.pt")
@@ -413,6 +413,6 @@ class PureTextEiTrainer(PureTextRlTrainer):
         # Select the rollouts with a high reward for the given agent
         good_mask = (
             rollouts["next", "agents", "reward"][..., agent_index].sum(axis=-1)
-            >= self.params.pure_text_ei.reward_threshold
+            >= self.hyper_params.pure_text_ei.reward_threshold
         )
         return rollouts[good_mask]

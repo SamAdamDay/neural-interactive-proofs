@@ -30,11 +30,11 @@ from einops import repeat, rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.types import TorchDevice
-from pvg.utils.params import get_agent_part_flags
+from pvg.utils.hyper_params import get_agent_part_flags
 from pvg.utils.torch import apply_orthogonal_initialisation
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -98,7 +98,7 @@ class AgentPart(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -251,18 +251,18 @@ class AgentPart(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__()
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.agent_name = agent_name
         self.protocol_handler = protocol_handler
 
-        self.agent_params = params.agents[agent_name]
+        self.agent_params = hyper_params.agents[agent_name]
         self.agent_index = self.protocol_handler.agent_names.index(agent_name)
 
     @abstractmethod
@@ -286,13 +286,13 @@ class TensorDictAgentPartMixin(AgentPart, TensorDictModuleBase, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -333,13 +333,13 @@ class TensorDictDummyAgentPartMixin(TensorDictAgentPartMixin, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -399,7 +399,7 @@ class RandomWholeAgent(WholeAgent, ABC):
 class AgentBody(AgentPart, ABC):
     """Base class for all agent bodies, which compute representations for heads.
 
-    Representations should have dimension `params.d_representation`.
+    Representations should have dimension `hyper_params.d_representation`.
     """
 
 
@@ -447,7 +447,7 @@ class CombinedAgentPart(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -539,13 +539,13 @@ class CombinedAgentPart(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         parts: dict[str, AgentPart],
     ):
         super().__init__()
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.parts = parts
@@ -629,13 +629,13 @@ class CombinedWhole(CombinedAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         wholes: dict[str, WholeAgent],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=wholes,
@@ -661,13 +661,13 @@ class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         parts: dict[str, AgentPart],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=parts,
@@ -683,7 +683,7 @@ class CombinedBody(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -695,13 +695,13 @@ class CombinedBody(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         bodies: dict[str, AgentBody],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=bodies,
@@ -730,7 +730,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -742,13 +742,13 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         policy_heads: dict[str, AgentPolicyHead],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=policy_heads,
@@ -891,7 +891,7 @@ class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -903,13 +903,13 @@ class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         value_heads: dict[str, AgentValueHead],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=value_heads,
@@ -941,7 +941,7 @@ class Agent(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
@@ -961,7 +961,7 @@ class Agent(ABC):
         The solo head of the agent.
     """
 
-    params: InitVar[Parameters]
+    hyper_params: InitVar[HyperParameters]
     agent_name: InitVar[str]
     whole: Optional[WholeAgent] = None
     body: Optional[AgentBody] = None
@@ -977,7 +977,7 @@ class Agent(ABC):
 
     def __post_init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         agent_name: str,
     ):
         if self.body is None and self.policy_body is None and self.whole is None:
@@ -1037,10 +1037,10 @@ class Agent(ABC):
                 " not a 'policy_body'"
             )
 
-        self.params = params
+        self.hyper_params = hyper_params
         self.agent_name = agent_name
 
-        self.agent_params = params.agents[agent_name]
+        self.agent_params = hyper_params.agents[agent_name]
 
     def set_state(self, checkpoint: AgentState):
         """Set the state of the agent from a checkpoint.
@@ -1091,7 +1091,7 @@ class Agent(ABC):
     ):
         """Filter the parameters and set their learning rate, and append them to a list.
 
-        Normally appends a dictionary with the keys `params` and `lr`, consisting of the
+        Normally appends a dictionary with the keys `hyper_params` and `lr`, consisting of the
         filtered parameters and their learning rate. If the learning rate is 0, the
         parameters are frozen instead.
 
@@ -1118,9 +1118,9 @@ class Agent(ABC):
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
     def _body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         network_suffix = "network"
-        if self.params.functionalize_modules:
+        if self.hyper_params.functionalize_modules:
             network_suffix += "_params"
         if use_single_body and use_critic and part == "actor":
             return f"actor_{network_suffix}.module.0.{self.agent_name}"
@@ -1133,10 +1133,10 @@ class Agent(ABC):
                 raise ValueError(f"Unknown part: {part}")
 
     def _non_body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         nums = {"actor": "1-9", "critic": "0-9"}
         network_suffix = "network"
-        if self.params.functionalize_modules:
+        if self.hyper_params.functionalize_modules:
             network_suffix += "_params"
         if use_single_body and use_critic:
             return f"{part}_{network_suffix}.module.[{nums[part]}].{self.agent_name}"
@@ -1150,7 +1150,7 @@ class Agent(ABC):
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.named_parameters(), self.value_body.named_parameters()
@@ -1159,7 +1159,7 @@ class Agent(ABC):
 
     @property
     def _body_parameters(self) -> Iterable[TorchParameter]:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.parameters(), self.value_body.parameters()
@@ -1189,12 +1189,12 @@ class Agent(ABC):
         -------
         param_dict : Iterable[dict[str, Any]]
             The Torch parameters of the agent, and their learning rates. This is an
-            iterable of dictionaries with the keys `params` and `lr`.
+            iterable of dictionaries with the keys `hyper_params` and `lr`.
         """
 
         # Check for mistakes
         if (
-            self.params.rl.use_shared_body
+            self.hyper_params.rl.use_shared_body
             and self.agent_params.agent_lr_factor.actor
             != self.agent_params.agent_lr_factor.critic
         ):
@@ -1202,7 +1202,7 @@ class Agent(ABC):
                 "The agent learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
-            self.params.rl.use_shared_body
+            self.hyper_params.rl.use_shared_body
             and self.agent_params.body_lr_factor.actor
             != self.agent_params.body_lr_factor.critic
         ):

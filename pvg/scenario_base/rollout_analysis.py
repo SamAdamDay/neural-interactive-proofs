@@ -7,7 +7,7 @@ from tensordict import TensorDictBase
 
 from numpy import ma
 
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import HyperParameters, ScenarioType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.nested_array_dict import NestedArrayDict
@@ -18,7 +18,7 @@ class RolloutAnalyser(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The experiment settings.
@@ -47,11 +47,11 @@ class RolloutAnalyser(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
 
@@ -96,7 +96,7 @@ class PureTextRolloutAnalyser(RolloutAnalyser, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The experiment settings.
@@ -109,14 +109,14 @@ class PureTextRolloutAnalyser(RolloutAnalyser, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         model_name: str,
         *,
         use_dummy_api: bool = False,
     ):
-        super().__init__(params, settings, protocol_handler)
+        super().__init__(hyper_params, settings, protocol_handler)
         self.model_name = model_name
         self.use_dummy_api = use_dummy_api
 

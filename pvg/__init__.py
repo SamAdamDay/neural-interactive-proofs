@@ -1,5 +1,5 @@
 from .parameters import (
-    Parameters,
+    HyperParameters,
     LrFactors,
     AgentsParameters,
     RandomAgentParameters,
