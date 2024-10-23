@@ -6,16 +6,21 @@ import json
 import os
 import sys
 from math import floor
-from tqdm import tqdm
-import datasets
 import re
 import textdistance
-from pvg.utils.apps_metric import check_correctness
 import requests
 import multiprocessing
 import argparse
+
+from tqdm import tqdm
+
+import datasets
+
 from openai import OpenAI
-from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY, HF_TOKEN
+
+from pvg.constants import CV_DATA_DIR
+from pvg.utils.apps_metric import check_correctness
+from pvg.utils.env import load_env_once
 
 
 def suppress_output(func):
@@ -60,12 +65,16 @@ def solution_generation_wrapper(
 def get_openai_response(
     model,
     messages,
-    api_key=OPENAI_API_KEY,
+    api_key=None,
     temperature=1.0,
     log_probs=False,
     top_logprobs=None,
     num_responses=1,
 ):
+
+    if api_key is None:
+        load_env_once()
+        api_key = os.getenv("OPENAI_API_KEY")
 
     client = OpenAI(api_key=api_key)
 
@@ -82,7 +91,7 @@ def get_openai_response(
 def get_openrouter_response(
     model,
     messages,
-    api_key=OPENROUTER_API_KEY,
+    api_key=None,
     temperature=1.0,
     log_probs=False,
     top_logprobs=None,
@@ -103,6 +112,11 @@ def get_openrouter_response(
     - requests.exceptions.RequestException: If there was an error sending the request.
 
     """
+
+    if api_key is None:
+        load_env_once()
+        api_key = os.getenv("OPENROUTER_API_KEY")
+
     responses = []
 
     # Crazily, the openrouter API doesn't support multiple completions in a single request, so we have to make multiple requests
@@ -205,8 +219,8 @@ class CodeValidationDatasetConfig:
     system_prompt: Optional[str] = None
     max_attempts: int = 10
     local_dir: str = CV_DATA_DIR
-    openrouter_api_key: Optional[str] = OPENROUTER_API_KEY
-    token: Optional[str] = HF_TOKEN
+    openrouter_api_key: Optional[str] = None
+    token: Optional[str] = None
     pull_repo: Optional[str] = "lrhammond/buggy-apps"
     push_repo: Optional[str] = "lrhammond/buggy-apps"
     save_after: Optional[int] = 10
@@ -228,6 +242,14 @@ class CodeValidationDatasetConfig:
         Raises:
             ValueError: If `num_problematic_inputs` is not between 0 and 10.
         """
+
+        if self.openrouter_api_key is None:
+            load_env_once()
+            self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+
+        if self.token is None:
+            load_env_once()
+            self.token = os.getenv("HF_TOKEN")
 
         if self.system_prompt is None:
             if self.num_problematic_inputs < 0 or self.num_problematic_inputs > 10:
@@ -668,7 +690,7 @@ def load_buggy_data(
 
 def generate_cv_dataset(
     config: CodeValidationDatasetConfig | dict,
-    manager: Optional[multiprocessing.Manager] = None,
+    manager: Optional[multiprocessing.managers.SyncManager] = None,
 ):
 
     if isinstance(config, dict):

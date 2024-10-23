@@ -51,12 +51,3 @@ WANDB_DUMMY_RUN_PROJECT = "pvg-sandbox"
 WANDB_DUMMY_RUN_ENTITY = "lrhammond-team"
 WANDB_DUMMY_RUN_NAME = "dummy_run"
 WANDB_OPENAI_FINETUNE_PROJECT = "pvg-openai-finetune"
-
-# OpenRouter and OpneAI API Keys
-env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# Hugging Face API Key
-HF_TOKEN = "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"
