@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from sklearn.model_selection import ParameterGrid
@@ -6,6 +8,7 @@ from pvg import (
     Parameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CodeValidationAgentParameters,
     CommonProtocolParameters,
     SoloAgentParameters,
     RlTrainerParameters,
@@ -24,13 +27,26 @@ from pvg.utils.output import DummyTqdm
 
 # Specification for creating a grid of parameters using ParameterGrid
 param_specs = [
-    # Test the two scenarios with the vanilla PPO trainer
+    # Test the two tensor scenarios with the vanilla PPO trainer
     {
         "scenario": [
             ScenarioType.GRAPH_ISOMORPHISM,
             ScenarioType.IMAGE_CLASSIFICATION,
         ],
         "message_size": [3],
+    },
+    # Test the code validation scenario with the expert iteration trainer with various
+    # protocols
+    {
+        "scenario": [ScenarioType.CODE_VALIDATION],
+        "trainer": [TrainerType.PURE_TEXT_EI],
+        "protocol": [
+            InteractionProtocolType.PVG,
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+            InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
+        ],
     },
     # Test pretraining the agents
     {
@@ -129,6 +145,9 @@ def test_prepare_run_experiment(param_spec: dict):
     basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
         ImageClassificationAgentParameters.construct_test_params()
     )
+    basic_agent_params[ScenarioType.CODE_VALIDATION] = (
+        CodeValidationAgentParameters.construct_test_params()
+    )
 
     # Very basic parameters for each trainer
     rl_params = RlTrainerParameters(
@@ -145,6 +164,7 @@ def test_prepare_run_experiment(param_spec: dict):
         TrainerType.VANILLA_PPO: None,
         TrainerType.SPG: SpgParameters(),
         TrainerType.REINFORCE: None,
+        TrainerType.PURE_TEXT_EI: None,
     }
     common_ppo_params = CommonPpoParameters()
 
@@ -204,6 +224,7 @@ def test_prepare_run_experiment(param_spec: dict):
             "d_representation": 1,
             "include_linear_message_space": include_linear_message,
             "message_size": message_size,
+            "seed": 109,
         }
     )
 
@@ -217,4 +238,5 @@ def test_prepare_run_experiment(param_spec: dict):
         test_run=True,
         ignore_cache=True,
         pin_memory=False,
+        num_rollout_workers=0,
     )

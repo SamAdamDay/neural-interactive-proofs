@@ -790,4 +790,4 @@ class CompositeSpec(NumpySpec):
                     for sub_key in spec.keys(recurse=True):
                         yield (key,) + sub_key
                 else:
-                    yield key
+                    yield (key,)

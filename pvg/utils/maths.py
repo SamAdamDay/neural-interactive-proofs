@@ -1,14 +1,24 @@
 """Utilities for useful mathematical operations."""
 
 from typing import Tuple, Union, Sequence, Optional
+import random
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
+import numpy as np
+
 from jaxtyping import Float, Int
 
 from pvg.parameters import IhvpVariant
+
+
+def set_seed(seed: int):
+    """Set the seed in Python, NumPy, and PyTorch."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def dot_td(td1, td2):
@@ -368,7 +378,7 @@ def mean_episode_reward(
 def minstd_generate_pseudo_random_sequence(
     seed: Int[Tensor, "..."], length: int
 ) -> Int[Tensor, "... length"]:
-    """Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
+    r"""Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
 
     The MINSTD algorithm is a simple linear congruential generator (LCG) that is defined
     by the following recurrence relation:

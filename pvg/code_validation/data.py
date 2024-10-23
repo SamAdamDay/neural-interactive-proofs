@@ -6,6 +6,7 @@ import shutil
 import json
 from typing import Any
 from textwrap import indent
+from random import randint
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,6 +15,7 @@ from datasets import (
     load_dataset,
     load_from_disk,
     Dataset as HuggingFaceDataset,
+    IterableDataset as HuggingFaceIterableDataset,
     concatenate_datasets,
 )
 
@@ -32,6 +34,12 @@ class CodeValidationDataset(Dataset, ABC):
     """Base class for the code validation datasets.
 
     Works with HuggingFace datasets.
+
+    The dataset should have the following columns:
+    - "question": The question text.
+    - "solution": The solution text.
+    - "verdict": The verdict which the prover should be arguing for.
+    - "y": The label, 1 for correct solutions and 0 for buggy solutions.
     """
 
     _main_data: HuggingFaceDataset
@@ -152,6 +160,29 @@ class CodeValidationDataset(Dataset, ABC):
 
 
 @register_scenario_class(
+    ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "test"}
+)
+class TestCodeValidationDataset(CodeValidationDataset):
+    """A test dataset for code validation, with dummy data."""
+
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
+
+        def sample_generator():
+            for i in range(10):
+                yield {
+                    "question": f"Question {i}",
+                    "solution": f"Solution {i}",
+                    "verdict": 1,
+                    "y": randint(0, 1),
+                }
+
+        return HuggingFaceDataset.from_generator(sample_generator)
+
+    def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
+        return raw_dataset
+
+
+@register_scenario_class(
     ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "codeparrot/apps"}
 )
 class AppsCodeValidationDataset(CodeValidationDataset):
@@ -163,7 +194,7 @@ class AppsCodeValidationDataset(CodeValidationDataset):
     NeurIPS-21
     """
 
-    def _load_raw_dataset(self):
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
         split = "train" if self.train else "test"
         return load_dataset(
             self.params.dataset,
@@ -228,7 +259,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     NeurIPS-21
     """
 
-    def _load_raw_dataset(self):
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
         return load_dataset(
             self.params.dataset,
             split="train",

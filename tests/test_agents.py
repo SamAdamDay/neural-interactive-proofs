@@ -25,6 +25,7 @@ from pvg.scenario_base import (
     TensorDictEnvironment,
     TensorDictAgentPartMixin,
 )
+from pvg.utils.maths import set_seed
 
 
 def test_graph_isomorphism_combined_agents():
@@ -115,7 +116,7 @@ def test_channel_visibility(
     and that all the expected channels are present in the data.
     """
 
-    torch.manual_seed(0)
+    set_seed(0)
 
     num_message_channels = 3
     max_message_rounds = 8

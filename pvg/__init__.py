@@ -12,7 +12,7 @@ from .parameters import (
     VanillaPpoParameters,
     SpgParameters,
     ReinforceParameters,
-    EiParameters,
+    PureTextEiParameters,
     ImageClassificationParameters,
     DatasetParameters,
     CommonProtocolParameters,

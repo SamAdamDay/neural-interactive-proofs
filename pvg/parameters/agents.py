@@ -435,9 +435,12 @@ class CodeValidationAgentParameters(AgentParameters):
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
-    max_tokens_per_message : int
+    max_response_words : int
+        In the system prompt, we say that the agent should respond with a message of at
+        most this many words.
+    max_tokens_per_message : int | None
         The maximum number of tokens which the model is allowed to generate in a single
-        message.
+        message. If `None`, this is calculated based on the `max_response_words`.
     num_invalid_generation_retries : int
         The number of times to retry generating a message if the model returns an
         invalid response.
@@ -453,7 +456,9 @@ class CodeValidationAgentParameters(AgentParameters):
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
 
-    max_tokens_per_message: int = 512
+    max_response_words: int = 150
+
+    max_tokens_per_message: int | None = None
     num_invalid_generation_retries: int = 5
 
     @classmethod

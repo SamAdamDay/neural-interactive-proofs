@@ -12,11 +12,11 @@ from pvg import (
     RlTrainerParameters,
     ScenarioType,
     TrainerType,
-    EiParameters,
     InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    PureTextEiParameters,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -31,7 +31,7 @@ param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    frames_per_batch=[200 * 8],
+    rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
@@ -41,14 +41,13 @@ param_grid = dict(
     freeze_prover=[False],
     fine_tune_from_scratch=[False],
     shared_reward=[False],
-    min_message_rounds=[2],
-    max_message_rounds=[8],
+    min_message_rounds=[0],
+    max_message_rounds=[9],
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    use_prover_watchdog=[True],
-    prover_watchdog_model_name=["gpt-4o-mini-2024-07-18"],
-    use_dummy_api=[True],
+    run_test_loop=[False],
+    use_dummy_api=[False],
 )
 
 
@@ -83,6 +82,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
     elif combo["interaction_protocol"] in [
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MNIP,
+        InteractionProtocolType.MERLIN_ARTHUR,
     ]:
         agents_params_dict["prover0"] = CodeValidationAgentParameters(
             **prover_params_dict
@@ -101,13 +101,12 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         trainer=TrainerType.PURE_TEXT_EI,
         dataset=combo["dataset_name"],
         rl=RlTrainerParameters(
-            frames_per_batch=combo["frames_per_batch"],
+            rollouts_per_iteration=combo["rollouts_per_iteration"],
+            frames_per_batch=None,
             num_iterations=combo["num_iterations"],
         ),
-        ei=EiParameters(
-            use_prover_watchdog=combo["use_prover_watchdog"],
-            prover_watchdog_model_name=combo["prover_watchdog_model_name"],
-            prover_watchdog_use_dummy_api=combo["use_dummy_api"],
+        pure_text_ei=PureTextEiParameters(
+            run_test_loop=combo["run_test_loop"],
         ),
         agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],
@@ -168,8 +167,8 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
 def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
     if combo_index is None:
-        return f"ei_vc_{cmd_args.run_infix}"
-    return f"ei_vc_{cmd_args.run_infix}_{combo_index}"
+        return f"ei_cv_{cmd_args.run_infix}"
+    return f"ei_cv_{cmd_args.run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:

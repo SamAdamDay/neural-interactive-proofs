@@ -44,7 +44,6 @@ from pvg.protocols.base import (
     DeterministicSingleVerifierProtocolHandler,
 )
 from pvg.protocols.registry import register_protocol_handler
-from pvg.utils.maths import minstd_generate_pseudo_random_sequence
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -145,6 +144,11 @@ class AdpProtocol(PvgProtocol):
 @register_protocol_handler(InteractionProtocolType.DEBATE)
 class DebateProtocol(PvgProtocol):
     """Implementation of the Debate protocol[^1].
+
+    The protocol consists of two provers and a verifier. The provers debate a question
+    with the verifier, who decides which prover is correct. "prover0" attempts to
+    convince the verifier of a negative answer, while "prover1" attempts to convince the
+    verifier of a positive answer.
 
     Parameters
     ----------
@@ -264,6 +268,22 @@ class DebateProtocol(PvgProtocol):
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
     ):
+        """Include rewards for the provers based on the verifier's decision.
+
+        Normally, "prover0" is rewarded if the verifier decides 0, and "prover1" is
+        rewarded if the verifier decides 1.
+
+        If `shared_reward` is set, both provers get the same reward as the verifier.
+
+        Parameters
+        ----------
+        verifier_decision_made : Bool[Tensor, "..."]
+            A boolean mask indicating whether the verifier has made a decision.
+        verifier_decision : Int[Tensor, "..."]
+            The verifier's decision.
+        reward : Float[Tensor, "... agent"]
+            The reward tensor to update. This will be updated in-place.
+        """
         protocol_params = self.params.protocol_common
 
         if protocol_params.shared_reward:
@@ -278,6 +298,11 @@ class DebateProtocol(PvgProtocol):
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """Implementation of the Merlin-Arthur protocol.
+
+    The protocol consists of two provers and a verifier. One of the two provers sends a
+    message to the verifier, who then makes a decision. Which prover sends the message
+    is determined randomly. "prover0" attempts to convince the verifier of a negative
+    answer, while "prover1" attempts to convince the verifier of a positive answer.
 
     Parameters
     ----------
@@ -322,22 +347,13 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             A boolean mask indicating which agents are active in the given round.
         """
 
-        # Generate a random sequence for each batch element
-        random_sequence = minstd_generate_pseudo_random_sequence(
-            seed, self.max_message_rounds
-        )
-
-        # Use the round-th element of the random sequence to determine which prover goes
-        # first
-        prover1_first = (
-            random_sequence.gather(-1, round[..., None]).squeeze(-1) % 2 == 0
-        )
-
+        # Determine which of the two provers sends the message
+        prover1_goes = (seed % 2) == 0
         return rearrange(
             [
-                (round % 2 == 0) & prover1_first,
-                (round % 2 == 0) & ~prover1_first,
-                round % 2 == 1,
+                (round == 0) & prover1_goes,
+                (round == 0) & ~prover1_goes,
+                round == 1,
             ],
             "agent ... -> ... agent 1",
         )
@@ -347,8 +363,8 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     ) -> bool:
         """Specifies whether an agent can be active in a given round.
 
-        When the verifier goes second, both provers can be active in (zero-based) even
-        rounds, and the verifier is active in odd rounds.
+        The provers can only be active in the first round, and the verifier can only be
+        active in the second round.
 
         Returns
         -------
@@ -356,16 +372,10 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             Whether the agent can be active in the given round.
         """
 
-        if self.params.protocol_common.verifier_first:
-            if agent_name in ["prover0", "prover1"]:
-                return round % 2 == 1
-            elif agent_name == "verifier":
-                return round % 2 == 0
-        else:
-            if agent_name in ["prover0", "prover1"]:
-                return round % 2 == 0
-            elif agent_name == "verifier":
-                return round % 2 == 1
+        if agent_name in ["prover0", "prover1"]:
+            return round == 0
+        elif agent_name == "verifier":
+            return round == 1
 
     def _include_prover_rewards(
         self,

@@ -101,10 +101,21 @@ class Environment(ABC):
 
     @property
     def frames_per_batch(self) -> int:
+        """The number of frames to sample per training iteration.
+
+        This can be set directly with `rl.frames_per_batch`, or it can be determined by
+        `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
+        """
         if self.params.rl.frames_per_batch is not None:
             return self.params.rl.frames_per_batch
         else:
-            return len(self.dataset) * self.steps_per_env_per_iteration
+            if self.params.rl.rollouts_per_iteration is not None:
+                return (
+                    self.params.rl.rollouts_per_iteration
+                    * self.steps_per_env_per_iteration
+                )
+            else:
+                return len(self.dataset) * self.steps_per_env_per_iteration
 
     @property
     def num_envs(self) -> int:
@@ -827,6 +838,22 @@ class PureTextEnvironment(Environment, ABC):
                 ),
                 "batch round channel",
             ),
+            message_agent_id=IntArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_message_channels,
+                ),
+                "batch round channel",
+            ),
+            raw_message_history=StringArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_agents,
+                ),
+                "batch round agent",
+            ),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -846,6 +873,13 @@ class PureTextEnvironment(Environment, ABC):
                         self.protocol_handler.num_message_channels,
                     ),
                     "batch agent channel",
+                ),
+                raw_message=StringArraySpec(
+                    (
+                        *self.batch_size,
+                        self.num_agents,
+                    ),
+                    "batch agent",
                 ),
                 retry_count=IntArraySpec(
                     (
@@ -910,6 +944,7 @@ class PureTextEnvironment(Environment, ABC):
             ),
             done=BoolArraySpec(*self.batch_size, "batch"),
             terminated=BoolArraySpec(*self.batch_size, "batch"),
+            padding=BoolArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -944,6 +979,7 @@ class PureTextEnvironment(Environment, ABC):
 
         # Add the latest messages to the message history
         message_history = env_state["message_history"].copy()
+        message_agent_id = env_state["message_agent_id"].copy()
         for channel_id, channel_name in enumerate(
             self.protocol_handler.message_channel_names
         ):
@@ -954,13 +990,20 @@ class PureTextEnvironment(Environment, ABC):
                 if message is not None:
                     if who_messaged is not None:
                         raise RuntimeError(
-                            f"Agents {who_messaged} and {agent_name} both messaged on "
-                            f"channel {channel_name}. "
+                            f"Agents {who_messaged!r} and {agent_name!r} both messaged "
+                            f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
                     message_history[0, round, channel_id] = message
+                    message_agent_id[0, round, channel_id] = agent_id
 
         next_state["message_history"] = message_history
+        next_state["message_agent_id"] = message_agent_id
+
+        # Add the raw messages to the raw message history
+        raw_message_history = env_state["raw_message_history"].copy()
+        raw_message_history[0, round] = env_state["agents", "raw_message"][0]
+        next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
         shared_done, agent_done, terminated, reward = (
@@ -969,6 +1012,7 @@ class PureTextEnvironment(Environment, ABC):
         next_state["done"] = shared_done.numpy()
         next_state["agents", "done"] = agent_done.numpy()
         next_state["terminated"] = terminated.numpy()
+        next_state["padding"] = np.zeros(*self.batch_size, dtype=bool)
         next_state["agents", "reward"] = reward.numpy()
 
         # Add the next state as a sub-dictionary
@@ -1050,7 +1094,7 @@ class PureTextEnvironment(Environment, ABC):
             self.state_spec.keys(recurse=True),
             self.done_spec.keys(recurse=True),
         ):
-            next_state[key] = state_env["next", key]
+            next_state[key] = state_env[("next", *key)]
 
         return next_state
 
@@ -1091,6 +1135,29 @@ class PureTextEnvironment(Environment, ABC):
 
         return state_env
 
+    @abstractmethod
+    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+        """Get the datapoint from a single-element environment state as a dictionary.
+
+        This returns a dictionary which specifies the datapoint for the environment
+        state.
+
+        This method should be extended by base classes to include whatever additional
+        fields consistute the datapoint.
+
+        Parameters
+        ----------
+        env_state : NestedArrayDict
+            The environment state.
+
+        Returns
+        -------
+        datapoint : dict
+            The datapoint as a dictionary.
+        """
+
+        return dict(y=int(env_state["y"]))
+
     def _masked_reset(
         self,
         env_state: NestedArrayDict,
@@ -1120,9 +1187,11 @@ class PureTextEnvironment(Environment, ABC):
         env_state["y"][mask] = data_batch["y"]
         env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
+        env_state["message_agent_id"][mask] = -1
         env_state["round"][mask] = 0
         env_state["done"][mask] = False
         env_state["agents", "done"][mask] = False
         env_state["terminated"][mask] = False
+        env_state["padding"][mask] = False
 
         return env_state

@@ -1,6 +1,6 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Literal
 from dataclasses import dataclass
 
 from pvg.parameters.base import SubParameters, register_parameter_class
@@ -16,8 +16,15 @@ class RlTrainerParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int | None
-        The number of frames to sample per training iteration. If `None` we sample the
-        amount of frames needed so that every training datapoint appears exactly once.
+        The number of frames to sample per training iteration. If `None` we set the
+        number of frames so that `rollouts_per_iteration` rollouts are sampled per
+        iteration.
+    rollouts_per_iteration : int | None
+        If `frames_per_batch` is `None`, we use this parameter to determine the number
+        of rollouts to sample per iteration. `frames_per_batch` is then set to
+        `rollouts_per_iteration * steps_per_env_per_iteration`. If `None`, this defaults
+        to the dataset size, so that every training datapoint appears exactly once in
+        each iteration.
     steps_per_env_per_iteration : int | None
         Each batch is divided into a number of environments which run trajectories for
         this many steps. Note that when a trajectory ends, a new one is started
@@ -37,6 +44,17 @@ class RlTrainerParameters(SubParameters):
         Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
+    loss_critic_type : str
+        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+    clip_value : float or bool, optional
+        If a ``float`` is provided, it will be used to compute a clipped version of the
+        value prediction with respect to the input tensordict value estimate and use it
+        to calculate the value loss. The purpose of clipping is to limit the impact of
+        extreme value predictions, helping stabilize training and preventing large
+        updates. However, it will have no impact if the value estimate was done by the
+        current version of the value estimator. If instead ``True`` is provided, the
+        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
+        provided or ``False``, no clipping will be performed. Defaults to ``False``.
     normalize_observations : bool
         Whether to normalise the observations in the environment.
     num_normalization_steps : int
@@ -51,21 +69,11 @@ class RlTrainerParameters(SubParameters):
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
         The number of iterations to run the test for.
-    loss_critic_type : str
-        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-    clip_value : float or bool, optional
-        If a ``float`` is provided, it will be used to compute a clipped version of the
-        value prediction with respect to the input tensordict value estimate and use it
-        to calculate the value loss. The purpose of clipping is to limit the impact of
-        extreme value predictions, helping stabilize training and preventing large
-        updates. However, it will have no impact if the value estimate was done by the
-        current version of the value estimator. If instead ``True`` is provided, the
-        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
-        provided or ``False``, no clipping will be performed. Defaults to ``False``.
     """
 
     # Sampling
     frames_per_batch: int | None = 1000
+    rollouts_per_iteration: int | None = None
     steps_per_env_per_iteration: int | None = None
     num_iterations: int = 1000
 
@@ -222,7 +230,26 @@ class SoloAgentParameters(SubParameters):
 
 @register_parameter_class
 @dataclass
-class EiParameters(SubParameters):
+class TextRlParameters(SubParameters):
+    """Additional parameters for the text-based RL trainers.
+
+    Parameters
+    ----------
+    save_transcripts : bool
+        Whether to save the transcripts of the rollouts. Note that the raw rollouts are
+        always saved, and the transcripts can be extracted from them. So this is mostly
+        for convenience (and comes with a small processing overhead).
+    transcript_format : Literal["json", "yaml"]
+        The format to save the transcripts in.
+    """
+
+    save_transcripts: bool = True
+    transcript_format: Literal["json", "yaml"] = "yaml"
+
+
+@register_parameter_class
+@dataclass
+class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 
     Parameters
@@ -230,20 +257,10 @@ class EiParameters(SubParameters):
     reward_threshold : float
         The threshold on the reward for a rollout to be added to the fine-tuning
         dataset.
-    use_prover_watchdog : bool
-        Whether to use a language model to evaluate how well the prover(s) are
-        conforming to their roles.
-    prover_watchdog_model_name : str
-        The name of the language model to use as the watchdog.
-    prover_watchdog_use_dummy_api : bool
-        Whether to use a dummy API to generate responses from the watchdog.
-    prover_watchdog_num_invalid_generation_retries : int
-        The number of retries to allow when the watchdog generates an invalid response.
+    run_test_loop : bool
+        Whether to run the test loop after training.
     """
 
     reward_threshold: float = 0.9
 
-    use_prover_watchdog: bool = False
-    prover_watchdog_model_name: str = "gpt-4o-mini-2024-07-18"
-    prover_watchdog_use_dummy_api: bool = False
-    prover_watchdog_num_invalid_generation_retries: int = 3
+    run_test_loop: bool = False
