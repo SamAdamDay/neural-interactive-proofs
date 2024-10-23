@@ -386,9 +386,9 @@ class ProverAnalyserMixin:
                 continue
 
             # TODO: need a function to tell if the agent can be active in *any* round
-            for round in range(self.protocol_handler.max_message_rounds):
+            for round_id in range(self.protocol_handler.max_message_rounds):
                 if self.protocol_handler.can_agent_be_active(
-                    agent_name, round, channel_name
+                    agent_name, round_id, channel_name
                 ):
                     break
             else:

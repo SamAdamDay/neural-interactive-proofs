@@ -143,7 +143,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         return self.message_channel_names
 
     def parse_chat_completion(
-        self, completion_text: str, agent_name: str, round: int
+        self, completion_text: str, agent_name: str, round_id: int
     ) -> tuple[OrderedDict[str, str] | None, int]:
         """Parse a chat completion into a message to each channel and a decision
 
@@ -153,7 +153,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             The completion to parse.
         agent_name : str
             The name of the agent that generated the completion.
-        round : int
+        round_id : int
             The current round of the interaction.
 
         Returns
@@ -182,12 +182,12 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         active_channels = [
             channel_name
             for channel_name in self.message_channel_names
-            if self.can_agent_be_active(agent_name, round, channel_name)
+            if self.can_agent_be_active(agent_name, round_id, channel_name)
         ]
 
         if len(active_channels) == 0:
             raise ValueError(
-                f"Tried to parse response for {agent_name!r} in round {round}, but it "
+                f"Tried to parse response for {agent_name!r} in round {round_id}, but it "
                 f"is not active in any channel."
             )
 

@@ -158,15 +158,17 @@ def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType
     base_agent_names = base_protocol_handler.agent_names
     base_channel_names = base_protocol_handler.message_channel_names
 
-    round = torch.arange(0, max_message_rounds)
+    round_id = torch.arange(0, max_message_rounds)
     seed = torch.randint(0, 1000, (max_message_rounds,))
 
     # Get the masks of which agents are active in which rounds and channels
     active_agents_mask = protocol_handler.get_active_agents_mask_from_rounds_and_seed(
-        round, seed
+        round_id, seed
     )
     base_active_agent_mask = (
-        base_protocol_handler.get_active_agents_mask_from_rounds_and_seed(round, seed)
+        base_protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+            round_id, seed
+        )
     )
 
     # Build a list which for each round contains a set of the agent-channel pairs that

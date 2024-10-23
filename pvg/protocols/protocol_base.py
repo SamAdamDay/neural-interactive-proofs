@@ -172,7 +172,7 @@ class ProtocolHandler(ABC):
 
     @abstractmethod
     def get_active_agents_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "... agent channel"]:
         """Get a boolean mask of active agents for a batch of rounds.
 
@@ -181,7 +181,7 @@ class ProtocolHandler(ABC):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The round of the protocol.
         seed : Int[Tensor, "..."]
             The per-environment seed.
@@ -195,7 +195,7 @@ class ProtocolHandler(ABC):
 
     @abstractmethod
     def can_agent_be_active(
-        self, agent_name: str, round: int, channel_name: str
+        self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
         """Specifies whether an agent can be active in a given round and channel.
 
@@ -208,7 +208,7 @@ class ProtocolHandler(ABC):
             Whether the agent can be active in the given round and channel.
         """
 
-    def can_agent_be_active_any_channel(self, agent_name: str, round: int) -> bool:
+    def can_agent_be_active_any_channel(self, agent_name: str, round_id: int) -> bool:
         """Specifies whether an agent can be active in any channel in a given round.
 
         For non-deterministic protocols, this is true if the agent has some probability
@@ -221,13 +221,13 @@ class ProtocolHandler(ABC):
         """
 
         return any(
-            self.can_agent_be_active(agent_name, round, channel_name)
+            self.can_agent_be_active(agent_name, round_id, channel_name)
             for channel_name in self.message_channel_names
         )
 
     @abstractmethod
     def get_verifier_guess_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifiers can make a guess/decision.
 
@@ -236,7 +236,7 @@ class ProtocolHandler(ABC):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The batch of rounds.
         seed : Int[Tensor, "..."]
             The per-environment seed.
@@ -261,12 +261,12 @@ class ProtocolHandler(ABC):
         """
 
         agents_first_active_rounds = {}
-        for round in range(100):
+        for round_id in range(100):
             for agent_name in set(self.agent_names) - set(
                 agents_first_active_rounds.keys()
             ):
-                if self.can_agent_be_active_any_channel(agent_name, round):
-                    agents_first_active_rounds[agent_name] = round
+                if self.can_agent_be_active_any_channel(agent_name, round_id):
+                    agents_first_active_rounds[agent_name] = round_id
             if len(agents_first_active_rounds) == len(self.agent_names):
                 break
         else:
@@ -314,7 +314,7 @@ class ProtocolHandler(ABC):
 
     def _get_agent_decision_made_mask(
         self,
-        round: Int[Tensor, "..."],
+        round_id: Int[Tensor, "..."],
         y: Int[Tensor, "... 1"],
         guess_mask: Bool[Tensor, "..."],
         decision: Int[Tensor, "..."],
@@ -325,7 +325,7 @@ class ProtocolHandler(ABC):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The round number.
         y : Int[Tensor, "... 1"]
             The target value.
@@ -348,7 +348,7 @@ class ProtocolHandler(ABC):
 
         verifier_decision_made = guess_mask & (decision != 2)
         verifier_decision_made = verifier_decision_made & (
-            round >= self.min_message_rounds
+            round_id >= self.min_message_rounds
         )
 
         return verifier_decision_made
@@ -389,7 +389,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         return [self.verifier_name]
 
     def get_verifier_guess_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifier can make a guess.
 
@@ -398,7 +398,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The batch of rounds.
         seed : Int[Tensor, "..."]
             The per-environment seed.
@@ -409,7 +409,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             Which batch items the verifiers can make a guess in.
         """
         active_agents_mask = self.get_active_agents_mask_from_rounds_and_seed(
-            round, seed
+            round_id, seed
         )
         verifier_active_mask = active_agents_mask[
             ..., self.agent_names.index(self.verifier_name), :
@@ -465,7 +465,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         protocol_params = self.hyper_params.protocol_common
 
         y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
-        round: Int[Tensor, "..."] = as_tensor(env_td["round"])
+        round_id: Int[Tensor, "..."] = as_tensor(env_td["round"])
         seed: Int[Tensor, "..."] = as_tensor(env_td["seed"])
         decision: Int[Tensor, "... agent"] = as_tensor(env_td["agents", "decision"])
         shared_done: Bool[Tensor, "..."] = as_tensor(env_td["done"])
@@ -474,12 +474,12 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         # Get the mask of the batch items where the verifier can make a guess
         verifier_guess_mask = self.get_verifier_guess_mask_from_rounds_and_seed(
-            round, seed
+            round_id, seed
         )
 
         # Determine if the verifier has made a decision
         verifier_decision_made = self._get_agent_decision_made_mask(
-            round=round,
+            round_id=round_id,
             y=y,
             guess_mask=verifier_guess_mask,
             decision=decision[..., self.verifier_index],
@@ -506,10 +506,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         terminated = terminated | (
-            (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
         )
         reward[verifier_idx][
-            (round >= self.max_message_rounds - 1) & ~verifier_decision_made
+            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
         ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
@@ -581,7 +581,9 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
         self._validate_active_agents()
 
     @abstractmethod
-    def is_agent_active(self, agent_name: str, round: int, channel_name: str) -> bool:
+    def is_agent_active(
+        self, agent_name: str, round_id: int, channel_name: str
+    ) -> bool:
         """Specifies whether an agent is active in a given round and channel.
 
         An agent must only send a message in a channel which is visible to them.
@@ -593,7 +595,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
         """
 
     def can_agent_be_active(
-        self, agent_name: str, round: int, channel_name: str
+        self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
         """Specifies whether an agent can be active in a given round and channel.
 
@@ -605,7 +607,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             Whether the agent can be active in the given round and channel.
         """
 
-        return self.is_agent_active(agent_name, round, channel_name)
+        return self.is_agent_active(agent_name, round_id, channel_name)
 
     @cached_property
     def active_agents_by_round(self) -> list[dict[str, list[str]]]:
@@ -617,17 +619,17 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
         -------
         active_agents_by_round : list[dict[str, list[str]]]
             The agent names active in each round and channel.
-            `agent_turn_names[round][channel_name]` is a list of the agent names active
-            in round `round` and channel `channel_name`.
+            `agent_turn_names[round_id][channel_name]` is a list of the agent names
+            active in round `round_id` and channel `channel_name`.
         """
 
         active_agents_by_round = []
-        for round in range(self.max_message_rounds):
+        for round_id in range(self.max_message_rounds):
             agents_per_channel = {}
             for channel_name in self.message_channel_names:
                 active_agent_names = []
                 for agent_name in self.agent_names:
-                    if self.is_agent_active(agent_name, round, channel_name):
+                    if self.is_agent_active(agent_name, round_id, channel_name):
                         active_agent_names.append(agent_name)
                 agents_per_channel[channel_name] = active_agent_names
             active_agents_by_round.append(agents_per_channel)
@@ -655,14 +657,18 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             enumerate(self.agent_names),
             enumerate(self.message_channel_names),
         )
-        for round, (agent_index, agent_name), (channel_index, channel_name) in iterator:
-            if agent_name in self.active_agents_by_round[round][channel_name]:
-                active_agents[round, agent_index, channel_index] = True
+        for (
+            round_id,
+            (agent_index, agent_name),
+            (channel_index, channel_name),
+        ) in iterator:
+            if agent_name in self.active_agents_by_round[round_id][channel_name]:
+                active_agents[round_id, agent_index, channel_index] = True
 
         return active_agents
 
     def get_active_agents_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."] | None
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."] | None
     ) -> Bool[Tensor, "... agent channel"]:
         """Get a boolean mask of active agents for a batch of rounds.
 
@@ -671,7 +677,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The round of the protocol.
         seed : Int[Tensor, "..."] | None
             The per-environment seed. This is ignored for deterministic protocols, so it
@@ -684,10 +690,10 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             agent sends a message in the channel in round `round[*batch]`.
         """
 
-        return self.active_agents_mask[round, :, :]
+        return self.active_agents_mask[round_id, :, :]
 
     def get_verifier_guess_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."] | None
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."] | None
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating when the verifier can make a guess.
 
@@ -696,7 +702,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The batch of rounds.
         seed : Int[Tensor, "..."] | None
             The per-environment seed. This is ignored for deterministic protocols, so it
@@ -708,7 +714,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             Which batch items the verifier can make a guess in.
         """
         active_agents_mask = self.get_active_agents_mask_from_rounds_and_seed(
-            round, seed
+            round_id, seed
         )
         verifier_active_mask = active_agents_mask[..., self.verifier_index, :]
         return verifier_active_mask.any(dim=-1)
@@ -726,11 +732,13 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
         """
 
         agents_first_active_rounds = {}
-        for round, active_agents_by_channel in enumerate(self.active_agents_by_round):
+        for round_id, active_agents_by_channel in enumerate(
+            self.active_agents_by_round
+        ):
             for active_agent_names in active_agents_by_channel.values():
                 for agent_name in active_agent_names:
                     if agent_name not in agents_first_active_rounds:
-                        agents_first_active_rounds[agent_name] = round
+                        agents_first_active_rounds[agent_name] = round_id
 
         return agents_first_active_rounds
 
@@ -742,9 +750,9 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             self.agent_names,
             self.message_channel_names,
         )
-        for round, agent_name, channel_name in iterator:
-            if agent_name in self.active_agents_by_round[round][channel_name]:
+        for round_id, agent_name, channel_name in iterator:
+            if agent_name in self.active_agents_by_round[round_id][channel_name]:
                 assert (agent_name, channel_name) in self.agent_channel_visibility, (
-                    f"Protocol specification error: Agent {agent_name!r} is active "
-                    f"in round {round} and channel {channel_name!r} but cannot see it."
+                    f"Protocol specification error: Agent {agent_name!r} is active in "
+                    f"round {round_id} and channel {channel_name!r} but cannot see it."
                 )

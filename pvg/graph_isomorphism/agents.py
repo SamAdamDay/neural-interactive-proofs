@@ -2050,7 +2050,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         hooks: Optional[GraphIsomorphismAgentHooks] = None,
     ) -> TensorDict:
 
-        round: Int[Tensor, "..."] = data["round"]
+        round_id: Int[Tensor, "..."] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
@@ -2060,7 +2060,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
-                    input_dict[key] = round == 0
+                    input_dict[key] = round_id == 0
                 elif key == "message":
                     if "message" not in data.keys():
                         continue

@@ -1690,7 +1690,7 @@ class ImageClassificationCombinedBody(CombinedBody):
     additional_out_keys = ("round",)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        round: Int[Tensor, "batch"] = data["round"]
+        round_id: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
@@ -1699,7 +1699,7 @@ class ImageClassificationCombinedBody(CombinedBody):
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
-                    input_dict[key] = round == 0
+                    input_dict[key] = round_id == 0
                 elif key == "message":
                     if "message" not in data.keys():
                         continue

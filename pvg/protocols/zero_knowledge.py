@@ -201,7 +201,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         return agent_channel_visibility
 
     def can_agent_be_active(
-        self, agent_name: str, round: int, channel_name: str
+        self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
 
         base_channel_name, _, channel_suffix = channel_name.rpartition("_")
@@ -214,7 +214,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 return False
             elif agent_name == "verifier":
                 return self.base_protocol.can_agent_be_active(
-                    "verifier", round, base_channel_name
+                    "verifier", round_id, base_channel_name
                 )
 
         # Adversarial verifiers are active in the adversarial channels when the base
@@ -225,7 +225,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 return False
             elif agent_name == "adversarial_verifier":
                 return self.base_protocol.can_agent_be_active(
-                    "verifier", round, base_channel_name
+                    "verifier", round_id, base_channel_name
                 )
 
         # The simulator is active in the simulator channels when the base protocol
@@ -233,25 +233,27 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         elif channel_suffix == "simulator":
             if agent_name == "simulator":
                 return self.base_protocol.can_agent_be_active(
-                    "verifier", round, base_channel_name
+                    "verifier", round_id, base_channel_name
                 )
             else:
                 return False
 
         # Whether the provers are active is determined by the base protocol
         return self.base_protocol.can_agent_be_active(
-            agent_name, round, base_channel_name
+            agent_name, round_id, base_channel_name
         )
 
     def get_active_agents_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "... agent channel"]:
 
         num_base_channels = self.base_protocol.num_message_channels
 
         # Start with the active agents from the base protocol
         active_mask: Bool[Tensor, "... base_agent base_channel"] = (
-            self.base_protocol.get_active_agents_mask_from_rounds_and_seed(round, seed)
+            self.base_protocol.get_active_agents_mask_from_rounds_and_seed(
+                round_id, seed
+            )
         )
 
         # Copy the mask for the verifier to the adversarial verifier and simulator
@@ -297,7 +299,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         return active_mask
 
     def get_verifier_guess_mask_from_rounds_and_seed(
-        self, round: Int[Tensor, "..."], seed: Int[Tensor, "..."]
+        self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating whether the verifier can make a decision.
 
@@ -305,7 +307,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The round of the protocol.
 
         Returns
@@ -314,7 +316,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             A boolean mask indicating whether the verifier can make a decision.
         """
         return self.base_protocol.get_verifier_guess_mask_from_rounds_and_seed(
-            round, seed
+            round_id, seed
         )
 
     def step_interaction_protocol(
@@ -365,7 +367,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """
 
         y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
-        round: Int[Tensor, "..."] = as_tensor(env_td["round"])
+        round_id: Int[Tensor, "..."] = as_tensor(env_td["round"])
         seed: Int[Tensor, "..."] = as_tensor(env_td["seed"])
         decision: Int[Tensor, "... agent"] = as_tensor(env_td["agents", "decision"])
         main_message_logits: Float[Tensor, "... agent channel position logit"] = (
@@ -390,12 +392,12 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # Get the mask of the batch items where the adversarial verifier can make a
         # guess
         adversarial_verifier_guess_mask = (
-            self.get_verifier_guess_mask_from_rounds_and_seed(round, seed)
+            self.get_verifier_guess_mask_from_rounds_and_seed(round_id, seed)
         )
 
         # Determine if the adversarial verifier has made a decision and is done
         adversarial_verifier_decision_made = self._get_agent_decision_made_mask(
-            round=round,
+            round_id=round_id,
             y=y,
             guess_mask=adversarial_verifier_guess_mask,
             decision=decision[..., self.adversarial_verifier_index],
@@ -430,7 +432,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         )
 
         simulator_reward: Float[Tensor, "..."] = self._get_simulator_reward(
-            round=round,
+            round_id=round_id,
             seed=seed,
             main_message_logits=main_message_logits,
             decision_logits=decision_logits,
@@ -457,7 +459,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     def _get_simulator_reward(
         self,
-        round: Int[Tensor, "..."],
+        round_id: Int[Tensor, "..."],
         seed: Int[Tensor, "..."],
         main_message_logits: Float[Tensor, "... agent channel position logit"],
         decision_logits: Float[Tensor, "... agent 3"],
@@ -485,7 +487,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         Parameters
         ----------
-        round : Int[Tensor, "..."]
+        round_id : Int[Tensor, "..."]
             The round of the protocol.
         seed : Int[Tensor, "..."]
             The per-environment seed.
@@ -523,7 +525,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # and simulator are active in
         channel_active_mask: Bool[
             Tensor, "... base_channel"
-        ] = self.get_active_agents_mask_from_rounds_and_seed(round, seed)[
+        ] = self.get_active_agents_mask_from_rounds_and_seed(round_id, seed)[
             ...,
             self.adversarial_verifier_index,
             num_base_channels : 2 * num_base_channels,
@@ -552,7 +554,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Get the mask for which batch items the adversarial verifier can make a guess
         adversarial_verifier_guess_mask: Float[Tensor, "..."] = (
-            self.get_verifier_guess_mask_from_rounds_and_seed(round, seed)
+            self.get_verifier_guess_mask_from_rounds_and_seed(round_id, seed)
         )
 
         # Get the decision logits for the adversarial verifier and simulator

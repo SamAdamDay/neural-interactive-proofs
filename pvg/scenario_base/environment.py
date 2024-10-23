@@ -669,7 +669,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         # ... round channel position {message_shape_str}
         message_history = env_td.get(message_history_key)
-        round: Int[Tensor, "..."] = env_td.get("round")
+        round_id: Int[Tensor, "..."] = env_td.get("round")
         seed: Int[Tensor, "..."] = env_td.get("seed")
         message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
@@ -679,7 +679,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # (... agent channel)
         active_agents_mask = (
             self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
-                round, seed
+                round_id, seed
             )
         )
 
@@ -697,7 +697,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         # Get a mask for which round it is
-        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+        round_mask = F.one_hot(
+            round_id, self.protocol_handler.max_message_rounds
+        ).bool()
 
         # Reshape it so that it looks like the message history with 1's for the message
         # space dims and channel and position dim
@@ -978,8 +980,8 @@ class PureTextEnvironment(Environment, ABC):
             if key not in [("round",), ("message_history",)]:
                 next_state[key] = env_state[key]
 
-        round = env_state["round"]
-        next_state["round"] = round + 1
+        round_id = env_state["round"]
+        next_state["round"] = round_id + 1
 
         # Add the latest messages to the message history
         message_history = env_state["message_history"].copy()
@@ -998,15 +1000,15 @@ class PureTextEnvironment(Environment, ABC):
                             f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
-                    message_history[0, round, channel_id] = message
-                    message_agent_id[0, round, channel_id] = agent_id
+                    message_history[0, round_id, channel_id] = message
+                    message_agent_id[0, round_id, channel_id] = agent_id
 
         next_state["message_history"] = message_history
         next_state["message_agent_id"] = message_agent_id
 
         # Add the raw messages to the raw message history
         raw_message_history = env_state["raw_message_history"].copy()
-        raw_message_history[0, round] = env_state["agents", "raw_message"][0]
+        raw_message_history[0, round_id] = env_state["agents", "raw_message"][0]
         next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals

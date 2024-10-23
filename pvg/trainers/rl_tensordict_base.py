@@ -459,7 +459,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         else:
             prefix = "test_"
 
-        round: Int[Tensor, "..."] = tensordict_data.get(("next", "round"))
+        round_id: Int[Tensor, "..."] = tensordict_data.get(("next", "round"))
         done: Bool[Tensor, "..."] = tensordict_data.get(("next", "done"))
         reward: Float[Tensor, "... agent"] = tensordict_data.get(
             ("next", "agents", "reward")
@@ -484,7 +484,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         log_stats = {}
 
         # Compute the mean episode length
-        mean_episode_length = round[done].float().mean().item()
+        mean_episode_length = round_id[done].float().mean().item()
         log_stats[f"{prefix}mean_episode_length"] = mean_episode_length
 
         for i, agent_name in enumerate(self.agent_names):
