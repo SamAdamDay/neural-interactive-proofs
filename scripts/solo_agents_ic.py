@@ -12,7 +12,7 @@ import logging
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
     ImageClassificationParameters,
@@ -59,8 +59,8 @@ param_grid = dict(
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
-    return Parameters(
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
+    return HyperParameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.SOLO_AGENT,
         dataset=combo["dataset_name"],
@@ -118,11 +118,11 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     else:
         wandb_tags = []
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         logger=logger,
         dataset_on_device=cmd_args.dataset_on_device,
@@ -145,8 +145,10 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

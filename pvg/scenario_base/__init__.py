@@ -27,6 +27,7 @@ from .agents import (
     TensorDictAgentPartMixin,
     TensorDictDummyAgentPartMixin,
     WholeAgent,
+    PureTextWholeAgent,
     RandomWholeAgent,
     AgentBody,
     AgentHead,
@@ -43,6 +44,7 @@ from .agents import (
     CombinedPolicyHead,
     CombinedValueHead,
     Agent,
+    AgentState,
 )
 from .rollout_samples import (
     RolloutSamples,
@@ -53,4 +55,10 @@ from .pretrained_models import (
     PretrainedModel,
     register_pretrained_model_class,
     get_pretrained_model_class,
+)
+from .rollout_analysis import (
+    RolloutAnalyser,
+    ROLLOUT_ANALYSERS,
+    register_rollout_analyser,
+    PureTextRolloutAnalyser,
 )

@@ -17,7 +17,7 @@ import wandb
 
 from tqdm import tqdm
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
@@ -32,7 +32,7 @@ import pvg.code_validation
 
 
 def run_experiment(
-    params: Parameters,
+    hyper_params: HyperParameters,
     device: TorchDevice = "cpu",
     logger: Optional[LoggingType] = None,
     profiler: Optional[torch.profiler.profile] = None,
@@ -43,10 +43,13 @@ def run_experiment(
     wandb_entity: str = WANDB_ENTITY,
     run_id: Optional[str] = None,
     allow_auto_generated_run_id: bool = False,
+    allow_resuming_wandb_run: bool = False,
+    allow_overriding_wandb_config: bool = False,
     print_wandb_run_url: bool = False,
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
     num_dataset_threads: int = 8,
+    num_rollout_workers: int = 4,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
     enable_efficient_attention: bool = False,
@@ -60,7 +63,7 @@ def run_experiment(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     device : TorchDevice, default="cpu"
         The device to use for training.
@@ -83,6 +86,10 @@ def run_experiment(
         is False.
     allow_auto_generated_run_id : bool, default=False
         If True, the run ID can be auto-generated if not specified.
+    allow_resuming_wandb_run : bool, default=False
+        If True, the run can be resumed if the run ID is specified and the run exists.
+    allow_overriding_wandb_config : bool, default=False
+        If True, the W&B config can be overridden when resuming a run.
     print_wandb_run_url : bool, default=False
         If True, print the URL of the W&B run at the start of the experiment.
     wandb_tags : list[str], default=[]
@@ -92,6 +99,9 @@ def run_experiment(
         together in the UI. This is useful for doing multiple runs on the same machine.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
+    num_rollout_workers : int, default=4
+        The number of workers to use for collecting rollout samples, when this is done
+        in parallel.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training.
@@ -130,11 +140,13 @@ def run_experiment(
             tags=wandb_tags,
             group=wandb_group,
             id=run_id,
-            resume="never",
+            resume="allow" if allow_resuming_wandb_run else "never",
         )
-        wandb_run.config.update(params.to_dict())
+        wandb_run.config.update(
+            hyper_params.to_dict(), allow_val_change=allow_overriding_wandb_config
+        )
         if print_wandb_run_url:
-            print(f"W&B run URL: {wandb_run.get_url()}")
+            print(f"W&B run URL: {wandb_run.get_url()}")  # noqa: T201
         stat_logger = WandbStatLogger(wandb_run)
     else:
         wandb_run = None
@@ -143,6 +155,7 @@ def run_experiment(
     # Set up the experiment settings
     settings = ExperimentSettings(
         device=device,
+        run_id=run_id,
         wandb_run=wandb_run,
         stat_logger=stat_logger,
         tqdm_func=tqdm_func,
@@ -150,6 +163,7 @@ def run_experiment(
         profiler=profiler,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,
+        num_rollout_workers=num_rollout_workers,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
         enable_efficient_attention=enable_efficient_attention,
@@ -158,10 +172,10 @@ def run_experiment(
     )
 
     # Build the scenario components of the experiment.
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     # Build the trainer.
-    trainer = build_trainer(params, scenario_instance, settings)
+    trainer = build_trainer(hyper_params, scenario_instance, settings)
 
     # Suppress warnings about a batching rule not being implemented by PyTorch for
     # aten::_scaled_dot_product_efficient_attention and
@@ -206,7 +220,7 @@ class PreparedExperimentInfo:
 
 
 def prepare_experiment(
-    params: Parameters,
+    hyper_params: HyperParameters,
     profiler: Optional[torch.profiler.profile] = None,
     ignore_cache: bool = False,
     num_dataset_threads: int = 8,
@@ -221,7 +235,7 @@ def prepare_experiment(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
@@ -261,10 +275,10 @@ def prepare_experiment(
     )
 
     # Build the scenario components of the experiment.
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     # Build the trainer.
-    trainer = build_trainer(params, scenario_instance, settings)
+    trainer = build_trainer(hyper_params, scenario_instance, settings)
 
     # Get the total number of training iterations.
     total_num_iterations = trainer.get_total_num_iterations()

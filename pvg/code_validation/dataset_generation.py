@@ -17,18 +17,19 @@ import argparse
 from openai import OpenAI
 from pvg.constants import CV_DATA_DIR, OPENAI_API_KEY, OPENROUTER_API_KEY, HF_TOKEN
 
-HF_TOKEN = "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"
 
 def suppress_output(func):
     def wrapper(*args, **kwargs):
-        with open(os.devnull, 'w') as fnull:
+        with open(os.devnull, "w") as fnull:
             sys.stdout = fnull
             sys.stderr = fnull
             result = func(*args, **kwargs)
             sys.stdout = sys.__stdout__
             sys.stderr = sys.__stderr__
         return result
+
     return wrapper
+
 
 def solution_generation_wrapper(
     result,
@@ -52,7 +53,7 @@ def solution_generation_wrapper(
             debug=debug,
         )
         return result.append(buggy_solutions)
-    except Exception as e:
+    except Exception:
         result.append([None])
 
 
@@ -145,7 +146,9 @@ def get_openrouter_response(
                         {k: c[k] for k in ["token", "logprob"]}
                         for c in completion["logprobs"]["content"]
                     ]
-                    if log_probs and "log_probs" in completion and completion["logprobs"] is not None
+                    if log_probs
+                    and "log_probs" in completion
+                    and completion["logprobs"] is not None
                     else None
                 ),
                 "top_logprobs": (
@@ -156,7 +159,9 @@ def get_openrouter_response(
                         ]
                         for c in completion["logprobs"]["content"]
                     ]
-                    if top_logprobs and "log_probs" in completion and completion["logprobs"] is not None
+                    if top_logprobs
+                    and "log_probs" in completion
+                    and completion["logprobs"] is not None
                     else None
                 ),
             }
@@ -189,7 +194,9 @@ class CodeValidationDatasetConfig:
     """
 
     model: str = "openai/gpt-4o-mini"
-    difficulties: List[str] = field(default_factory=lambda: ["interview","competition","introductory"])
+    difficulties: List[str] = field(
+        default_factory=lambda: ["interview", "competition", "introductory"]
+    )
     split: str | None = None
     fraction_to_modify: float = 0.5
     max_modifications: int = 1
@@ -372,8 +379,8 @@ def test_buggy_solution(
     fraction_correct = float(results.count(True) / len(results))
     fraction_errors = float(buggy_outputs.count(None) / len(buggy_outputs))
     if debug:
-        print(f"{int(fraction_errors*100)}% errors")
-        print(f"{int(fraction_correct*100)}% checks passed")
+        print(f"{int(fraction_errors*100)}% errors")  # noqa: T201
+        print(f"{int(fraction_correct*100)}% checks passed")  # noqa: T201
 
     if (
         fraction_correct < 1
@@ -441,8 +448,8 @@ def test_buggy_solution(
     fraction_matching = (denom - numer) / denom if denom > 0 else 1
 
     if debug:
-        print(f"{(denom / len(outputs))*100:.2f}% valid inputs")
-        print(f"{fraction_matching*100:.2f}% matching outputs")
+        print(f"{(denom / len(outputs))*100:.2f}% valid inputs")  # noqa: T201
+        print(f"{fraction_matching*100:.2f}% matching outputs")  # noqa: T201
 
     if fraction_matching == 1.0:
         return False, results, None
@@ -489,7 +496,7 @@ def generate_buggy_solutions(
     """
 
     if debug:
-        print(f"Problem: {datum['problem_id']}")
+        print(f"Problem: {datum['problem_id']}")  # noqa: T201
 
     if existing_buggy_solutions is None:
         buggy_solutions = [None] * len(json.loads(datum["solutions"]))
@@ -525,12 +532,12 @@ def generate_buggy_solutions(
             attempts = 0
 
             if debug:
-                print(f"Solution: {s}/{len(solutions)}")
+                print(f"Solution: {s}/{len(solutions)}")  # noqa: T201
 
             while not valid_buggy_solution and attempts < max_attempts:
 
                 if debug:
-                    print(f"Attempt: {attempts}")
+                    print(f"Attempt: {attempts}")  # noqa: T201
 
                 if multiple_completions:
                     model_outputs = get_openrouter_response(
@@ -545,7 +552,7 @@ def generate_buggy_solutions(
                     ]
 
                 if debug:
-                    print("Model output(s) received")
+                    print("Model output(s) received")  # noqa: T201
 
                 for model_output in model_outputs:
 
@@ -556,11 +563,11 @@ def generate_buggy_solutions(
                     )
 
                     if debug:
-                        print("Answer extracted")
+                        print("Answer extracted")  # noqa: T201
 
                     if not safe:
                         if debug:
-                            print("Unsafe solution generated")
+                            print("Unsafe solution generated")  # noqa: T201
                         continue
 
                     valid_buggy_solution, input_output_checks, _ = test_buggy_solution(
@@ -575,7 +582,9 @@ def generate_buggy_solutions(
 
             if valid_buggy_solution:
                 if debug:
-                    print(f"Valid buggy solution generated in {attempts} attempts\n")
+                    print(  # noqa: T201
+                        f"Valid buggy solution generated in {attempts} attempts\n"
+                    )
 
                 # Calculate the Levenshtein distance
                 levenshtein_distance = textdistance.levenshtein(
@@ -591,7 +600,7 @@ def generate_buggy_solutions(
 
             if attempts == max_attempts:
                 if debug:
-                    print("Failed to generate buggy solution\n")
+                    print("Failed to generate buggy solution\n")  # noqa: T201
                 buggy_solutions[s] = None
             else:
                 passed = input_output_checks.count(True)
@@ -612,23 +621,27 @@ def generate_buggy_solutions(
 
     return buggy_solutions
 
+
 def create_empty_dataset():
 
     return datasets.Dataset.from_dict(
-                {
-                    k: []
-                    for k in [
-                        "apps_split",
-                        "apps_problem_id",
-                        "difficulty",
-                        "question",
-                        "solutions",
-                        "buggy_solutions",
-                    ]
-                }
-            )
+        {
+            k: []
+            for k in [
+                "apps_split",
+                "apps_problem_id",
+                "difficulty",
+                "question",
+                "solutions",
+                "buggy_solutions",
+            ]
+        }
+    )
 
-def load_buggy_data(config: CodeValidationDatasetConfig, split: List[str]) -> datasets.Dataset:
+
+def load_buggy_data(
+    config: CodeValidationDatasetConfig, split: List[str]
+) -> datasets.Dataset:
 
     # Load existing buggy data (the only split is train, so we specify that)
     if config.pull_repo is not None:
@@ -651,6 +664,7 @@ def load_buggy_data(config: CodeValidationDatasetConfig, split: List[str]) -> da
             buggy_data = create_empty_dataset()
 
     return buggy_data
+
 
 def generate_cv_dataset(
     config: CodeValidationDatasetConfig | dict,
@@ -694,11 +708,11 @@ def generate_cv_dataset(
                 lambda x: x["difficulty"] == d and x["apps_split"] == s
             ).sort("apps_problem_id")
 
-            num_buggy_data_to_generate = max(min(config.num_data, len(data_slice)) - len(
-                buggy_data_slice
-            ), 0)
+            num_buggy_data_to_generate = max(
+                min(config.num_data, len(data_slice)) - len(buggy_data_slice), 0
+            )
             num_data_added = 0
-            print(
+            print(  # noqa: T201
                 f"Generating {num_buggy_data_to_generate} buggy data for the {d} problems in the {s} split"
             )
 
@@ -755,7 +769,7 @@ def generate_cv_dataset(
                 if p.is_alive():
                     p.terminate()
                     p.join()
-                    print(
+                    print(  # noqa: T201
                         f"Generating buggy solutions for problem {datum['problem_id']} ({s}) timed out after {timeout} seconds"
                     )
                     buggy_solutions = [None]
@@ -807,13 +821,17 @@ def generate_cv_dataset(
                 elif num_data_added % config.save_after == 0 and num_data_added > 0:
                     # buggy_data.to_json(os.path.join(config.local_dir, s, f"{d}.jsonl"))
                     buggy_data = load_buggy_data(config, split)
-                    combined_buggy_data = datasets.concatenate_datasets([buggy_data, new_data])
+                    combined_buggy_data = datasets.concatenate_datasets(
+                        [buggy_data, new_data]
+                    )
                     new_data = create_empty_dataset()
                     combined_buggy_data.save_to_disk(
                         os.path.join(config.local_dir, "code_validation.data")
                     )
                     if config.push_repo is not None:
-                        combined_buggy_data.push_to_hub(config.push_repo, token=config.token)
+                        combined_buggy_data.push_to_hub(
+                            config.push_repo, token=config.token
+                        )
 
             # Calculate the elapsed time, rounding microseconds down
             elapsed_time = datetime.now() - start_time
@@ -821,13 +839,15 @@ def generate_cv_dataset(
                 days=elapsed_time.days, seconds=elapsed_time.seconds
             )
             message = f"Added {num_data_added} buggy data overall in {elapsed_time} for the {d} problems in the {s} split"
-            print(message)
+            print(message)  # noqa: T201
 
             # Save data
             if num_data_added > 0:
                 # buggy_data.to_json(os.path.join(config.local_dir, s, f"{d}.jsonl"))
                 buggy_data = load_buggy_data(config, split)
-                combined_buggy_data = datasets.concatenate_datasets([buggy_data, new_data])
+                combined_buggy_data = datasets.concatenate_datasets(
+                    [buggy_data, new_data]
+                )
                 new_data = create_empty_dataset()
                 combined_buggy_data.save_to_disk(
                     os.path.join(config.local_dir, "code_validation.data")
@@ -867,7 +887,7 @@ def change_to_new_cv_dataset(max_solutions=1):
         indices = buggy_data[split]["problem_id"]
         sliced_data = data[split].filter(lambda x: x["problem_id"] in indices)
 
-        print("Split: {split}")
+        print("Split: {split}")  # noqa: T201
 
         for buggy_datum, datum in tqdm(zip(buggy_data[split], sliced_data)):
 
@@ -1075,7 +1095,7 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
     # Calculate the elapsed time, rounding microseconds down
     elapsed_time = datetime.now() - start_time
     elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
-    print(f"Done in {elapsed_time}")
+    print(f"Done in {elapsed_time}")  # noqa: T201
 
     # Add new buggy data to the existing buggy data
     # for s in config.split:
@@ -1092,7 +1112,7 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
             if config.push_repo is not None:
                 buggy_data.push_to_hub(config.push_repo, split=s)
 
-            new_datum = {
+            new_datum = {  # noqa: F841
                 "apps_split": split,
                 "apps_problem_id": datum["problem_id"],
                 "difficulty": datum["difficulty"],
@@ -1124,7 +1144,7 @@ def update_cv_dataset(config: CodeValidationDatasetConfig | dict):
                     if max(passed, failed) == 0:
                         raise ValueError("No checks were performed")
 
-                    new_solution = {
+                    new_solution = {  # noqa: F841
                         "apps_solution_number": i,
                         "solution": buggy_solution["solution"],
                         "levenshtein_distance": buggy_solution["levenshtein_distance"],

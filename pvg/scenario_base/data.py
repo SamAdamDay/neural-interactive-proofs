@@ -27,11 +27,12 @@ from tensordict.utils import _td_fields, IndexType
 from numpy.typing import NDArray
 
 from pvg.protocols import ProtocolHandler
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.types import TorchDevice
 from pvg.utils.data import is_nested_key
 from pvg.utils.nested_array_dict import NestedArrayDict
+from pvg.utils.torch import FastForwardableBatchSampler
 
 
 class CachedPretrainedEmbeddingsNotFound(Exception):
@@ -47,7 +48,7 @@ class Dataset(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -59,12 +60,12 @@ class Dataset(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.train = train
@@ -94,7 +95,7 @@ class TensorDictDataset(Dataset, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -108,13 +109,13 @@ class TensorDictDataset(Dataset, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             train=train,
@@ -131,9 +132,19 @@ class TensorDictDataset(Dataset, ABC):
             if os.path.isdir(self.processed_dir) and settings.ignore_cache:
                 shutil.rmtree(self.processed_dir)
 
-            # Create the tensordict of the dataset and save it to disk as a
-            # memory-mapped file
+            # Create the tensordict of the dataset
             self._main_data = self.build_tensor_dict()
+
+            # Reduce the size of the training set if needed
+            if (
+                self.train
+                and self.hyper_params.dataset_options.max_train_size is not None
+            ):
+                self._main_data = self._main_data[
+                    : self.hyper_params.dataset_options.max_train_size
+                ]
+
+            # Save it to disk as a memory-mapped file
             self._main_data.memmap_(
                 self.processed_dir, num_threads=settings.num_dataset_threads
             )
@@ -447,7 +458,7 @@ class NestedArrayDictDataset(Dataset, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -511,6 +522,18 @@ class NestedArrayDictDataLoader(TorchDataLoader):
     ----------
     dataset : NestedArrayDictDataset
         The dataset to load.
+    batch_size : int, default=1
+        How many samples per batch to load.
+    shuffle : bool, default=False
+        Set to True to have the data reshuffled at every epoch.
+    drop_last : bool, default=False
+        Set to True to drop the last incomplete batch, if the dataset size is not
+        divisible by the batch size.
+    generator : torch.Generator | None, default=None
+        Generator used for the random sampling.
+    initial_skip : int, default=0
+        Number of initial samples to skip.
+
     """
 
     def __init__(
@@ -520,13 +543,22 @@ class NestedArrayDictDataLoader(TorchDataLoader):
         shuffle: bool = False,
         drop_last: bool = False,
         generator: torch.Generator | None = None,
+        initial_skip: int = 0,
         **kwargs,
     ):
         if shuffle:
             sampler = RandomSampler(dataset, generator=generator)
         else:
             sampler = SequentialSampler(dataset)
-        sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=drop_last)
+        if initial_skip > 0:
+            sampler = FastForwardableBatchSampler(
+                sampler,
+                batch_size=batch_size,
+                drop_last=drop_last,
+                initial_skip=initial_skip,
+            )
+        else:
+            sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=drop_last)
 
         super().__init__(
             dataset,

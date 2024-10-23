@@ -23,12 +23,12 @@ SAVE_PATH = "playground/benchmarking/results"
 def strip_comments(source_code: str) -> str:
 
     # Remove inline comments
-    source_code = re.sub(r'#.*', '', source_code)
-    
+    source_code = re.sub(r"#.*", "", source_code)
+
     # Remove block comments
-    source_code = re.sub(r'""".*?"""', '', source_code, flags=re.DOTALL)
-    source_code = re.sub(r"'''.*?'''", '', source_code, flags=re.DOTALL)
-    
+    source_code = re.sub(r'""".*?"""', "", source_code, flags=re.DOTALL)
+    source_code = re.sub(r"'''.*?'''", "", source_code, flags=re.DOTALL)
+
     return source_code
 
 
@@ -107,7 +107,7 @@ def guess_if_correct(
         # Calculate the elapsed time, rounding microseconds down
         elapsed_time = datetime.now() - start_time
         elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
-        print(f"Received model output in {elapsed_time}.")
+        print(f"Received model output in {elapsed_time}.")  # noqa: T201
 
     answers = []
     answer_probs = []
@@ -200,18 +200,12 @@ def evaluate_model(
 
     data = load_dataset("lrhammond/buggy-apps", split="train")
 
-    counter = {
-                s: {d: 0 for d in difficulties}
-                for s in splits
-            }
+    counter = {s: {d: 0 for d in difficulties} for s in splits}
 
     num_added = 0
     max_problems = len(data) if max_problems is None else max_problems
 
-    results = {
-                    s: {d: {} for d in difficulties}
-                    for s in splits
-                }
+    results = {s: {d: {} for d in difficulties} for s in splits}
 
     for s in splits:
         for d in difficulties:
@@ -228,10 +222,14 @@ def evaluate_model(
                 else:
                     results[s][d] = {}
 
-            data_slice = data.filter(lambda x: x["apps_split"] == s and x["difficulty"] == d)
+            data_slice = data.filter(
+                lambda x: x["apps_split"] == s and x["difficulty"] == d
+            )
             max_problems = len(data) if max_problems is None else max_problems
 
-            print(f"\nModel: {model_name}\nReasoning: {show_working}\nSplit: {s}\nDifficulty: {d}")
+            print(  # noqa: T201
+                f"\nModel: {model_name}\nReasoning: {show_working}\nSplit: {s}\nDifficulty: {d}"
+            )
 
             # for datum in tqdm(data_slice[:max_problems], colour="magenta"):
             for i in tqdm(range(max_problems), colour="magenta"):
@@ -251,20 +249,24 @@ def evaluate_model(
                 counter[s][d] += 1
 
                 if verbose:
-                    print("\n\n")
-                    print(f"Problem: {problem_id} ({datum['apps_split']})")
+                    print("\n\n")  # noqa: T201
+                    print(
+                        f"Problem: {problem_id} ({datum['apps_split']})"
+                    )  # noqa: T201
 
                 for actual_answer, sols in zip(
                     ["yes", "no"], [datum["solutions"], datum["buggy_solutions"]]
                 ):
 
                     if verbose:
-                        print("====================================")
-                        print(f"Actual answer: {actual_answer}\n")
+                        print("====================================")  # noqa: T201
+                        print(f"Actual answer: {actual_answer}\n")  # noqa: T201
 
                     for sol in sols:
 
-                        query = generate_query(datum["question"], sol["solution"], show_working)
+                        query = generate_query(
+                            datum["question"], sol["solution"], show_working
+                        )
                         answers, answer_probs, alt_probs = guess_if_correct(
                             model,
                             api_key,
@@ -291,13 +293,19 @@ def evaluate_model(
                                 # correct.append('correct')
                                 if check_probs and answer_probs[i] is not None:
                                     correct_probs.append(answer_probs[i])
-                                if num_alternatives is not None and alt_probs[i] is not None:
+                                if (
+                                    num_alternatives is not None
+                                    and alt_probs[i] is not None
+                                ):
                                     correct_alt_probs.append(alt_probs[i])
                             else:
                                 # correct.append(0)
                                 if check_probs and answer_probs[i] is not None:
                                     incorrect_probs.append(answer_probs[i])
-                                if num_alternatives is not None and alt_probs[i] is not None:
+                                if (
+                                    num_alternatives is not None
+                                    and alt_probs[i] is not None
+                                ):
                                     incorrect_alt_probs.append(alt_probs[i])
 
                         correct = answers.count(actual_answer)
@@ -311,10 +319,14 @@ def evaluate_model(
                         }
                         if check_probs:
                             stats["avg_prob_when_correct"] = (
-                                np.mean(correct_probs) if len(correct_probs) > 0 else None
+                                np.mean(correct_probs)
+                                if len(correct_probs) > 0
+                                else None
                             )
                             stats["avg_prob_when_incorrect"] = (
-                                np.mean(incorrect_probs) if len(incorrect_probs) > 0 else None
+                                np.mean(incorrect_probs)
+                                if len(incorrect_probs) > 0
+                                else None
                             )
                         if num_alternatives is not None:
                             stats["avg_alt_prob_when_correct"] = (
@@ -328,28 +340,32 @@ def evaluate_model(
                                 else None
                             )
 
-                        results[s][d][problem_id][
-                            actual_answer
-                        ] = stats
+                        results[s][d][problem_id][actual_answer] = stats
 
                         if verbose:
-                            print("----------------------------")
-                            print(f"Solution number: {sols.index(sol)}")
-                            print(f"Fraction correct: {stats['fraction_correct']}")
-                            print(f"Fraction incorrect: {stats['fraction_incorrect']}")
-                            print(f"Fraction failed: {stats['fraction_failed']}")
+                            print("----------------------------")  # noqa: T201
+                            print(f"Solution number: {sols.index(sol)}")  # noqa: T201
+                            print(  # noqa: T201
+                                f"Fraction correct: {stats['fraction_correct']}"
+                            )
+                            print(  # noqa: T201
+                                f"Fraction incorrect: {stats['fraction_incorrect']}"
+                            )
+                            print(  # noqa: T201
+                                f"Fraction failed: {stats['fraction_failed']}"
+                            )
                             if check_probs:
-                                print(
+                                print(  # noqa: T201
                                     f"Avg prob when correct: {stats['avg_prob_when_correct']}"
                                 )
-                                print(
+                                print(  # noqa: T201
                                     f"Avg prob when incorrect: {stats['avg_prob_when_incorrect']}"
                                 )
                             if num_alternatives is not None:
-                                print(
+                                print(  # noqa: T201
                                     f"Avg alt prob when correct: {stats['avg_alt_prob_when_correct']}"
                                 )
-                                print(
+                                print(  # noqa: T201
                                     f"Avg alt prob when incorrect: {stats['avg_alt_prob_when_incorrect']}"
                                 )
 
@@ -372,23 +388,21 @@ def main():
     # Required arguments
     parser.add_argument("model", type=str, help="Model to evaluate")
 
-
- 
     # Optional arguments
     # New argument to accept a list of strings
     parser.add_argument(
         "--splits",
         default=["train", "test"],
         type=str,
-        nargs='+',  # One or more arguments
-        help="The splits to evaluate"
+        nargs="+",  # One or more arguments
+        help="The splits to evaluate",
     )
     parser.add_argument(
         "--difficulties",
         default=["introductory", "interview", "competition"],
         type=str,
-        nargs='+',  # One or more arguments
-        help="The difficulties to evaluate"
+        nargs="+",  # One or more arguments
+        help="The difficulties to evaluate",
     )
     parser.add_argument(
         "--max_problems",
@@ -468,7 +482,10 @@ def main():
     # Calculate the elapsed time, rounding microseconds down
     elapsed_time = datetime.now() - start_time
     elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
-    print(f"Evaluated {cmd_args.model} on {num_added} (new) problems in {elapsed_time}.")
+    print(  # noqa: T201
+        f"Evaluated {cmd_args.model} on {num_added} (new) problems in {elapsed_time}."
+    )
+
 
 if __name__ == "__main__":
     main()

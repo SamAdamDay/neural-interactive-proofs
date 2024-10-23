@@ -7,7 +7,7 @@ from math import ceil
 import torch
 
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     SoloAgentParameters,
     ScenarioType,
     TrainerType,
@@ -21,7 +21,7 @@ from pvg.timing.timeables import TrainingTimeable, register_timeable
 class RunTimeable(TrainingTimeable, ABC):
     """Base class for a timeable that performs a complete experiment run.
 
-    Other than the arguments to the constructor, all other experiment params are their
+    Other than the arguments to the constructor, all other experiment hyper_params are their
     defaults.
 
     The schedule is as follows:
@@ -85,7 +85,7 @@ class RunTimeable(TrainingTimeable, ABC):
         self.force_cpu = force_cpu
         self.pretrain = pretrain
 
-        self.params = self._get_params()
+        self.hyper_params = self._get_params()
 
         if torch.cuda.is_available() and not force_cpu:
             self.device = "cuda"
@@ -93,14 +93,14 @@ class RunTimeable(TrainingTimeable, ABC):
             self.device = "cpu"
 
         # Prepare the experiment, e.g. build the dataset
-        prepare_experiment(self.params)
+        prepare_experiment(self.hyper_params)
 
-    def _get_params(self) -> Parameters:
+    def _get_params(self) -> HyperParameters:
         """Get the parameters which define the experiment.
 
         Returns
         -------
-        params : Parameters
+        hyper_params : HyperParameters
             The parameters of the experiment.
         """
 
@@ -135,7 +135,7 @@ class RunTimeable(TrainingTimeable, ABC):
                 num_test_iterations=1,
             )
 
-        return Parameters(
+        return HyperParameters(
             scenario=self.scenario,
             trainer=self.trainer,
             dataset=self.dataset,
@@ -152,7 +152,7 @@ class RunTimeable(TrainingTimeable, ABC):
         profiler : torch.profiler.profile
             The profiler to use.
         """
-        run_experiment(self.params, device=self.device, profiler=profiler)
+        run_experiment(self.hyper_params, device=self.device, profiler=profiler)
 
 
 @register_timeable(name="graph_isomorphism_solo_agent")

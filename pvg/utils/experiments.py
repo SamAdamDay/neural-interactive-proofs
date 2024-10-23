@@ -30,9 +30,7 @@ import torch
 import wandb
 
 from wandb import AlertLevel as WandbAlertLevel
-import wandb
 
-from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
@@ -161,6 +159,8 @@ class HyperparameterExperiment(ABC):
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         arg_parser_description: str = "Run hyperparameter experiments",
+        default_wandb_project: Optional[str] = None,
+        allow_resuming_wandb_run: bool = False,
     ):
         if run_id_fn is None:
 
@@ -174,6 +174,10 @@ class HyperparameterExperiment(ABC):
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
         self.run_preparer_fn = run_preparer_fn
+        self.allow_resuming_wandb_run = allow_resuming_wandb_run
+
+        if default_wandb_project is None:
+            default_wandb_project = WANDB_PROJECT
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -214,7 +218,7 @@ class HyperparameterExperiment(ABC):
             "--wandb-project",
             type=str,
             help="The name of the W&B project to use",
-            default=WANDB_PROJECT,
+            default=default_wandb_project,
         )
         self.parser.add_argument(
             "--wandb-entity",
@@ -286,7 +290,7 @@ class HyperparameterExperiment(ABC):
             If there is a run with the same ID as any run in this experiment.
         """
 
-        if self.cmd_args.use_wandb:
+        if self.cmd_args.use_wandb and not self.allow_resuming_wandb_run:
 
             api = wandb.Api()
 
@@ -392,6 +396,12 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    default_wandb_project : Optional[str], default=None
+        The default W&B project to use. If None, the default is to use the global
+        constant `WANDB_PROJECT`.
+    allow_resuming_wandb_run : bool, default=False
+        Whether to allow resuming a W&B run with the same ID as a run in this
+        experiment.
     output_width : int, default=70
         The width of the output to print (after the logging prefix).
     """
@@ -407,6 +417,8 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
+        default_wandb_project: Optional[str] = None,
+        allow_resuming_wandb_run: bool = False,
         output_width: int = 70,
     ):
         super().__init__(
@@ -416,6 +428,8 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments sequentially",
+            default_wandb_project=default_wandb_project,
+            allow_resuming_wandb_run=allow_resuming_wandb_run,
         )
 
         self.output_width = output_width
@@ -466,7 +480,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
         )
 
-        # Print the run_id and the Parameters
+        # Print the run_id and the hyper-parameters
         if not cmd_args.quiet:
             base_logger.info("")
             base_logger.info("=" * self.output_width)
@@ -579,6 +593,12 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    default_wandb_project : Optional[str], default=None
+        The default W&B project to use. If None, the default is to use the global
+        constant `WANDB_PROJECT`.
+    allow_resuming_wandb_run : bool, default=False
+        Whether to allow resuming a W&B run with the same ID as a run in this
+        experiment.
     default_num_workers : int, default=1
         The default number of workers to use for multiprocessing.
     """
@@ -592,6 +612,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
+        default_wandb_project: Optional[str] = None,
+        allow_resuming_wandb_run: bool = False,
         default_num_workers: int = 1,
     ):
         super().__init__(
@@ -601,6 +623,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
             arg_parser_description="Run hyperparameter experiments in parallel",
+            default_wandb_project=default_wandb_project,
+            allow_resuming_wandb_run=allow_resuming_wandb_run,
         )
 
         # Needed so that we can pickle the command arguments
@@ -680,9 +704,14 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         )
 
         if fine_grained_global_tqdm:
-            global_tqdm_step_fn = lambda: global_tqdm.update(1)
+
+            def global_tqdm_step_fn():
+                global_tqdm.update(1)
+
         else:
-            global_tqdm_step_fn = lambda: ...
+
+            def global_tqdm_step_fn():
+                pass
 
         # Run the experiment
         self.experiment_fn(

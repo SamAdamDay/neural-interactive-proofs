@@ -1,13 +1,7 @@
 """Replacements for buggy parts of libraries we use."""
 
-# Monkey patch inspect.getargspec to inspect.getfullargspec (RuntimeModule is imported from bugfix for the code validation dataset generation)
 import warnings
-
-warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
 import inspect
-
-if not hasattr(inspect, "getargspec"):
-    inspect.getargspec = inspect.getfullargspec
 from pyext import RuntimeModule
 
 import torch
@@ -21,6 +15,13 @@ from torchrl.objectives.value.functional import (
     _inv_pad_sequence,
 )
 from torchrl.envs.transforms import Reward2GoTransform as Reward2GoTransformBuggy
+
+
+# Monkey patch inspect.getargspec to inspect.getfullargspec (RuntimeModule is imported
+# from bugfix for the code validation dataset generation)
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
+if not hasattr(inspect, "getargspec"):
+    inspect.getargspec = inspect.getfullargspec
 
 
 @_transpose_time

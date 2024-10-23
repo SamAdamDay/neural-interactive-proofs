@@ -32,18 +32,18 @@
 
 ## Running an experiment
 
-The `Parameters` class contains all experiment parameters needed for a reproducible
+The `HyperParameters` class contains all experiment parameters needed for a reproducible
 experiment. Running an experiment looks like:
 
 ```python
-from pvg import Parameters, run_experiment
-params = Parameters(
+from pvg import HyperParameters, run_experiment
+hyper_params = HyperParameters(
     "{scenario_name}", 
     "{trainer_name}", 
     "{dataset_name}", 
     **additional_parameters,
 )
-run_experiment(params)
+run_experiment(hyper_params)
 ```
 
 - `additional_parameters` can include nested dictionaries. See the `parameters` module

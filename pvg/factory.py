@@ -25,7 +25,7 @@ from torch import nn
 
 import wandb
 
-from pvg.parameters import Parameters, ScenarioType, TrainerType
+from pvg.parameters import HyperParameters, ScenarioType, TrainerType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import (
     Dataset,
@@ -53,8 +53,9 @@ from pvg.scenario_base.environment import Environment
 from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.protocols import ProtocolHandler, build_protocol_handler
 from pvg.message_regression import MessageRegressor, build_message_regressor
-from pvg.constants import CHECKPOINT_ARTIFACT_PREFIX
-from pvg.utils.params import get_agent_part_flags
+from pvg.constants import MODEL_CHECKPOINT_ARTIFACT_PREFIX
+from pvg.utils.hyper_params import get_agent_part_flags
+from pvg.utils.maths import set_seed
 
 T = TypeVar("T")
 
@@ -92,12 +93,12 @@ class ParameterSelector:
         else:
             self.filter_matchers.append((filter, cls))
 
-    def select(self, params: Parameters) -> type:
+    def select(self, hyper_params: HyperParameters) -> type:
         """Get a class from the parameter selector based on the parameters.
 
         Parameters
         ----------
-        params : Parameters
+        hyper_params : HyperParameters
             The parameters of the experiment.
 
         Returns
@@ -109,7 +110,7 @@ class ParameterSelector:
         # Find the first class that matches the parameters
         for filter, cls in self.filter_matchers:
             for address, value in filter.items():
-                if params.get(address) != value:
+                if hyper_params.get(address) != value:
                     break
             else:
                 return cls
@@ -206,7 +207,7 @@ class ScenarioInstance:
 
 
 def build_scenario_instance(
-    params: Parameters, settings: ExperimentSettings
+    hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ScenarioInstance:
     """Factory function for building a scenario instance from parameters.
 
@@ -215,8 +216,8 @@ def build_scenario_instance(
 
     Parameters
     ----------
-    params : Parameters
-        The params of the experiment.
+    hyper_params : HyperParameters
+        The hyper_params of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
 
@@ -242,68 +243,69 @@ def build_scenario_instance(
             The class for the component.
         """
 
-        if (params.scenario, base_class) not in SCENARIO_CLASS_REGISTRY:
+        if (hyper_params.scenario, base_class) not in SCENARIO_CLASS_REGISTRY:
             raise NotImplementedError(
-                f"Scenario {params.scenario} does not have a class for {base_class}."
+                f"Scenario {hyper_params.scenario} does not have a class for {base_class}."
             )
 
-        param_selector = SCENARIO_CLASS_REGISTRY[(params.scenario, base_class)]
+        param_selector = SCENARIO_CLASS_REGISTRY[(hyper_params.scenario, base_class)]
 
         if agent_name is not None:
-            params_to_select = params.agents[agent_name]
+            params_to_select = hyper_params.agents[agent_name]
         else:
-            params_to_select = params
+            params_to_select = hyper_params
 
         try:
             return param_selector.select(params_to_select)
         except NotImplementedError as e:
             raise NotImplementedError(
-                f"No class found for {params.scenario} and {base_class} matching any "
+                f"No class found for {hyper_params.scenario} and {base_class} matching any "
                 f"filter."
             ) from e
 
     # Set the random seed
-    torch.manual_seed(params.seed)
-    np.random.seed(params.seed)
+    set_seed(hyper_params.seed)
 
     # Silence W&B if requested
     if settings.silence_wandb:
         os.environ["WANDB_SILENT"] = "true"
 
     # Create the protocol handler
-    protocol_handler = build_protocol_handler(params, settings)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
 
     # Create the message regressor
-    message_regressor = build_message_regressor(params, settings, protocol_handler)
+    message_regressor = build_message_regressor(
+        hyper_params, settings, protocol_handler
+    )
 
     # Create the datasets
     train_dataset = get_scenario_class(Dataset)(
-        params, settings, protocol_handler, train=True
+        hyper_params, settings, protocol_handler, train=True
     )
     test_dataset = get_scenario_class(Dataset)(
-        params, settings, protocol_handler, train=False
+        hyper_params, settings, protocol_handler, train=False
     )
 
     # Build the agents
-    agents = _build_agents(params, settings, protocol_handler, get_scenario_class)
+    agents = _build_agents(hyper_params, settings, protocol_handler, get_scenario_class)
 
     # Add pretrained embeddings to the datasets
     if isinstance(train_dataset, TensorDictDataset) and isinstance(
         test_dataset, TensorDictDataset
     ):
         _add_pretrained_embeddings_to_datasets(
-            params, settings, agents, train_dataset, test_dataset
+            hyper_params, settings, agents, train_dataset, test_dataset
         )
 
     # Build additional components if the trainer is an RL trainer
     if (
-        params.trainer == TrainerType.VANILLA_PPO
-        or params.trainer == TrainerType.SPG
-        or params.trainer == TrainerType.REINFORCE
-        or params.trainer == TrainerType.PURE_TEXT_EI
+        hyper_params.trainer == TrainerType.VANILLA_PPO
+        or hyper_params.trainer == TrainerType.SPG
+        or hyper_params.trainer == TrainerType.REINFORCE
+        or hyper_params.trainer == TrainerType.PURE_TEXT_EI
     ):
         additional_rl_components = _build_components_for_rl_trainer(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             train_dataset=train_dataset,
@@ -325,7 +327,7 @@ def build_scenario_instance(
 
 
 def _build_agents(
-    params: Parameters,
+    hyper_params: HyperParameters,
     settings: ExperimentSettings,
     protocol_handler: ProtocolHandler,
     get_scenario_class: Callable[[type, Optional[str]], type],
@@ -334,7 +336,7 @@ def _build_agents(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -354,11 +356,11 @@ def _build_agents(
 
     # Check if we need a critic, if it shares a body with the actor, and if the agents
     # are whole agents
-    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(params)
+    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(hyper_params)
 
     # Create the agents
     agents: dict[str, Agent] = {}
-    for agent_name, agent_params in params.agents.items():
+    for agent_name, agent_params in hyper_params.agents.items():
         agent_dict = {}
 
         # If we're loading a checkpoint and parameters, get the run and replace the
@@ -375,9 +377,8 @@ def _build_agents(
             )
 
         # Set the random seed based on the agent name
-        agent_seed = (params.seed + hash(agent_name)) % (2**32)
-        torch.manual_seed(agent_seed)
-        np.random.seed(agent_seed)
+        agent_seed = (hyper_params.seed + hash(agent_name)) % (2**32)
+        set_seed(agent_seed)
 
         # Get the names of the bodies
         if use_single_body:
@@ -387,7 +388,7 @@ def _build_agents(
 
         def build_part(base_class: type[T]) -> T:
             return get_scenario_class(base_class, agent_name=agent_name)(
-                params=params,
+                hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
                 agent_name=agent_name,
@@ -402,9 +403,9 @@ def _build_agents(
                     agent_dict[name] = build_part(AgentBody)
 
         if (
-            params.trainer == TrainerType.VANILLA_PPO
-            or params.trainer == TrainerType.SPG
-            or params.trainer == TrainerType.REINFORCE
+            hyper_params.trainer == TrainerType.VANILLA_PPO
+            or hyper_params.trainer == TrainerType.SPG
+            or hyper_params.trainer == TrainerType.REINFORCE
         ):
             if agent_params.is_random:
                 agent_dict["policy_head"] = build_part(RandomAgentPolicyHead)
@@ -414,8 +415,8 @@ def _build_agents(
                 agent_dict["policy_head"] = build_part(AgentPolicyHead)
                 if use_critic:
                     agent_dict["value_head"] = build_part(AgentValueHead)
-        if params.trainer == TrainerType.SOLO_AGENT or (
-            params.pretrain_agents and not agent_params.is_random
+        if hyper_params.trainer == TrainerType.SOLO_AGENT or (
+            hyper_params.pretrain_agents and not agent_params.is_random
         ):
             if agent_params.is_random:
                 raise ValueError("Cannot use random agents with solo agent trainer.")
@@ -424,14 +425,14 @@ def _build_agents(
             agent_dict["whole"] = build_part(WholeAgent)
 
         agents[agent_name] = get_scenario_class(Agent, agent_name=agent_name)(
-            params=params, agent_name=agent_name, **agent_dict
+            hyper_params=hyper_params, agent_name=agent_name, **agent_dict
         )
 
         # Load the agent checkpoint if requested
         if agent_params.load_checkpoint_and_parameters:
             # Select the artifact to load
             artifact = checkpoint_wandb_run.use_artifact(
-                f"{CHECKPOINT_ARTIFACT_PREFIX}{agent_params.checkpoint_run_id}:"
+                f"{MODEL_CHECKPOINT_ARTIFACT_PREFIX}{agent_params.checkpoint_run_id}:"
                 f"{agent_params.checkpoint_version}"
             )
 
@@ -455,7 +456,7 @@ def _build_agents(
 
 
 def _add_pretrained_embeddings_to_datasets(
-    params: Parameters,
+    hyper_params: HyperParameters,
     settings: ExperimentSettings,
     agents: dict[str, Agent],
     train_dataset: Dataset,
@@ -472,7 +473,7 @@ def _add_pretrained_embeddings_to_datasets(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -499,7 +500,9 @@ def _add_pretrained_embeddings_to_datasets(
     for base_model_name in required_pretrained_models:
 
         # Load the pretrained model class
-        pretrained_model_class = get_pretrained_model_class(base_model_name, params)
+        pretrained_model_class = get_pretrained_model_class(
+            base_model_name, hyper_params
+        )
 
         # Get the full model name, which may differ from the model name specified by the
         # parameters, if the latter is a shorthand
@@ -521,7 +524,7 @@ def _add_pretrained_embeddings_to_datasets(
             continue
 
         # Generate the embeddings
-        pretrained_model = pretrained_model_class(params, settings)
+        pretrained_model = pretrained_model_class(hyper_params, settings)
         embeddings = pretrained_model.generate_dataset_embeddings(datasets)
 
         # Add the embeddings to the datasets
@@ -534,7 +537,7 @@ def _add_pretrained_embeddings_to_datasets(
 
 
 def _build_components_for_rl_trainer(
-    params: Parameters,
+    hyper_params: HyperParameters,
     settings: ExperimentSettings,
     protocol_handler: ProtocolHandler,
     train_dataset: Dataset,
@@ -546,7 +549,7 @@ def _build_components_for_rl_trainer(
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment.
     settings : ExperimentSettings
         The settings for the experiment.
@@ -569,20 +572,20 @@ def _build_components_for_rl_trainer(
     """
 
     # Check if we need a critic and if it shares a body with the actor
-    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(params)
+    use_critic, use_single_body, use_whole_agent = get_agent_part_flags(hyper_params)
 
     additional_rl_components = {}
 
     # Create the environments
     additional_rl_components["train_environment"] = get_scenario_class(Environment)(
-        params=params,
+        hyper_params=hyper_params,
         settings=settings,
         dataset=train_dataset,
         protocol_handler=protocol_handler,
         train=True,
     )
     additional_rl_components["test_environment"] = get_scenario_class(Environment)(
-        params=params,
+        hyper_params=hyper_params,
         settings=settings,
         dataset=test_dataset,
         protocol_handler=protocol_handler,
@@ -592,55 +595,61 @@ def _build_components_for_rl_trainer(
     # Create the combined agents
     if use_whole_agent:
         additional_rl_components["combined_whole"] = get_scenario_class(CombinedWhole)(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
-            wholes={name: agents[name].whole for name in params.agents},
+            wholes={name: agents[name].whole for name in hyper_params.agents},
         )
     else:
         if use_single_body:
             additional_rl_components["combined_body"] = get_scenario_class(
                 CombinedBody
             )(
-                params=params,
+                hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                bodies={name: agents[name].body for name in params.agents},
+                bodies={name: agents[name].body for name in hyper_params.agents},
             )
         else:
             additional_rl_components["combined_policy_body"] = get_scenario_class(
                 CombinedBody
             )(
-                params=params,
+                hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                bodies={name: agents[name].policy_body for name in params.agents},
+                bodies={name: agents[name].policy_body for name in hyper_params.agents},
             )
             if use_critic:
                 additional_rl_components["combined_value_body"] = get_scenario_class(
                     CombinedBody
                 )(
-                    params=params,
+                    hyper_params=hyper_params,
                     settings=settings,
                     protocol_handler=protocol_handler,
-                    bodies={name: agents[name].value_body for name in params.agents},
+                    bodies={
+                        name: agents[name].value_body for name in hyper_params.agents
+                    },
                 )
         additional_rl_components["combined_policy_head"] = get_scenario_class(
             CombinedPolicyHead
         )(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
-            policy_heads={name: agents[name].policy_head for name in params.agents},
+            policy_heads={
+                name: agents[name].policy_head for name in hyper_params.agents
+            },
         )
         if use_critic:
             additional_rl_components["combined_value_head"] = get_scenario_class(
                 CombinedValueHead
             )(
-                params=params,
+                hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                value_heads={name: agents[name].value_head for name in params.agents},
+                value_heads={
+                    name: agents[name].value_head for name in hyper_params.agents
+                },
             )
 
     return additional_rl_components

@@ -25,13 +25,17 @@ from torchrl.envs.transforms import Transform, ObservationNorm
 from jaxtyping import Int, Float, Bool
 
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     AgentUpdateSchedule,
     ConstantUpdateSchedule,
     ContiguousPeriodicUpdateSchedule,
 )
 from pvg.experiment_settings import ExperimentSettings
-from pvg.trainers.base import TensorDictTrainer, attach_progress_bar, IterationContext
+from pvg.trainers.trainer_base import (
+    TensorDictTrainer,
+    attach_progress_bar,
+    IterationContext,
+)
 from pvg.trainers.solo_agent import SoloAgentTrainer
 from pvg.model_cache import (
     cached_models_exist,
@@ -42,7 +46,7 @@ from pvg.scenario_base import TensorDictEnvironment
 from pvg.factory import ScenarioInstance
 from pvg.artifact_logger import ArtifactLogger
 from pvg.rl_objectives import Objective
-from pvg.utils.maths import logit_entropy
+from pvg.utils.maths import logit_entropy, set_seed
 from pvg.utils.torch import DummyOptimizer
 from pvg.utils.training import ParamGroupFreezer
 from pvg.utils.distributions import CompositeCategoricalDistribution
@@ -79,7 +83,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -106,11 +110,23 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
-        super().__init__(params, scenario_instance, settings)
+        super().__init__(hyper_params, scenario_instance, settings)
+
+        # Update clip value to be a float or None
+        self.clip_value = self.hyper_params.rl.clip_value
+        if self.clip_value == True:
+            self.clip_value = self.hyper_params.ppo.clip_epsilon
+        elif self.clip_value == False:
+            self.clip_value = None
+
+    def _initialise_state(self):
+        """Initialise the state of the trainer."""
+
+        super()._initialise_state()
 
         self.train_environment: TensorDictEnvironment = (
             self.scenario_instance.train_environment
@@ -119,26 +135,18 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             self.scenario_instance.test_environment
         )
 
-        # Update clip value to be a float or None
-        self.clip_value = self.params.rl.clip_value
-        if self.clip_value == True:
-            self.clip_value = self.params.ppo.clip_epsilon
-        elif self.clip_value == False:
-            self.clip_value = None
-
     def train(self):
         """Train the agents."""
 
         # Set the seed
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
 
         # Add the observation normalization transforms if requested
-        if self.params.rl.normalize_observations:
+        if self.hyper_params.rl.normalize_observations:
             self._add_normalization_transforms()
 
         # Pretrain the agents first in isolation if requested
-        if self.params.pretrain_agents:
+        if self.hyper_params.pretrain_agents:
             self._pretrain_agents()
 
         # Setup
@@ -160,8 +168,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         """Add observation normalization transforms to the environments."""
 
         # Set the seed before computing the normalization statistics
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
 
         self.train_environment = TransformedEnv(self.train_environment)
         self.test_environment = TransformedEnv(self.test_environment)
@@ -170,12 +177,12 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         # "linear_message_history", and initialize the statistics by running the
         # environments with random actions
         normalization_keys = ["x", "message"]
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             normalization_keys.append("linear_message_history")
         if self.settings.test_run:
             num_normalization_steps = 10
         else:
-            num_normalization_steps = self.params.rl.num_normalization_steps
+            num_normalization_steps = self.hyper_params.rl.num_normalization_steps
         pbar = self.settings.tqdm_func(
             total=2 * len(normalization_keys), desc="Computing norm stats"
         )
@@ -213,7 +220,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             }
 
         # Get the parameters that define the model cache
-        model_cache_params = self.params.to_dict()
+        model_cache_params = self.hyper_params.to_dict()
         model_cache_params = dict(
             (key, value)
             for key, value in model_cache_params.items()
@@ -230,7 +237,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         else:
             # Train the agents in isolation
             solo_agent_trainer = SoloAgentTrainer(
-                self.params, self.scenario_instance, self.settings
+                self.hyper_params, self.scenario_instance, self.settings
             )
             solo_agent_trainer.train(as_pretraining=True)
 
@@ -330,7 +337,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             storing_device=self.device,
             frames_per_batch=self.train_environment.frames_per_batch,
             total_frames=self.train_environment.frames_per_batch
-            * self.params.rl.num_iterations,
+            * self.hyper_params.rl.num_iterations,
         )
 
         test_collector = SyncDataCollector(
@@ -340,7 +347,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             storing_device=self.device,
             frames_per_batch=self.test_environment.frames_per_batch,
             total_frames=self.test_environment.frames_per_batch
-            * self.params.rl.num_test_iterations,
+            * self.hyper_params.rl.num_test_iterations,
         )
 
         return train_collector, test_collector
@@ -363,7 +370,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
                 self.train_environment.frames_per_batch, device=self.device
             ),
             sampler=SamplerWithoutReplacement(),
-            batch_size=self.params.rl.minibatch_size,
+            batch_size=self.hyper_params.rl.minibatch_size,
             transform=transform,
         )
 
@@ -404,7 +411,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         param_group_collections = {}
         for agent_name, agent in self.scenario_instance.agents.items():
             param_dict = agent.get_model_parameter_dicts(
-                base_lr=self.params.rl.lr,
+                base_lr=self.hyper_params.rl.lr,
                 named_parameters=loss_module.named_parameters(),
             )
             all_param_dicts.extend(param_dict)
@@ -418,7 +425,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         param_group_freezer = ParamGroupFreezer(
             optimizer,
             param_group_collections,
-            use_required_grad=self.params.functionalize_modules,
+            use_required_grad=self.hyper_params.functionalize_modules,
         )
 
         return optimizer, param_group_freezer
@@ -452,7 +459,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         else:
             prefix = "test_"
 
-        round: Int[Tensor, "..."] = tensordict_data.get(("next", "round"))
+        round_id: Int[Tensor, "..."] = tensordict_data.get(("next", "round"))
         done: Bool[Tensor, "..."] = tensordict_data.get(("next", "done"))
         reward: Float[Tensor, "... agent"] = tensordict_data.get(
             ("next", "agents", "reward")
@@ -468,7 +475,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             ("agents", "decision_logits")
         )
         message_logits_key = self.scenario_instance.agents[
-            self._agent_names[0]
+            self.agent_names[0]
         ].message_logits_key
         message_logits: Float[Tensor, "... agent channel position logit"] = (
             tensordict_data.get(("agents", message_logits_key))
@@ -477,10 +484,10 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         log_stats = {}
 
         # Compute the mean episode length
-        mean_episode_length = round[done].float().mean().item()
+        mean_episode_length = round_id[done].float().mean().item()
         log_stats[f"{prefix}mean_episode_length"] = mean_episode_length
 
-        for i, agent_name in enumerate(self._agent_names):
+        for i, agent_name in enumerate(self.agent_names):
             # Compute the mean reward per step and per episode
             mean_reward = reward[..., i].mean().item()
             log_stats[f"{agent_name}.{prefix}mean_step_reward"] = mean_reward
@@ -548,7 +555,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
         # Compute the mean accuracy for the done episodes
         verifier_decision = tensordict_data.get(("agents", "decision"))[
-            ..., self._agent_names.index("verifier")
+            ..., self.agent_names.index("verifier")
         ]
         log_stats[f"{prefix}mean_accuracy"] = (
             (verifier_decision[done] == tensordict_data["y"][done].squeeze())
@@ -562,7 +569,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
             def log_per_agent_losses(agent_losses: TensorDictBase):
                 for key, val in agent_losses.items():
-                    for i, agent_name in enumerate(self._agent_names):
+                    for i, agent_name in enumerate(self.agent_names):
                         log_stats[f"{prefix}{agent_name}.{key}"] = (
                             val[..., i].mean().item()
                         )
@@ -584,8 +591,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         """Run generic RL training and test loops."""
 
         # Set the seed
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
 
         # Run the training loop with the appropriate context managers
         with ExitStack() as stack:
@@ -597,7 +603,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             self._build_test_context(stack)
             self._run_test_loop()
 
-    @attach_progress_bar(lambda self: self.params.rl.num_iterations)
+    @attach_progress_bar(lambda self: self.hyper_params.rl.num_iterations)
     def _run_train_loop(self, iteration_context: IterationContext):
         """Run the training loop.
 
@@ -618,8 +624,8 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
         # Create the update schedule iterators
         update_schedule_iterators = [
-            update_schedule_iterator(self.params.agents[name].update_schedule)
-            for name in self._agent_names
+            update_schedule_iterator(self.hyper_params.agents[name].update_schedule)
+            for name in self.agent_names
         ]
 
         iterator = zip(enumerate(self.train_collector), *update_schedule_iterators)
@@ -629,35 +635,25 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
                 self.settings.profiler.step()
 
             # Update the learning rate if annealing is enabled
-            if self.params.rl.anneal_lr:
+            if self.hyper_params.rl.anneal_lr:
                 if iteration == 0:
                     for pg in self.optimizer.param_groups:
                         pg["_original_lr"] = pg["lr"]
                 for pg in self.optimizer.param_groups:
-                    pg["lr"] = (1 - (iteration / self.params.rl.num_iterations)) * pg[
-                        "_original_lr"
-                    ]
+                    pg["lr"] = (
+                        1 - (iteration / self.hyper_params.rl.num_iterations)
+                    ) * pg["_original_lr"]
 
             # Freeze and unfreeze the parameters of the agents according to the update
             # schedule
-            for agent_name, update in zip(self._agent_names, agent_updates):
+            for agent_name, update in zip(self.agent_names, agent_updates):
                 if update:
                     self.param_group_freezer.unfreeze(agent_name)
                 else:
                     self.param_group_freezer.freeze(agent_name)
 
-            # Expand the done and terminated to match the reward shape (this is expected
-            # by the value estimator)
-            tensordict_data.set(
-                ("next", "agents", "done"),
-                tensordict_data.get(("next", "done"))
-                .unsqueeze(-1)
-                .expand(
-                    tensordict_data.get_item_shape(
-                        ("next", self.train_environment.reward_key)
-                    )
-                ),
-            )
+            # Expand the terminated to match the reward shape (this is expected by the
+            # value estimator)
             tensordict_data.set(
                 ("next", "agents", "terminated"),
                 tensordict_data.get(("next", "terminated"))
@@ -672,7 +668,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             # Compute the GAE
             if self.gae is not None:
                 with torch.no_grad():
-                    if self.params.functionalize_modules:
+                    if self.hyper_params.functionalize_modules:
                         self.gae(
                             tensordict_data,
                             params=self.loss_module.critic_network_params,
@@ -728,9 +724,10 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         mean_loss_vals = None
 
         total_steps = 0
-        for _ in range(self.params.rl.num_epochs):
+        for _ in range(self.hyper_params.rl.num_epochs):
             for _ in range(
-                self.train_environment.frames_per_batch // self.params.rl.minibatch_size
+                self.train_environment.frames_per_batch
+                // self.hyper_params.rl.minibatch_size
             ):
                 # Sample a minibatch from the replay buffer
                 sub_data = self.replay_buffer.sample()
@@ -754,7 +751,8 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
                     # Clip gradients and update parameters
                     clip_grad_norm_(
-                        self.loss_module.parameters(), self.params.rl.max_grad_norm
+                        self.loss_module.parameters(),
+                        self.hyper_params.rl.max_grad_norm,
                     )
                     self.optimizer.step()
                     self.optimizer.zero_grad()
@@ -776,7 +774,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
         return mean_loss_vals
 
-    @attach_progress_bar(lambda self: self.params.rl.num_test_iterations)
+    @attach_progress_bar(lambda self: self.hyper_params.rl.num_test_iterations)
     def _run_test_loop(self, iteration_context: IterationContext):
         """Run the test loop.
 

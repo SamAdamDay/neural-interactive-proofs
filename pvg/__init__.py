@@ -1,5 +1,5 @@
 from .parameters import (
-    Parameters,
+    HyperParameters,
     LrFactors,
     AgentsParameters,
     RandomAgentParameters,
@@ -12,6 +12,7 @@ from .parameters import (
     VanillaPpoParameters,
     SpgParameters,
     ReinforceParameters,
+    PureTextEiParameters,
     ImageClassificationParameters,
     DatasetParameters,
     CommonProtocolParameters,

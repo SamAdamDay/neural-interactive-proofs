@@ -8,11 +8,11 @@ from tensordict import TensorDict
 
 from torchrl.envs.utils import check_env_specs
 
-from einops import rearrange
+from einops import rearrange, repeat
 
 from pvg.scenario_base import Environment, TensorDictDataset
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     ScenarioType,
     TrainerType,
     AgentsParameters,
@@ -30,6 +30,7 @@ from pvg.image_classification import (
     ImageClassificationDataset,
 )
 from pvg.protocols import build_protocol_handler
+from pvg.utils.maths import set_seed
 
 
 @pytest.mark.parametrize(
@@ -65,13 +66,15 @@ def test_environment_specs(
         The environment class to use for the scenario.
     """
 
-    params = Parameters(scenario_type, TrainerType.VANILLA_PPO, "test", message_size=3)
+    hyper_params = HyperParameters(
+        scenario_type, TrainerType.VANILLA_PPO, "test", message_size=3
+    )
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True
     )
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = dataset_class(params, settings, protocol_handler)
-    env = environment_class(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = dataset_class(hyper_params, settings, protocol_handler)
+    env = environment_class(hyper_params, settings, dataset, protocol_handler)
     check_env_specs(env)
 
 
@@ -83,7 +86,7 @@ def test_graph_isomorphism_environment_step():
     message_size = 1
 
     # Set up the environment.
-    params = Parameters(
+    hyper_params = HyperParameters(
         ScenarioType.GRAPH_ISOMORPHISM,
         TrainerType.VANILLA_PPO,
         "test",
@@ -110,9 +113,9 @@ def test_graph_isomorphism_environment_step():
         message_size=message_size,
     )
     settings = ExperimentSettings(device="cpu", test_run=True, ignore_cache=True)
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = GraphIsomorphismDataset(params, settings, protocol_handler)
-    env = GraphIsomorphismEnvironment(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = GraphIsomorphismDataset(hyper_params, settings, protocol_handler)
+    env = GraphIsomorphismEnvironment(hyper_params, settings, dataset, protocol_handler)
 
     max_num_nodes = env.max_num_nodes
     num_message_channels = protocol_handler.num_message_channels
@@ -126,6 +129,7 @@ def test_graph_isomorphism_environment_step():
     assert num_message_channels == 1
 
     # Set up the TensorDict to feed into the environment.
+    done = torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool)
     env_td = TensorDict(
         dict(
             adjacency=torch.zeros(
@@ -135,6 +139,7 @@ def test_graph_isomorphism_environment_step():
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
+            seed=torch.zeros(batch_size, dtype=torch.int64),
             message_history=torch.zeros(
                 batch_size,
                 max_message_rounds,
@@ -168,10 +173,11 @@ def test_graph_isomorphism_environment_step():
                     decision=torch.tensor(
                         [[0] * batch_size, [0, 0, 1, 2, 2, 2, 0, 0, 1, 1, 1, 1]]
                     ).transpose(0, 1),
+                    done=repeat(done, "batch -> batch 2"),
                 ),
                 batch_size=(batch_size, 2),
             ),
-            done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
+            done=done,
             terminated=torch.zeros(batch_size, dtype=torch.bool),
         ),
         batch_size=batch_size,
@@ -196,14 +202,17 @@ def test_graph_isomorphism_environment_step():
         dtype=torch.float32,
     )
     for i in range(batch_size):
-        round = env_td["round"][i]
-        agent_index = round % 2
+        round_id = env_td["round"][i]
+        agent_index = round_id % 2
         message = env_td["agents", "node_selected"][i, agent_index]
         expected_message[i] = F.one_hot(message, 2 * max_num_nodes).view(
             num_message_channels, message_size, 2, max_num_nodes
         )
         graph_id = message // max_num_nodes
-        expected_message_history[i, round, 0, 0, graph_id, message % max_num_nodes] = 1
+        expected_message_history[
+            i, round_id, 0, 0, graph_id, message % max_num_nodes
+        ] = 1
+    expected_done = torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool)
     expected_next = TensorDict(
         dict(
             adjacency=env_td["adjacency"],
@@ -211,7 +220,7 @@ def test_graph_isomorphism_environment_step():
             message_history=expected_message_history,
             x=expected_message_history,
             round=env_td["round"] + 1,
-            done=torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool),
+            done=expected_done,
             message=expected_message,
             agents=TensorDict(
                 dict(
@@ -231,7 +240,8 @@ def test_graph_isomorphism_environment_step():
                             [1, 2],
                         ],
                         dtype=torch.float32,
-                    )
+                    ),
+                    done=repeat(expected_done, "batch -> batch 2"),
                 ),
                 batch_size=(batch_size, 2),
             ),
@@ -260,7 +270,7 @@ def test_image_classification_environment_step():
     message_size = 1
 
     # Set up the environment.
-    params = Parameters(
+    hyper_params = HyperParameters(
         ScenarioType.IMAGE_CLASSIFICATION,
         TrainerType.VANILLA_PPO,
         "test",
@@ -287,9 +297,11 @@ def test_image_classification_environment_step():
         image_classification=ImageClassificationParameters(num_block_groups=2),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
-    protocol_handler = build_protocol_handler(params, settings)
-    dataset = ImageClassificationDataset(params, settings, protocol_handler)
-    env = ImageClassificationEnvironment(params, settings, dataset, protocol_handler)
+    protocol_handler = build_protocol_handler(hyper_params, settings)
+    dataset = ImageClassificationDataset(hyper_params, settings, protocol_handler)
+    env = ImageClassificationEnvironment(
+        hyper_params, settings, dataset, protocol_handler
+    )
 
     image_width = env.image_width
     image_height = env.image_height
@@ -300,7 +312,7 @@ def test_image_classification_environment_step():
     num_message_channels = protocol_handler.num_message_channels
 
     # Build the tensor of latent pixels selected by the agents.
-    torch.manual_seed(0)
+    set_seed(0)
     latent_pixel_selected = torch.randint(
         0,
         latent_height * latent_width,
@@ -312,6 +324,7 @@ def test_image_classification_environment_step():
     assert num_message_channels == 1
 
     # Set up the TensorDict to feed into the environment.
+    done = torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool)
     env_td = TensorDict(
         dict(
             image=torch.zeros(
@@ -324,6 +337,7 @@ def test_image_classification_environment_step():
             round=torch.remainder(
                 torch.arange(batch_size, dtype=torch.long), max_message_rounds
             ),
+            seed=torch.zeros(batch_size, dtype=torch.int64),
             message_history=torch.zeros(
                 batch_size,
                 max_message_rounds,
@@ -340,10 +354,11 @@ def test_image_classification_environment_step():
                     decision=torch.tensor(
                         [[0] * batch_size, [0, 0, 1, 2, 2, 2, 0, 0, 1, 1, 1, 1]]
                     ).transpose(0, 1),
+                    done=repeat(done, "batch -> batch 2"),
                 ),
                 batch_size=(batch_size, 2),
             ),
-            done=torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], dtype=torch.bool),
+            done=done,
             terminated=torch.zeros(batch_size, dtype=torch.bool),
         ),
         batch_size=batch_size,
@@ -368,21 +383,22 @@ def test_image_classification_environment_step():
         dtype=torch.float32,
     )
     for i in range(batch_size):
-        round = env_td["round"][i]
-        agent_index = round % 2
+        round_id = env_td["round"][i]
+        agent_index = round_id % 2
         message = env_td["agents", "latent_pixel_selected"][i, agent_index]
         expected_message[i] = F.one_hot(message, latent_height * latent_width).view(
             num_message_channels, message_size, latent_height, latent_width
         )
         y, x = divmod(message.item(), latent_width)
-        expected_message_history[i, round, 0, 0, y, x] = 1
+        expected_message_history[i, round_id, 0, 0, y, x] = 1
+    expected_done = torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool)
     expected_next = TensorDict(
         dict(
             image=env_td["image"],
             message_history=expected_message_history,
             x=expected_message_history,
             round=env_td["round"] + 1,
-            done=torch.tensor([0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1], dtype=torch.bool),
+            done=expected_done,
             message=expected_message,
             agents=TensorDict(
                 dict(
@@ -402,7 +418,10 @@ def test_image_classification_environment_step():
                             [1, 2],
                         ],
                         dtype=torch.float32,
-                    )
+                    ),
+                    done=torch.stack(
+                        [expected_done, torch.zeros_like(expected_done)], dim=-1
+                    ),
                 ),
                 batch_size=(batch_size, 2),
             ),

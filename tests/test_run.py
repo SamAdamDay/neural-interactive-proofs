@@ -1,11 +1,15 @@
+import random
+
 import pytest
 
 from sklearn.model_selection import ParameterGrid
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    CodeValidationAgentParameters,
+    CommonProtocolParameters,
     SoloAgentParameters,
     RlTrainerParameters,
     CommonPpoParameters,
@@ -23,13 +27,26 @@ from pvg.utils.output import DummyTqdm
 
 # Specification for creating a grid of parameters using ParameterGrid
 param_specs = [
-    # Test the two scenarios with the vanilla PPO trainer
+    # Test the two tensor scenarios with the vanilla PPO trainer
     {
         "scenario": [
             ScenarioType.GRAPH_ISOMORPHISM,
             ScenarioType.IMAGE_CLASSIFICATION,
         ],
         "message_size": [3],
+    },
+    # Test the code validation scenario with the expert iteration trainer with various
+    # protocols
+    {
+        "scenario": [ScenarioType.CODE_VALIDATION],
+        "trainer": [TrainerType.PURE_TEXT_EI],
+        "protocol": [
+            InteractionProtocolType.PVG,
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+            InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
+        ],
     },
     # Test pretraining the agents
     {
@@ -76,6 +93,18 @@ param_specs = [
             InteractionProtocolType.DEBATE,
             InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
             InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
+        ],
+    },
+    # Test the zero-knowledge protocols
+    {
+        "zero_knowledge": [True],
+        "protocol": [
+            InteractionProtocolType.PVG,
+            InteractionProtocolType.DEBATE,
+            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+            InteractionProtocolType.MERLIN_ARTHUR,
+            InteractionProtocolType.MNIP,
         ],
     },
     # Test manual architectures
@@ -116,6 +145,9 @@ def test_prepare_run_experiment(param_spec: dict):
     basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
         ImageClassificationAgentParameters.construct_test_params()
     )
+    basic_agent_params[ScenarioType.CODE_VALIDATION] = (
+        CodeValidationAgentParameters.construct_test_params()
+    )
 
     # Very basic parameters for each trainer
     rl_params = RlTrainerParameters(
@@ -132,6 +164,7 @@ def test_prepare_run_experiment(param_spec: dict):
         TrainerType.VANILLA_PPO: None,
         TrainerType.SPG: SpgParameters(),
         TrainerType.REINFORCE: None,
+        TrainerType.PURE_TEXT_EI: None,
     }
     common_ppo_params = CommonPpoParameters()
 
@@ -140,6 +173,7 @@ def test_prepare_run_experiment(param_spec: dict):
     trainer_type = param_spec.get("trainer", TrainerType.VANILLA_PPO)
     ppo_loss_type = param_spec.get("ppo_loss", PpoLossType.CLIP)
     protocol_type = param_spec.get("protocol", InteractionProtocolType.PVG)
+    zero_knowledge = param_spec.get("zero_knowledge", False)
     is_random = param_spec.get("is_random", False)
     pretrain_agents = param_spec.get("pretrain_agents", False)
     manual_architecture = param_spec.get("manual_architecture", None)
@@ -155,7 +189,10 @@ def test_prepare_run_experiment(param_spec: dict):
 
     # Construct the agent parameters
     agents_param = {}
-    for agent_name in AGENT_NAMES[protocol_type]:
+    agent_names = list(AGENT_NAMES[protocol_type])
+    if zero_knowledge:
+        agent_names.extend(["simulator", "adversarial_verifier"])
+    for agent_name in agent_names:
         if is_random and agent_name != "verifier":
             agents_param[agent_name] = {"is_random": True}
         else:
@@ -170,12 +207,15 @@ def test_prepare_run_experiment(param_spec: dict):
         trainer_param.variant = param_spec["spg_variant"]
 
     # Construct the parameters
-    params = Parameters(
+    hyper_params = HyperParameters(
         **{
             "scenario": scenario_type,
             "trainer": trainer_type,
             "dataset": "test",
             "interaction_protocol": protocol_type,
+            "protocol_common": CommonProtocolParameters(
+                zero_knowledge=zero_knowledge,
+            ),
             "agents": agents_param,
             "pretrain_agents": pretrain_agents,
             "rl": rl_params,
@@ -184,17 +224,19 @@ def test_prepare_run_experiment(param_spec: dict):
             "d_representation": 1,
             "include_linear_message_space": include_linear_message,
             "message_size": message_size,
+            "seed": 109,
         }
     )
 
     # Prepare the experiment
-    prepare_experiment(params=params, test_run=True, ignore_cache=True)
+    prepare_experiment(hyper_params=hyper_params, test_run=True, ignore_cache=True)
 
     # Run the experiment in test mode
     run_experiment(
-        params,
+        hyper_params,
         tqdm_func=DummyTqdm,
         test_run=True,
         ignore_cache=True,
         pin_memory=False,
+        num_rollout_workers=0,
     )

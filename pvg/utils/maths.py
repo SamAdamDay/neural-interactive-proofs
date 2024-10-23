@@ -1,14 +1,24 @@
 """Utilities for useful mathematical operations."""
 
-from typing import Tuple
+from typing import Tuple, Union, Sequence, Optional
+import random
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from jaxtyping import Float
+import numpy as np
+
+from jaxtyping import Float, Int
 
 from pvg.parameters import IhvpVariant
+
+
+def set_seed(seed: int):
+    """Set the seed in Python, NumPy, and PyTorch."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def dot_td(td1, td2):
@@ -264,6 +274,51 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     return -torch.sum(probs * log_probs, dim=-1)
 
 
+def logit_or_2(
+    a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]
+) -> Float[Tensor, "... logits"]:
+    """
+    Computes the logit OR operation for two input tensors using the log-sum-exp trick.
+
+    The logit OR operation is defined as:
+        max_logit + log1p(exp(min_logit - max_logit))
+    where max_logit is the element-wise maximum of the inputs,
+    and min_logit is the element-wise minimum of the inputs.
+
+    Args:
+        a (torch.Tensor): The first input tensor.
+        b (torch.Tensor): The second input tensor.
+
+    Returns:
+        torch.Tensor: The result of the logit OR operation applied element-wise to the input tensors.
+    """
+
+    max_logit = torch.maximum(a, b)
+    min_logit = torch.minimum(a, b)
+    return max_logit + torch.log1p(torch.exp(min_logit - max_logit))
+
+
+def logit_or_n(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
+    """
+    Compute the logit of the OR of n events given their logits.
+
+    Args:
+    logits (torch.Tensor): A tensor of logit values.
+    dim (int, optional): The dimension along which to apply the OR operation.
+                         If None, the operation is applied to all elements.
+
+    Returns:
+    torch.Tensor: The logit of the OR of input events along the specified dimension.
+    """
+    if dim is None:
+        max_logit = torch.max(logits)
+        return max_logit + torch.log1p(torch.sum(torch.exp(logits - max_logit)) - 1)
+    else:
+        max_logit = torch.max(logits, dim=dim, keepdim=True).values
+        exp_sum = torch.sum(torch.exp(logits - max_logit), dim=dim, keepdim=False)
+        return max_logit + torch.log1p(exp_sum - 1)
+
+
 def mean_episode_reward(
     reward: Float[Tensor, "... step"], done_mask: Float[Tensor, "... step"]
 ) -> float:
@@ -318,3 +373,42 @@ def mean_episode_reward(
     episode_rewards = episode_rewards[not_first_done_mask]
 
     return episode_rewards.mean().item()
+
+
+def minstd_generate_pseudo_random_sequence(
+    seed: Int[Tensor, "..."], length: int
+) -> Int[Tensor, "... length"]:
+    r"""Generate a pseudo-random sequence of numbers using the MINSTD algorithm.
+
+    The MINSTD algorithm is a simple linear congruential generator (LCG) that is defined
+    by the following recurrence relation:
+
+        x_{n+1} = (48271 * x_n) % 2147483647
+
+    where x_0 is the seed value.
+
+    Parameters
+    ----------
+    seed : Int[Tensor, ...]
+        The seed value for the pseudo-random number generator. This is a tensor of
+        arbitrary shape.
+    length : int
+        The length of the pseudo-random sequence to generate.
+
+    Returns
+    -------
+    pseudo_random_sequence : Int[Tensor, "... length"]
+        The pseudo-random sequence of numbers (x_1, \ldots, x_{length}) generated using
+        the MINSTD algorithm. An extra dimension is added to the output tensor to
+        represent the sequence length.
+    """
+
+    pseudo_random_sequence = torch.empty(
+        (*seed.shape, length), dtype=seed.dtype, device=seed.device
+    )
+
+    for i in range(length):
+        seed = (48271 * seed) % 2147483647
+        pseudo_random_sequence[..., i] = seed
+
+    return pseudo_random_sequence

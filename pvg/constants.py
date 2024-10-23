@@ -23,20 +23,34 @@ RESULTS_DIR = os.path.join(_root_dir, "results")
 RESULTS_DATA_DIR = os.path.join(RESULTS_DIR, "data")
 GI_SOLO_AGENTS_RESULTS_DATA_DIR = os.path.join(RESULTS_DATA_DIR, "solo_gi_agents")
 
+EXPERIMENT_STATE_DIR = os.path.join(_root_dir, "experiment_checkpoints")
+
+SEEDS = [8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030]
+
 # The user hosting the pretrained models
 HF_PRETRAINED_MODELS_USER = "SamAdamDay"
 
 # Weights & Biases defaults
 WANDB_PROJECT = "pvg-sandbox"
+WANDB_CV_PROJECT = "pvg-code-validation-sandbox"
 WANDB_ENTITY = "lrhammond-team"
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"
 ROLLOUT_SAMPLE_ARTIFACT_TYPE = "rollout_sample"
 ROLLOUT_SAMPLE_FILENAME = "rollout_sample.pkl"
-CHECKPOINT_ARTIFACT_PREFIX = "checkpoint_"
-CHECKPOINT_ARTIFACT_TYPE = "checkpoint"
+MODEL_CHECKPOINT_ARTIFACT_PREFIX = "checkpoint_"
+MODEL_CHECKPOINT_ARTIFACT_TYPE = "checkpoint"
+CHECKPOINT_STATE_ARTIFACT_PREFIX = "state_"
+CHECKPOINT_STATE_ARTIFACT_TYPE = "state"
+ROLLOUTS_ARTIFACT_PREFIX = "full_rollouts_"
+ROLLOUTS_ARTIFACT_TYPE = "full_rollouts"
+RAW_TRANSCRIPT_ARTIFACT_PREFIX = "raw_transcript_"
+RAW_TRANSCRIPT_ARTIFACT_TYPE = "raw_transcript"
+PROCESSED_TRANSCRIPT_ARTIFACT_PREFIX = "processed_transcript_"
+PROCESSED_TRANSCRIPT_ARTIFACT_TYPE = "processed_transcript"
 WANDB_DUMMY_RUN_PROJECT = "pvg-sandbox"
 WANDB_DUMMY_RUN_ENTITY = "lrhammond-team"
 WANDB_DUMMY_RUN_NAME = "dummy_run"
+WANDB_OPENAI_FINETUNE_PROJECT = "pvg-openai-finetune"
 
 # OpenRouter and OpneAI API Keys
 env_path = Path(__file__).resolve().parent.parent / ".env"

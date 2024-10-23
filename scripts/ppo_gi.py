@@ -3,11 +3,12 @@
 from argparse import Namespace
 import os
 import logging
+import dataclasses
 
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
@@ -24,8 +25,10 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    DatasetParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
+    ContiguousPeriodicUpdateSchedule,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -102,13 +105,15 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
+    # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
+    # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
+    max_train_size=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     # Set the pretrain_agents flag. This can be forced to False with the --no-pretrain
     # flag.
@@ -118,16 +123,32 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         pretrain_agents = combo["pretrain_agents"]
 
     # Create the parameters object
-    if combo["update_spec"] is None:
-        verifier_update_schedule = ConstantUpdateSchedule()
-        prover_update_schedule = ConstantUpdateSchedule()
-    else:
+    verifier_update_schedule = ConstantUpdateSchedule()
+    prover_update_schedule = ConstantUpdateSchedule()
+    prover0_update_schedule = ConstantUpdateSchedule()
+    prover1_update_schedule = ConstantUpdateSchedule()
+    if isinstance(combo["update_spec"], tuple) and len(combo["update_spec"]) == 2:
         period = combo["update_spec"][0] + combo["update_spec"][1]
         verifier_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=True
         )
         prover_update_schedule = AlternatingPeriodicUpdateSchedule(
             period, combo["update_spec"][0], first_agent=False
+        )
+    elif isinstance(combo["update_spec"], tuple) and len(combo["update_spec"]) == 3:
+        period = sum(combo["update_spec"])
+        verifier_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period, 0, combo["update_spec"][0]
+        )
+        prover0_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period,
+            combo["update_spec"][0],
+            combo["update_spec"][0] + combo["update_spec"][1],
+        )
+        prover1_update_schedule = ContiguousPeriodicUpdateSchedule(
+            period,
+            combo["update_spec"][0] + combo["update_spec"][1],
+            period,
         )
     if combo["prover_manual_architecture"]:
         prover_lr_factor = {"actor": 0.0, "critic": 0.0}
@@ -182,15 +203,22 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MERLIN_ARTHUR,
+        InteractionProtocolType.MNIP,
     ):
+        prover0_params = dataclasses.replace(
+            prover_params, update_schedule=prover0_update_schedule
+        )
+        prover1_params = dataclasses.replace(
+            prover_params, update_schedule=prover1_update_schedule
+        )
         agents_params = AgentsParameters(
-            verifier=verifier_params, prover0=prover_params, prover1=prover_params
+            verifier=verifier_params, prover0=prover0_params, prover1=prover1_params
         )
     else:
         raise NotImplementedError(
             f"Unknown interaction protocol: {combo['interaction_protocol']}"
         )
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
@@ -250,10 +278,13 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         d_representation=combo["d_representation"],
         include_linear_message_space=combo["include_linear_message"],
         message_size=combo["message_size"],
+        dataset_options=DatasetParameters(
+            max_train_size=combo["max_train_size"],
+        ),
         seed=combo["seed"],
     )
 
-    return params
+    return hyper_params
 
 
 def experiment_fn(arguments: ExperimentFunctionArguments):
@@ -266,7 +297,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     device = torch.device(f"cuda:{cmd_args.gpu_num}")
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
@@ -279,7 +310,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         dataset_on_device=cmd_args.dataset_on_device,
         enable_efficient_attention=cmd_args.enable_efficient_attention,
@@ -303,8 +334,10 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

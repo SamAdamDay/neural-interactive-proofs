@@ -4,10 +4,11 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import Guess, MinMessageRoundsSchedulerType
 
 
+@register_parameter_class
 @dataclass
 class CommonProtocolParameters(SubParameters):
     """Common additional parameters for the interaction protocol.
@@ -32,6 +33,8 @@ class CommonProtocolParameters(SubParameters):
     force_guess: Guess, optional
         The guess to force the verifier to make. If not provided, the verifier makes a
         guess using its policy.
+    zero_knowledge: bool
+        Whether to use a zero-knowledge version of the protocol.
     """
 
     verifier_first: bool = True
@@ -44,6 +47,8 @@ class CommonProtocolParameters(SubParameters):
     shared_reward: bool = False
 
     force_guess: Optional[Guess] = None
+
+    zero_knowledge: bool = False
 
 
 @dataclass
@@ -77,10 +82,11 @@ class LongProtocolParameters(SubParameters, ABC):
             self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
         ):
             self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
-                self.min_message_rounds_scheduler
+                self.min_message_rounds_scheduler.upper()
             ]
 
 
+@register_parameter_class
 @dataclass
 class PvgProtocolParameters(LongProtocolParameters):
     """Additional parameters for the PVG interaction protocol.
@@ -99,6 +105,7 @@ class PvgProtocolParameters(LongProtocolParameters):
     """
 
 
+@register_parameter_class
 @dataclass
 class DebateProtocolParameters(LongProtocolParameters):
     """Additional parameters for the debate interaction protocol.
@@ -122,3 +129,43 @@ class DebateProtocolParameters(LongProtocolParameters):
 
     sequential: bool = False
     prover0_first: bool = True
+
+
+@register_parameter_class
+@dataclass
+class MnipProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the Mnip interaction protocol.
+
+    Parameters
+    ----------
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
+    max_message_rounds : int
+        The maximum number of rounds of the game. Each round corresponds to one move by
+        one or more agents.
+    min_message_rounds : int
+        The minimum number of rounds of messages. Before this point, the verifier's
+        guesses are not registered.
+    min_message_rounds_scheduler : MinMessageRoundsScheduler
+        The scheduler to use for the minimum number of message rounds, allowing it to
+        change over time. TODO: not currently implemented.
+    """
+
+    sequential: bool = False
+    prover0_first: bool = True
+
+
+@dataclass
+class ZkProtocolParameters(LongProtocolParameters):
+    """Additional parameters for the debate interaction protocol.
+
+    Parameters
+    ----------
+    simulator_reward_coefficient : float
+        The coefficient to multiply the logit closeness by to get the simulator reward.
+    """
+
+    simulator_reward_coefficient: float = 1.0
+    aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually

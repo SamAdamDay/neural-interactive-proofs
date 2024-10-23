@@ -10,7 +10,12 @@ from pvg.scenario_base import Environment, PureTextEnvironment
 from pvg.factory import register_scenario_class
 from pvg.parameters import ScenarioType
 from pvg.utils.data import VariableDataCycler
-from pvg.utils.nested_array_dict import CompositeSpec, NestedArrayDict, StringArraySpec
+from pvg.utils.nested_array_dict import (
+    CompositeSpec,
+    NestedArrayDict,
+    StringArraySpec,
+    IntArraySpec,
+)
 
 
 @register_scenario_class(ScenarioType.CODE_VALIDATION, Environment)
@@ -29,8 +34,19 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         observation_spec["question"] = StringArraySpec(*self.batch_size, "batch")
         observation_spec["solution"] = StringArraySpec(*self.batch_size, "batch")
+        observation_spec["verdict"] = IntArraySpec(*self.batch_size, "batch")
 
         return observation_spec
+
+    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+
+        datapoint = super().get_datapoint_from_env_state_as_dict(env_state)
+
+        datapoint["question"] = str(env_state["question"])
+        datapoint["solution"] = str(env_state["solution"])
+        datapoint["verdict"] = int(env_state["verdict"])
+
+        return datapoint
 
     def _masked_reset(
         self,
@@ -43,5 +59,6 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         env_state["question"] = data_batch["question"]
         env_state["solution"] = data_batch["solution"]
+        env_state["verdict"] = data_batch["verdict"]
 
         return env_state

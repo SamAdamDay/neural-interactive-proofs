@@ -17,7 +17,7 @@ from tensordict import TensorDictBase
 
 from einops import rearrange
 
-from pvg.parameters import Parameters, MessageRegressionMethodType
+from pvg.parameters import HyperParameters, MessageRegressionMethodType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.utils.torch import ACTIVATION_CLASSES
@@ -28,7 +28,7 @@ class MessageRegressor(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -38,17 +38,17 @@ class MessageRegressor(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
 
         # Determine the agents to do regression analysis on
-        if params.message_regression.agents is not None:
-            self.agent_names = params.message_regression.agents
+        if hyper_params.message_regression.agents is not None:
+            self.agent_names = hyper_params.message_regression.agents
         else:
             self.agent_names = self.protocol_handler.agent_names
 
@@ -66,7 +66,7 @@ class MessageRegressor(ABC):
             The regression scores for each agent.
         """
 
-        if self.params.message_regression.reset_on_fit:
+        if self.hyper_params.message_regression.reset_on_fit:
             self.reset_parameters()
 
         scores = {}
@@ -83,7 +83,7 @@ class MessageRegressor(ABC):
             # Split into training and testing data
             num_samples = len(agent_data)
             num_test_samples = ceil(
-                num_samples * self.params.message_regression.test_size
+                num_samples * self.hyper_params.message_regression.test_size
             )
             permutation = torch.randperm(num_samples)
             train_mask = permutation[num_test_samples:]
@@ -163,15 +163,17 @@ def register_protocol_handler(
 
 
 def build_message_regressor(
-    params: Parameters, settings: ExperimentSettings, protocol_handler: ProtocolHandler
+    hyper_params: HyperParameters,
+    settings: ExperimentSettings,
+    protocol_handler: ProtocolHandler,
 ) -> MessageRegressor:
     """Build a message regressor based on the parameters."""
 
-    if not params.message_regression.enabled:
-        return DummyMessageRegressor(params, settings, protocol_handler)
+    if not hyper_params.message_regression.enabled:
+        return DummyMessageRegressor(hyper_params, settings, protocol_handler)
 
-    return MESSAGE_REGRESSORS[params.message_regression.regression_method](
-        params, settings, protocol_handler
+    return MESSAGE_REGRESSORS[hyper_params.message_regression.regression_method](
+        hyper_params, settings, protocol_handler
     )
 
 
@@ -184,30 +186,34 @@ class MlpMessageRegressor(MessageRegressor):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
     ):
-        super().__init__(params, settings, protocol_handler)
+        super().__init__(hyper_params, settings, protocol_handler)
 
         # Build the models
         self.models: dict[str, Sequential] = {}
         for agent_name in self.agent_names:
             model_layers = []
             activation_class = ACTIVATION_CLASSES[
-                params.message_regression.mlp_activation
+                hyper_params.message_regression.mlp_activation
             ]
-            model_layers.append(LazyLinear(params.message_regression.mlp_hidden_size))
+            model_layers.append(
+                LazyLinear(hyper_params.message_regression.mlp_hidden_size)
+            )
             model_layers.append(activation_class())
-            for _ in range(params.message_regression.mlp_num_layers - 2):
+            for _ in range(hyper_params.message_regression.mlp_num_layers - 2):
                 model_layers.append(
                     Linear(
-                        params.message_regression.mlp_hidden_size,
-                        params.message_regression.mlp_hidden_size,
+                        hyper_params.message_regression.mlp_hidden_size,
+                        hyper_params.message_regression.mlp_hidden_size,
                     )
                 )
                 model_layers.append(activation_class())
-            model_layers.append(Linear(params.message_regression.mlp_hidden_size, 2))
+            model_layers.append(
+                Linear(hyper_params.message_regression.mlp_hidden_size, 2)
+            )
             self.models[agent_name] = Sequential(*model_layers).to(settings.device)
 
     def fit_score_agent(
@@ -221,7 +227,7 @@ class MlpMessageRegressor(MessageRegressor):
         label_test = test_data["y"].squeeze(-1)
 
         # Add the linear message to the message data if using
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             linear_message_train = rearrange(
                 train_data["linear_message"], "batch ... -> batch (...)"
             )
@@ -236,12 +242,12 @@ class MlpMessageRegressor(MessageRegressor):
         dataset_test = TensorDataset(message_test, label_test)
         dataloader_train = DataLoader(
             dataset_train,
-            batch_size=self.params.message_regression.mlp_batch_size,
+            batch_size=self.hyper_params.message_regression.mlp_batch_size,
             shuffle=True,
         )
         dataloader_test = DataLoader(
             dataset_test,
-            batch_size=self.params.message_regression.mlp_batch_size,
+            batch_size=self.hyper_params.message_regression.mlp_batch_size,
             shuffle=False,
         )
 
@@ -251,11 +257,12 @@ class MlpMessageRegressor(MessageRegressor):
 
         # Get the optimizer
         optimizer = torch.optim.Adam(
-            model.parameters(), lr=self.params.message_regression.mlp_learning_rate
+            model.parameters(),
+            lr=self.hyper_params.message_regression.mlp_learning_rate,
         )
 
         # Fit the model
-        for _ in range(self.params.message_regression.mlp_num_epochs):
+        for _ in range(self.hyper_params.message_regression.mlp_num_epochs):
             for message_batch, label_batch in dataloader_train:
                 message_batch = message_batch.to(self.settings.device)
                 label_batch = label_batch.to(self.settings.device)

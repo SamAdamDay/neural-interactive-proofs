@@ -153,4 +153,9 @@ log
 
 # PyTorch Image Models Source code
 pytorch-image-models-*
-/playground/benchmarking/results
+
+# Benchmarking results
+playground/benchmarking/results
+
+# Experiment checkpoints
+experiment_checkpoints/*

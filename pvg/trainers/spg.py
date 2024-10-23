@@ -17,7 +17,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     device : TorchDevice
         The device to use for training.
@@ -36,33 +36,33 @@ class SpgTrainer(ReinforcementLearningTrainer):
 
         # Construct the loss module
         stackelberg_sequence_int = [
-            tuple(self._agent_names.index(name) for name in group)
-            for group in self.params.spg.stackelberg_sequence
+            tuple(self.agent_names.index(name) for name in group)
+            for group in self.hyper_params.spg.stackelberg_sequence
         ]
         loss_module = SpgLoss(
             actor=self.policy_operator,
             critic=self.value_operator,
-            variant=self.params.spg.variant,
+            variant=self.hyper_params.spg.variant,
             stackelberg_sequence=stackelberg_sequence_int,
-            names=self._agent_names,
+            names=self.agent_names,
             ihvp={
-                "variant": self.params.spg.ihvp_variant,
-                "num_iterations": self.params.spg.ihvp_num_iterations,
-                "rank": self.params.spg.ihvp_rank,
-                "rho": self.params.spg.ihvp_rho,
+                "variant": self.hyper_params.spg.ihvp_variant,
+                "num_iterations": self.hyper_params.spg.ihvp_num_iterations,
+                "rank": self.hyper_params.spg.ihvp_rank,
+                "rho": self.hyper_params.spg.ihvp_rho,
             },
-            additional_lola_term=self.params.spg.additional_lola_term,
-            sos_params=self.params.spg.sos_params,
+            additional_lola_term=self.hyper_params.spg.additional_lola_term,
+            sos_params=self.hyper_params.spg.sos_params,
             agent_lr_factors=[
                 agent_params.agent_lr_factor
-                for agent_params in self.params.agents.values()
+                for agent_params in self.hyper_params.agents.values()
             ],
-            lr=self.params.rl.lr,
-            clip_epsilon=self.params.ppo.clip_epsilon,
-            entropy_coef=self.params.ppo.entropy_eps,
-            normalize_advantage=self.params.ppo.normalize_advantage,
-            functional=self.params.functionalize_modules,
-            loss_critic_type=self.params.rl.loss_critic_type,
+            lr=self.hyper_params.rl.lr,
+            clip_epsilon=self.hyper_params.ppo.clip_epsilon,
+            entropy_coef=self.hyper_params.ppo.entropy_eps,
+            normalize_advantage=self.hyper_params.ppo.normalize_advantage,
+            functional=self.hyper_params.functionalize_modules,
+            loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
         )
         loss_module.set_keys(
@@ -77,8 +77,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
         # Make the generalized advantage estimator
         loss_module.make_value_estimator(
             ValueEstimators.GAE,
-            gamma=self.params.rl.gamma,
-            lmbda=self.params.rl.lmbda,
+            gamma=self.hyper_params.rl.gamma,
+            lmbda=self.hyper_params.rl.lmbda,
         )
         gae = loss_module.value_estimator
 

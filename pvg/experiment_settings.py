@@ -30,6 +30,9 @@ class ExperimentSettings:
     ----------
     device : TorchDevice, default="cpu"
         The device to use for training.
+    run_id : str, optional
+        The ID of the current run. This can be used to save and restore the state of the
+        experiment.
     wandb_run : wandb.wandb_sdk.wandb_run.Run, optional
         The W&B run to log to, if any.
     silence_wandb : bool, default=True
@@ -58,7 +61,7 @@ class ExperimentSettings:
         The number of threads to use for saving the memory-mapped tensordict.
     num_rollout_workers : int, default=4
         The number of workers to use for collecting rollout samples, when this is done
-        in parallel.
+        in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training. When the device if the
@@ -77,6 +80,11 @@ class ExperimentSettings:
         global progress bar.
     pretrained_embeddings_batch_size : int, default=256
         The batch size to use when generating embeddings for the pretrained models.
+    num_api_generation_timeouts : int, default=100
+        The number of timeouts to allow when generating API outputs. If the number of
+        timeouts exceeds this value, the experiment will be stopped.
+    do_not_load_checkpoint : bool, default=False
+        If True, the experiment will not load a checkpoint if one exists.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -85,6 +93,7 @@ class ExperimentSettings:
     """
 
     device: TorchDevice = torch.device("cpu")
+    run_id: Optional[str] = None
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
@@ -102,6 +111,8 @@ class ExperimentSettings:
     enable_efficient_attention: bool = False
     global_tqdm_step_fn: callable = default_global_tqdm_step_fn
     pretrained_embeddings_batch_size: int = 256
+    num_api_generation_timeouts: int = 100
+    do_not_load_checkpoint: bool = False
     test_run: bool = False
 
     unpicklable_fields: ClassVar[tuple[str, ...]] = ("global_tqdm_step_fn",)
@@ -137,3 +148,7 @@ class ExperimentSettings:
                 state[field_name] = getattr(self, field_name)
 
         return state
+
+    def __deepcopy__(self, memo) -> "ExperimentSettings":
+        """We do not deepcopy this object, as it is a singleton and contains locks."""
+        return self

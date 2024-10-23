@@ -5,16 +5,35 @@ from contextlib import ExitStack
 from typing import ContextManager, Callable, Optional
 import functools
 import inspect
+from pathlib import Path
+from dataclasses import dataclass
+import dataclasses
+import json
+from logging import getLogger
+import sys
 
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
+import wandb
+from wandb import Artifact
+
 from tqdm import tqdm
 
-from pvg.parameters import Parameters
+from pvg.scenario_base.agents import AgentState
+from pvg.parameters import HyperParameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
-from pvg.utils.params import get_agent_part_flags
+from pvg.utils.hyper_params import get_agent_part_flags
+from pvg.constants import (
+    EXPERIMENT_STATE_DIR,
+    CHECKPOINT_STATE_ARTIFACT_PREFIX,
+    CHECKPOINT_STATE_ARTIFACT_TYPE,
+)
+
+
+class CheckPointNotFoundError(Exception):
+    """Exception raised when a checkpoint is not found."""
 
 
 class Trainer(ABC):
@@ -22,7 +41,7 @@ class Trainer(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -30,27 +49,256 @@ class Trainer(ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    @dataclass
+    class State:
+        """Base class for storing the state of an experiment.
+
+        This class should hold all the data that needs to be saved and restored when
+        checkpointing an experiment.
+
+        Parameters
+        ----------
+        iteration : int
+            The current iteration number.
+        agents : dict[str, AgentCheckpoint]
+            The checkpoints of the agents.
+        """
+
+        iteration: int = 0
+        agents: dict[str, AgentState] = dataclasses.field(default_factory=dict)
+
     @property
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
         return self.scenario_instance.protocol_handler.max_message_rounds
 
+    @property
+    def agent_names(self) -> list[str]:
+        """The names of the agents in the scenario."""
+        return self.scenario_instance.protocol_handler.agent_names
+
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.scenario_instance = scenario_instance
         self.settings = settings
 
-        self._agent_names = self.scenario_instance.protocol_handler.agent_names
+        if settings.logger is None:
+            self.settings.logger = getLogger(__name__)
+
+        # Try to restore the experiment state from a checkpoint. If no checkpoint is
+        # available, initialise the state.
+        if settings.do_not_load_checkpoint or settings.test_run:
+            self._initialise_state()
+        else:
+            try:
+                self.state = self._load_checkpoint()
+                self.settings.logger.info(
+                    f"Restoring experiment state from iteration {self.state.iteration}"
+                )
+            except CheckPointNotFoundError:
+                self._initialise_state()
 
     @abstractmethod
     def train(self):
         """Train the agents."""
         pass
+
+    def save_checkpoint(self, log: bool = True):
+        """Save the state of the experiment to a checkpoint.
+
+        Parameters
+        ----------
+        log : bool, default=True
+            Whether to log the checkpointing.
+        """
+
+        # If we are running a test run, we don't want to save the rollouts
+        if self.settings.test_run:
+            return
+
+        # Create the checkpoint directory if it doesn't exist
+        self.checkpoint_base_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(self.checkpoint_state_path, "w") as f:
+            json.dump(dataclasses.asdict(self.state), f, indent=4)
+
+        # Save the parameters to a separate file
+        with open(self.checkpoint_params_path, "w") as f:
+            json.dump(self.hyper_params.to_dict(), f, sort_keys=True, indent=4)
+
+        # If using W&B, also log the checkpoint as an artifact
+        if self.settings.wandb_run is not None:
+            artifact = wandb.Artifact(
+                f"{CHECKPOINT_STATE_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                CHECKPOINT_STATE_ARTIFACT_TYPE,
+            )
+            artifact.add_file(self.checkpoint_state_path)
+            self.settings.wandb_run.log_artifact(artifact)
+
+        if log:
+            self.settings.logger.info(
+                f"Saved experiment state to '{self.checkpoint_state_path}'"
+            )
+
+    def _initialise_state(self):
+        """Initialise the state of the experiment.
+
+        This method should be implemented by subclasses to initialise the state of the
+        experiment. This is called at the beginning of training when starting from
+        scratch (i.e. not restoring from a checkpoint).
+        """
+
+    @classmethod
+    def get_checkpoint_base_dir_from_run_id(cls, run_id: str) -> Path:
+        """Get the base directory for a checkpoint from a run ID.
+
+        Parameters
+        ----------
+        run_id : str
+            The run ID.
+
+        Returns
+        -------
+        checkpoint_base_dir : Path
+            The path to the base directory for the checkpoint.
+        """
+        return Path(EXPERIMENT_STATE_DIR, run_id)
+
+    @property
+    def checkpoint_base_dir(self) -> Path | None:
+        """The path to the directory containing the checkpoint."""
+
+        if self.settings.run_id is None:
+            return None
+
+        return self.get_checkpoint_base_dir_from_run_id(self.settings.run_id)
+
+    @property
+    def checkpoint_state_path(self) -> Path | None:
+        """The path to the checkpoint state file."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("state.json")
+
+    @property
+    def checkpoint_params_path(self) -> Path | None:
+        """The path to the parameters file for the checkpoint."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("hyper_params.json")
+
+    def _load_checkpoint(self) -> State:
+        """Load the experiment state from a checkpoint, if available.
+
+        Returns
+        -------
+        state : State
+            The state of the experiment.
+
+        Raises
+        ------
+        CheckPointNotFoundError
+            If the checkpoint file is not found.
+        """
+
+        # If using W&B, try to download the state from the artifact first
+        if (
+            self.settings.wandb_run is not None
+            and not self.checkpoint_state_path.is_file()
+        ):
+            artifact_name = (
+                f"{CHECKPOINT_STATE_ARTIFACT_PREFIX}{self.settings.wandb_run.name}"
+                f":latest"
+            )
+            try:
+                artifact: Artifact = self.settings.wandb_run.use_artifact(
+                    artifact_name,
+                    type=CHECKPOINT_STATE_ARTIFACT_TYPE,
+                )
+                artifact.download(self.checkpoint_base_dir)
+            except wandb.errors.CommError as e:
+                # W&B doesn't use subclasses for errors, so we have to check the
+                # message. If the error was not that the artifact was not found, we
+                # re-raise it.
+                if f"artifact '{artifact_name}' not found in" not in e.message:
+                    raise e
+
+        if (
+            self.checkpoint_state_path is None
+            or not self.checkpoint_state_path.exists()
+            or not self.checkpoint_state_path.is_file()
+        ):
+            raise CheckPointNotFoundError
+
+        # Check if the parameters in the checkpoint match the current parameters
+        with open(self.checkpoint_params_path, "r") as f:
+            if (
+                json.dumps(self.hyper_params.to_dict(), sort_keys=True, indent=4)
+                != f.read()
+            ):
+                print(  # noqa: T201
+                    "The parameters in the checkpoint do not match the current "
+                    "parameters."
+                )
+                while True:
+                    response = input("Do you want to continue? [Y/n]: ")
+                    if response.lower() == "y" or response == "":
+                        break
+                    elif response.lower() == "n":
+                        sys.exit(1)
+                    else:
+                        print(  # noqa: T201
+                            "Invalid response. Please enter 'y' or 'n'."
+                        )
+
+        with open(self.checkpoint_state_path, "r") as f:
+            state_dict = json.load(f)
+
+        return self.State(**state_dict)
+
+    def _add_file_to_wandb_artifact(
+        self, artifact_name: str, artifact_type: str, file_path: Path
+    ):
+        """Add a file to a W&B artifact, creating the artifact if it doesn't exist.
+
+        If the artifact already exists, we add the file to the existing artifact,
+        creating a new version.
+
+        Parameters
+        ----------
+        artifact_name : str
+            The name of the artifact to add the file to. This should not contain an
+            alias or version, as we always add to the latest version.
+        artifact_type : str
+            The type of the artifact.
+        file_path : Path
+            The path to the file to add to the artifact.
+        """
+
+        try:
+            saved_artifact: Artifact = self.settings.wandb_run.use_artifact(
+                f"{artifact_name}:latest",
+                type=artifact_type,
+            )
+            artifact = saved_artifact.new_draft()
+        except wandb.errors.CommError as e:
+            # W&B doesn't use subclasses for errors, so we have to check the message. If
+            # the error was not that the artifact was not found, we re-raise it.
+            if f"artifact '{artifact_name}:latest' not found in" not in e.message:
+                raise e
+            artifact = Artifact(name=artifact_name, type=artifact_type)
+
+        artifact.add_file(file_path)
+        self.settings.wandb_run.log_artifact(artifact)
 
     def get_total_num_iterations(self) -> int:
         """Get the total number of iterations that the trainer will run for.
@@ -75,16 +323,16 @@ class TensorDictTrainer(Trainer, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         scenario_instance: ScenarioInstance,
         settings: ExperimentSettings,
     ):
-        super().__init__(params, scenario_instance, settings)
+        super().__init__(hyper_params, scenario_instance, settings)
 
         self.device = self.settings.device
 
         # Check if we need a critic and if it shares a body with the actor
-        self.use_critic, self.use_single_body, _ = get_agent_part_flags(params)
+        self.use_critic, self.use_single_body, _ = get_agent_part_flags(hyper_params)
 
     def _build_train_context(self, stack: ExitStack) -> list[ContextManager]:
         """Builds the context manager ExitStack for training.
@@ -275,7 +523,7 @@ def attach_progress_bar(
     Example
     -------
     >>> class MyTrainer(Trainer):
-    ...     @attach_progress_bar(lambda self: self.params.num_iterations)
+    ...     @attach_progress_bar(lambda self: self.hyper_params.num_iterations)
     ...     def train(self, iteration_context: IterationContext):
     ...         for i in range(iteration_context.num_iterations):
     ...             iteration_context.step()
