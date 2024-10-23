@@ -297,17 +297,24 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         done: Bool[np.ndarray, "..."] = rollouts["done"]
         next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
+        next_terminated: Bool[np.ndarray, "..."] = rollouts["next", "terminated"]
+        padding: Bool[np.ndarray, "..."] = rollouts["padding"]
+
+        last_timestep = (next_done | next_terminated) & ~padding
 
         log_stats = {}
 
         for agent_index, agent_name in enumerate(self.agent_names):
 
             # Get the total episode reward for each agent
+            episode_reward = rollouts["next", "agents", "reward"][..., agent_index].sum(
+                axis=-1
+            )
             log_stats[f"{agent_name}.{prefix}mean_episode_reward"] = (
-                rollouts["next", "agents", "reward"][..., agent_index]
-                .sum(axis=-1)
-                .mean()
-                .item()
+                episode_reward.mean().item()
+            )
+            log_stats[f"{agent_name}.{prefix}std_episode_reward"] = (
+                episode_reward.std().item()
             )
 
             # The proportion of messages that were retried or hit the token limit
@@ -322,19 +329,61 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 .item()
             )
 
+        episode_length = (
+            rollouts["message_history"][..., -1, :, 0] != None  # noqa: E711
+        )
         log_stats[f"{prefix}mean_episode_length"] = (
-            (rollouts["message_history"][..., -1, :, 0] != None)  # noqa: E711
-            .sum(axis=-1)
-            .mean()
-            .item()
+            episode_length.sum(axis=-1).mean().item()
+        )
+        log_stats[f"{prefix}std_episode_length"] = (
+            episode_length.sum(axis=-1).std().item()
         )
 
-        # Get the mean accuracy of the verifier
+        # Get the mean and std accuracy of the verifier
         verifier_decision = rollouts["agents", "decision"][
             ..., self.agent_names.index("verifier")
         ]
-        log_stats[f"{prefix}mean_accuracy"] = (
-            (verifier_decision[next_done] == rollouts["y"][next_done]).mean().item()
+        accuracy = verifier_decision[last_timestep] == rollouts["y"][last_timestep]
+        log_stats[f"{prefix}mean_accuracy"] = accuracy.mean().item()
+        log_stats[f"{prefix}std_accuracy"] = accuracy.std().item()
+
+        # Get the mean and accuracy of the verifier by class
+        for class_value in [0, 1]:
+            class_mask = rollouts["y"][last_timestep] == class_value
+            class_accuracy = verifier_decision[last_timestep][class_mask] == class_value
+            log_stats[f"{prefix}mean_{class_value}_accuracy"] = (
+                class_accuracy.mean().item()
+            )
+            log_stats[f"{prefix}std_{class_value}_accuracy"] = (
+                class_accuracy.std().item()
+            )
+
+        # Get the mean and std verifier decision
+        log_stats[f"{prefix}mean_decision"] = (
+            verifier_decision[last_timestep].mean().item()
+        )
+        log_stats[f"{prefix}std_decision"] = (
+            verifier_decision[last_timestep].std().item()
+        )
+
+        # Get the precision and recall of the verifier
+        true_positives = (
+            (verifier_decision[last_timestep] == 1)
+            & (rollouts["y"][last_timestep] == 1)
+        ).sum()
+        false_positives = (
+            (verifier_decision[last_timestep] == 1)
+            & (rollouts["y"][last_timestep] == 0)
+        ).sum()
+        false_negatives = (
+            (verifier_decision[last_timestep] == 0)
+            & (rollouts["y"][last_timestep] == 1)
+        ).sum()
+        log_stats[f"{prefix}precision"] = true_positives / (
+            true_positives + false_positives
+        )
+        log_stats[f"{prefix}recall"] = true_positives / (
+            true_positives + false_negatives
         )
 
         return log_stats

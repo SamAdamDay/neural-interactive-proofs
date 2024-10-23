@@ -944,6 +944,7 @@ class PureTextEnvironment(Environment, ABC):
             ),
             done=BoolArraySpec(*self.batch_size, "batch"),
             terminated=BoolArraySpec(*self.batch_size, "batch"),
+            padding=BoolArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -1011,6 +1012,7 @@ class PureTextEnvironment(Environment, ABC):
         next_state["done"] = shared_done.numpy()
         next_state["agents", "done"] = agent_done.numpy()
         next_state["terminated"] = terminated.numpy()
+        next_state["padding"] = np.zeros(*self.batch_size, dtype=bool)
         next_state["agents", "reward"] = reward.numpy()
 
         # Add the next state as a sub-dictionary
@@ -1190,5 +1192,6 @@ class PureTextEnvironment(Environment, ABC):
         env_state["done"][mask] = False
         env_state["agents", "done"][mask] = False
         env_state["terminated"][mask] = False
+        env_state["padding"][mask] = False
 
         return env_state

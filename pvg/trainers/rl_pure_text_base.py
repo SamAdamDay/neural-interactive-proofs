@@ -14,6 +14,8 @@ import yaml
 
 import torch
 
+import numpy as np
+
 from wandb import Artifact
 import wandb
 
@@ -540,6 +542,7 @@ def _sample_single_rollout(
 
         # If we are done, we need to pad the rollout with zero actions
         else:
+            env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
             if "next" not in env_state.keys():
                 env_state = environment.add_dummy_actions_and_next_to_state(env_state)
             env_states.append(env_state)
