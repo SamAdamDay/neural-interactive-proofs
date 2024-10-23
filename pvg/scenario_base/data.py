@@ -32,6 +32,7 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.types import TorchDevice
 from pvg.utils.data import is_nested_key
 from pvg.utils.nested_array_dict import NestedArrayDict
+from pvg.utils.torch import FastForwardableBatchSampler
 
 
 class CachedPretrainedEmbeddingsNotFound(Exception):
@@ -518,6 +519,18 @@ class NestedArrayDictDataLoader(TorchDataLoader):
     ----------
     dataset : NestedArrayDictDataset
         The dataset to load.
+    batch_size : int, default=1
+        How many samples per batch to load.
+    shuffle : bool, default=False
+        Set to True to have the data reshuffled at every epoch.
+    drop_last : bool, default=False
+        Set to True to drop the last incomplete batch, if the dataset size is not
+        divisible by the batch size.
+    generator : torch.Generator | None, default=None
+        Generator used for the random sampling.
+    initial_skip : int, default=0
+        Number of initial samples to skip.
+
     """
 
     def __init__(
@@ -527,13 +540,22 @@ class NestedArrayDictDataLoader(TorchDataLoader):
         shuffle: bool = False,
         drop_last: bool = False,
         generator: torch.Generator | None = None,
+        initial_skip: int = 0,
         **kwargs,
     ):
         if shuffle:
             sampler = RandomSampler(dataset, generator=generator)
         else:
             sampler = SequentialSampler(dataset)
-        sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=drop_last)
+        if initial_skip > 0:
+            sampler = FastForwardableBatchSampler(
+                sampler,
+                batch_size=batch_size,
+                drop_last=drop_last,
+                initial_skip=initial_skip,
+            )
+        else:
+            sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=drop_last)
 
         super().__init__(
             dataset,

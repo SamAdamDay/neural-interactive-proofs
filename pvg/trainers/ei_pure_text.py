@@ -64,7 +64,9 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 # Sample rollouts
                 rollouts = self.sample_rollouts(
-                    self.train_environment, use_tqdm=not self.settings.test_run
+                    self.train_environment,
+                    self.state.iteration,
+                    use_tqdm=not self.settings.test_run,
                 )
 
                 # Save the rollouts to the checkpoint directory
@@ -166,7 +168,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 # Sample rollouts from the test environment
                 rollouts = self.sample_rollouts(
-                    self.test_environment, use_tqdm=True, tqdm_desc="Testing"
+                    self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
                 )
 
                 # Log the statistics of the rollouts

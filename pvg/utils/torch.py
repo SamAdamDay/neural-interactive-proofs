@@ -1,12 +1,13 @@
 """Handy PyTorch classes and utilities, including modules."""
 
-from typing import Callable, Optional, Iterable
+from typing import Callable, Optional, Iterable, Iterator
 from abc import abstractmethod
 from math import prod
 
 import torch
 from torch import Tensor
 import torch.nn as nn
+from torch.utils.data import BatchSampler, Sampler
 
 from torchvision.models.resnet import (
     BasicBlock as BasicResNetBlock,
@@ -832,3 +833,59 @@ class TensorDictPrint(TensorDictModuleBase):
                 )
             print(to_print)  # noqa: T201
         return tensordict
+
+
+class FastForwardableBatchSampler(BatchSampler):
+    """A batch sampler which can skip an initial number of items.
+
+    See the docs for PyTorch's `BatchSampler` for details.
+
+    Parameters
+    ----------
+    sampler : Sampler[int] | Iterable[int]
+        Base sampler. Can be any iterable object
+    batch_size : int
+        The size of the mini-batch
+    drop_last : bool
+        If ``True``, the sampler will drop the last batch if its size would be less than
+        ``batch_size``
+    initial_skip : int, default=0
+        The number of items to skip at the start of the sampler.
+    """
+
+    def __init__(
+        self,
+        sampler: Sampler[int] | Iterable[int],
+        batch_size: int,
+        drop_last: bool,
+        initial_skip: int = 0,
+    ):
+        super().__init__(sampler, batch_size, drop_last)
+        self.initial_skip = initial_skip
+
+    def __iter__(self) -> Iterator[list[int]]:
+        # Adapted from `torch.utils.data.sampler.BatchSampler.__iter__`.
+        if self.drop_last:
+            sampler_iter = iter(self.sampler)
+            for _ in range(self.initial_skip):
+                next(sampler_iter)
+            while True:
+                try:
+                    batch = [next(sampler_iter) for _ in range(self.batch_size)]
+                    yield batch
+                except StopIteration:
+                    break
+        else:
+            batch = [0] * self.batch_size
+            idx_in_batch = 0
+            for i, idx in enumerate(self.sampler):
+                if i < self.initial_skip:
+                    continue
+                batch[idx_in_batch] = idx
+                idx_in_batch += 1
+                if idx_in_batch == self.batch_size:
+                    yield batch
+                    idx_in_batch = 0
+                    batch = [0] * self.batch_size
+            if idx_in_batch > 0:
+                yield batch[:idx_in_batch]

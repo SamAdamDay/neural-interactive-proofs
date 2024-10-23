@@ -131,20 +131,10 @@ class PureTextRlTrainer(Trainer, ABC):
         """The directory to save the rollout analysis to."""
         return self.checkpoint_base_dir.joinpath("analysis")
 
-    def __init__(
-        self,
-        params: Parameters,
-        scenario_instance: ScenarioInstance,
-        settings: ExperimentSettings,
-    ):
-        super().__init__(params, scenario_instance, settings)
-
-        # Create a random number generator
-        self.rng = torch.Generator()
-
     def sample_rollouts(
         self,
         environment: PureTextEnvironment,
+        iteration: int | Literal["test"],
         use_tqdm: bool = False,
         tqdm_desc: str = "Sampling rollouts",
     ) -> NestedArrayDict:
@@ -158,6 +148,8 @@ class PureTextRlTrainer(Trainer, ABC):
         ----------
         dataset : NestedArrayDictDataset
             The dataset of task instances.
+        iteration : int | Literal["test"]
+            The iteration number, or "test" if the rollouts are from the test set.
         environment : PureTextEnvironment
             The environment to sample rollouts in.
         use_tqdm : bool
@@ -172,11 +164,14 @@ class PureTextRlTrainer(Trainer, ABC):
             max_message_rounds)
         """
 
+        generator = torch.Generator()
+        generator.manual_seed(self.params.seed)
         dataloader = NestedArrayDictDataLoader(
             environment.dataset,
             batch_size=environment.batch_size[0],
             shuffle=True,
-            generator=self.rng,
+            generator=generator,
+            initial_skip=environment.num_envs * iteration,
         )
         data_cycler = VariableDataCycler(
             dataloader, default_batch_size=environment.batch_size[0]
