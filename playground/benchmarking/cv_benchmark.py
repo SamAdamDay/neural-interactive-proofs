@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from pvg.code_validation.dataset_generation import get_openrouter_response
+from pvg.code_validation.dataset_generation import _get_openrouter_response
 import re
 import numpy as np
 import json
@@ -92,13 +92,13 @@ def guess_if_correct(
     if debug:
         start_time = datetime.now()
 
-    responses = get_openrouter_response(
+    responses = _get_openrouter_response(
         model,
         query,
         api_key,
         num_responses=n_attempts,
-        log_probs=check_probs,
-        top_logprobs=num_alternatives,
+        get_log_probs=check_probs,
+        get_top_logprobs=num_alternatives,
         temperature=temperature,
         force_multiple_generations=force_multiple_generations,
     )

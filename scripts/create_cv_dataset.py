@@ -4,7 +4,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pvg.constants import OPENROUTER_API_KEY
 
 from pvg.code_validation.dataset_generation import (
-    generate_cv_dataset,
+    generate_and_save_cv_dataset,
     CodeValidationDatasetConfig,
 )
 
@@ -50,4 +50,4 @@ config = CodeValidationDatasetConfig(
 )
 
 # Generate the dataset
-generate_cv_dataset(config)
+generate_and_save_cv_dataset(config)

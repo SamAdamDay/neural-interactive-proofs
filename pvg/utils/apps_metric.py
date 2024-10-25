@@ -13,9 +13,7 @@ from datetime import datetime
 import json
 import multiprocessing
 
-# import warnings
-# warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
-from pvg.utils.bugfix import RuntimeModule
+from pvg.utils.runtime_module import RuntimeModule
 
 
 class CODE_TYPE(Enum):

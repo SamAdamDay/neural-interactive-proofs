@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "pvg"
 version = "0.0.1"
 
+[tool.black]
+extend-exclude = "pvg/utils/runtime_module.py"
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -36,6 +39,7 @@ exclude = [
     "site-packages",
     "venv",
     "playground",
+    "pvg/utils/runtime_module.py"
 ]
 
 # Same as Black.
