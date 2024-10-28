@@ -114,8 +114,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
                 for agent_name, agent_whole in self.agent_wholes.items():
 
-                    # Select the rollouts with a high reward for the given agent
-                    selected_rollouts = self._select_good_rollouts(rollouts, agent_name)
+                    # Select the rollouts to fine-tune on
+                    selected_rollouts = self._select_rollouts_for_fine_tuning(
+                        rollouts, agent_name
+                    )
 
                     # Create a fine-tune job for these rollouts
                     self.settings.logger.info(
@@ -390,10 +392,10 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         return log_stats
 
-    def _select_good_rollouts(
+    def _select_rollouts_for_fine_tuning(
         self, rollouts: NestedArrayDict, agent_name: str
     ) -> NestedArrayDict:
-        """Select the rollouts with a high reward for the given agent, for fine-tuning.
+        """Select rollouts to fine-tune on, based on the reward.
 
         Parameters
         ----------
@@ -409,10 +411,57 @@ class PureTextEiTrainer(PureTextRlTrainer):
         """
 
         agent_index = self.agent_names.index(agent_name)
+        agent_episode_reward = rollouts["next", "agents", "reward"][
+            ..., agent_index
+        ].sum(axis=-1)
 
-        # Select the rollouts with a high reward for the given agent
-        good_mask = (
-            rollouts["next", "agents", "reward"][..., agent_index].sum(axis=-1)
-            >= self.hyper_params.pure_text_ei.reward_threshold
-        )
-        return rollouts[good_mask]
+        num_rollouts = agent_episode_reward.shape[0]
+
+        if self.hyper_params.pure_text_ei.rollout_selection_method == "threshold":
+
+            # Select the rollouts with a high reward for the given agent
+            good_mask = (
+                agent_episode_reward >= self.hyper_params.pure_text_ei.reward_threshold
+            )
+            return rollouts[good_mask]
+
+        elif (
+            self.hyper_params.pure_text_ei.rollout_selection_method
+            == "weighted_sampling"
+        ):
+
+            # Compute the weights by normalizing the rewards
+            if self.hyper_params.pure_text_ei.weighting_minimum is not None:
+                weights = np.maximum(
+                    agent_episode_reward,
+                    self.hyper_params.pure_text_ei.weighting_minimum,
+                )
+                weights = weights - self.hyper_params.pure_text_ei.weighting_minimum
+                weights = weights / weights.sum()
+            else:
+                weights = agent_episode_reward - agent_episode_reward.min()
+                weights = weights / weights.sum()
+
+            # Add a small constant to the weights to avoid zero weights
+            weights += self.hyper_params.pure_text_ei.weighting_epsilon / num_rollouts
+            weights /= weights.sum()
+
+            sample_size = round(
+                num_rollouts
+                * self.hyper_params.pure_text_ei.weighting_sample_size_factor
+            )
+
+            index = np.random.choice(
+                num_rollouts,
+                size=sample_size,
+                p=weights,
+                replace=self.hyper_params.pure_text_ei.weighting_use_replacement,
+            )
+
+            return rollouts[index]
+
+        else:
+            raise ValueError(
+                f"Unknown rollout selection method: "
+                f"{self.hyper_params.pure_text_ei.rollout_selection_method!r}"
+            )
