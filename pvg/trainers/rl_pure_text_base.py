@@ -197,9 +197,13 @@ class PureTextRlTrainer(Trainer, ABC):
             # Create fine-tune jobs for each agent
             if self.state.train_loop_stage == "create_fine_tune_jobs":
 
+                # Load all the rollouts if we are fine-tuning on all previous rollouts
+                if self.hyper_params.text_rl.fine_tune_on_all_previous_rollouts:
+                    rollouts = self._load_rollouts(range(self.state.iteration + 1))
+
                 # Load the rollouts if they are not already set (i.e. if we are resuming
                 # this stage)
-                if rollouts is None:
+                elif rollouts is None:
                     rollouts = self._load_rollouts(self.state.iteration)
 
                 self._stage_create_fine_tune_jobs(rollouts)
@@ -222,7 +226,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
         if self.state.train_loop_stage == "test":
 
-            if self.hyper_params.pure_text_ei.run_test_loop:
+            if self.hyper_params.text_rl.run_test_loop:
 
                 self._stage_run_test_loop()
 
@@ -569,30 +573,39 @@ class PureTextRlTrainer(Trainer, ABC):
                     processed_transcript_path,
                 )
 
-    def _load_rollouts(self, iteration: int) -> NestedArrayDict:
+    def _load_rollouts(self, iterations: int | Iterable[int]) -> NestedArrayDict:
         """Load the rollouts from the checkpoint directory.
 
         Parameters
         ----------
-        iteration : int
-            The iteration number.
+        iterations : int | Iterable[int]
+            The iteration numbers to load the rollouts for. These will be concatenated
+            into a single NestedArrayDict.
 
         Returns
         -------
         NestedArrayDict
-            The rollouts.
+            The concatenated rollouts for each iteration requested.
         """
 
         # If we are running a test run, we shouldn't be loading rollouts
         if self.settings.test_run:
             raise RuntimeError("Attempted to load rollouts in test run.")
 
+        if isinstance(iterations, int):
+            iterations = [iterations]
+
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 
-        checkpoint_filepath = self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt")
+        checkpoint_filepaths = [
+            self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt")
+            for iteration in iterations
+        ]
 
         # If using W&B, try to download the rollouts from the artifact first
-        if self.settings.wandb_run is not None and not checkpoint_filepath.is_file():
+        if self.settings.wandb_run is not None and not all(
+            filepath.is_file() for filepath in checkpoint_filepaths
+        ):
             artifact_name = (
                 f"{ROLLOUTS_ARTIFACT_PREFIX}{self.settings.wandb_run.name}:latest"
             )
@@ -609,8 +622,17 @@ class PureTextRlTrainer(Trainer, ABC):
                 if f"artifact '{artifact_name}' not found in" not in e.message:
                     raise e
 
-        with open(checkpoint_filepath, "rb") as f:
-            return pickle.load(f)
+        checkpoints = []
+        for iteration, checkpoint_filepath in zip(iterations, checkpoint_filepaths):
+            if not checkpoint_filepath.is_file():
+                raise FileNotFoundError(
+                    f"Attempted to load rollouts for iteration {iteration}, but "
+                    f"file {checkpoint_filepath!r} not found."
+                )
+            with open(checkpoint_filepath, "rb") as f:
+                checkpoints.append(pickle.load(f))
+
+        return concatenate_nested_array_dicts(checkpoints)
 
     def _get_log_stats(
         self,
