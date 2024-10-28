@@ -254,13 +254,39 @@ class PureTextEiParameters(SubParameters):
 
     Parameters
     ----------
+    rollout_selection_method : Literal["threshold", "weighted_sampling"]
+        The method to use for selecting rollouts for fine-tuning. Possible values are:
+
+        - "threshold": Rollouts are selected if their reward is above a certain
+          threshold.
+        - "weighted_sampling": Rollouts are selected with a probability proportional to
+          their reward.
+
     reward_threshold : float
-        The threshold on the reward for a rollout to be added to the fine-tuning
-        dataset.
+        When using the threshold method, the threshold on the reward for a rollout to be
+        added to the fine-tuning dataset.
+    weighting_sample_size_factor : float
+        When using the weighted sampling method, the number of rollouts to sample is
+        computed as this factor times the number of rollouts.
+    weighting_minimum : float | None
+        When using the weighted sampling method, all rewards below this value are
+        assigned this value before being used as weights. If `None`, no minimum is
+        applied.
+    weighting_use_replacement : bool
+        Whether to sample with replacement when using the weighted sampling method.
+    weighting_epsilon : float
+        When using the weighted sampling method, this value, divided by the number of
+        rollouts, is added to the normalised weights, which are then normalised again.
+        This can be used to prevent the probabilities from becoming zero.
     run_test_loop : bool
         Whether to run the test loop after training.
     """
 
+    rollout_selection_method: Literal["threshold", "weighted_sampling"] = "threshold"
     reward_threshold: float = 0.9
+    weighting_sample_size_factor: float = 0.5
+    weighting_minimum: Optional[float] = None
+    weighting_use_replacement: bool = True
+    weighting_epsilon: float = 0.01
 
     run_test_loop: bool = False

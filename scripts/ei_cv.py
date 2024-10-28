@@ -31,7 +31,7 @@ param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    rollouts_per_iteration=[200],
+    rollouts_per_iteration=[20],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
@@ -40,6 +40,8 @@ param_grid = dict(
     prover_top_p=[None],
     freeze_prover=[False],
     fine_tune_from_scratch=[False],
+    rollout_selection_method=["weighted_sampling"],
+    weighting_use_replacement=[True],
     shared_reward=[False],
     min_message_rounds=[0],
     max_message_rounds=[9],
@@ -47,7 +49,7 @@ param_grid = dict(
     debate_sequential=[False],
     debate_prover0_first=[True],
     run_test_loop=[False],
-    use_dummy_api=[False],
+    use_dummy_api=[True],
 )
 
 
@@ -107,6 +109,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         ),
         pure_text_ei=PureTextEiParameters(
             run_test_loop=combo["run_test_loop"],
+            rollout_selection_method=combo["rollout_selection_method"],
+            weighting_use_replacement=combo["weighting_use_replacement"],
         ),
         agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],
