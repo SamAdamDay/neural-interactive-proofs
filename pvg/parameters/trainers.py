@@ -235,16 +235,25 @@ class TextRlParameters(SubParameters):
 
     Parameters
     ----------
+    fine_tune_on_all_previous_rollouts : bool
+        Whether to fine-tune the agents on the rollouts from all iterations so far. If
+        `False`, only the rollouts from the current iteration are used.
     save_transcripts : bool
         Whether to save the transcripts of the rollouts. Note that the raw rollouts are
         always saved, and the transcripts can be extracted from them. So this is mostly
         for convenience (and comes with a small processing overhead).
     transcript_format : Literal["json", "yaml"]
         The format to save the transcripts in.
+    run_test_loop : bool
+        Whether to run the test loop after training.
     """
+
+    fine_tune_on_all_previous_rollouts: bool = False
 
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
+
+    run_test_loop: bool = False
 
 
 @register_parameter_class
@@ -278,8 +287,6 @@ class PureTextEiParameters(SubParameters):
         When using the weighted sampling method, this value, divided by the number of
         rollouts, is added to the normalised weights, which are then normalised again.
         This can be used to prevent the probabilities from becoming zero.
-    run_test_loop : bool
-        Whether to run the test loop after training.
     """
 
     rollout_selection_method: Literal["threshold", "weighted_sampling"] = "threshold"
@@ -288,5 +295,3 @@ class PureTextEiParameters(SubParameters):
     weighting_minimum: Optional[float] = None
     weighting_use_replacement: bool = True
     weighting_epsilon: float = 0.01
-
-    run_test_loop: bool = False

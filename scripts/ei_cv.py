@@ -10,6 +10,7 @@ from pvg import (
     AgentsParameters,
     CodeValidationAgentParameters,
     RlTrainerParameters,
+    TextRlParameters,
     ScenarioType,
     TrainerType,
     InteractionProtocolType,
@@ -40,6 +41,7 @@ param_grid = dict(
     prover_top_p=[None],
     freeze_prover=[False],
     fine_tune_from_scratch=[False],
+    fine_tune_on_all_previous_rollouts=[True],
     rollout_selection_method=["weighted_sampling"],
     weighting_use_replacement=[True],
     shared_reward=[False],
@@ -107,8 +109,13 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             frames_per_batch=None,
             num_iterations=combo["num_iterations"],
         ),
-        pure_text_ei=PureTextEiParameters(
+        text_rl=TextRlParameters(
             run_test_loop=combo["run_test_loop"],
+            fine_tune_on_all_previous_rollouts=combo[
+                "fine_tune_on_all_previous_rollouts"
+            ],
+        ),
+        pure_text_ei=PureTextEiParameters(
             rollout_selection_method=combo["rollout_selection_method"],
             weighting_use_replacement=combo["weighting_use_replacement"],
         ),

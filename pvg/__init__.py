@@ -12,6 +12,7 @@ from .parameters import (
     VanillaPpoParameters,
     SpgParameters,
     ReinforceParameters,
+    TextRlParameters,
     PureTextEiParameters,
     ImageClassificationParameters,
     DatasetParameters,
