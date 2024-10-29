@@ -32,7 +32,7 @@ param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[10],
-    rollouts_per_iteration=[20],
+    rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
@@ -41,8 +41,8 @@ param_grid = dict(
     prover_top_p=[None],
     freeze_prover=[False],
     fine_tune_from_scratch=[False],
-    fine_tune_on_all_previous_rollouts=[True],
-    rollout_selection_method=["weighted_sampling"],
+    fine_tune_on_all_previous_rollouts=[False],
+    rollout_selection_method=["threshold"],
     weighting_use_replacement=[True],
     shared_reward=[False],
     min_message_rounds=[0],
@@ -51,7 +51,7 @@ param_grid = dict(
     debate_sequential=[False],
     debate_prover0_first=[True],
     run_test_loop=[False],
-    use_dummy_api=[True],
+    use_dummy_api=[False],
 )
 
 
