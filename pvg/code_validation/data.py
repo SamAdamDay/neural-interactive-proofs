@@ -262,20 +262,16 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     """
 
     def _load_raw_dataset(self) -> HuggingFaceDataset:
+        split = "train" if self.train else "test"
         return load_dataset(
             self.hyper_params.dataset,
-            split="train",
+            split=split,
         )
 
     def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
 
         def filter_instance(instance: dict[str, str | int]) -> bool:
-            """Filter based on the hyper_params and split"""
-
-            if instance["apps_split"] == "train" and not self.train:
-                return False
-            if instance["apps_split"] == "test" and self.train:
-                return False
+            """Filter based on the hyper_params"""
 
             return (
                 instance["difficulty"]

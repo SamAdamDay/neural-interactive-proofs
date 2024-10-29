@@ -446,12 +446,16 @@ class PureTextRlTrainer(Trainer, ABC):
 
         generator = torch.Generator()
         generator.manual_seed(self.hyper_params.seed)
+        if iteration == "test":
+            initial_skip = 0
+        else:
+            initial_skip = environment.num_envs * iteration
         dataloader = NestedArrayDictDataLoader(
             environment.dataset,
             batch_size=environment.batch_size[0],
             shuffle=True,
             generator=generator,
-            initial_skip=environment.num_envs * iteration,
+            initial_skip=initial_skip,
         )
         data_cycler = VariableDataCycler(
             dataloader, default_batch_size=environment.batch_size[0]
