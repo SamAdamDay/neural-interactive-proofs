@@ -67,7 +67,7 @@ class CodeValidationAgentSpec:
 
     human_name: str
     response_channel_headers: Optional[dict[str, str]] = None
-    channel_order: Optional[list[str | list[str]]] = None
+    channel_order: Optional[list[str | set[str]]] = None
     anonymous: bool = False
     last_round_system_message: Optional[str] = None
     use_raw_message_for_self_prompt: bool = True
