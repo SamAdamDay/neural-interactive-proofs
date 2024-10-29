@@ -6,11 +6,12 @@ protocol.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Iterator
 import importlib.resources
 from string import Template
 from functools import cache
 from collections import OrderedDict
+from random import Random
 
 from pvg.parameters import InteractionProtocolType
 from pvg.protocols.protocol_base import ProtocolHandler
@@ -40,10 +41,12 @@ class CodeValidationAgentSpec:
         messages for all channels in which the agent is active. Each message is prefaced
         by a header that specifies the channel. This dictionary maps channel names to
         headers. This can be `None` if the agent is active in only one channel.
-    channel_order : list[str], optional
+    channel_order : list[str | set[str]], optional
         When making a request to the model, in each round the channels are ordered
-        according to this list. It is recommended to put the channels in which the agent
-        is active last. If `None`, the order is determined by the protocol handler.
+        according to this list. It is a list of either channel names or sets of channel
+        names. If a set of channel names is given, the channels are ordered randomly
+        within that set. It is recommended to put the channels in which the agent is
+        active last. If `None`, the order is determined by the protocol handler.
     anonymous : bool, optional
         Whether the agent is anonymous. If True, the agent's name will not be used in
         prompts. Default is False.
@@ -64,7 +67,7 @@ class CodeValidationAgentSpec:
 
     human_name: str
     response_channel_headers: Optional[dict[str, str]] = None
-    channel_order: Optional[list[str]] = None
+    channel_order: Optional[list[str | list[str]]] = None
     anonymous: bool = False
     last_round_system_message: Optional[str] = None
     use_raw_message_for_self_prompt: bool = True
@@ -120,8 +123,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             f".{self.hyper_params.interaction_protocol!s}"
         )
 
-    def get_agent_ordered_channels(self, agent_name: str) -> list[str]:
-        """Get the the channels ordered for the agent.
+    def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
+        """An iterator over the channels ordered for the agent.
 
         Channels can be ordered differently for each agent, when creating the request to
         the model.
@@ -130,6 +133,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         ----------
         agent_name : str
             The name of the agent.
+        seed : int
+            The random seed to use for shuffling the channels, if necessary.
 
         Returns
         -------
@@ -138,9 +143,17 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """
 
         if self.agent_specs[agent_name].channel_order is not None:
-            return self.agent_specs[agent_name].channel_order
 
-        return self.message_channel_names
+            random = Random(seed)
+
+            for list_item in self.agent_specs[agent_name].channel_order:
+                if isinstance(list_item, set):
+                    yield from random.sample(list(list_item), len(list_item))
+                else:
+                    yield list_item
+
+        else:
+            yield from self.message_channel_names
 
     def parse_chat_completion(
         self, completion_text: str, agent_name: str, round_id: int
@@ -363,23 +376,33 @@ class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
 @register_protocol_handler(InteractionProtocolType.DEBATE)
 class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol):
 
-    agent_specs = {
-        "verifier": CodeValidationAgentSpec(
-            "Verifier",
-            response_channel_headers={
-                "prover0_channel": "Question for Expert_1:",
-                "prover1_channel": "Question for Expert_2:",
-            },
-            last_round_system_message="You cannot ask any more questions. You must now "
-            "make a decision.",
-        ),
-        "prover0": CodeValidationAgentSpec(
-            "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
-        ),
-        "prover1": CodeValidationAgentSpec(
-            "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
-        ),
-    }
+    @property
+    def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
+        """A dictionary mapping agent names to specifications"""
+
+        if self.hyper_params.debate_protocol.randomize_channel_order:
+            verifier_channel_order = [{"prover0_channel", "prover1_channel"}]
+        else:
+            verifier_channel_order = None
+
+        return {
+            "verifier": CodeValidationAgentSpec(
+                "Verifier",
+                response_channel_headers={
+                    "prover0_channel": "Question for Expert_1:",
+                    "prover1_channel": "Question for Expert_2:",
+                },
+                last_round_system_message="You cannot ask any more questions. You must "
+                "now make a decision.",
+                channel_order=verifier_channel_order,
+            ),
+            "prover0": CodeValidationAgentSpec(
+                "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
+            ),
+            "prover1": CodeValidationAgentSpec(
+                "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
+            ),
+        }
 
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
@@ -397,20 +420,30 @@ class MerlinArthurCodeValidationProtocol(
 @register_protocol_handler(InteractionProtocolType.MNIP)
 class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
 
-    agent_specs = {
-        "verifier": CodeValidationAgentSpec(
-            "Verifier",
-            response_channel_headers={
-                "prover0_channel": "Question for Expert_1:",
-                "prover1_channel": "Question for Expert_2:",
-            },
-            last_round_system_message="You cannot ask any more questions. You must now "
-            "make a decision.",
-        ),
-        "prover0": CodeValidationAgentSpec(
-            "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
-        ),
-        "prover1": CodeValidationAgentSpec(
-            "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
-        ),
-    }
+    @property
+    def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
+        """A dictionary mapping agent names to specifications"""
+
+        if self.hyper_params.mnip_protocol.randomize_channel_order:
+            verifier_channel_order = [{"prover0_channel", "prover1_channel"}]
+        else:
+            verifier_channel_order = None
+
+        return {
+            "verifier": CodeValidationAgentSpec(
+                "Verifier",
+                response_channel_headers={
+                    "prover0_channel": "Question for Expert_1:",
+                    "prover1_channel": "Question for Expert_2:",
+                },
+                last_round_system_message="You cannot ask any more questions. You must "
+                "now make a decision.",
+                channel_order=verifier_channel_order,
+            ),
+            "prover0": CodeValidationAgentSpec(
+                "Expert_1", channel_order=["prover1_channel", "prover0_channel"]
+            ),
+            "prover1": CodeValidationAgentSpec(
+                "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
+            ),
+        }
