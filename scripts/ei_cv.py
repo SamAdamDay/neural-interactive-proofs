@@ -3,6 +3,7 @@
 from argparse import Namespace
 import os
 import logging
+from datetime import datetime
 
 
 from pvg import (
@@ -51,7 +52,6 @@ param_grid = dict(
     debate_sequential=[False],
     debate_prover0_first=[True],
     run_test_loop=[False],
-    use_dummy_api=[False],
 )
 
 
@@ -62,7 +62,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             model_name=combo["verifier_model"],
             temperature=combo["verifier_temperature"],
             top_p=combo["verifier_top_p"],
-            use_dummy_api=combo["use_dummy_api"],
+            use_dummy_api=cmd_args.use_dummy_api,
             fine_tune_from_scratch=combo["fine_tune_from_scratch"],
         ),
     )
@@ -71,7 +71,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         model_name=combo["prover_model"],
         temperature=combo["prover_temperature"],
         top_p=combo["prover_top_p"],
-        use_dummy_api=combo["use_dummy_api"],
+        use_dummy_api=cmd_args.use_dummy_api,
         freeze_agent=combo["freeze_prover"],
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
     )
@@ -149,6 +149,14 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     hyper_params = _construct_params(combo, cmd_args)
 
+    if cmd_args.num_rollout_workers is None:
+        if cmd_args.use_dummy_api:
+            num_rollout_workers = 0
+        else:
+            num_rollout_workers = 8
+    else:
+        num_rollout_workers = cmd_args.num_rollout_workers
+
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
         os.environ["WANDB_SILENT"] = "true"
@@ -172,14 +180,22 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
-        num_rollout_workers=cmd_args.num_rollout_workers,
+        num_rollout_workers=num_rollout_workers,
     )
 
 
 def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+    if cmd_args.run_infix == "" and cmd_args.use_dummy_api:
+        run_infix = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    elif cmd_args.run_infix == "":
+        raise ValueError(
+            "When not using the dummy API, the run_infix argument must be provided."
+        )
+    else:
+        run_infix = cmd_args.run_infix
     if combo_index is None:
-        return f"ei_cv_{cmd_args.run_infix}"
-    return f"ei_cv_{cmd_args.run_infix}_{combo_index}"
+        return f"ei_cv_{run_infix}"
+    return f"ei_cv_{run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
@@ -197,15 +213,33 @@ if __name__ == "__main__":
         run_id_fn=run_id_fn,
         run_preparer_fn=run_preparer_fn,
         experiment_name="EI_VC",
+        arg_parser_description="Run Code Validation experiments with Expert Iteration, "
+        "running from a hyperparameter grid in sequence.",
         default_wandb_project=WANDB_CV_PROJECT,
         allow_resuming_wandb_run=True,
+        add_run_infix_argument=False,
+    )
+
+    experiment.parser.add_argument(
+        "run_infix",
+        type=str,
+        help="Infix to add to the run ID to distinguish between different runs. Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
+        nargs="?",
+        default="",
     )
 
     experiment.parser.add_argument(
         "--num-rollout-workers",
         type=int,
-        default=4,
-        help="Number of workers to use for sampling rollouts.",
+        default=None,
+        help="Number of workers to use for sampling rollouts. Defaults 0 when using dummy API, 8 otherwise.",
+    )
+
+    experiment.parser.add_argument(
+        "--dummy",
+        action="store_true",
+        dest="use_dummy_api",
+        help="Whether to use the dummy API for the agents. Useful for testing.",
     )
 
     experiment.run()
