@@ -275,6 +275,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 round_id=data["round"][batch_id],
                 question=data["question"][batch_id],
                 solution=data["solution"][batch_id],
+                seed=int(data["seed"][batch_id]),
                 verdict=data["verdict"][batch_id],
             )
             if parsed_completion.next_messages is None:
@@ -477,6 +478,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         round_id: int,
         question: str,
         solution: str,
+        seed: int,
         verdict: int,
     ) -> _ParsedChatCompletion:
         """Generate the next message and decision for the agent, with retries.
@@ -503,6 +505,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The problem text.
         solution : str
             The proposed solution text.
+        seed : int
+            The per-environment seed.
         verdict : int
             The verdict that the prover is arguing for, where 0 means "reject" and 1
             means "accept". (Currently ignored.)
@@ -532,6 +536,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             round_id=round_id,
             question=question,
             solution=solution,
+            seed=seed,
         )
 
         # Try the generation a number of times
@@ -593,6 +598,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         round_id: int,
         question: str,
         solution: str,
+        seed: int,
         ensure_last_message_is_assistant: bool = False,
     ) -> list[dict[str, str]]:
         """Construct the chat history ready to feed to the API.
@@ -611,6 +617,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The name of the message channel.
         question : str
             The problem text.
+        solution : str
+            The proposed solution text.
+        seed : int
+            The per-environment seed.
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
@@ -669,7 +679,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 no_message = False
 
             for channel_name in self.protocol_handler.get_agent_ordered_channels(
-                self.agent_name
+                self.agent_name, seed=seed + round_id
             ):
 
                 # If the agent cannot see the channel, skip
@@ -867,6 +877,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     round_id=rollout_final_state["round"],
                     question=rollout_final_state["question"],
                     solution=rollout_final_state["solution"],
+                    seed=int(rollout_final_state["seed"]),
                     ensure_last_message_is_assistant=True,
                 )
             except AgentNotActiveInChannelError:
