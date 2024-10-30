@@ -138,6 +138,7 @@ class Trainer(ABC):
                 CHECKPOINT_STATE_ARTIFACT_TYPE,
             )
             artifact.add_file(self.checkpoint_state_path)
+            artifact.add_file(self.checkpoint_params_path)
             self.settings.wandb_run.log_artifact(artifact)
 
         if log:
