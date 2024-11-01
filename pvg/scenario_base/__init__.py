@@ -40,6 +40,7 @@ from .agents import (
     CombinedAgentPart,
     CombinedTensorDictAgentPart,
     CombinedWhole,
+    PureTextCombinedWhole,
     CombinedBody,
     CombinedPolicyHead,
     CombinedValueHead,

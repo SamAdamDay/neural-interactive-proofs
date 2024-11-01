@@ -33,6 +33,7 @@ from jaxtyping import Float, Int, Bool
 from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
+from pvg.scenario_base.environment import PureTextEnvironment
 from pvg.utils.types import TorchDevice
 from pvg.utils.hyper_params import get_agent_part_flags
 from pvg.utils.torch import apply_orthogonal_initialisation
@@ -367,11 +368,28 @@ class PureTextWholeAgent(WholeAgent, ABC):
         return super().visible_message_channel_mask.cpu().detach().numpy()
 
     @abstractmethod
-    def forward(self, data: NestedArrayDict) -> NestedArrayDict:
-        """Forward pass through the agent"""
+    def forward(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Forward pass through the agent
 
-    def __call__(self, data: NestedArrayDict) -> NestedArrayDict:
-        return self.forward(data)
+        Parameters
+        ----------
+        data : NestedArrayDict
+            The input to the agent.
+        environment : PureTextEnvironment
+            The environment the agent is interacting with.
+
+        Returns
+        -------
+        output : NestedArrayDict
+            The output of the forward pass on the input.
+        """
+
+    def __call__(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        return self.forward(data, environment)
 
     @abstractmethod
     def create_fine_tune_job(self, data: NestedArrayDict):
@@ -641,6 +659,16 @@ class CombinedWhole(CombinedAgentPart, ABC):
             parts=wholes,
         )
         self.wholes = wholes
+
+
+class PureTextCombinedWhole(CombinedWhole, ABC):
+    """Base class for modules which combine whole pure-text agents together."""
+
+    @abstractmethod
+    def forward(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Run a forward pass through all the agents and combine the output."""
 
 
 class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
