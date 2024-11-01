@@ -34,7 +34,7 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         observation_spec["question"] = StringArraySpec(*self.batch_size, "batch")
         observation_spec["solution"] = StringArraySpec(*self.batch_size, "batch")
-        observation_spec["verdict"] = IntArraySpec(*self.batch_size, "batch")
+        observation_spec["prover_stance"] = IntArraySpec(*self.batch_size, "batch")
 
         return observation_spec
 
@@ -44,7 +44,7 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         datapoint["question"] = str(env_state["question"])
         datapoint["solution"] = str(env_state["solution"])
-        datapoint["verdict"] = int(env_state["verdict"])
+        datapoint["prover_stance"] = int(env_state["prover_stance"])
 
         return datapoint
 
@@ -59,6 +59,6 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         env_state["question"] = data_batch["question"]
         env_state["solution"] = data_batch["solution"]
-        env_state["verdict"] = data_batch["verdict"]
+        env_state["prover_stance"] = data_batch["prover_stance"]
 
         return env_state

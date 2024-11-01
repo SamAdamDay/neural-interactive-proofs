@@ -17,6 +17,10 @@ class CommonProtocolParameters(SubParameters):
     ----------
     verifier_first : bool
         Whether the verifier goes first in the protocol.
+    randomize_prover_stance : bool
+        Whether, for each datapoint, the verdict the prover arguing for is randomized.
+        This is only relevant when there is a single prover, and when using a text-based
+        protocol.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
@@ -38,6 +42,7 @@ class CommonProtocolParameters(SubParameters):
     """
 
     verifier_first: bool = True
+    randomize_prover_stance: bool = False
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0

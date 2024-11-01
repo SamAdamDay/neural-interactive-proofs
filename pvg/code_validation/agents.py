@@ -132,7 +132,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         "solution",
         "round",
         "seed",
-        "verdict",
+        "prover_stance",
     ]
     agent_level_out_keys = [
         "message",
@@ -221,8 +221,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 model in each timestep.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
-              "reject" and 1 means "accept".
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+              that the prover is arguing for, where 0 means "reject" and 1 means
+              "accept".
 
         environment : PureTextEnvironment
             The environment in which the agent is running.
@@ -296,7 +297,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 question=data["question"][batch_id],
                 solution=data["solution"][batch_id],
                 seed=int(data["seed"][batch_id]),
-                verdict=data["verdict"][batch_id],
+                prover_stance=data["prover_stance"][batch_id],
             )
             if parsed_completion.next_messages is None:
                 output_data["message"][batch_id] = None
@@ -354,8 +355,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 between the agents in each channel.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
-              "reject" and 1 means "accept".
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+              that the prover is arguing for, where 0 means "reject" and 1 means
+              "accept".
 
         """
 
@@ -502,7 +504,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         question: str,
         solution: str,
         seed: int,
-        verdict: int,
+        prover_stance: int,
     ) -> _ParsedChatCompletion:
         """Generate the next message and decision for the agent, with retries.
 
@@ -530,7 +532,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The proposed solution text.
         seed : int
             The per-environment seed.
-        verdict : int
+        prover_stance : int
             The verdict that the prover is arguing for, where 0 means "reject" and 1
             means "accept". (Currently ignored.)
 
@@ -559,6 +561,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             round_id=round_id,
             question=question,
             solution=solution,
+            prover_stance=prover_stance,
             seed=seed,
         )
 
@@ -622,6 +625,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         round_id: int,
         question: str,
         solution: str,
+        prover_stance: int,
         seed: int,
         ensure_last_message_is_assistant: bool = False,
     ) -> list[PromptMessage]:
@@ -662,12 +666,13 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         """
 
         # First add the system prompt
-        system_prompt = self.system_prompt_template.substitute(
+        system_prompt = self.protocol_handler.get_agent_system_prompt(
+            agent_name=self.agent_name,
             question=question,
             solution=solution,
             max_questions=self.protocol_handler.max_verifier_turns - 1,
             max_response_words=self.agent_params.max_response_words,
-            verdict="accept",
+            agent_stance=prover_stance,
         )
         chat_messages = [dict(role="system", content=system_prompt)]
 
@@ -871,8 +876,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 model in each timestep.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
-              "reject" and 1 means "accept".
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+              that the prover is arguing for, where 0 means "reject" and 1 means
+              "accept".
 
         Returns
         -------
@@ -898,9 +904,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     message_history=rollout_final_state["message_history"],
                     message_agent_id=rollout_final_state["message_agent_id"],
                     raw_message_history=rollout_final_state["raw_message_history"],
-                    round_id=rollout_final_state["round"],
+                    round_id=int(rollout_final_state["round"]),
                     question=rollout_final_state["question"],
                     solution=rollout_final_state["solution"],
+                    prover_stance=int(rollout_final_state["prover_stance"]),
                     seed=int(rollout_final_state["seed"]),
                     ensure_last_message_is_assistant=True,
                 )
@@ -963,8 +970,9 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
                 at a round-channel pair.
             - "question" (...): The problem text.
             - "solution" (...): The proposed solution text.
-            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
-              "reject" and 1 means "accept".
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+                that the prover is arguing for, where 0 means "reject" and 1 means
+                "accept".
 
         environment : PureTextEnvironment
             The environment in which the agents are running.
@@ -979,6 +987,8 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
                 agent.
             - ("agents", "raw_message") (... agent): The raw message generated by the
                 models, before parsing.
+            - ("agents", "prompt") (... agent message field): The prompt used to
+                generate the message.
             - ("agents", "decision") (... agent): The decision made by the agent. This
                 is either 0 (reject), 1 (accept) or 2 (no decision).
             - ("agents", "retry_count") (... agent channel): The number of retries

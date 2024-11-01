@@ -49,6 +49,13 @@ class ProtocolHandler(ABC):
         """The names of the provers in the protocol."""
         return [agent_name for agent_name in self.agent_names if "prover" in agent_name]
 
+    @cached_property
+    def prover_indices(self) -> list[int]:
+        """The indices of the provers in the list of agent names."""
+        return [
+            self.agent_names.index(prover_name) for prover_name in self.prover_names
+        ]
+
     @property
     def verifier_names(self) -> list[str]:
         """The names of the verifiers in the protocol."""
@@ -520,7 +527,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         # Compute the rewards for the other agents and add them
         self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_idx], reward
+            verifier_decision_made, decision[verifier_idx], reward, env_td
         )
 
         # The agent-specific done signal is the same as the shared done signal
@@ -528,14 +535,23 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         return shared_done, agent_done, terminated, reward
 
-    @abstractmethod
     def _include_prover_rewards(
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
     ):
         """Compute the rewards for the other agents and add them to the current reward.
+
+        The default implementation is as follows:
+
+        - If there is one prover, they are rewarded when the verifier guesses "accept".
+        - If there are two provers, the first is rewarded when the verifier guesses
+          "reject" and the second is rewarded when the verifier guesses "accept".
+
+        Implement a custom method for protocols with more than two provers, or for
+        protocols with different reward schemes.
 
         The `reward` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
@@ -549,7 +565,33 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
             verifier.
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
         """
+
+        if len(self.prover_names) > 2:
+            raise NotImplementedError(
+                "The default _include_prover_rewards method only supports protocols "
+                "with two provers. Implement a custom method for protocols with more "
+                "than two provers."
+            )
+
+        if self.hyper_params.protocol_common.shared_reward:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = reward[..., self.verifier_index]
+        else:
+            if len(self.prover_names) == 1:
+                reward[..., self.prover_indices[0]] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * self.hyper_params.protocol_common.prover_reward
+            else:
+                reward[..., self.prover_indices[0]] = (
+                    verifier_decision_made & (verifier_decision == 0)
+                ).float() * self.hyper_params.protocol_common.prover_reward
+                reward[..., self.prover_indices[1]] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * self.hyper_params.protocol_common.prover_reward
 
 
 class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, ABC):

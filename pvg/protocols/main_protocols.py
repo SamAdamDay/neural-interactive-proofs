@@ -104,23 +104,6 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
             elif agent_name == "verifier":
                 return round_id % 2 == 1
 
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        protocol_params = self.hyper_params.protocol_common
-        verifier_index = (..., self.agent_names.index("verifier"))
-        prover_index = (..., self.agent_names.index("prover"))
-
-        if protocol_params.shared_reward:
-            reward[prover_index] = reward[verifier_index]
-        else:
-            reward[prover_index] = (
-                verifier_decision_made & (verifier_decision == 1)
-            ).float() * protocol_params.prover_reward
-
 
 @register_protocol_handler(InteractionProtocolType.ABSTRACT_DECISION_PROBLEM)
 class AdpProtocol(PvgProtocol):
@@ -266,38 +249,6 @@ class DebateProtocol(PvgProtocol):
     def min_message_rounds(self) -> int:
         return self.hyper_params.debate_protocol.min_message_rounds
 
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        """Include rewards for the provers based on the verifier's decision.
-
-        Normally, "prover0" is rewarded if the verifier decides 0, and "prover1" is
-        rewarded if the verifier decides 1.
-
-        If `shared_reward` is set, both provers get the same reward as the verifier.
-
-        Parameters
-        ----------
-        verifier_decision_made : Bool[Tensor, "..."]
-            A boolean mask indicating whether the verifier has made a decision.
-        verifier_decision : Int[Tensor, "..."]
-            The verifier's decision.
-        reward : Float[Tensor, "... agent"]
-            The reward tensor to update. This will be updated in-place.
-        """
-        protocol_params = self.hyper_params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
-
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
@@ -380,22 +331,6 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             return round_id == 0
         elif agent_name == "verifier":
             return round_id == 1
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        protocol_params = self.hyper_params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MNIP)
@@ -502,23 +437,6 @@ class MnipProtocol(PvgProtocol):
                         return False
                 elif agent_name == "verifier":
                     return round_id % 2 == 1
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        protocol_params = self.hyper_params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == 1)
-                ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)

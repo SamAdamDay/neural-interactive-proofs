@@ -16,6 +16,8 @@ import torch
 
 import numpy as np
 
+from einops import reduce
+
 from jaxtyping import Bool
 
 from wandb import Artifact
@@ -811,6 +813,8 @@ class PureTextRlTrainer(Trainer, ABC):
               by to generate the message for each agent in each timestep.
             - ("agents", "decision") (batch round agent) : The decision made by each
               agent in each timestep.
+            - ("agents", "reward") (batch round agent) : The reward received by each
+              agent in each timestep.
 
             The nested array dict also contains keys which specify the datapoint for
             each rollout, as extracted by
@@ -845,6 +849,11 @@ class PureTextRlTrainer(Trainer, ABC):
         raw_message = rollouts["agents", "raw_message"]
         prompt = rollouts["agents", "prompt"]
         decision = rollouts["agents", "decision"]
+        reward = reduce(
+            rollouts["next", "agents", "reward"],
+            "batch round agent -> batch agent",
+            "sum",
+        )
         num_rollouts = rollouts.batch_size[0]
 
         protocol_handler = self.scenario_instance.protocol_handler
@@ -935,6 +944,10 @@ class PureTextRlTrainer(Trainer, ABC):
             metadata = self.train_environment.get_datapoint_from_env_state_as_dict(
                 rollouts[rollout_id, 0]
             )
+            metadata["reward"] = {
+                agent_name: reward[rollout_id, agent_id].item()
+                for agent_id, agent_name in enumerate(agent_names)
+            }
 
             raw_transcripts.append(dict(transcript=raw_transcript, **metadata))
             processed_transcripts.append(
