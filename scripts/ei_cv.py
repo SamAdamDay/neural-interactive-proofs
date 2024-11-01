@@ -46,6 +46,7 @@ param_grid = dict(
     rollout_selection_method=["threshold"],
     weighting_use_replacement=[True],
     shared_reward=[False],
+    randomize_prover_stance=[False],
     min_message_rounds=[0],
     max_message_rounds=[9],
     verifier_first=[True],
@@ -124,6 +125,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
             verifier_first=combo["verifier_first"],
+            randomize_prover_stance=combo["randomize_prover_stance"],
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],

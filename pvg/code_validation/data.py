@@ -36,10 +36,15 @@ class CodeValidationDataset(Dataset, ABC):
     Works with HuggingFace datasets.
 
     The dataset should have the following columns:
+
     - "question": The question text.
     - "solution": The solution text.
-    - "verdict": The verdict which the prover should be arguing for.
     - "y": The label, 1 for correct solutions and 0 for buggy solutions.
+
+    In addition, each datapoint should receive a "prover_stance" which is the verdict
+    that the prover should be arguing for, in single-prover settings under the
+    appropriate hyper-parameters. This can be computed from the (hash of the) solution
+    text.
     """
 
     _main_data: HuggingFaceDataset
@@ -172,7 +177,7 @@ class TestCodeValidationDataset(CodeValidationDataset):
                 yield {
                     "question": f"Question {i}",
                     "solution": f"Solution {i}",
-                    "verdict": 1,
+                    "prover_stance": 1,
                     "y": randint(0, 1),
                 }
 
@@ -228,19 +233,19 @@ class AppsCodeValidationDataset(CodeValidationDataset):
             solution = bytes(solution, "utf-8").decode("unicode_escape")
 
             # Decide on the verdict that the prover should be arguing for
-            verdict = get_hash_parity(solution)
+            prover_stance = get_hash_parity(solution)
 
             return {
                 "question": instance["question"],
                 "solution": solution,
-                "verdict": verdict,
+                "prover_stance": prover_stance,
                 "y": 1,
             }
 
         processed_dataset = raw_dataset.filter(filter_instance)
         processed_dataset = processed_dataset.map(process_instance)
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "verdict", "y"]
+            ["question", "solution", "prover_stance", "y"]
         )
 
         return processed_dataset
@@ -285,7 +290,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["solutions"][solution_index]["solution"],
-                "verdict": get_hash_parity(
+                "prover_stance": get_hash_parity(
                     instance["solutions"][solution_index]["solution"]
                 ),
                 "y": 1,
@@ -298,7 +303,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["buggy_solutions"][solution_index]["solution"],
-                "verdict": get_hash_parity(
+                "prover_stance": get_hash_parity(
                     instance["buggy_solutions"][solution_index]["solution"]
                 ),
                 "y": 0,
@@ -356,7 +361,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         processed_dataset = concatenate_datasets(non_buggy_datasets + buggy_datasets)
 
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "verdict", "y"]
+            ["question", "solution", "prover_stance", "y"]
         )
 
         return processed_dataset
