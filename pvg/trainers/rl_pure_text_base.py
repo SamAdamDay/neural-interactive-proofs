@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Literal, Iterable
-from itertools import repeat
 from multiprocessing import Pool
 from functools import cached_property
 from pathlib import Path
@@ -25,12 +24,9 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
-from pvg.parameters import HyperParameters
-from pvg.factory import ScenarioInstance
-from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base.data import NestedArrayDictDataLoader, NestedArrayDictDataset
-from pvg.scenario_base.environment import PureTextEnvironment
-from pvg.scenario_base.agents import PureTextWholeAgent
+from pvg.scenario_base.data import NestedArrayDictDataLoader
+from pvg.scenario_base.environment import PureTextEnvironment, PromptMessage
+from pvg.scenario_base.agents import PureTextWholeAgent, PureTextCombinedWhole
 from pvg.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
@@ -49,6 +45,8 @@ from pvg.constants import (
     RAW_TRANSCRIPT_ARTIFACT_TYPE,
     PROCESSED_TRANSCRIPT_ARTIFACT_PREFIX,
     PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
+    PROMPTS_ARTIFACT_PREFIX,
+    PROMPTS_ARTIFACT_TYPE,
 )
 
 
@@ -123,7 +121,7 @@ class PureTextRlTrainer(Trainer, ABC):
         }
 
     @property
-    def combined_agent(self) -> PureTextWholeAgent:
+    def combined_agent(self) -> PureTextCombinedWhole:
         """The agents combined into a single operator."""
         return self.scenario_instance.combined_whole
 
@@ -141,6 +139,11 @@ class PureTextRlTrainer(Trainer, ABC):
     def processed_transcripts_dir(self) -> Path:
         """The directory to save the processed transcripts to."""
         return self.checkpoint_base_dir.joinpath("processed_transcripts")
+
+    @property
+    def prompts_dir(self) -> Path:
+        """The directory to save the prompts to."""
+        return self.checkpoint_base_dir.joinpath("prompts")
 
     @property
     def checkpoint_analysis_dir(self) -> Path:
@@ -342,7 +345,7 @@ class PureTextRlTrainer(Trainer, ABC):
         )
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, self.state.iteration)
+        self._save_rollouts(rollouts, self.state.iteration, self.train_environment)
 
         return rollouts
 
@@ -409,7 +412,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats)
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, "test")
+        self._save_rollouts(rollouts, "test", self.test_environment)
 
     def _sample_rollouts(
         self,
@@ -494,7 +497,10 @@ class PureTextRlTrainer(Trainer, ABC):
         return stack_nested_array_dicts(rollout_list, dim=0)
 
     def _save_rollouts(
-        self, rollouts: NestedArrayDict, iteration: int | Literal["test"]
+        self,
+        rollouts: NestedArrayDict,
+        iteration: int | Literal["test"],
+        environment: PureTextEnvironment,
     ):
         """Save the rollouts to the checkpoint directory.
 
@@ -504,10 +510,14 @@ class PureTextRlTrainer(Trainer, ABC):
             The rollouts to save.
         iteration : int | Literal["test"]
             The iteration number, or "test" if the rollouts are from the test set.
+        environment : PureTextEnvironment
+            The environment the rollouts were sampled in.
         """
 
         if self.hyper_params.text_rl.save_transcripts:
-            raw_transcripts, processed_transcripts = self._extract_transcripts(rollouts)
+            raw_transcripts, processed_transcripts, prompts = (
+                self._extract_transcripts_and_prompts(rollouts, environment)
+            )
 
         # If we are running a test run, we don't want to save the rollouts
         if self.settings.test_run:
@@ -533,6 +543,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
             self.raw_transcripts_dir.mkdir(parents=True, exist_ok=True)
             self.processed_transcripts_dir.mkdir(parents=True, exist_ok=True)
+            self.prompts_dir.mkdir(parents=True, exist_ok=True)
 
             if self.hyper_params.text_rl.transcript_format == "yaml":
                 file_extension = "yaml"
@@ -550,6 +561,9 @@ class PureTextRlTrainer(Trainer, ABC):
             processed_transcript_path = self.processed_transcripts_dir.joinpath(
                 f"processed_{iteration}.{file_extension}"
             )
+            prompts_path = self.prompts_dir.joinpath(
+                f"prompts_{iteration}.{file_extension}"
+            )
 
             with open(raw_transcript_path, "w") as f:
                 if self.hyper_params.text_rl.transcript_format == "yaml":
@@ -563,6 +577,12 @@ class PureTextRlTrainer(Trainer, ABC):
                 elif self.hyper_params.text_rl.transcript_format == "json":
                     json.dump(processed_transcripts, f, indent=4)
 
+            with open(prompts_path, "w") as f:
+                if self.hyper_params.text_rl.transcript_format == "yaml":
+                    yaml.dump(prompts, f)
+                elif self.hyper_params.text_rl.transcript_format == "json":
+                    json.dump(prompts, f, indent=4)
+
             # If using W&B, also log the transcripts as artifacts
             if self.settings.wandb_run is not None:
                 self._add_file_to_wandb_artifact(
@@ -575,6 +595,11 @@ class PureTextRlTrainer(Trainer, ABC):
                     f"{self.settings.wandb_run.name}",
                     PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
                     processed_transcript_path,
+                )
+                self._add_file_to_wandb_artifact(
+                    f"{PROMPTS_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                    PROMPTS_ARTIFACT_TYPE,
+                    prompts_path,
                 )
 
     def _load_rollouts(self, iterations: int | Iterable[int]) -> NestedArrayDict:
@@ -755,10 +780,10 @@ class PureTextRlTrainer(Trainer, ABC):
 
         return log_stats
 
-    def _extract_transcripts(
-        self, rollouts: NestedArrayDict
-    ) -> tuple[list[dict], list[dict]]:
-        """Extract the raw and processed transcripts from the rollouts.
+    def _extract_transcripts_and_prompts(
+        self, rollouts: NestedArrayDict, environment: PureTextEnvironment
+    ) -> tuple[list[dict], list[dict], list[list[dict[str, list[PromptMessage]]]]]:
+        """Extract the raw and processed transcripts, and prompts, from the rollouts.
 
         The raw transcript is the sequence of outputs generated by the models, per
         agent, while the processed transcript is the result of processing these and
@@ -782,12 +807,17 @@ class PureTextRlTrainer(Trainer, ABC):
               generated each message in the message history.
             - ("agents", "raw_message") (batch round agent) : The raw message generated
               by each model in each timestep.
+            - ("agents", "prompt") (batch round agent message field) : The prompt used
+              by to generate the message for each agent in each timestep.
             - ("agents", "decision") (batch round agent) : The decision made by each
               agent in each timestep.
 
             The nested array dict also contains keys which specify the datapoint for
             each rollout, as extracted by
             `environment.get_datapoint_from_env_state_as_dict`.
+
+        environment : PureTextEnvironment
+            The environment the rollouts were sampled in.
 
         Returns
         -------
@@ -802,11 +832,18 @@ class PureTextRlTrainer(Trainer, ABC):
             value at "transcript" is a list of dictionaries whose keys are
             `f"{active_agent_name}@{channel_name}"` and values are the messages in each
             channel.
+        prompts : list[list[dict[str, list[PromptMessage]]]]
+            The prompts used to generate the messages at each timestep. This is a list
+            containing for each batch item a list of dictionaries, one for each round.
+            Each dictionary has the agent names as keys and the prompts used by the
+            agents the as values. The prompts are a list of dictionaries, whose type is
+            specified by the `PromptMessage` class.
         """
 
         message_history = rollouts["message_history"]
         message_agent_id = rollouts["message_agent_id"]
         raw_message = rollouts["agents", "raw_message"]
+        prompt = rollouts["agents", "prompt"]
         decision = rollouts["agents", "decision"]
         num_rollouts = rollouts.batch_size[0]
 
@@ -816,11 +853,13 @@ class PureTextRlTrainer(Trainer, ABC):
 
         raw_transcripts = []
         processed_transcripts = []
+        prompts = []
 
         for rollout_id in range(num_rollouts):
 
             raw_transcript = []
             processed_transcript = []
+            prompts_by_round = []
 
             for round_id in range(self.max_message_rounds):
 
@@ -882,6 +921,17 @@ class PureTextRlTrainer(Trainer, ABC):
                 if processed_transcript_round:
                     processed_transcript.append(processed_transcript_round)
 
+                # Get the prompts used by each agent in this round. If this is empty for
+                # an agent, it means the agent did not message in this round.
+                prompt_round = {}
+                for agent_id, agent_name in enumerate(agent_names):
+                    agent_prompt = environment.prompt_array_to_list(
+                        prompt[rollout_id, round_id, agent_id]
+                    )
+                    if len(agent_prompt) > 0:
+                        prompt_round[agent_name] = agent_prompt
+                prompts_by_round.append(prompt_round)
+
             metadata = self.train_environment.get_datapoint_from_env_state_as_dict(
                 rollouts[rollout_id, 0]
             )
@@ -890,15 +940,16 @@ class PureTextRlTrainer(Trainer, ABC):
             processed_transcripts.append(
                 dict(transcript=processed_transcript, **metadata)
             )
+            prompts.append(prompts_by_round)
 
-        return raw_transcripts, processed_transcripts
+        return raw_transcripts, processed_transcripts, prompts
 
 
 def _sample_single_rollout(
     args: tuple[
         PureTextEnvironment,
         int,
-        PureTextWholeAgent,
+        PureTextCombinedWhole,
         Optional[NestedArrayDict],
     ]
 ) -> NestedArrayDict:
@@ -916,7 +967,7 @@ def _sample_single_rollout(
         The environment to sample a rollout in.
     max_message_rounds : int
         The maximum number of message rounds in the rollout.
-    combined_agent : PureTextWholeAgent
+    combined_agent : PureTextCombinedWhole
         The combined agent to use for the rollout.
     data_batch : NestedArrayDict, optional
         The data batch to use for the rollout. If None, the data batch will be
@@ -938,7 +989,7 @@ def _sample_single_rollout(
         if not done:
 
             # Run the forward pass on all agents to sample actions
-            env_state = combined_agent.forward(env_state)
+            env_state = combined_agent.forward(env_state, environment)
 
             # Step the environment to get the next state. This writes the next state
             # in the "next" sub-dictionary.

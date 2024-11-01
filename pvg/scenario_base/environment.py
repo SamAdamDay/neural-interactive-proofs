@@ -1,7 +1,7 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, ClassVar
+from typing import Optional, Any, TypedDict, NotRequired, Literal
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
@@ -41,6 +41,7 @@ from pvg.protocols import ProtocolHandler
 from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
+from pvg.utils.types import NumpyStringDtype, String
 from pvg.utils.nested_array_dict import (
     NestedArrayDict,
     NumpySpec,
@@ -824,10 +825,49 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         self.rng = torch.manual_seed(seed)
 
 
+class PromptMessage(TypedDict):
+    """A message in the prompt for a language model API.
+
+    The prompt is a list of messages, where each message is a dictionary with keys as
+    follows.
+
+    Attributes
+    ----------
+    role : Literal["system", "assistant", "user"]
+        The role of the message sender.
+    content : str
+        The content of the message.
+    name : str, optional
+        The name of the message sender.
+    """
+
+    role: Literal["system", "assistant", "user"]
+    content: str
+    name: NotRequired[str]
+
+
 class PureTextEnvironment(Environment, ABC):
     """Base for environments which handle non-tokenised text with nested array dicts."""
 
     dataset: NestedArrayDictDataset
+
+    @property
+    def max_prompt_messages(self) -> int:
+        """The maximum number messages which can be sent in a prompt to an agent.
+
+        The prompt for the agent is constructed from the message history, but may be longer
+        than the number of rounds because messages can be split by channel, and system
+        messages can be included.
+
+        This gives a rough upper bound on the number of messages which can be sent in a
+        prompt. Hopefully this is enough to cover all cases.
+        """
+
+        return 2 * (
+            self.protocol_handler.max_message_rounds
+            * self.protocol_handler.num_message_channels
+            + 10
+        )
 
     @property
     @abstractmethod
@@ -886,6 +926,15 @@ class PureTextEnvironment(Environment, ABC):
                         self.num_agents,
                     ),
                     "batch agent",
+                ),
+                prompt=StringArraySpec(
+                    (
+                        *self.batch_size,
+                        self.protocol_handler.num_agents,
+                        self.max_prompt_messages,
+                        len(PromptMessage.__annotations__),
+                    ),
+                    "batch agent message field",
                 ),
                 retry_count=IntArraySpec(
                     (
@@ -1164,6 +1213,92 @@ class PureTextEnvironment(Environment, ABC):
 
         return dict(y=int(env_state["y"]))
 
+    def prompt_list_to_array(
+        self, prompt_list: list[PromptMessage]
+    ) -> String[NDArray, "message field"]:
+        """Convert a prompt in the form of a list of dictionaries to a numpy array.
+
+        Each element of the list is a dictionary with keys defined in `PromptMessage`.
+        We convert this to a numpy array with columns corresponding to the keys in
+        `PromptMessage`.
+
+        Parameters
+        ----------
+        prompt_list : list[PromptMessage]
+            The list of prompts to convert.
+        """
+
+        required_keys = sorted(PromptMessage.__required_keys__)
+        optional_keys = sorted(PromptMessage.__optional_keys__)
+
+        prompt_array = np.full(
+            (
+                self.max_prompt_messages,
+                len(required_keys) + len(optional_keys),
+            ),
+            None,
+            dtype=NumpyStringDtype,
+        )
+
+        for i, prompt in enumerate(prompt_list):
+            for j, key in enumerate(required_keys):
+                prompt_array[i, j] = prompt[key]
+            for j, key in enumerate(optional_keys):
+                if key in prompt:
+                    prompt_array[i, j + len(required_keys)] = prompt[key]
+
+        return prompt_array
+
+    def prompt_array_to_list(
+        self, prompt_array: String[NDArray, "message field"]
+    ) -> list[PromptMessage]:
+        """Convert a prompt in the form of a numpy array to a list of dictionaries.
+
+        Each row of the numpy array corresponds to a message in the prompt, and each
+        column corresponds to a field of the message.
+
+        The prompt array has a fixed number of rows, but the prompt may be shorter. If
+        any required field is None in a row, we take that to indicate the end of the
+        prompt.
+
+        Parameters
+        ----------
+        prompt_array : String[NDArray, "message field"]
+            The numpy array to convert.
+
+        Returns
+        -------
+        prompt_list : list[PromptMessage]
+            The list of prompts.
+        """
+
+        required_keys = sorted(PromptMessage.__required_keys__)
+        optional_keys = sorted(PromptMessage.__optional_keys__)
+
+        prompt_list = []
+        for row in prompt_array:
+            prompt = {}
+
+            any_none = False
+            for key, value in zip(required_keys, row[: len(required_keys)]):
+                prompt[key] = value
+                if value is None:
+                    any_none = True
+                    break
+
+            # If any of the required keys are None, we have reached the end of the
+            # prompt messages
+            if any_none:
+                break
+
+            for key, value in zip(optional_keys, row[len(required_keys) :]):
+                if value is not None:
+                    prompt[key] = value
+
+            prompt_list.append(prompt)
+
+        return prompt_list
+
     def _masked_reset(
         self,
         env_state: NestedArrayDict,
@@ -1194,6 +1329,7 @@ class PureTextEnvironment(Environment, ABC):
         env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
         env_state["message_agent_id"][mask] = -1
+        env_state["raw_message_history"][mask] = None
         env_state["round"][mask] = 0
         env_state["done"][mask] = False
         env_state["agents", "done"][mask] = False
