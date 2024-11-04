@@ -29,14 +29,15 @@ from jaxtyping import Bool
 from openai import OpenAI, APITimeoutError, APIStatusError, RateLimitError
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
 
-from pvg.scenario_base import (
+from pvg.scenario_base.agents import (
     WholeAgent,
     PureTextWholeAgent,
+    PureTextSharedModelGroup,
     RandomWholeAgent,
     CombinedWhole,
     PureTextCombinedWhole,
     Agent,
-    AgentState,
+    PureTextSharedModelGroupState,
 )
 from pvg.scenario_base.environment import PromptMessage, PureTextEnvironment
 from pvg.parameters import (
@@ -71,8 +72,8 @@ class AgentNotActiveInChannelError(Exception):
 
 
 @dataclass
-class OpenAiAgentState(AgentState):
-    """The state of an OpenAI agent.
+class OpenAiSharedModelGroupState(PureTextSharedModelGroupState):
+    """The state of an OpenAI shared model group.
 
     Attributes
     ----------
@@ -153,15 +154,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     @property
     def base_model_name(self) -> str:
         """The base OpenAI model name, before any fine-tuning."""
-        return self.agent_params.model_name
+        return self.shared_model_group.base_model_name
 
     @property
     def model_name(self) -> str:
         """The OpenAI model name, including any fine-tuning."""
-        if self.fine_tuned_model_name is not None:
-            return self.fine_tuned_model_name
-        else:
-            return self.base_model_name
+        return self.shared_model_group.model_name
 
     @property
     def agent_spec(self) -> CodeValidationAgentSpec:
@@ -198,8 +196,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         load_env_once()
 
         self._openai_client: Optional[OpenAI] = None
-        self.fine_tune_job_id: Optional[str] = None
-        self.fine_tuned_model_name: Optional[str] = None
 
     def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
@@ -317,183 +313,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             )
 
         return output_data
-
-    def get_state_dict(self) -> dict:
-        """Get the state dictionary of the agent.
-
-        Returns
-        -------
-        state_dict : dict
-            The state dictionary of the agent.
-        """
-
-        return dict(
-            fine_tune_job_id=self.fine_tune_job_id,
-            fine_tuned_model_name=self.fine_tuned_model_name,
-        )
-
-    def set_state(self, checkpoint: OpenAiAgentState | dict[str, Any]):
-
-        if isinstance(checkpoint, dict):
-            checkpoint = OpenAiAgentState(**checkpoint)
-
-        self.fine_tune_job_id = checkpoint.fine_tune_job_id
-        self.fine_tuned_model_name = checkpoint.fine_tuned_model_name
-
-    def create_fine_tune_job(self, rollouts: NestedArrayDict):
-        """Create a fine-tune job for the agent.
-
-        This method generates a dataset of examples ready to pass to the fine-tune API.
-
-        Parameters
-        ----------
-        rollouts : NestedArrayDict
-            The sampled rollouts. A nested dictionary of arrays with keys:
-
-            - "round" (...): The current round number.
-            - "message_history" (... round channel): The history of messages exchanged
-                between the agents in each channel.
-            - "question" (...): The problem text.
-            - "solution" (...): The proposed solution text.
-            - "prover_stance" (...): When randomizing the prover stance, the verdict
-              that the prover is arguing for, where 0 means "reject" and 1 means
-              "accept".
-
-        """
-
-        if self.agent_params.freeze_agent:
-            self.fine_tune_job_id = "frozen_job_id"
-            return
-
-        fine_tune_dataset = self._build_fine_tune_dataset(rollouts)
-
-        # OpenAI requires at least 10 examples for fine-tuning
-        if len(fine_tune_dataset) < 10:
-            self.fine_tune_job_id = "insufficient_data_job_id"
-            return
-
-        if self.agent_params.use_dummy_api:
-            self.fine_tune_job_id = "dummy_job_id"
-            return
-
-        with TemporaryDirectory() as temp_dir:
-
-            # Write the dataset to a temporary file
-            file_path = Path(temp_dir, "fine_tune_dataset.jsonl")
-            with open(file_path, "w") as f:
-                for example in fine_tune_dataset:
-                    f.write(json.dumps(example) + "\n")
-
-            # Upload the file to OpenAI
-            uploaded_file = self.client.files.create(
-                file=open(file_path, "rb"), purpose="fine-tune"
-            )
-
-        file_id = uploaded_file.id
-
-        if self.agent_params.fine_tune_from_scratch:
-            model_name = self.base_model_name
-        else:
-            model_name = self.model_name
-
-        # Create the fine-tune job
-        while True:
-            try:
-                job = self.client.fine_tuning.jobs.create(
-                    model=model_name,
-                    training_file=file_id,
-                    integrations=[
-                        {
-                            "type": "wandb",
-                            "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
-                        }
-                    ],
-                )
-
-            # If we are day rate limited, sleep for an hour and try again
-            except RateLimitError as e:
-                if e.code == "daily_rate_limit_exceeded":
-                    sleep(60 * 60)
-                    continue
-                else:
-                    raise e
-
-            break
-
-        self.fine_tune_job_id = job.id
-
-    def get_fine_tune_job_status(
-        self,
-    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
-        """Get the status of the fine-tune job"""
-
-        if self.agent_params.use_dummy_api or self.agent_params.freeze_agent:
-            return "succeeded"
-
-        if self.fine_tune_job_id == "insufficient_data_job_id":
-            return "succeeded"
-
-        status = self._get_fine_tune_job().status
-
-        if status in ["validating_files", "queued"]:
-            return "pending"
-        elif status in ["running", "succeeded", "failed", "cancelled"]:
-            return status
-        else:
-            raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
-
-    def get_fine_tune_job_error_repr(self) -> str:
-        """Get a string representation of the error for the fine-tune job"""
-
-        if self.agent_params.use_dummy_api:
-            raise ValueError("Cannot get error for dummy API")
-
-        if self.agent_params.freeze_agent:
-            raise ValueError("Cannot get fine-tune error for frozen agent")
-
-        if self.fine_tune_job_id == "insufficient_data_job_id":
-            raise ValueError("Cannot get error for insufficient data job")
-
-        error = self._get_fine_tune_job().error
-
-        output = f"Code: {error.code}. Message: {error.message}."
-        if error.param is not None:
-            output += f" Parameter: {error.param}."
-
-        if isinstance(error, APIStatusError):
-            output += f" Headers: {error.response.headers}."
-
-        return output
-
-    def switch_to_next_model(self):
-        """Switch to the next model after fine-tuning"""
-
-        if self.fine_tune_job_id is None:
-            raise ValueError("Fine-tune job ID not set")
-
-        if self.agent_params.use_dummy_api:
-            self.fine_tuned_model_name = "dummy_model_name"
-            return
-
-        # If we didn't fine-tune due to insufficient data, don't switch models
-        if self.fine_tune_job_id == "insufficient_data_job_id":
-            return
-
-        if self.agent_params.freeze_agent:
-            self.fine_tuned_model_name = None
-            return
-
-        job = self._get_fine_tune_job()
-
-        if job.status != "succeeded":
-            raise ValueError(
-                f"Cannot switch to next model: fine-tune job status is {job.status!r}"
-            )
-
-        if job.fine_tuned_model is None:
-            raise ValueError("Fine-tuned model name not set in fine-tune job")
-
-        self.fine_tuned_model_name = job.fine_tuned_model
 
     def _generate_next_message_and_decision(
         self,
@@ -855,7 +674,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 ]
                 return "\n".join(response)
 
-    def _build_fine_tune_dataset(
+    def build_fine_tune_dataset(
         self, rollouts: NestedArrayDict
     ) -> list[dict[Literal["messages"], list[PromptMessage]]]:
         """Build the dataset for fine-tuning the agent given sampled rollouts
@@ -918,14 +737,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         return fine_tune_dataset
 
-    def _get_fine_tune_job(self) -> OpenAIFineTuningJob:
-        """Get the fine-tune job from the OpenAI API"""
-
-        if self.fine_tune_job_id is None:
-            raise ValueError("Fine-tune job ID not set")
-
-        return self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
-
     def __getstate__(self) -> dict[str, Any]:
         """Get the state of the object for pickling.
 
@@ -941,6 +752,248 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         state["_openai_client"] = None
 
         return state
+
+
+@register_scenario_class(
+    CV_SCENARIO, PureTextSharedModelGroup, {"model_provider": "OpenAI"}
+)
+class OpenAiSharedModelGroup(PureTextSharedModelGroup):
+    """A class representing a group of code validation OpenAI agents sharing a model."""
+
+    state_class: ClassVar[type[PureTextSharedModelGroupState]] = (
+        OpenAiSharedModelGroupState
+    )
+
+    agent_wholes: dict[str, OpenAiWholeAgent]
+
+    @property
+    def client(self) -> OpenAI:
+        """The OpenAI client to use for interacting with the OpenAI API."""
+        if self._openai_client is None:
+            self._openai_client = OpenAI()
+        return self._openai_client
+
+    def __init__(
+        self,
+        hyper_params: HyperParameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler | CodeValidationProtocolHandler,
+        agent_wholes: dict[str, OpenAiWholeAgent],
+        group_name: str,
+    ):
+
+        if not isinstance(protocol_handler, CodeValidationProtocolHandler):
+            raise NotImplementedError(
+                f"The code validation scenario is not implemented for "
+                f"{hyper_params.scenario}, because a `CodeValidationProtocolHandler` "
+                f"subclass has not been registered."
+            )
+
+        super().__init__(
+            hyper_params, settings, protocol_handler, agent_wholes, group_name
+        )
+
+        # Make sure the environment variables are loaded, so that we can access the
+        # OpenAI API key
+        load_env_once()
+
+        self._openai_client: Optional[OpenAI] = None
+
+    def create_fine_tune_job(self, rollouts_per_agent: dict[str, NestedArrayDict]):
+        """Create a fine-tune job for the agent.
+
+        This method generates a dataset of examples ready to pass to the fine-tune API.
+
+        Parameters
+        ----------
+        rollouts_per_agent: dict[str, NestedArrayDict]
+            The sampled rollouts for each agent. Each is a nested dictionary of arrays
+            with keys:
+
+            - "round" (...): The current round number.
+            - "message_history" (... round channel): The history of messages exchanged
+                between the agents in each channel.
+            - "question" (...): The problem text.
+            - "solution" (...): The proposed solution text.
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+              that the prover is arguing for, where 0 means "reject" and 1 means
+              "accept".
+
+        """
+
+        if self.shared_agent_params.freeze_agent:
+            self.fine_tune_job_id = "frozen_job_id"
+            return
+
+        fine_tune_datasets = {
+            agent_name: agent_whole.build_fine_tune_dataset(
+                rollouts_per_agent[agent_name]
+            )
+            for agent_name, agent_whole in self.agent_wholes.items()
+        }
+
+        fine_tune_dataset = sum(fine_tune_datasets.values(), [])
+
+        # OpenAI requires at least 10 examples for fine-tuning
+        if len(fine_tune_dataset) < 10:
+            self.fine_tune_job_id = "insufficient_data_job_id"
+            return
+
+        if self.shared_agent_params.use_dummy_api:
+            self.fine_tune_job_id = "dummy_job_id"
+            return
+
+        with TemporaryDirectory() as temp_dir:
+
+            # Write the dataset to a temporary file
+            file_path = Path(temp_dir, "fine_tune_dataset.jsonl")
+            with open(file_path, "w") as f:
+                for example in fine_tune_dataset:
+                    f.write(json.dumps(example) + "\n")
+
+            # Upload the file to OpenAI
+            uploaded_file = self.client.files.create(
+                file=open(file_path, "rb"), purpose="fine-tune"
+            )
+
+        file_id = uploaded_file.id
+
+        if self.shared_agent_params.fine_tune_from_scratch:
+            model_name = self.base_model_name
+        else:
+            model_name = self.model_name
+
+        # Create the fine-tune job
+        while True:
+            try:
+                job = self.client.fine_tuning.jobs.create(
+                    model=model_name,
+                    training_file=file_id,
+                    integrations=[
+                        {
+                            "type": "wandb",
+                            "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
+                        }
+                    ],
+                )
+
+            # If we are day rate limited, sleep for an hour and try again
+            except RateLimitError as e:
+                if e.code == "daily_rate_limit_exceeded":
+                    sleep(60 * 60)
+                    continue
+                else:
+                    raise e
+
+            break
+
+        self.fine_tune_job_id = job.id
+
+    def get_fine_tune_job_status(
+        self,
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+        """Get the status of the fine-tune job"""
+
+        if (
+            self.shared_agent_params.use_dummy_api
+            or self.shared_agent_params.freeze_agent
+        ):
+            return "succeeded"
+
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            return "succeeded"
+
+        status = self._get_fine_tune_job().status
+
+        if status in ["validating_files", "queued"]:
+            return "pending"
+        elif status in ["running", "succeeded", "failed", "cancelled"]:
+            return status
+        else:
+            raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
+
+    def get_fine_tune_job_error_repr(self) -> str:
+        """Get a string representation of the error for the fine-tune job"""
+
+        if self.shared_agent_params.use_dummy_api:
+            raise ValueError("Cannot get error for dummy API")
+
+        if self.shared_agent_params.freeze_agent:
+            raise ValueError("Cannot get fine-tune error for frozen agent")
+
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            raise ValueError("Cannot get error for insufficient data job")
+
+        error = self._get_fine_tune_job().error
+
+        output = f"Code: {error.code}. Message: {error.message}."
+        if error.param is not None:
+            output += f" Parameter: {error.param}."
+
+        if isinstance(error, APIStatusError):
+            output += f" Headers: {error.response.headers}."
+
+        return output
+
+    def switch_to_next_model(self):
+        """Switch to the next model after fine-tuning"""
+
+        if self.fine_tune_job_id is None:
+            raise ValueError("Fine-tune job ID not set")
+
+        if self.shared_agent_params.use_dummy_api:
+            self.fine_tuned_model_name = "dummy_model_name"
+            return
+
+        # If we didn't fine-tune due to insufficient data, don't switch models
+        if self.fine_tune_job_id == "insufficient_data_job_id":
+            return
+
+        if self.shared_agent_params.freeze_agent:
+            self.fine_tuned_model_name = None
+            return
+
+        job = self._get_fine_tune_job()
+
+        if job.status != "succeeded":
+            raise ValueError(
+                f"Cannot switch to next model: fine-tune job status is {job.status!r}"
+            )
+
+        if job.fine_tuned_model is None:
+            raise ValueError("Fine-tuned model name not set in fine-tune job")
+
+        self.fine_tuned_model_name = job.fine_tuned_model
+
+    def get_state_dict(self) -> dict:
+        """Get the state dictionary of the agent.
+
+        Returns
+        -------
+        state_dict : dict
+            The state dictionary of the agent.
+        """
+
+        return dict(
+            fine_tune_job_id=self.fine_tune_job_id,
+            fine_tuned_model_name=self.fine_tuned_model_name,
+        )
+
+    def set_state(self, checkpoint: OpenAiSharedModelGroupState | dict[str, Any]):
+
+        if isinstance(checkpoint, dict):
+            checkpoint = OpenAiSharedModelGroupState(**checkpoint)
+
+        self.fine_tune_job_id = checkpoint.fine_tune_job_id
+        self.fine_tuned_model_name = checkpoint.fine_tuned_model_name
+
+    def _get_fine_tune_job(self) -> OpenAIFineTuningJob:
+        """Get the fine-tune job from the OpenAI API"""
+
+        if self.fine_tune_job_id is None:
+            raise ValueError("Fine-tune job ID not set")
+
+        return self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
 
 
 @register_scenario_class(CV_SCENARIO, RandomWholeAgent)
@@ -1132,4 +1185,6 @@ class CodeValidationAgent(Agent):
 
     agent_params: ClassVar[CodeValidationAgentParameters | RandomAgentParameters]
 
-    agent_state_class: ClassVar[type[OpenAiAgentState]] = OpenAiAgentState
+    agent_state_class: ClassVar[type[OpenAiSharedModelGroupState]] = (
+        OpenAiSharedModelGroupState
+    )

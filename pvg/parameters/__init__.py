@@ -81,6 +81,7 @@ from .agents import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    PureTextAgentParameters,
     CodeValidationAgentParameters,
     AgentsParameters,
 )

@@ -6,6 +6,7 @@ from multiprocessing import Pool
 from functools import cached_property
 from pathlib import Path
 import pickle
+import dataclasses
 from dataclasses import dataclass
 import json
 from time import sleep
@@ -28,7 +29,12 @@ import wandb.errors
 
 from pvg.scenario_base.data import NestedArrayDictDataLoader
 from pvg.scenario_base.environment import PureTextEnvironment, PromptMessage
-from pvg.scenario_base.agents import PureTextWholeAgent, PureTextCombinedWhole
+from pvg.scenario_base.agents import (
+    PureTextWholeAgent,
+    PureTextCombinedWhole,
+    PureTextSharedModelGroup,
+    PureTextSharedModelGroupState,
+)
 from pvg.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
@@ -77,6 +83,9 @@ class PureTextRlTrainer(Trainer, ABC):
             "test",
             "done",
         ] = "sample_rollouts"
+        shared_model_groups: dict[str, PureTextSharedModelGroupState] = (
+            dataclasses.field(default_factory=dict)
+        )
 
     _state: State
 
@@ -86,9 +95,9 @@ class PureTextRlTrainer(Trainer, ABC):
         if not hasattr(self, "_state"):
             self._state = self.State()
 
-        # Get the state of the agents to fill out the `agents` field
-        for agent_name, agent_whole in self.scenario_instance.agents.items():
-            self._state.agents[agent_name] = agent_whole.get_state()
+        # Get the state of the agents to fill out the `shared_model_groups` field
+        for group_name, shared_model_group in self.shared_model_groups.items():
+            self._state.shared_model_groups[group_name] = shared_model_group.get_state()
 
         return self._state
 
@@ -96,10 +105,12 @@ class PureTextRlTrainer(Trainer, ABC):
     def state(self, state: State):
         self._state = state
 
-        for agent_name, agent in self.scenario_instance.agents.items():
-            if agent_name not in state.agents:
-                raise ValueError(f"Agent {agent_name!r} not found in state.")
-            agent.set_state(state.agents[agent_name])
+        for group_name, shared_model_group in self.shared_model_groups.items():
+            if group_name not in state.shared_model_groups:
+                raise ValueError(
+                    f"Shared model group {group_name!r} not found in state."
+                )
+            shared_model_group.set_state(state.shared_model_groups[group_name])
 
     @property
     def train_environment(self) -> PureTextEnvironment:
@@ -121,6 +132,11 @@ class PureTextRlTrainer(Trainer, ABC):
             agent_name: agent.whole
             for agent_name, agent in self.scenario_instance.agents.items()
         }
+
+    @cached_property
+    def shared_model_groups(self) -> dict[str, PureTextSharedModelGroup]:
+        """The agents grouped by having a shared model."""
+        return self.scenario_instance.shared_model_groups
 
     @property
     def combined_agent(self) -> PureTextCombinedWhole:
@@ -381,16 +397,16 @@ class PureTextRlTrainer(Trainer, ABC):
         while True:
 
             num_successful_jobs = 0
-            for agent_name, agent_whole in self.agent_wholes.items():
-                if agent_whole.get_fine_tune_job_status() == "succeeded":
+            for group_name, shared_model_group in self.shared_model_groups.items():
+                if shared_model_group.get_fine_tune_job_status() == "succeeded":
                     num_successful_jobs += 1
-                elif agent_whole.get_fine_tune_job_status() == "failed":
+                elif shared_model_group.get_fine_tune_job_status() == "failed":
                     raise RuntimeError(
-                        f"Fine-tune job for {agent_name!r} failed. "
-                        f"{agent_whole.get_fine_tune_job_error_repr()}"
+                        f"Fine-tune job for group {group_name!r} failed. "
+                        f"{shared_model_group.get_fine_tune_job_error_repr()}"
                     )
 
-            if num_successful_jobs == len(self.agent_wholes):
+            if num_successful_jobs == len(self.shared_model_groups):
                 self.settings.logger.info("All fine-tune jobs succeeded")
                 break
 
@@ -398,8 +414,8 @@ class PureTextRlTrainer(Trainer, ABC):
             sleep(60)
 
         # Make all the agents use the new, fine-tuned models
-        for agent_name, agent_whole in self.agent_wholes.items():
-            agent_whole.switch_to_next_model()
+        for shared_model_group in self.shared_model_groups.values():
+            shared_model_group.switch_to_next_model()
 
     def _stage_run_test_loop(self):
         """Training stage: run the test loop."""
