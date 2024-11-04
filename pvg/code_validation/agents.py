@@ -1049,6 +1049,22 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         return self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
 
+    def __getstate__(self) -> dict[str, Any]:
+        """Get the state of the object for pickling.
+
+        We don't pickle the OpenAI client, as it is not picklable.
+
+        Returns
+        -------
+        state : dict[str, any]
+            The state of the object.
+        """
+
+        state = self.__dict__
+        state["_openai_client"] = None
+
+        return state
+
 
 @register_scenario_class(CV_SCENARIO, RandomWholeAgent)
 class CodeValidationRandomAgentPolicyHead(PureTextWholeAgent, RandomWholeAgent):
