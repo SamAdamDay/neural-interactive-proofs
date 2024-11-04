@@ -1,7 +1,7 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, TypedDict, NotRequired, Literal
+from typing import Optional, Any, Literal
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
@@ -51,6 +51,7 @@ from pvg.utils.nested_array_dict import (
     FloatArraySpec,
     BoolArraySpec,
 )
+from pvg.utils.future import TypedDict, NotRequired
 
 
 class Environment(ABC):

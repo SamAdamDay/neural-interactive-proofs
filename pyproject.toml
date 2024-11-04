@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "pvg"
 version = "0.0.1"
 
+[tool.black]
+extend-exclude = "pvg/utils/future/typing.py"
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -35,6 +38,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "pvg/utils/future/typing.py",
 ]
 
 # Same as Black.
