@@ -25,7 +25,12 @@ from torch import nn
 
 import wandb
 
-from pvg.parameters import HyperParameters, ScenarioType, TrainerType
+from pvg.parameters import (
+    HyperParameters,
+    ScenarioType,
+    TrainerType,
+    PureTextAgentParameters,
+)
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import (
     Dataset,
@@ -48,6 +53,7 @@ from pvg.scenario_base.agents import (
     CombinedValueHead,
     CombinedWhole,
     Agent,
+    PureTextSharedModelGroup,
 )
 from pvg.scenario_base.environment import Environment
 from pvg.scenario_base.pretrained_models import get_pretrained_model_class
@@ -189,6 +195,10 @@ class ScenarioInstance:
         The combined policy head of the agents, if the agents are combined.
     combined_value_head : Optional[CombinedValueHead]
         The combined value head of the agents, if the agents are combined.
+    shared_model_groups : Optional[dict[str, PureTextSharedModelGroup]]
+        The shared model groups for pure-text environments. Agents in the same group
+        share the same model. A dictionary with the group name as the key and the shared
+        model group as the value.
     """
 
     train_dataset: Dataset
@@ -204,6 +214,7 @@ class ScenarioInstance:
     combined_value_body: Optional[CombinedBody] = None
     combined_policy_head: Optional[CombinedPolicyHead] = None
     combined_value_head: Optional[CombinedValueHead] = None
+    shared_model_groups: Optional[dict[str, PureTextSharedModelGroup]] = None
 
 
 def build_scenario_instance(
@@ -227,7 +238,9 @@ def build_scenario_instance(
         The constructed scenario instance, which holds the components of the scenario.
     """
 
-    def get_scenario_class(base_class: type, agent_name: str | None = None) -> type:
+    def get_scenario_class(
+        base_class: type[T], agent_name: str | None = None
+    ) -> type[T]:
         """Get the class for a component based on the scenario and base class.
 
         Parameters
@@ -245,7 +258,8 @@ def build_scenario_instance(
 
         if (hyper_params.scenario, base_class) not in SCENARIO_CLASS_REGISTRY:
             raise NotImplementedError(
-                f"Scenario {hyper_params.scenario} does not have a class for {base_class}."
+                f"Scenario {hyper_params.scenario} does not have a class for "
+                f"{base_class}."
             )
 
         param_selector = SCENARIO_CLASS_REGISTRY[(hyper_params.scenario, base_class)]
@@ -259,8 +273,8 @@ def build_scenario_instance(
             return param_selector.select(params_to_select)
         except NotImplementedError as e:
             raise NotImplementedError(
-                f"No class found for {hyper_params.scenario} and {base_class} matching any "
-                f"filter."
+                f"No class found for {hyper_params.scenario} and {base_class} matching "
+                f"any filter."
             ) from e
 
     # Set the random seed
@@ -288,6 +302,54 @@ def build_scenario_instance(
 
     # Build the agents
     agents = _build_agents(hyper_params, settings, protocol_handler, get_scenario_class)
+
+    # Build the shared model groups if applicable
+    if all(
+        isinstance(agent_params, PureTextAgentParameters)
+        for agent_params in hyper_params.agents.values()
+    ):
+
+        agent_whole_groups: defaultdict[str, list[WholeAgent]] = defaultdict(list)
+        scenario_classes: dict[str, type[PureTextSharedModelGroup]] = {}
+
+        for agent_name, agent_params in hyper_params.agents.items():
+
+            agent_params: PureTextAgentParameters
+
+            # If the `shared_model_group` is None, the group name is the agent name
+            if agent_params.shared_model_group is None:
+                group_name = agent_name
+            else:
+                group_name = agent_params.shared_model_group
+
+            agent_whole_groups[group_name].append(agents[agent_name].whole)
+
+            # Get the class used to build the shared model group, and check that all
+            # agents in the group use the same class
+            if group_name not in scenario_classes:
+                scenario_classes[group_name] = get_scenario_class(
+                    PureTextSharedModelGroup, agent_name=agent_name
+                )
+            elif scenario_classes[group_name] != get_scenario_class(
+                PureTextSharedModelGroup, agent_name=agent_name
+            ):
+                raise ValueError(
+                    f"Shared model group {group_name!r} has different "
+                    f"`PureTextSharedModelGroup` classes registered for different "
+                    f"agents."
+                )
+
+        shared_model_groups: dict[str, PureTextSharedModelGroup] = {}
+        for group_name, group_agent_wholes in agent_whole_groups.items():
+            shared_model_groups[group_name] = scenario_classes[group_name](
+                hyper_params=hyper_params,
+                settings=settings,
+                protocol_handler=protocol_handler,
+                agent_wholes=group_agent_wholes,
+                group_name=group_name,
+            )
+    else:
+        shared_model_groups = None
 
     # Add pretrained embeddings to the datasets
     if isinstance(train_dataset, TensorDictDataset) and isinstance(
@@ -322,6 +384,7 @@ def build_scenario_instance(
         agents=agents,
         protocol_handler=protocol_handler,
         message_regressor=message_regressor,
+        shared_model_groups=shared_model_groups,
         **additional_rl_components,
     )
 

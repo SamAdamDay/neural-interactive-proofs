@@ -30,7 +30,7 @@ from einops import repeat, rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from pvg.parameters import HyperParameters
+from pvg.parameters import HyperParameters, PureTextAgentParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
 from pvg.scenario_base.environment import PureTextEnvironment
@@ -360,6 +360,8 @@ class WholeAgent(AgentPart, ABC):
 class PureTextWholeAgent(WholeAgent, ABC):
     """Base class for whole agents which process text input and call APIs."""
 
+    shared_model_group: Optional["PureTextSharedModelGroup"] = None
+    agent_params: PureTextAgentParameters
     _visible_message_channel_mask: Optional[Bool[np.ndarray, "channel"]] = None
 
     @cached_property
@@ -386,14 +388,157 @@ class PureTextWholeAgent(WholeAgent, ABC):
             The output of the forward pass on the input.
         """
 
+    @abstractmethod
+    def build_fine_tune_dataset(self, rollouts: NestedArrayDict) -> list:
+        """Build a dataset for fine-tuning the agent from sampled rollouts.
+
+        This method generates a dataset of examples ready to pass to the fine-tune API.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The sampled rollouts.
+
+        Returns
+        -------
+        fine_tune_dataset : list
+            The dataset for fine-tuning the agent.
+        """
+
     def __call__(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         return self.forward(data, environment)
 
+
+@dataclass
+class PureTextSharedModelGroupState(ABC):
+    """Base class for storing all the data needed to restore a shared model group."""
+
+
+class PureTextSharedModelGroup(ABC):
+    """A class representing a group of pure text agents which share the same model
+
+    The shared model is fine-tuned on the data from all agents in the group.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    agent_wholes : Iterable[PureTextWholeAgent]
+        The agents in the shared model group.
+    group_name : str
+        The name of the shared model group.
+    """
+
+    state_class: ClassVar[type[PureTextSharedModelGroupState]] = (
+        PureTextSharedModelGroupState
+    )
+
+    @dataclass
+    class SharedAgentParams:
+        """The parameters shared by all agents in the group."""
+
+        model_name: str
+        freeze_agent: bool
+        use_dummy_api: bool
+        fine_tune_from_scratch: bool
+
+    @property
+    def model_name(self) -> str:
+        """The current model name, which may be the base model or a fine-tuned model."""
+        if self.fine_tuned_model_name is not None:
+            return self.fine_tuned_model_name
+        else:
+            return self.base_model_name
+
+    def __init__(
+        self,
+        hyper_params: HyperParameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        agent_wholes: Iterable[PureTextWholeAgent],
+        group_name: str,
+    ):
+        self.hyper_params = hyper_params
+        self.settings = settings
+        self.protocol_handler = protocol_handler
+        self.group_name = group_name
+
+        self.agent_wholes = {agent.agent_name: agent for agent in agent_wholes}
+        self.agent_names = list(self.agent_wholes.keys())
+
+        shared_agent_params = {}
+        for agent in agent_wholes:
+
+            # Check that the agent's shared_model_group attribute is set correctly
+            if (
+                agent.agent_params.shared_model_group is not None
+                and agent.agent_params.shared_model_group != self.group_name
+            ):
+                raise ValueError(
+                    f"Tried to create a shared model group named {group_name!r} "
+                    f"containing agent {agent.agent_name!r}, but its "
+                    f"`shared_model_group` attribute is set to "
+                    f"{agent.agent_params.shared_model_group!r}."
+                )
+            elif (
+                agent.agent_params.shared_model_group is None
+                and group_name != agent.agent_name
+            ):
+                raise ValueError(
+                    f"Tried to create a shared model group named {group_name!r} "
+                    f"containing agent {agent.agent_name!r}, but its "
+                    f"`shared_model_group` attribute is not set."
+                )
+
+            # Get the value of the shared agent parameters and check that they are the
+            # same for all agents in the group
+            for shared_agent_param_field in fields(self.SharedAgentParams):
+                param_name = shared_agent_param_field.name
+                if param_name not in shared_agent_params:
+                    shared_agent_params[param_name] = getattr(
+                        agent.agent_params, param_name
+                    )
+                elif (
+                    getattr(agent.agent_params, param_name)
+                    != shared_agent_params[param_name]
+                ):
+                    raise ValueError(
+                        f"All agents in a shared model group must have the same "
+                        f"{param_name!r} parameter, but got "
+                        f"{shared_agent_params[param_name]!r} for agent "
+                        f"{self.agent_names[0]!r} and "
+                        f"{getattr(agent.agent_params, param_name)!r} for "
+                        f"agent {agent.agent_name!r}."
+                    )
+
+            # Set the agent's shared_model_group attribute
+            if agent.shared_model_group is not None:
+                raise ValueError(
+                    f"Agent {agent.agent_name} is already in a shared model group."
+                )
+            agent.shared_model_group = self
+
+        self.shared_agent_params = self.SharedAgentParams(**shared_agent_params)
+        self.base_model_name = self.shared_agent_params.model_name
+
+        self.fine_tune_job_id: Optional[str] = None
+        self.fine_tuned_model_name: Optional[str] = None
+
     @abstractmethod
-    def create_fine_tune_job(self, data: NestedArrayDict):
-        """Create a fine-tune job for the agent given sampled rollouts"""
+    def create_fine_tune_job(self, data_per_agent: dict[str, NestedArrayDict]):
+        """Create a fine-tune job for the agent group given sampled rollouts
+
+        Parameters
+        ----------
+        data_per_agent : dict[str, NestedArrayDict]
+            The data for each agent in the group, sampled from the environment.
+        """
 
     @abstractmethod
     def get_fine_tune_job_status(
@@ -408,6 +553,37 @@ class PureTextWholeAgent(WholeAgent, ABC):
     @abstractmethod
     def switch_to_next_model(self):
         """Switch to the next model after fine-tuning"""
+
+    def set_state(self, checkpoint: PureTextSharedModelGroupState):
+        """Set the state of the shared model group from a checkpoint.
+
+        This method should be overridden by subclasses to restore the state of the
+        shared model group from a checkpoint.
+
+        Parameters
+        ----------
+        checkpoint : AgentCheckpoint
+            The checkpoint to restore the state from.
+        """
+
+    def get_state_dict(self) -> dict:
+        """Get the state of the shared model group as a dict.
+
+        This method should be implemented by subclasses capable of saving their state.
+
+        Returns
+        -------
+        state_dict : dict
+            The state of the shared model group.
+        """
+        raise NotImplementedError(
+            f"Getting the agent state is not implemented for "
+            f"{self.__class__.__name__}"
+        )
+
+    def get_state(self) -> PureTextSharedModelGroupState:
+        """Get the state of the shared model group."""
+        return self.state_class(**self.get_state_dict())
 
 
 class RandomWholeAgent(WholeAgent, ABC):

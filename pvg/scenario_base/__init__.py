@@ -28,6 +28,8 @@ from .agents import (
     TensorDictDummyAgentPartMixin,
     WholeAgent,
     PureTextWholeAgent,
+    PureTextSharedModelGroup,
+    PureTextSharedModelGroupState,
     RandomWholeAgent,
     AgentBody,
     AgentHead,

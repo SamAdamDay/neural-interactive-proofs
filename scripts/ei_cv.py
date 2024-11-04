@@ -41,6 +41,7 @@ param_grid = dict(
     prover_temperature=[None],
     prover_top_p=[None],
     freeze_prover=[False],
+    provers_share_model=[False],
     fine_tune_from_scratch=[False],
     fine_tune_on_all_previous_rollouts=[False],
     rollout_selection_method=["threshold"],
@@ -76,6 +77,11 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         freeze_agent=combo["freeze_prover"],
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
     )
+
+    if combo["provers_share_model"]:
+        prover_params_dict["shared_model_group"] = "provers_group"
+    else:
+        prover_params_dict["shared_model_group"] = None
 
     if combo["interaction_protocol"] in [
         InteractionProtocolType.PVG,

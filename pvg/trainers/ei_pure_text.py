@@ -31,16 +31,21 @@ class PureTextEiTrainer(PureTextRlTrainer):
             The rollouts sampled in this iteration.
         """
 
-        for agent_name, agent_whole in self.agent_wholes.items():
+        for group_name, shared_model_group in self.shared_model_groups.items():
 
-            # Select the rollouts to fine-tune on
-            selected_rollouts = self._select_rollouts_for_fine_tuning(
-                rollouts, agent_name
+            # Select the rollouts to fine-tune on for each agent in the shared model
+            # group
+            selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
+            for agent_name in shared_model_group.agent_names:
+                selected_rollouts_per_agent[agent_name] = (
+                    self._select_rollouts_for_fine_tuning(rollouts, agent_name)
+                )
+
+            self.settings.logger.info(
+                f"Creating fine-tune job for group {group_name!r}"
             )
 
-            # Create a fine-tune job for these rollouts
-            self.settings.logger.info(f"Creating fine-tune job for {agent_name!r}")
-            agent_whole.create_fine_tune_job(selected_rollouts)
+            shared_model_group.create_fine_tune_job(selected_rollouts_per_agent)
 
     def _select_rollouts_for_fine_tuning(
         self, rollouts: NestedArrayDict, agent_name: str
