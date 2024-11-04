@@ -1,0 +1,15 @@
+Your task is to simulate a conversation between $num_agents agents. In the conversation there is a verifier and one or more provers. The verifier is trying to determine whether a piece of Python code is a correct solution to a given programming problem by interacting with the prover(s). The prover(s) will be trying to convince the verifier to accept or reject the code, regardless of its true correctness. The prompts that the agents have been given are as follows.
+
+# Verifier Prompt
+
+$verifier_prompt
+
+# Prover Prompt(s)
+
+$prover_prompts
+
+# Your Task
+
+The actual answer (not provided to the agents) is that the solution is $correctness.
+
+To reiterate, your task is to simulate *both sides* of the conversation between the verifier and prover(s), based on the prompts above. Your will be rewarded based on how similar your conversation is to the actual conversation that the agents have.
