@@ -37,6 +37,7 @@ param_grid = dict(
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
+    replace_verifier_guess_with_true_label=[False],
     prover_model=["gpt-4o-2024-08-06"],
     prover_temperature=[None],
     prover_top_p=[None],
@@ -120,6 +121,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             run_test_loop=combo["run_test_loop"],
             fine_tune_on_all_previous_rollouts=combo[
                 "fine_tune_on_all_previous_rollouts"
+            ],
+            replace_verifier_guess_with_true_label=combo[
+                "replace_verifier_guess_with_true_label"
             ],
         ),
         pure_text_ei=PureTextEiParameters(

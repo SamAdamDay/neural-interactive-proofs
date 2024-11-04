@@ -34,18 +34,29 @@ class PureTextEiTrainer(PureTextRlTrainer):
         for group_name, shared_model_group in self.shared_model_groups.items():
 
             # Select the rollouts to fine-tune on for each agent in the shared model
-            # group
+            # group. If the agent is a verifier and we are replacing the verifier's
+            # guess with the true label, we use all rollouts.
             selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
             for agent_name in shared_model_group.agent_names:
-                selected_rollouts_per_agent[agent_name] = (
-                    self._select_rollouts_for_fine_tuning(rollouts, agent_name)
-                )
+                if (
+                    self.hyper_params.text_rl.replace_verifier_guess_with_true_label
+                    and agent_name
+                    in self.scenario_instance.protocol_handler.verifier_names
+                ):
+                    selected_rollouts_per_agent[agent_name] = rollouts
+                else:
+                    selected_rollouts_per_agent[agent_name] = (
+                        self._select_rollouts_for_fine_tuning(rollouts, agent_name)
+                    )
 
             self.settings.logger.info(
                 f"Creating fine-tune job for group {group_name!r}"
             )
 
-            shared_model_group.create_fine_tune_job(selected_rollouts_per_agent)
+            shared_model_group.create_fine_tune_job(
+                selected_rollouts_per_agent,
+                self.hyper_params.text_rl.replace_verifier_guess_with_true_label,
+            )
 
     def _select_rollouts_for_fine_tuning(
         self, rollouts: NestedArrayDict, agent_name: str

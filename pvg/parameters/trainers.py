@@ -238,6 +238,10 @@ class TextRlParameters(SubParameters):
     fine_tune_on_all_previous_rollouts : bool
         Whether to fine-tune the agents on the rollouts from all iterations so far. If
         `False`, only the rollouts from the current iteration are used.
+    replace_verifier_guess_with_true_label : bool
+        When fine-tuning on the rollouts, whether to replace the verifier's guess with
+        the true label. This only changes the last message of the verifier, and leaves
+        the rest of the transcript unchanged.
     save_transcripts : bool
         Whether to save the transcripts of the rollouts. Note that the raw rollouts are
         always saved, and the transcripts can be extracted from them. So this is mostly
@@ -249,6 +253,8 @@ class TextRlParameters(SubParameters):
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
+
+    replace_verifier_guess_with_true_label: bool = False
 
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
