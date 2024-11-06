@@ -533,17 +533,18 @@ class PureTextSharedModelGroup(ABC):
     @abstractmethod
     def create_fine_tune_job(
         self,
-        data_per_agent: dict[str, NestedArrayDict],
-        replace_verifier_guess_with_true_label: bool = False,
+        rollouts_per_agent: dict[str, NestedArrayDict],
+        guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
     ):
         """Create a fine-tune job for the agent group given sampled rollouts
 
         Parameters
         ----------
-        data_per_agent : dict[str, NestedArrayDict]
+        rollouts_per_agent : dict[str, NestedArrayDict]
             The data for each agent in the group, sampled from the environment.
-        replace_verifier_guess_with_true_label : bool, default=False
-            Whether to replace the verifier's guess with the true label.
+        guess_replaced_rollouts : dict[str, NestedArrayDict], default={}
+            Additional rollouts for the verifier agents where the verifier's guess is to
+            be replaced with the true label.
         """
 
     @abstractmethod

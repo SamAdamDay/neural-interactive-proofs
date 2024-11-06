@@ -238,10 +238,23 @@ class TextRlParameters(SubParameters):
     fine_tune_on_all_previous_rollouts : bool
         Whether to fine-tune the agents on the rollouts from all iterations so far. If
         `False`, only the rollouts from the current iteration are used.
-    replace_verifier_guess_with_true_label : bool
-        When fine-tuning on the rollouts, whether to replace the verifier's guess with
-        the true label. This only changes the last message of the verifier, and leaves
-        the rest of the transcript unchanged.
+    verifier_guess_replacement_proportion : float
+        When fine-tuning on the rollouts, replace the verifier's guess with the true
+        label for this proportion of the rollouts. This only changes the last message of
+        the verifier, and leaves the rest of the transcript unchanged.
+    verifier_guess_replacement_annealing : Literal["none", "linear", "exponential"]
+        The annealing schedule for the proportion of rollouts where the verifier's guess
+        is replaced. Possible values are:
+
+        - "none": No annealing.
+        - "linear": Linear annealing with rate
+          `verifier_guess_replacement_annealing_rate`.
+        - "exponential": Exponential annealing with base
+          `1-verifier_guess_replacement_annealing_rate`.
+
+    verifier_guess_replacement_annealing_rate : float
+        The rate of annealing for the proportion of rollouts where the verifier's guess
+        is replaced.
     save_transcripts : bool
         Whether to save the transcripts of the rollouts. Note that the raw rollouts are
         always saved, and the transcripts can be extracted from them. So this is mostly
@@ -254,7 +267,11 @@ class TextRlParameters(SubParameters):
 
     fine_tune_on_all_previous_rollouts: bool = False
 
-    replace_verifier_guess_with_true_label: bool = False
+    verifier_guess_replacement_proportion: float = 0.0
+    verifier_guess_replacement_annealing: Literal["none", "linear", "exponential"] = (
+        "none"
+    )
+    verifier_guess_replacement_annealing_rate: float = 0.1
 
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"

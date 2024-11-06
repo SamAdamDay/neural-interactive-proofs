@@ -846,7 +846,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     def create_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
-        replace_verifier_guess_with_true_label: bool = False,
+        guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
     ):
         """Create a fine-tune job for the agent.
 
@@ -868,23 +868,34 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
               that the prover is arguing for, where 0 means "reject" and 1 means
               "accept".
 
-        replace_verifier_guess_with_true_label : bool, default=False
-            Whether to replace the verifier's guess with the true label. If this is set
-            to True the verifier's guess will be replaced with either 'Decision: accept'
-            or 'Decision: reject' based on the true label.
+        guess_replaced_rollouts : dict[str, NestedArrayDict], default={}
+            Additional rollouts for the verifier agents where the verifier's guess is to
+            be replaced with the true label. In these the verifier's guess will be
+            replaced with either 'Decision: accept' or 'Decision: reject' based on the
+            true label.
         """
 
         if self.shared_agent_params.freeze_agent:
             self.fine_tune_job_id = "frozen_job_id"
             return
 
-        fine_tune_datasets = {
-            agent_name: agent_whole.build_fine_tune_dataset(
-                rollouts_per_agent[agent_name],
-                replace_verifier_guess_with_true_label,
+        fine_tune_datasets = {}
+        for agent_name, agent_whole in self.agent_wholes.items():
+            fine_tune_datasets[agent_name] = agent_whole.build_fine_tune_dataset(
+                rollouts_per_agent[agent_name]
             )
-            for agent_name, agent_whole in self.agent_wholes.items()
-        }
+            if agent_name in guess_replaced_rollouts:
+                if not agent_whole.is_verifier:
+                    raise ValueError(
+                        f"Guess replaced rollouts can only be provided for verifier "
+                        f"agents. But {agent_name!r} is not a verifier agent."
+                    )
+                fine_tune_datasets[agent_name].extend(
+                    agent_whole.build_fine_tune_dataset(
+                        guess_replaced_rollouts[agent_name],
+                        replace_verifier_guess_with_true_label=True,
+                    )
+                )
 
         fine_tune_dataset = sum(fine_tune_datasets.values(), [])
 
