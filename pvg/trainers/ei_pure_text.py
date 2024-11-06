@@ -34,16 +34,47 @@ class PureTextEiTrainer(PureTextRlTrainer):
         for group_name, shared_model_group in self.shared_model_groups.items():
 
             # Select the rollouts to fine-tune on for each agent in the shared model
-            # group. If the agent is a verifier and we are replacing the verifier's
-            # guess with the true label, we use all rollouts.
+            # group. If the agent is a verifier, we take a proportion of the rollouts
+            # and replace the verifier guess with the true label.
             selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
+            guess_replaced_rollouts: dict[str, NestedArrayDict] = {}
             for agent_name in shared_model_group.agent_names:
-                if (
-                    self.hyper_params.text_rl.replace_verifier_guess_with_true_label
-                    and agent_name
-                    in self.scenario_instance.protocol_handler.verifier_names
-                ):
-                    selected_rollouts_per_agent[agent_name] = rollouts
+
+                if agent_name in self.scenario_instance.protocol_handler.verifier_names:
+
+                    replace_proportion = (
+                        self._get_verifier_guess_replacement_proportion(
+                            self.state.iteration
+                        )
+                    )
+                    replace_size = int(replace_proportion * len(rollouts))
+
+                    # Permute the rollouts. We make sure that the permutation is
+                    # determined by the seed, the iteration, and the agent name. This
+                    # way we can ensure reproducibility even when the code changes.
+                    random_number_generator = np.random.default_rng(
+                        (
+                            self.hyper_params.seed
+                            + self.state.iteration
+                            + hash(agent_name)
+                        )
+                        % 2**64
+                    )
+                    permutation = random_number_generator.permutation(len(rollouts))
+                    permuted_rollouts = rollouts[permutation]
+
+                    # Choose the first `replace_size` rollouts to replace the verifier
+                    # guess with the true label, and from the rest, select the rollouts
+                    # to fine-tune on based on the reward.
+                    guess_replaced_rollouts[agent_name] = permuted_rollouts[
+                        :replace_size
+                    ]
+                    selected_rollouts_per_agent[agent_name] = (
+                        self._select_rollouts_for_fine_tuning(
+                            permuted_rollouts[replace_size:], agent_name
+                        )
+                    )
+
                 else:
                     selected_rollouts_per_agent[agent_name] = (
                         self._select_rollouts_for_fine_tuning(rollouts, agent_name)
@@ -55,7 +86,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
             shared_model_group.create_fine_tune_job(
                 selected_rollouts_per_agent,
-                self.hyper_params.text_rl.replace_verifier_guess_with_true_label,
+                guess_replaced_rollouts,
             )
 
     def _select_rollouts_for_fine_tuning(

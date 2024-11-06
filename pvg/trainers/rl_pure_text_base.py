@@ -514,6 +514,48 @@ class PureTextRlTrainer(Trainer, ABC):
 
         return stack_nested_array_dicts(rollout_list, dim=0)
 
+    def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
+        """Get the proportion of rollouts where we replace the guess with the true label
+
+        For this proportion of the sampled rollouts, we replace the verifier guess with
+        either "Decision: accept" or "Decision: reject" based on the true label.
+
+        This value can be annealed over the course of the training.
+
+        Parameters
+        ----------
+        iteration : int
+            The current iteration number.
+
+        Returns
+        -------
+        proportion : float
+            The proportion of rollouts where we replace the guess with the true label.
+
+        Raises
+        ------
+        ValueError
+            If the annealing type is invalid.
+        """
+
+        anneal_type = self.hyper_params.text_rl.verifier_guess_replacement_annealing
+        initial_proportion = (
+            self.hyper_params.text_rl.verifier_guess_replacement_proportion
+        )
+        rate = self.hyper_params.text_rl.verifier_guess_replacement_annealing_rate
+
+        if anneal_type == "none":
+            return initial_proportion
+        elif anneal_type == "linear":
+            return max(initial_proportion - iteration * rate, 0)
+        elif anneal_type == "exponential":
+            return initial_proportion * (1 - rate) ** iteration
+        else:
+            raise ValueError(
+                f"Invalid annealing type {anneal_type!r} for verifier guess "
+                f"replacement."
+            )
+
     def _save_rollouts(
         self,
         rollouts: NestedArrayDict,
