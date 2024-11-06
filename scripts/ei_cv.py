@@ -44,9 +44,9 @@ param_grid = dict(
     prover_temperature=[None],
     prover_top_p=[None],
     freeze_prover=[False],
-    provers_share_model=[False],
-    fine_tune_from_scratch=[False],
-    fine_tune_on_all_previous_rollouts=[False],
+    provers_share_model=[True],
+    fine_tune_from_scratch=[True],
+    fine_tune_on_all_previous_rollouts=[True],
     rollout_selection_method=["threshold"],
     weighting_use_replacement=[True],
     shared_reward=[False],
@@ -56,7 +56,7 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    run_test_loop=[False],
+    run_test_loop=[True],
 )
 
 
