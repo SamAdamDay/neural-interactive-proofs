@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import os
 import shutil
 import json
-from typing import Any
+from typing import Any, ClassVar
 from textwrap import indent
 from random import randint
 
@@ -15,7 +15,6 @@ from datasets import (
     load_dataset,
     load_from_disk,
     Dataset as HuggingFaceDataset,
-    IterableDataset as HuggingFaceIterableDataset,
     concatenate_datasets,
 )
 
@@ -46,6 +45,8 @@ class CodeValidationDataset(Dataset, ABC):
     appropriate hyper-parameters. This can be computed from the (hash of the) solution
     text.
     """
+
+    instance_keys: ClassVar[tuple[str]] = ("question", "solution", "prover_stance")
 
     _main_data: HuggingFaceDataset
 
@@ -179,6 +180,7 @@ class TestCodeValidationDataset(CodeValidationDataset):
                     "solution": f"Solution {i}",
                     "prover_stance": 1,
                     "y": randint(0, 1),
+                    "id": i,
                 }
 
         return HuggingFaceDataset.from_generator(sample_generator)
@@ -244,8 +246,11 @@ class AppsCodeValidationDataset(CodeValidationDataset):
 
         processed_dataset = raw_dataset.filter(filter_instance)
         processed_dataset = processed_dataset.map(process_instance)
+        processed_dataset = processed_dataset.add_column(
+            "id", np.arange(len(processed_dataset))
+        )
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "prover_stance", "y"]
+            ["question", "solution", "prover_stance", "y", "id"]
         )
 
         return processed_dataset
@@ -358,10 +363,17 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             solution_index += 1
 
         # Concatenate the non-buggy and buggy datasets
-        processed_dataset = concatenate_datasets(non_buggy_datasets + buggy_datasets)
+        processed_dataset: HuggingFaceDataset = concatenate_datasets(
+            non_buggy_datasets + buggy_datasets
+        )
+
+        # Add an ID column
+        processed_dataset = processed_dataset.add_column(
+            "id", np.arange(len(processed_dataset))
+        )
 
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "prover_stance", "y"]
+            ["question", "solution", "prover_stance", "y", "id"]
         )
 
         return processed_dataset

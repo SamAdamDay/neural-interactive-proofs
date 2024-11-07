@@ -278,8 +278,10 @@ class ProtocolHandler(ABC):
                 break
         else:
             raise ValueError(
-                "Could not determine the first active round for all agents."
+                f"Could not determine the first active round for all agents. Missing: "
+                f"{set(self.agent_names) - set(agents_first_active_rounds.keys())}"
             )
+        return agents_first_active_rounds
 
     @abstractmethod
     def step_interaction_protocol(

@@ -68,7 +68,8 @@ class RlTrainerParameters(SubParameters):
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
-        The number of iterations to run the test for.
+        The number of iterations to run the test for. In each iteration we sample
+        `frames_per_batch` frames, as in training.
     """
 
     # Sampling
@@ -263,6 +264,9 @@ class TextRlParameters(SubParameters):
         The format to save the transcripts in.
     run_test_loop : bool
         Whether to run the test loop after training.
+    test_on_whole_dataset : bool
+        Whether to run the test loop on the whole dataset or only on a single
+        iteration-worth of rollouts.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
@@ -277,6 +281,7 @@ class TextRlParameters(SubParameters):
     transcript_format: Literal["json", "yaml"] = "yaml"
 
     run_test_loop: bool = False
+    test_on_whole_dataset: bool = True
 
 
 @register_parameter_class

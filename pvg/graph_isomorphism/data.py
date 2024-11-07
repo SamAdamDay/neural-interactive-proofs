@@ -34,6 +34,8 @@ class GraphIsomorphismDataset(TensorDictDataset):
         Whether to load the training or test set.
     """
 
+    instance_keys = ("adjacency", "x", "node_mask", "wl_score")
+
     adjacency_dtype = torch.int32
     x_dtype = torch.float32
     y_dtype = torch.int64
