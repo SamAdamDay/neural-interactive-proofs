@@ -68,7 +68,8 @@ class RlTrainerParameters(SubParameters):
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
-        The number of iterations to run the test for.
+        The number of iterations to run the test for. In each iteration we sample
+        `frames_per_batch` frames, as in training.
     """
 
     # Sampling

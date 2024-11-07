@@ -375,6 +375,56 @@ def mean_episode_reward(
     return episode_rewards.mean().item()
 
 
+def aggregate_mean_grouped_by_class(
+    values: Float[Tensor, "batch"],
+    classes: Int[Tensor, "batch"],
+    num_classes: Optional[int] = None,
+) -> Float[Tensor, "class"]:
+    """Compute the mean of values grouped by class.
+
+    `values` is a 1D tensor of values to aggregate, and `classes` is a 1D tensor of
+    class labels for each value. The function computes the mean of the values for each
+    class.
+
+    It returns a 1D tensor of mean values for each class. If any class has no values
+    associated with it, the mean for that class is set to NaN.
+
+    Parameters
+    ----------
+    values : Float[Tensor, "batch"]
+        The values to aggregate.
+    classes : Int[Tensor, "batch"]
+        The class labels for each value.
+    num_classes : int, optional
+        The number of classes. If not provided, it is inferred from the class labels.
+
+    Returns
+    -------
+    mean_values : Float[Tensor, "class"]
+        The mean of the values for each class.
+    """
+
+    if values.ndim != 1:
+        raise ValueError(f"`values` must be a 1D tensor, but got shape {values.shape}")
+    if classes.ndim != 1:
+        raise ValueError(
+            f"`classes` must be a 1D tensor, but got shape {classes.shape}"
+        )
+    if values.shape != classes.shape:
+        raise ValueError(
+            f"`values` and `classes` must have the same shape, but got {values.shape} "
+            f"and {classes.shape}"
+        )
+
+    if num_classes is None:
+        num_classes = classes.max().item() + 1
+
+    class_counts = torch.bincount(classes, minlength=num_classes)
+    sum_per_class = torch.bincount(classes, values, minlength=num_classes)
+
+    return sum_per_class / class_counts.float()
+
+
 def minstd_generate_pseudo_random_sequence(
     seed: Int[Tensor, "..."], length: int
 ) -> Int[Tensor, "... length"]:

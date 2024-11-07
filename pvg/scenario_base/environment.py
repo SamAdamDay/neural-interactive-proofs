@@ -172,7 +172,6 @@ class Environment(ABC):
         self.protocol_handler = protocol_handler
         self.train = train
         self.dataset = dataset
-        self.data_cycler: Optional[VariableDataCycler] = None
 
         self.num_agents = len(self.protocol_handler.agent_names)
 
@@ -238,6 +237,8 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     train : bool, optional
         Whether the environment is used for training or evaluation.
     """
+
+    dataset: TensorDictDataset
 
     _int_dtype: torch.dtype = torch.int
 
@@ -479,6 +480,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 dtype=torch.long,
                 device=self.device,
             ),
+            datapoint_id=DiscreteTensorSpec(
+                len(self.dataset),
+                shape=(self.num_envs,),
+                dtype=torch.long,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -517,6 +524,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The done specification.
         """
         return CompositeSpec(
+            # TODO: This leads to issues because TorchRL calls `any` on the done signal
             agents=CompositeSpec(
                 done=BinaryDiscreteTensorSpec(
                     self.num_agents,
@@ -803,6 +811,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             0, self.observation_spec["seed"].n, (mask.sum().item(),), device=self.device
         )
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
+        env_td["datapoint_id"][mask] = data_batch["_id"]
         env_td["message_history"][mask] = torch.zeros_like(
             env_td["message_history"][mask]
         )

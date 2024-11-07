@@ -135,6 +135,9 @@ class TensorDictDataset(Dataset, ABC):
             # Create the tensordict of the dataset
             self._main_data = self.build_tensor_dict()
 
+            # Add the _id field
+            self._main_data["_id"] = torch.arange(len(self._main_data))
+
             # Reduce the size of the training set if needed
             if (
                 self.train
