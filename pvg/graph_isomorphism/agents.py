@@ -283,6 +283,9 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if self.hyper_params.include_linear_message_space:
             env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
+        if "simulator" in self.agent_name:
+            env_level_in_keys = (*env_level_in_keys, "y") #LH-TODO maybe make this true for all agents?
+
         return env_level_in_keys
 
     agent_level_out_keys = ("graph_level_repr", "node_level_repr")
@@ -444,6 +447,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
             self.d_gnn_out
             + 2
             + self.num_visible_message_channels * self.hyper_params.message_size
+            + 1
         )
         if self.hyper_params.include_linear_message_space:
             in_features += (
@@ -763,6 +767,15 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 dtype=transformer_input.dtype,
             )
 
+        if "simulator" in self.agent_name:
+            y_feature = repeat(data["y"], "... 1 -> ... token 1", token=2 + 2 * max_num_nodes)
+        else:
+            y_feature = torch.zeros(
+                (*transformer_input.shape[:-1], 1),
+                device=transformer_input.device,
+                dtype=transformer_input.dtype,
+            )
+
         # Concatenate everything together
         # (..., 2 + 2 * node, streams * d_gnn + 2 + channel*position + linear_message)
         transformer_input = torch.cat(
@@ -771,6 +784,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
                 pooled_feature,
                 message_feature,
                 linear_message_feature,
+                y_feature,
             ),
             dim=-1,
         )
@@ -781,7 +795,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Run the transformer input through the encoder first
         # (..., 2 + 2 * node, d_transformer)
-        transformer_input = self.gnn_transformer_encoder(transformer_input)
+        transformer_input = self.gnn_transformer_encoder(transformer_input) # LH-TODO change input dims of gnn_transformer_encoder (defined in line 424), change in features
 
         self._run_recorder_hook(hooks, "transformer_input", transformer_input)
 
@@ -1260,10 +1274,13 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
 
     @property
     def env_level_in_keys(self):
+
         if self.has_decider is not None and self.agent_params.include_round_in_decider:
-            return ("message", "round")
+            env_level_in_keys = ("message", "round")
         else:
-            return ("message",)
+            env_level_in_keys = ("message",)
+
+        return env_level_in_keys
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:

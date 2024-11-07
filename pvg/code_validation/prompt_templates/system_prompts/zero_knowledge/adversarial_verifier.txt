@@ -6,4 +6,4 @@ $verifier_prompt
 
 # Your Task
 
-To reiterate, your  task is to interact with the experts based on the prompt above in a way that makes it difficult for Simulator to generate a similar conversation. Your will be rewarded based on how dissimilar your conversation is to the conversation that Simulator generates.†
+To reiterate, your  task is to interact with the experts based on the prompt above in a way that makes it difficult for Simulator to generate a similar conversation. Your will be rewarded based on how dissimilar your conversation is to the conversation that Simulator generates.

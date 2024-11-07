@@ -25,6 +25,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    ZkProtocolParameters,
     DatasetParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
@@ -105,6 +106,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
+    zero_knowledge=[False],
+
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
@@ -195,11 +198,14 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
         update_schedule=verifier_update_schedule,
     )
+    agents_params_dict = {}
     if combo["interaction_protocol"] in (
         InteractionProtocolType.PVG,
         InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
     ):
-        agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
+        # agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
+        agents_params_dict["verifier"] = verifier_params
+        agents_params_dict["prover"] = prover_params
     elif combo["interaction_protocol"] in (
         InteractionProtocolType.DEBATE,
         InteractionProtocolType.MERLIN_ARTHUR,
@@ -211,18 +217,30 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         prover1_params = dataclasses.replace(
             prover_params, update_schedule=prover1_update_schedule
         )
-        agents_params = AgentsParameters(
-            verifier=verifier_params, prover0=prover0_params, prover1=prover1_params
-        )
+        agents_params_dict["verifier"] = verifier_params
+        agents_params_dict["prover0"] = prover0_params
+        agents_params_dict["prover1"] = prover1_params
+        # agents_params = AgentsParameters(
+        #     verifier=verifier_params, prover0=prover0_params, prover1=prover1_params
+        # )
     else:
         raise NotImplementedError(
             f"Unknown interaction protocol: {combo['interaction_protocol']}"
         )
+    if combo["zero_knowledge"]:
+        agents_params_dict["adversarial_verifier"] = verifier_params
+        if combo["use_multiple_simulators"]:
+            for agent_name in agents_params_dict:
+                agents_params_dict[f"{agent_name}_simulator"] = agents_params_dict[agent_name]
+        else:
+            agents_params_dict["simulator"] = verifier_params
+
     hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
-        agents=agents_params,
+        # agents=agents_params,
+        agents=AgentsParameters(**agents_params_dict),
         rl=RlTrainerParameters(
             frames_per_batch=combo["frames_per_batch"],
             num_iterations=combo["num_iterations"],
@@ -263,6 +281,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             verifier_terminated_penalty=combo["verifier_terminated_penalty"],
             verifier_no_guess_reward=combo["verifier_no_guess_reward"],
             verifier_first=combo["verifier_first"],
+            zero_knowledge=combo["zero_knowledge"],
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
@@ -273,6 +292,11 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             max_message_rounds=combo["max_message_rounds"],
             sequential=combo["debate_sequential"],
             prover0_first=combo["debate_prover0_first"],
+        ),
+        zk_protocol=ZkProtocolParameters(
+            simulator_reward_coefficient = combo["simulator_reward_coefficient"],
+            aux_prover_reward_coefficient = combo["aux_prover_reward_coefficient"],
+            use_multiple_simulators = combo["use_multiple_simulators"],
         ),
         pretrain_agents=pretrain_agents,
         d_representation=combo["d_representation"],

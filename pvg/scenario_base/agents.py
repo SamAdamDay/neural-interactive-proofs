@@ -173,6 +173,11 @@ class AgentPart(ABC):
     def is_verifier(self) -> bool:
         """Whether the agent is a verifier."""
         return self.agent_name in self.protocol_handler.verifier_names
+    
+    @property
+    def is_simulator(self) -> bool:
+        """Whether the agent is a verifier."""
+        return self.agent_name in self.protocol_handler.simulator_names
 
     @property
     def max_message_rounds(self) -> int:

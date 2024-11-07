@@ -44,14 +44,22 @@ class ProtocolHandler(ABC):
     def agent_names(self) -> list[str]:
         """The names of the agents in the protocol in turn order."""
 
-    @cached_property
+    @property
     def prover_names(self) -> list[str]:
-        """The names of the provers in the protocol."""
+        """The names of the provers in the protocol.
+        
+        Note
+        ----
+        This includes the prover simulator(s)."""
         return [agent_name for agent_name in self.agent_names if "prover" in agent_name]
 
     @property
     def verifier_names(self) -> list[str]:
-        """The names of the verifiers in the protocol."""
+        """The names of the verifiers in the protocol.
+        
+        Note
+        ----
+        This includes the verifier simulator(s) and the adversarial verifier."""
         return [
             agent_name for agent_name in self.agent_names if "verifier" in agent_name
         ]
@@ -158,6 +166,27 @@ class ProtocolHandler(ABC):
                 visible_channels.append(channel)
 
         return visible_channels
+    
+    def get_agents_in_channel(self, channel_name: str) -> list[str]:
+        """Get the names of the agents that can see the given channel.
+
+        Parameters
+        ----------
+        channel_name : str
+            The name of the channel.
+
+        Returns
+        -------
+        agents_in_channel : list[str]
+            The names of the agents that can see the given channel.
+        """
+
+        agents_in_channel = []
+        for agent_name in self.agent_names:
+            if self.can_agent_see_channel(agent_name, channel_name):
+                agents_in_channel.append(agent_name)
+
+        return agents_in_channel
 
     def can_agent_see_channel(self, agent_name: str, channel_name: str) -> bool:
         """Determine whether an agent can see a channel.

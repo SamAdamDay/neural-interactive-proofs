@@ -289,25 +289,25 @@ class HyperParameters(BaseHyperParameters):
         else:
             zero_knowledge = default_zero_knowledge
 
+        if zero_knowledge and self.zk_protocol is None:
+            self.zk_protocol = ZkProtocolParameters()
+
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
-                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
             self._process_agents_params(
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
-                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.CODE_VALIDATION:
             self._process_agents_params(
                 CodeValidationAgentParameters,
                 RandomAgentParameters,
-                zero_knowledge,
             )
 
         # Add PPO parameters for specific variants to the appropriate class
@@ -325,7 +325,6 @@ class HyperParameters(BaseHyperParameters):
         self,
         agent_params_class: type[AgentParameters],
         random_agent_params_class: type[RandomAgentParameters],
-        zero_knowledge: bool,
     ) -> AgentsParameters:
         """Process agent parameters passed to `HyperParameters`.
 
@@ -338,8 +337,6 @@ class HyperParameters(BaseHyperParameters):
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-        zero_knowledge : bool
-            Whether the protocol is zero-knowledge.
         """
 
         # If no agent parameters are provided, use the default parameters for the
@@ -348,7 +345,7 @@ class HyperParameters(BaseHyperParameters):
             self.agents = AgentsParameters(
                 **{
                     name: agent_params_class()
-                    for name in get_protocol_agent_names(self, zero_knowledge)
+                    for name in get_protocol_agent_names(self)
                 }
             )
 
@@ -387,16 +384,16 @@ class HyperParameters(BaseHyperParameters):
 
         # Make sure the agent names match the agent names expected by the protocol
         agent_names = tuple(self.agents.keys())
-        if set(agent_names) != set(get_protocol_agent_names(self, zero_knowledge)):
+        if set(agent_names) != set(get_protocol_agent_names(self)):
             raise ValueError(
                 f"Agent names {agent_names} do not match the agent names expected"
                 f"by interaction protocol {self.interaction_protocol}: "
-                f"{get_protocol_agent_names(self, zero_knowledge)}."
+                f"{get_protocol_agent_names(self)}."
             )
 
 
 def get_protocol_agent_names(
-    hyper_params: HyperParameters, zero_knowledge: bool
+    hyper_params: HyperParameters
 ) -> list[str]:
     """Get the agent names required for the protocol.
 
@@ -404,8 +401,6 @@ def get_protocol_agent_names(
     ----------
     hyper_params : HyperParameters
         The parameters of the experiment.
-    zero_knowledge : bool
-        Whether the protocol is zero-knowledge.
 
     Returns
     -------
@@ -413,6 +408,11 @@ def get_protocol_agent_names(
         The agent names required for the protocol.
     """
     agent_names = list(AGENT_NAMES[hyper_params.interaction_protocol])
-    if zero_knowledge:
-        agent_names.extend(["simulator", "adversarial_verifier"])
+    if hyper_params.protocol_common.zero_knowledge:
+        if hyper_params.zk_protocol.use_multiple_simulators:
+            agent_names.extend([f"{agent_name}_simulator" for agent_name in agent_names])
+        else:
+            agent_names.append("simulator")
+        agent_names.append("adversarial_verifier")
+
     return agent_names

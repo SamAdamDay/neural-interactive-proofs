@@ -238,6 +238,7 @@ def test_zero_knowledge_pvg_step_method():
         zk_protocol=ZkProtocolParameters(
             simulator_reward_coefficient=simulator_reward_coefficient,
             aux_prover_reward_coefficient=aux_prover_reward_coefficient,
+            use_multiple_simulators=False,
         ),
     )
     settings = ExperimentSettings(device="cpu", test_run=True)
@@ -255,7 +256,7 @@ def test_zero_knowledge_pvg_step_method():
 
     verifier_index = protocol_handler.verifier_index
     adversarial_verifier_index = agent_names.index("adversarial_verifier")
-    simulator_index = agent_names.index("simulator")
+    simulator_indices = agent_names.index("simulator") if not protocol_handler.use_multiple_simulators else [protocol_handler.agent_names.index(a) for a in protocol_handler.agent_names if "simulator" in a]
 
     batch_size = (32, 8)
 
@@ -322,6 +323,7 @@ def test_zero_knowledge_pvg_step_method():
     # Create the second set of message logits. In the first channel in which the
     # verifier is active, the logits are: cosine_similarity, sqrt(1 - cosine_similarity),
     # followed by zeros. In the other channels, the logits are all zeros.
+    # TODO update to allow for multiple simulators
     source: Float[Tensor, "... logit"] = torch.stack(
         [
             env_td["message_cosine_similarity"],
@@ -334,11 +336,12 @@ def test_zero_knowledge_pvg_step_method():
         simulator_first_active_channel[..., None],
         repeat(source, "... logit -> ... channel logit", channel=num_channels),
         0,
-    )
+    ) 
 
     # Create two sets of decision logits, whose cosine similarities are those specified
+    # TODO update to multiple simulators
     decision_logits_a = torch.tensor([1.0, 0.0, 0.0]).expand(*batch_size, 3).clone()
-    decision_logits_b = torch.zeros_like(decision_logits_a)
+    decision_logits_b = torch.zeros_like(decision_logits_a) 
     decision_logits_b[..., 0] = env_td["decision_cosine_similarity"]
     decision_logits_b[..., 1] = torch.sqrt(
         1 - torch.pow(env_td["decision_cosine_similarity"], 2)
@@ -358,14 +361,14 @@ def test_zero_knowledge_pvg_step_method():
         message_logits_adversarial
     )
     message_logits[..., adversarial_verifier_index, :, 1:, :] = 0
-    message_logits[..., simulator_index, :, 0, :] = message_logits_simulator
-    message_logits[..., simulator_index, :, 1:, :] = 0
+    message_logits[..., simulator_indices, :, 0, :] = message_logits_simulator
+    message_logits[..., simulator_indices, :, 1:, :] = 0
 
     # Build the combined decision logits tensor. Similar to the message logits, we
     # leave the logits for the non-verifier agents as random.
     decision_logits = torch.randn(*batch_size, len(agent_names), 3)
     decision_logits[..., adversarial_verifier_index, :] = decision_logits_a
-    decision_logits[..., simulator_index, :] = decision_logits_b
+    decision_logits[..., simulator_indices, :] = decision_logits_b
 
     # Sanity check that the cosine similarities are as expected
     grouped_message_logits = rearrange(
@@ -374,6 +377,8 @@ def test_zero_knowledge_pvg_step_method():
         "-> ... agent group base_channel position logit",
         group=3,
     )
+
+    # TODO update to multiple simulators
     assert_close(
         torch.cosine_similarity(
             rearrange(
@@ -381,17 +386,18 @@ def test_zero_knowledge_pvg_step_method():
                 "... base_channel position logit -> ... (position base_channel logit)",
             ),
             rearrange(
-                grouped_message_logits[..., simulator_index, 2, :, :, :],
+                grouped_message_logits[..., simulator_indices, 2, :, :, :],
                 "... base_channel position logit -> ... (position base_channel logit)",
             ),
             dim=-1,
         ),
         env_td["message_cosine_similarity"],
     )
+    # TODO update to multiple simulators
     assert_close(
         torch.cosine_similarity(
             decision_logits[..., adversarial_verifier_index, :],
-            decision_logits[..., simulator_index, :],
+            decision_logits[..., simulator_indices, :],
             dim=-1,
         ),
         env_td["decision_cosine_similarity"],
@@ -480,10 +486,10 @@ def test_zero_knowledge_pvg_step_method():
         env_td["decision_cosine_similarity"] * verifier_can_guess_mask
     )
     expected_simulator_reward *= simulator_reward_coefficient
-    assert_close(reward[..., simulator_index], expected_simulator_reward)
+    assert_close(reward[..., simulator_indices], expected_simulator_reward)
 
     # Make sure the adversarial verifier reward the negative of the simulator reward
-    assert_close(reward[..., adversarial_verifier_index], -reward[..., simulator_index])
+    assert_close(reward[..., adversarial_verifier_index], -reward[..., simulator_indices].mean(dim=-1))
 
     # Make sure the prover rewards are the base prover rewards plus the simulator reward
     # multiplied by the coefficient.

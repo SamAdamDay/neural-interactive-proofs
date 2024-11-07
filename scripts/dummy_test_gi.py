@@ -18,6 +18,7 @@ from pvg import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     SpgParameters,
+    ZkProtocolParameters,
     MessageRegressionParameters,
     PpoLossType,
     SpgVariant,
@@ -66,11 +67,11 @@ def run(cmd_args: Namespace):
                         protocol_common=CommonProtocolParameters(
                             zero_knowledge=zero_knowledge
                         ),
+                        zk_protocol=ZkProtocolParameters(),
                         scenario=scenario,
                         trainer=trainer,
                         dataset=dataset,
                     ),
-                    zero_knowledge=zero_knowledge,
                 )
             }
         ),

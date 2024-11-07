@@ -19,6 +19,7 @@ from .parameters import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
+    ZkProtocolParameters,
     MessageRegressionParameters,
     ScenarioType,
     TrainerType,
