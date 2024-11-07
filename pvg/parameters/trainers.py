@@ -264,6 +264,9 @@ class TextRlParameters(SubParameters):
         The format to save the transcripts in.
     run_test_loop : bool
         Whether to run the test loop after training.
+    test_on_whole_dataset : bool
+        Whether to run the test loop on the whole dataset or only on a single
+        iteration-worth of rollouts.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
@@ -278,6 +281,7 @@ class TextRlParameters(SubParameters):
     transcript_format: Literal["json", "yaml"] = "yaml"
 
     run_test_loop: bool = False
+    test_on_whole_dataset: bool = True
 
 
 @register_parameter_class

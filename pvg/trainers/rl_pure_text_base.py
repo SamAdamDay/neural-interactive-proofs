@@ -19,7 +19,7 @@ import numpy as np
 
 from einops import reduce
 
-from jaxtyping import Bool
+from jaxtyping import Bool, Int, Float
 
 from wandb import Artifact
 import wandb
@@ -40,6 +40,7 @@ from pvg.scenario_base.rollout_analysis import (
     ROLLOUT_ANALYSERS,
 )
 from pvg.trainers.trainer_base import Trainer
+from pvg.utils.maths import aggregate_mean_grouped_by_class
 from pvg.utils.data import VariableDataCycler, truncated_iterator
 from pvg.utils.nested_array_dict import (
     NestedArrayDict,
@@ -447,12 +448,10 @@ class PureTextRlTrainer(Trainer, ABC):
 
         Parameters
         ----------
-        dataset : NestedArrayDictDataset
-            The dataset of task instances.
-        iteration : int | Literal["test"]
-            The iteration number, or "test" if the rollouts are from the test set.
         environment : PureTextEnvironment
             The environment to sample rollouts in.
+        iteration : int | Literal["test"]
+            The iteration number, or "test" if the rollouts are from the test set.
         use_tqdm : bool
             Whether to create a tqdm progress bar for the rollouts.
         tqdm_desc : str
@@ -482,9 +481,21 @@ class PureTextRlTrainer(Trainer, ABC):
             dataloader, default_batch_size=environment.batch_size[0]
         )
 
+        if iteration == "test":
+            if self.hyper_params.text_rl.test_on_whole_dataset:
+                num_rollouts = (
+                    len(environment.dataset) * self.hyper_params.rl.num_test_iterations
+                )
+            else:
+                num_rollouts = (
+                    environment.num_envs * self.hyper_params.rl.num_test_iterations
+                )
+        else:
+            num_rollouts = environment.num_envs
+
         arg_iterator = (
             (environment, self.max_message_rounds, self.combined_agent, data_batch)
-            for data_batch in truncated_iterator(data_cycler, environment.num_envs)
+            for data_batch in truncated_iterator(data_cycler, num_rollouts)
         )
 
         def get_rollouts(rollout_iterator: Iterable) -> list[NestedArrayDict]:
@@ -492,7 +503,7 @@ class PureTextRlTrainer(Trainer, ABC):
             if use_tqdm:
                 rollout_iterator = tqdm(
                     rollout_iterator,
-                    total=environment.num_envs,
+                    total=num_rollouts,
                     desc=tqdm_desc,
                 )
 
@@ -747,10 +758,16 @@ class PureTextRlTrainer(Trainer, ABC):
         else:
             prefix = "test_"
 
-        done: Bool[np.ndarray, "..."] = rollouts["done"]
-        next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
-        next_terminated: Bool[np.ndarray, "..."] = rollouts["next", "terminated"]
-        padding: Bool[np.ndarray, "..."] = rollouts["padding"]
+        reward: Float[np.ndarray, "rollout round agent"] = rollouts[
+            "next", "agents", "reward"
+        ]
+        done: Bool[np.ndarray, "rollout round"] = rollouts["done"]
+        next_done: Bool[np.ndarray, "rollout round"] = rollouts["next", "done"]
+        next_terminated: Bool[np.ndarray, "rollout round"] = rollouts[
+            "next", "terminated"
+        ]
+        padding: Bool[np.ndarray, "rollout round"] = rollouts["padding"]
+        datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
 
         last_timestep = (next_done | next_terminated) & ~padding
 
@@ -759,9 +776,7 @@ class PureTextRlTrainer(Trainer, ABC):
         for agent_index, agent_name in enumerate(self.agent_names):
 
             # Get the total episode reward for each agent
-            episode_reward = rollouts["next", "agents", "reward"][..., agent_index].sum(
-                axis=-1
-            )
+            episode_reward = reward[..., agent_index].sum(axis=-1)
             log_stats[f"{agent_name}.{prefix}mean_episode_reward"] = (
                 episode_reward.mean().item()
             )
@@ -799,7 +814,18 @@ class PureTextRlTrainer(Trainer, ABC):
         log_stats[f"{prefix}mean_accuracy"] = accuracy.mean().item()
         log_stats[f"{prefix}std_accuracy"] = accuracy.std().item()
 
-        # Get the mean and accuracy of the verifier by class
+        # Get the min mean accuracy over the datapoints.
+        mean_accuracy_per_datapoint = aggregate_mean_grouped_by_class(
+            accuracy.astype(float), datapoint_id
+        )
+        mean_accuracy_per_datapoint = mean_accuracy_per_datapoint[
+            ~np.isnan(mean_accuracy_per_datapoint)
+        ]
+        log_stats[f"{prefix}worst_datapoint_accuracy"] = (
+            mean_accuracy_per_datapoint.min().item()
+        )
+
+        # Get the mean and std accuracy of the verifier by class
         for class_value in [0, 1]:
             class_mask = rollouts["y"][last_timestep] == class_value
             class_accuracy = verifier_decision[last_timestep][class_mask] == class_value

@@ -32,7 +32,7 @@ from pvg.constants import WANDB_CV_PROJECT
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
-    num_iterations=[10],
+    num_iterations=[1],
     rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
@@ -57,6 +57,7 @@ param_grid = dict(
     debate_sequential=[False],
     debate_prover0_first=[True],
     run_test_loop=[True],
+    num_test_iterations=[1],
 )
 
 
@@ -118,6 +119,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             rollouts_per_iteration=combo["rollouts_per_iteration"],
             frames_per_batch=None,
             num_iterations=combo["num_iterations"],
+            num_test_iterations=combo["num_test_iterations"],
         ),
         text_rl=TextRlParameters(
             run_test_loop=combo["run_test_loop"],

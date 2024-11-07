@@ -9,7 +9,7 @@ import os
 from textwrap import indent
 from pathlib import Path
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -46,6 +46,13 @@ class CachedPretrainedEmbeddingsNotFound(Exception):
 class Dataset(ABC):
     """Base class for all datasets.
 
+    All datasets should have the following keys:
+
+    - "y": The true label (0 or 1).
+    - "id": The index of the data point.
+
+    Dataset will have additional keys specifying the input instance.
+
     Parameters
     ----------
     hyper_params : HyperParameters
@@ -57,6 +64,19 @@ class Dataset(ABC):
     train : bool
         Whether to load the training or test set.
     """
+
+    instance_keys: ClassVar[tuple[str]] = []
+    """The keys specifying the input instance.
+    
+    These should be set in the subclass. They are the keys that specify the problem
+    instance. For example, in a graph isomorphism problem, the instance keys might be
+    the adjacency matrices of the graphs.
+    """
+
+    @property
+    def keys(self) -> tuple[str]:
+        """The keys (field names) in the dataset."""
+        return ("y", "id") + self.instance_keys
 
     def __init__(
         self,
@@ -107,6 +127,16 @@ class TensorDictDataset(Dataset, ABC):
 
     _main_data: TensorDict
 
+    @property
+    def keys(self) -> tuple[str]:
+
+        keys = super().keys
+
+        if len(self.pretrained_model_names) > 0:
+            keys = keys + tuple(self.pretrained_model_names)
+
+        return keys
+
     def __init__(
         self,
         hyper_params: HyperParameters,
@@ -135,8 +165,8 @@ class TensorDictDataset(Dataset, ABC):
             # Create the tensordict of the dataset
             self._main_data = self.build_tensor_dict()
 
-            # Add the _id field
-            self._main_data["_id"] = torch.arange(len(self._main_data))
+            # Add the id field
+            self._main_data["id"] = torch.arange(len(self._main_data))
 
             # Reduce the size of the training set if needed
             if (
@@ -316,7 +346,7 @@ class TensorDictDataset(Dataset, ABC):
             The name of the pretrained model.
         full_embeddings : Tensor
             The embeddings generated from the full original dataset, before any
-            rearrangment or filtering.
+            rearrangement or filtering.
         overwrite_cache : bool, default=False
             Whether to overwrite the cached embeddings if they already exist.
         """

@@ -376,10 +376,10 @@ def mean_episode_reward(
 
 
 def aggregate_mean_grouped_by_class(
-    values: Float[Tensor, "batch"],
-    classes: Int[Tensor, "batch"],
+    values: Float[Tensor | np.ndarray, "batch"],
+    classes: Int[Tensor | np.ndarray, "batch"],
     num_classes: Optional[int] = None,
-) -> Float[Tensor, "class"]:
+) -> Float[Tensor | np.ndarray, "class"]:
     """Compute the mean of values grouped by class.
 
     `values` is a 1D tensor of values to aggregate, and `classes` is a 1D tensor of
@@ -391,17 +391,18 @@ def aggregate_mean_grouped_by_class(
 
     Parameters
     ----------
-    values : Float[Tensor, "batch"]
+    values : Float[Tensor | np.ndarray, "batch"]
         The values to aggregate.
-    classes : Int[Tensor, "batch"]
+    classes : Int[Tensor | np.ndarray, "batch"]
         The class labels for each value.
     num_classes : int, optional
         The number of classes. If not provided, it is inferred from the class labels.
 
     Returns
     -------
-    mean_values : Float[Tensor, "class"]
-        The mean of the values for each class.
+    mean_values : Float[Tensor | np.ndarray, "class"]
+        The mean of the values for each class. If either of the arguments is a numpy
+        array, this will be one too.
     """
 
     if values.ndim != 1:
@@ -416,13 +417,26 @@ def aggregate_mean_grouped_by_class(
             f"and {classes.shape}"
         )
 
+    was_numpy = False
+    if isinstance(values, np.ndarray):
+        values = torch.from_numpy(values)
+        was_numpy = True
+    if isinstance(classes, np.ndarray):
+        classes = torch.from_numpy(classes)
+        was_numpy = True
+
     if num_classes is None:
         num_classes = classes.max().item() + 1
 
     class_counts = torch.bincount(classes, minlength=num_classes)
     sum_per_class = torch.bincount(classes, values, minlength=num_classes)
 
-    return sum_per_class / class_counts.float()
+    mean_values = sum_per_class / class_counts.float()
+
+    if was_numpy:
+        mean_values = mean_values.cpu().detach().numpy()
+
+    return mean_values
 
 
 def minstd_generate_pseudo_random_sequence(

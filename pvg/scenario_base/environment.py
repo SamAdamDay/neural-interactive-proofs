@@ -811,7 +811,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             0, self.observation_spec["seed"].n, (mask.sum().item(),), device=self.device
         )
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
-        env_td["datapoint_id"][mask] = data_batch["_id"]
+        env_td["datapoint_id"][mask] = data_batch["id"]
         env_td["message_history"][mask] = torch.zeros_like(
             env_td["message_history"][mask]
         )
@@ -974,6 +974,7 @@ class PureTextEnvironment(Environment, ABC):
         """The specification for the state keys."""
         return CompositeArraySpec(
             y=IntArraySpec(*self.batch_size, "batch"),
+            datapoint_id=IntArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -1336,6 +1337,7 @@ class PureTextEnvironment(Environment, ABC):
         """
 
         env_state["y"][mask] = data_batch["y"]
+        env_state["datapoint_id"][mask] = data_batch["id"]
         env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
         env_state["message_agent_id"][mask] = -1
