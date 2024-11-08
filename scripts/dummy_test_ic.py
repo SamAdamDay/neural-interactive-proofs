@@ -6,7 +6,7 @@ import os
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
     ImageBuildingBlockType,
@@ -31,7 +31,7 @@ from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 def run(cmd_args: Namespace):
     if cmd_args.use_cpu or not torch.cuda.is_available():
-        print("Using CPU")
+        print("Using CPU")  # noqa: T201
         device = torch.device("cpu")
     else:
         device = torch.device("cuda")
@@ -41,7 +41,7 @@ def run(cmd_args: Namespace):
 
     # Create the parameters object
     interaction_protocol = InteractionProtocolType.PVG
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=ScenarioType.IMAGE_CLASSIFICATION,
         trainer=TrainerType.VANILLA_PPO,
         dataset="cifar10",
@@ -104,7 +104,7 @@ def run(cmd_args: Namespace):
     else:
         run_id = None
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,

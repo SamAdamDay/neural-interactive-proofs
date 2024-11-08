@@ -4,8 +4,9 @@ from abc import ABC, abstractmethod
 import os
 import shutil
 import json
-from typing import Any
+from typing import Any, ClassVar
 from textwrap import indent
+from random import randint
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,7 +19,7 @@ from datasets import (
 )
 
 from pvg.experiment_settings import ExperimentSettings
-from pvg.parameters import Parameters, ScenarioType
+from pvg.parameters import HyperParameters, ScenarioType
 from pvg.protocols import ProtocolHandler
 from pvg.scenario_base.data import Dataset
 from pvg.factory import register_scenario_class
@@ -32,14 +33,27 @@ class CodeValidationDataset(Dataset, ABC):
     """Base class for the code validation datasets.
 
     Works with HuggingFace datasets.
+
+    The dataset should have the following columns:
+
+    - "question": The question text.
+    - "solution": The solution text.
+    - "y": The label, 1 for correct solutions and 0 for buggy solutions.
+
+    In addition, each datapoint should receive a "prover_stance" which is the verdict
+    that the prover should be arguing for, in single-prover settings under the
+    appropriate hyper-parameters. This can be computed from the (hash of the) solution
+    text.
     """
+
+    instance_keys: ClassVar[tuple[str]] = ("question", "solution", "prover_stance")
 
     _main_data: HuggingFaceDataset
 
     @property
     def dataset_filepath_name(self) -> str:
         """The name of the dataset file."""
-        return self.params.dataset.replace("/", "_")
+        return self.hyper_params.dataset.replace("/", "_")
 
     @property
     def raw_dir(self) -> str:
@@ -84,12 +98,12 @@ class CodeValidationDataset(Dataset, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         train: bool = True,
     ):
-        super().__init__(params, settings, protocol_handler, train)
+        super().__init__(hyper_params, settings, protocol_handler, train)
 
         if not os.path.isdir(self.processed_dir) or settings.ignore_cache:
 
@@ -152,6 +166,30 @@ class CodeValidationDataset(Dataset, ABC):
 
 
 @register_scenario_class(
+    ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "test"}
+)
+class TestCodeValidationDataset(CodeValidationDataset):
+    """A test dataset for code validation, with dummy data."""
+
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
+
+        def sample_generator():
+            for i in range(10):
+                yield {
+                    "question": f"Question {i}",
+                    "solution": f"Solution {i}",
+                    "prover_stance": 1,
+                    "y": randint(0, 1),
+                    "id": i,
+                }
+
+        return HuggingFaceDataset.from_generator(sample_generator)
+
+    def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
+        return raw_dataset
+
+
+@register_scenario_class(
     ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "codeparrot/apps"}
 )
 class AppsCodeValidationDataset(CodeValidationDataset):
@@ -163,11 +201,11 @@ class AppsCodeValidationDataset(CodeValidationDataset):
     NeurIPS-21
     """
 
-    def _load_raw_dataset(self):
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
         split = "train" if self.train else "test"
         return load_dataset(
-            self.params.dataset,
-            self.params.code_validation.apps_difficulty,
+            self.hyper_params.dataset,
+            self.hyper_params.code_validation.apps_difficulty,
             split=split,
             data_dir=self.raw_dir,
         )
@@ -189,25 +227,30 @@ class AppsCodeValidationDataset(CodeValidationDataset):
                 raise ValueError(f"Failed to decode the solutions JSON. {instance}")
 
             # Get the solution at the specified index
-            solution = solutions_list[self.params.code_validation.apps_solution_number]
+            solution = solutions_list[
+                self.hyper_params.code_validation.apps_solution_number
+            ]
 
             # Un-escape the solution
             solution = bytes(solution, "utf-8").decode("unicode_escape")
 
             # Decide on the verdict that the prover should be arguing for
-            verdict = get_hash_parity(solution)
+            prover_stance = get_hash_parity(solution)
 
             return {
                 "question": instance["question"],
                 "solution": solution,
-                "verdict": verdict,
+                "prover_stance": prover_stance,
                 "y": 1,
             }
 
         processed_dataset = raw_dataset.filter(filter_instance)
         processed_dataset = processed_dataset.map(process_instance)
+        processed_dataset = processed_dataset.add_column(
+            "id", np.arange(len(processed_dataset))
+        )
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "verdict", "y"]
+            ["question", "solution", "prover_stance", "y", "id"]
         )
 
         return processed_dataset
@@ -228,23 +271,22 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     NeurIPS-21
     """
 
-    def _load_raw_dataset(self):
+    def _load_raw_dataset(self) -> HuggingFaceDataset:
+        split = "train" if self.train else "test"
         return load_dataset(
-            self.params.dataset,
-            split="train",
+            self.hyper_params.dataset,
+            split=split,
         )
 
     def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
 
         def filter_instance(instance: dict[str, str | int]) -> bool:
-            """Filter based on the params and split"""
+            """Filter based on the hyper_params"""
 
-            if instance["apps_split"] == "train" and not self.train:
-                return False
-            if instance["apps_split"] == "test" and self.train:
-                return False
-
-            return instance["difficulty"] == self.params.code_validation.apps_difficulty
+            return (
+                instance["difficulty"]
+                == self.hyper_params.code_validation.apps_difficulty
+            )
 
         def get_non_buggy_solution(
             instance: dict[str, str | int], solution_index: int
@@ -253,7 +295,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["solutions"][solution_index]["solution"],
-                "verdict": get_hash_parity(
+                "prover_stance": get_hash_parity(
                     instance["solutions"][solution_index]["solution"]
                 ),
                 "y": 1,
@@ -266,7 +308,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             return {
                 "question": instance["question"],
                 "solution": instance["buggy_solutions"][solution_index]["solution"],
-                "verdict": get_hash_parity(
+                "prover_stance": get_hash_parity(
                     instance["buggy_solutions"][solution_index]["solution"]
                 ),
                 "y": 0,
@@ -321,10 +363,17 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
             solution_index += 1
 
         # Concatenate the non-buggy and buggy datasets
-        processed_dataset = concatenate_datasets(non_buggy_datasets + buggy_datasets)
+        processed_dataset: HuggingFaceDataset = concatenate_datasets(
+            non_buggy_datasets + buggy_datasets
+        )
+
+        # Add an ID column
+        processed_dataset = processed_dataset.add_column(
+            "id", np.arange(len(processed_dataset))
+        )
 
         processed_dataset = processed_dataset.select_columns(
-            ["question", "solution", "verdict", "y"]
+            ["question", "solution", "prover_stance", "y", "id"]
         )
 
         return processed_dataset

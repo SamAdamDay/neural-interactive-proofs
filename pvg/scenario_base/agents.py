@@ -30,11 +30,12 @@ from einops import repeat, rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters, PureTextAgentParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.protocols import ProtocolHandler
+from pvg.scenario_base.environment import PureTextEnvironment
 from pvg.utils.types import TorchDevice
-from pvg.utils.params import get_agent_part_flags
+from pvg.utils.hyper_params import get_agent_part_flags
 from pvg.utils.torch import apply_orthogonal_initialisation
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -98,7 +99,7 @@ class AgentPart(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -251,18 +252,18 @@ class AgentPart(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__()
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.agent_name = agent_name
         self.protocol_handler = protocol_handler
 
-        self.agent_params = params.agents[agent_name]
+        self.agent_params = hyper_params.agents[agent_name]
         self.agent_index = self.protocol_handler.agent_names.index(agent_name)
 
     @abstractmethod
@@ -286,13 +287,13 @@ class TensorDictAgentPartMixin(AgentPart, TensorDictModuleBase, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -333,13 +334,13 @@ class TensorDictDummyAgentPartMixin(TensorDictAgentPartMixin, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -359,6 +360,8 @@ class WholeAgent(AgentPart, ABC):
 class PureTextWholeAgent(WholeAgent, ABC):
     """Base class for whole agents which process text input and call APIs."""
 
+    shared_model_group: Optional["PureTextSharedModelGroup"] = None
+    agent_params: PureTextAgentParameters
     _visible_message_channel_mask: Optional[Bool[np.ndarray, "channel"]] = None
 
     @cached_property
@@ -367,15 +370,182 @@ class PureTextWholeAgent(WholeAgent, ABC):
         return super().visible_message_channel_mask.cpu().detach().numpy()
 
     @abstractmethod
-    def forward(self, data: NestedArrayDict) -> NestedArrayDict:
-        """Forward pass through the agent"""
+    def forward(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Forward pass through the agent
 
-    def __call__(self, data: NestedArrayDict) -> NestedArrayDict:
-        return self.forward(data)
+        Parameters
+        ----------
+        data : NestedArrayDict
+            The input to the agent.
+        environment : PureTextEnvironment
+            The environment the agent is interacting with.
+
+        Returns
+        -------
+        output : NestedArrayDict
+            The output of the forward pass on the input.
+        """
 
     @abstractmethod
-    def create_fine_tune_job(self, data: NestedArrayDict):
-        """Create a fine-tune job for the agent given sampled rollouts"""
+    def build_fine_tune_dataset(self, rollouts: NestedArrayDict) -> list:
+        """Build a dataset for fine-tuning the agent from sampled rollouts.
+
+        This method generates a dataset of examples ready to pass to the fine-tune API.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The sampled rollouts.
+
+        Returns
+        -------
+        fine_tune_dataset : list
+            The dataset for fine-tuning the agent.
+        """
+
+    def __call__(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        return self.forward(data, environment)
+
+
+@dataclass
+class PureTextSharedModelGroupState(ABC):
+    """Base class for storing all the data needed to restore a shared model group."""
+
+
+class PureTextSharedModelGroup(ABC):
+    """A class representing a group of pure text agents which share the same model
+
+    The shared model is fine-tuned on the data from all agents in the group.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    agent_wholes : Iterable[PureTextWholeAgent]
+        The agents in the shared model group.
+    group_name : str
+        The name of the shared model group.
+    """
+
+    state_class: ClassVar[type[PureTextSharedModelGroupState]] = (
+        PureTextSharedModelGroupState
+    )
+
+    @dataclass
+    class SharedAgentParams:
+        """The parameters shared by all agents in the group."""
+
+        model_name: str
+        freeze_agent: bool
+        use_dummy_api: bool
+        fine_tune_from_scratch: bool
+
+    @property
+    def model_name(self) -> str:
+        """The current model name, which may be the base model or a fine-tuned model."""
+        if self.fine_tuned_model_name is not None:
+            return self.fine_tuned_model_name
+        else:
+            return self.base_model_name
+
+    def __init__(
+        self,
+        hyper_params: HyperParameters,
+        settings: ExperimentSettings,
+        protocol_handler: ProtocolHandler,
+        agent_wholes: Iterable[PureTextWholeAgent],
+        group_name: str,
+    ):
+        self.hyper_params = hyper_params
+        self.settings = settings
+        self.protocol_handler = protocol_handler
+        self.group_name = group_name
+
+        self.agent_wholes = {agent.agent_name: agent for agent in agent_wholes}
+        self.agent_names = list(self.agent_wholes.keys())
+
+        shared_agent_params = {}
+        for agent in agent_wholes:
+
+            # Check that the agent's shared_model_group attribute is set correctly
+            if (
+                agent.agent_params.shared_model_group is not None
+                and agent.agent_params.shared_model_group != self.group_name
+            ):
+                raise ValueError(
+                    f"Tried to create a shared model group named {group_name!r} "
+                    f"containing agent {agent.agent_name!r}, but its "
+                    f"`shared_model_group` attribute is set to "
+                    f"{agent.agent_params.shared_model_group!r}."
+                )
+            elif (
+                agent.agent_params.shared_model_group is None
+                and group_name != agent.agent_name
+            ):
+                raise ValueError(
+                    f"Tried to create a shared model group named {group_name!r} "
+                    f"containing agent {agent.agent_name!r}, but its "
+                    f"`shared_model_group` attribute is not set."
+                )
+
+            # Get the value of the shared agent parameters and check that they are the
+            # same for all agents in the group
+            for shared_agent_param_field in fields(self.SharedAgentParams):
+                param_name = shared_agent_param_field.name
+                if param_name not in shared_agent_params:
+                    shared_agent_params[param_name] = getattr(
+                        agent.agent_params, param_name
+                    )
+                elif (
+                    getattr(agent.agent_params, param_name)
+                    != shared_agent_params[param_name]
+                ):
+                    raise ValueError(
+                        f"All agents in a shared model group must have the same "
+                        f"{param_name!r} parameter, but got "
+                        f"{shared_agent_params[param_name]!r} for agent "
+                        f"{self.agent_names[0]!r} and "
+                        f"{getattr(agent.agent_params, param_name)!r} for "
+                        f"agent {agent.agent_name!r}."
+                    )
+
+            # Set the agent's shared_model_group attribute
+            if agent.shared_model_group is not None:
+                raise ValueError(
+                    f"Agent {agent.agent_name} is already in a shared model group."
+                )
+            agent.shared_model_group = self
+
+        self.shared_agent_params = self.SharedAgentParams(**shared_agent_params)
+        self.base_model_name = self.shared_agent_params.model_name
+
+        self.fine_tune_job_id: Optional[str] = None
+        self.fine_tuned_model_name: Optional[str] = None
+
+    @abstractmethod
+    def create_fine_tune_job(
+        self,
+        rollouts_per_agent: dict[str, NestedArrayDict],
+        guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
+    ):
+        """Create a fine-tune job for the agent group given sampled rollouts
+
+        Parameters
+        ----------
+        rollouts_per_agent : dict[str, NestedArrayDict]
+            The data for each agent in the group, sampled from the environment.
+        guess_replaced_rollouts : dict[str, NestedArrayDict], default={}
+            Additional rollouts for the verifier agents where the verifier's guess is to
+            be replaced with the true label.
+        """
 
     @abstractmethod
     def get_fine_tune_job_status(
@@ -391,6 +561,37 @@ class PureTextWholeAgent(WholeAgent, ABC):
     def switch_to_next_model(self):
         """Switch to the next model after fine-tuning"""
 
+    def set_state(self, checkpoint: PureTextSharedModelGroupState):
+        """Set the state of the shared model group from a checkpoint.
+
+        This method should be overridden by subclasses to restore the state of the
+        shared model group from a checkpoint.
+
+        Parameters
+        ----------
+        checkpoint : AgentCheckpoint
+            The checkpoint to restore the state from.
+        """
+
+    def get_state_dict(self) -> dict:
+        """Get the state of the shared model group as a dict.
+
+        This method should be implemented by subclasses capable of saving their state.
+
+        Returns
+        -------
+        state_dict : dict
+            The state of the shared model group.
+        """
+        raise NotImplementedError(
+            f"Getting the agent state is not implemented for "
+            f"{self.__class__.__name__}"
+        )
+
+    def get_state(self) -> PureTextSharedModelGroupState:
+        """Get the state of the shared model group."""
+        return self.state_class(**self.get_state_dict())
+
 
 class RandomWholeAgent(WholeAgent, ABC):
     """Base class for whole random agents."""
@@ -399,7 +600,7 @@ class RandomWholeAgent(WholeAgent, ABC):
 class AgentBody(AgentPart, ABC):
     """Base class for all agent bodies, which compute representations for heads.
 
-    Representations should have dimension `params.d_representation`.
+    Representations should have dimension `hyper_params.d_representation`.
     """
 
 
@@ -447,7 +648,7 @@ class CombinedAgentPart(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -539,13 +740,13 @@ class CombinedAgentPart(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         parts: dict[str, AgentPart],
     ):
         super().__init__()
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.parts = parts
@@ -629,18 +830,28 @@ class CombinedWhole(CombinedAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         wholes: dict[str, WholeAgent],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=wholes,
         )
         self.wholes = wholes
+
+
+class PureTextCombinedWhole(CombinedWhole, ABC):
+    """Base class for modules which combine whole pure-text agents together."""
+
+    @abstractmethod
+    def forward(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Run a forward pass through all the agents and combine the output."""
 
 
 class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
@@ -661,13 +872,13 @@ class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         parts: dict[str, AgentPart],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=parts,
@@ -683,7 +894,7 @@ class CombinedBody(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -695,13 +906,13 @@ class CombinedBody(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         bodies: dict[str, AgentBody],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=bodies,
@@ -730,7 +941,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -742,13 +953,13 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         policy_heads: dict[str, AgentPolicyHead],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=policy_heads,
@@ -767,7 +978,9 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         Returns
         -------
         policy_output : TensorDict
-            The output of the combined policy head.
+            The output of the combined policy head. This must contain the key ("agents",
+            "main_message_logits"), which has shape "... agents channel position logit"
+            and contains the logits for the agents' messages in the main message space.
         """
         pass
 
@@ -889,7 +1102,7 @@ class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -901,13 +1114,13 @@ class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
         value_heads: dict[str, AgentValueHead],
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             parts=value_heads,
@@ -939,7 +1152,7 @@ class Agent(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     agent_name : str
         The name of the agent.
@@ -959,7 +1172,7 @@ class Agent(ABC):
         The solo head of the agent.
     """
 
-    params: InitVar[Parameters]
+    hyper_params: InitVar[HyperParameters]
     agent_name: InitVar[str]
     whole: Optional[WholeAgent] = None
     body: Optional[AgentBody] = None
@@ -975,7 +1188,7 @@ class Agent(ABC):
 
     def __post_init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         agent_name: str,
     ):
         if self.body is None and self.policy_body is None and self.whole is None:
@@ -1035,10 +1248,10 @@ class Agent(ABC):
                 " not a 'policy_body'"
             )
 
-        self.params = params
+        self.hyper_params = hyper_params
         self.agent_name = agent_name
 
-        self.agent_params = params.agents[agent_name]
+        self.agent_params = hyper_params.agents[agent_name]
 
     def set_state(self, checkpoint: AgentState):
         """Set the state of the agent from a checkpoint.
@@ -1089,7 +1302,7 @@ class Agent(ABC):
     ):
         """Filter the parameters and set their learning rate, and append them to a list.
 
-        Normally appends a dictionary with the keys `params` and `lr`, consisting of the
+        Normally appends a dictionary with the keys `hyper_params` and `lr`, consisting of the
         filtered parameters and their learning rate. If the learning rate is 0, the
         parameters are frozen instead.
 
@@ -1116,9 +1329,9 @@ class Agent(ABC):
             model_param_dict.append(dict(params=filtered_params, lr=lr))
 
     def _body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         network_suffix = "network"
-        if self.params.functionalize_modules:
+        if self.hyper_params.functionalize_modules:
             network_suffix += "_params"
         if use_single_body and use_critic and part == "actor":
             return f"actor_{network_suffix}.module.0.{self.agent_name}"
@@ -1131,10 +1344,10 @@ class Agent(ABC):
                 raise ValueError(f"Unknown part: {part}")
 
     def _non_body_param_regex(self, part: str) -> str:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         nums = {"actor": "1-9", "critic": "0-9"}
         network_suffix = "network"
-        if self.params.functionalize_modules:
+        if self.hyper_params.functionalize_modules:
             network_suffix += "_params"
         if use_single_body and use_critic:
             return f"{part}_{network_suffix}.module.[{nums[part]}].{self.agent_name}"
@@ -1148,7 +1361,7 @@ class Agent(ABC):
 
     @property
     def _body_named_parameters(self) -> Iterable[tuple[str, TorchParameter]]:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.named_parameters(), self.value_body.named_parameters()
@@ -1157,7 +1370,7 @@ class Agent(ABC):
 
     @property
     def _body_parameters(self) -> Iterable[TorchParameter]:
-        use_critic, use_single_body, _ = get_agent_part_flags(self.params)
+        use_critic, use_single_body, _ = get_agent_part_flags(self.hyper_params)
         if use_critic and not use_single_body:
             return itertools.chain(
                 self.policy_body.parameters(), self.value_body.parameters()
@@ -1187,12 +1400,12 @@ class Agent(ABC):
         -------
         param_dict : Iterable[dict[str, Any]]
             The Torch parameters of the agent, and their learning rates. This is an
-            iterable of dictionaries with the keys `params` and `lr`.
+            iterable of dictionaries with the keys `hyper_params` and `lr`.
         """
 
         # Check for mistakes
         if (
-            self.params.rl.use_shared_body
+            self.hyper_params.rl.use_shared_body
             and self.agent_params.agent_lr_factor.actor
             != self.agent_params.agent_lr_factor.critic
         ):
@@ -1200,7 +1413,7 @@ class Agent(ABC):
                 "The agent learning rate factor for the actor and critic must be the same if the body is shared."
             )
         if (
-            self.params.rl.use_shared_body
+            self.hyper_params.rl.use_shared_body
             and self.agent_params.body_lr_factor.actor
             != self.agent_params.body_lr_factor.critic
         ):

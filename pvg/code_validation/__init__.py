@@ -18,3 +18,4 @@ from .agents import (
 )
 from .data import CodeValidationDataset
 from .environment import CodeValidationEnvironment
+from .protocols import CodeValidationProtocolHandler

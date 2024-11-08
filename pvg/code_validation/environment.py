@@ -34,9 +34,19 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         observation_spec["question"] = StringArraySpec(*self.batch_size, "batch")
         observation_spec["solution"] = StringArraySpec(*self.batch_size, "batch")
-        observation_spec["verdict"] = IntArraySpec(*self.batch_size, "batch")
+        observation_spec["prover_stance"] = IntArraySpec(*self.batch_size, "batch")
 
         return observation_spec
+
+    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+
+        datapoint = super().get_datapoint_from_env_state_as_dict(env_state)
+
+        datapoint["question"] = str(env_state["question"])
+        datapoint["solution"] = str(env_state["solution"])
+        datapoint["prover_stance"] = int(env_state["prover_stance"])
+
+        return datapoint
 
     def _masked_reset(
         self,
@@ -49,6 +59,6 @@ class CodeValidationEnvironment(PureTextEnvironment):
 
         env_state["question"] = data_batch["question"]
         env_state["solution"] = data_batch["solution"]
-        env_state["verdict"] = data_batch["verdict"]
+        env_state["prover_stance"] = data_batch["prover_stance"]
 
         return env_state

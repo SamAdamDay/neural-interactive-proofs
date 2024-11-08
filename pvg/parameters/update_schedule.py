@@ -5,9 +5,13 @@ agent should be updated by the optimizer. On all other iterations, the agent is 
 and does not update.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
-from pvg.parameters.base import ParameterValue
+from pvg.parameters.parameters_base import (
+    ParameterValue,
+    register_parameter_value_class,
+    get_parameter_or_parameter_value_class,
+)
 
 
 class AgentUpdateSchedule(ParameterValue, ABC):
@@ -17,17 +21,66 @@ class AgentUpdateSchedule(ParameterValue, ABC):
     the optimizer. On all other iterations, the agent is frozen and does not update.
     """
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}()"
-
     def to_dict(self) -> dict:
-        return self.__repr__()
+
+        as_dict = dict(_type=type(self).__name__)
+
+        if len(arguments := self._get_arguments_dict()) > 0:
+            as_dict.update({type(self).__name__: arguments})
+
+        return as_dict
+
+    @classmethod
+    def from_dict(cls, params_dict: dict) -> "AgentUpdateSchedule":
+        """Create an agent update schedule from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the agent update schedule.
+
+        Returns
+        -------
+        schedule : AgentUpdateSchedule
+            The agent update schedule.
+        """
+
+        # Get the class of the schedule
+        try:
+            class_name = params_dict["_type"]
+        except KeyError:
+            raise ValueError(
+                "Missing agent update schedule class ('_type') in dictionary"
+            )
+        schedule_class = get_parameter_or_parameter_value_class(class_name)
+
+        # Create the schedule
+        arguments = params_dict.get(class_name, {})
+        return schedule_class(**arguments)
+
+    def __repr__(self) -> str:
+        argument_string = ", ".join(
+            f"{key}={value}" for key, value in self._get_arguments_dict().items()
+        )
+        return f"{type(self).__name__}({argument_string})"
+
+    def _get_arguments_dict(self) -> dict:
+        """Get the constructor arguments of the schedule as a dictionary.
+
+        Returns
+        -------
+        arguments : dict
+            A dictionary of the arguments of the schedule.
+        """
+        return {}
 
 
+@register_parameter_value_class
 class ConstantUpdateSchedule(AgentUpdateSchedule):
     """An agent update schedule which updates the agent on all iterations."""
 
 
+@register_parameter_value_class
 class ContiguousPeriodicUpdateSchedule(AgentUpdateSchedule):
     """A periodic schedule where the agent is updated between start and stop iterations.
 
@@ -49,10 +102,11 @@ class ContiguousPeriodicUpdateSchedule(AgentUpdateSchedule):
         self.start = start
         self.stop = stop
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.period}, {self.start}, {self.stop})"
+    def _get_arguments_dict(self) -> dict:
+        return dict(period=self.period, start=self.start, stop=self.stop)
 
 
+@register_parameter_value_class
 class AlternatingPeriodicUpdateSchedule(ContiguousPeriodicUpdateSchedule):
     """A periodic schedule for alternating updates between two agents.
 
@@ -89,8 +143,9 @@ class AlternatingPeriodicUpdateSchedule(ContiguousPeriodicUpdateSchedule):
             stop = period
         super().__init__(period, start, stop)
 
-    def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}({self.period}, {self.first_agent_num_rounds}, "
-            f"{self.first_agent})"
+    def _get_arguments_dict(self) -> dict:
+        return dict(
+            period=self.period,
+            first_agent_num_rounds=self.first_agent_num_rounds,
+            first_agent=self.first_agent,
         )

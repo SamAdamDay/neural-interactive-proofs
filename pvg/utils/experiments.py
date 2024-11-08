@@ -30,9 +30,7 @@ import torch
 import wandb
 
 from wandb import AlertLevel as WandbAlertLevel
-import wandb
 
-from wandb import AlertLevel as WandbAlertLevel
 from tqdm import tqdm
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
@@ -163,6 +161,7 @@ class HyperparameterExperiment(ABC):
         arg_parser_description: str = "Run hyperparameter experiments",
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
+        add_run_infix_argument: bool = True,
     ):
         if run_id_fn is None:
 
@@ -205,12 +204,13 @@ class HyperparameterExperiment(ABC):
         )
 
         # Add parser arguments for W&B
-        self.parser.add_argument(
-            "--run-infix",
-            type=str,
-            help="The string to add in the middle of the run ID",
-            default="a",
-        )
+        if add_run_infix_argument:
+            self.parser.add_argument(
+                "--run-infix",
+                type=str,
+                help="The string to add in the middle of the run ID",
+                default="a",
+            )
         self.parser.add_argument(
             "--use-wandb",
             action="store_true",
@@ -398,12 +398,16 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    arg_parser_description : str, default="Run hyperparameter experiments sequentially"
+        The description of the argument parser.
     default_wandb_project : Optional[str], default=None
         The default W&B project to use. If None, the default is to use the global
         constant `WANDB_PROJECT`.
     allow_resuming_wandb_run : bool, default=False
         Whether to allow resuming a W&B run with the same ID as a run in this
         experiment.
+    add_run_infix_argument : bool, default=True
+        Whether to add an argument to the parser for adding an infix to the run ID.
     output_width : int, default=70
         The width of the output to print (after the logging prefix).
     """
@@ -419,8 +423,10 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
+        arg_parser_description: str = "Run hyperparameter experiments sequentially",
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
+        add_run_infix_argument: bool = True,
         output_width: int = 70,
     ):
         super().__init__(
@@ -429,9 +435,10 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
-            arg_parser_description="Run hyperparameter experiments sequentially",
+            arg_parser_description=arg_parser_description,
             default_wandb_project=default_wandb_project,
             allow_resuming_wandb_run=allow_resuming_wandb_run,
+            add_run_infix_argument=add_run_infix_argument,
         )
 
         self.output_width = output_width
@@ -482,7 +489,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
         )
 
-        # Print the run_id and the Parameters
+        # Print the run_id and the hyper-parameters
         if not cmd_args.quiet:
             base_logger.info("")
             base_logger.info("=" * self.output_width)
@@ -595,12 +602,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
+    arg_parser_description : str, default="Run hyperparameter experiments in parallel"
+        The description of the argument parser.
     default_wandb_project : Optional[str], default=None
         The default W&B project to use. If None, the default is to use the global
         constant `WANDB_PROJECT`.
     allow_resuming_wandb_run : bool, default=False
         Whether to allow resuming a W&B run with the same ID as a run in this
         experiment.
+    add_run_infix_argument : bool, default=True
+        Whether to add an argument to the parser for adding an infix to the run ID.
     default_num_workers : int, default=1
         The default number of workers to use for multiprocessing.
     """
@@ -614,8 +625,10 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
+        arg_parser_description: str = "Run hyperparameter experiments in parallel",
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
+        add_run_infix_argument: bool = True,
         default_num_workers: int = 1,
     ):
         super().__init__(
@@ -624,9 +637,10 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             run_id_fn=run_id_fn,
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
-            arg_parser_description="Run hyperparameter experiments in parallel",
+            arg_parser_description=arg_parser_description,
             default_wandb_project=default_wandb_project,
             allow_resuming_wandb_run=allow_resuming_wandb_run,
+            add_run_infix_argument=add_run_infix_argument,
         )
 
         # Needed so that we can pickle the command arguments
@@ -706,9 +720,14 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         )
 
         if fine_grained_global_tqdm:
-            global_tqdm_step_fn = lambda: global_tqdm.update(1)
+
+            def global_tqdm_step_fn():
+                global_tqdm.update(1)
+
         else:
-            global_tqdm_step_fn = lambda: ...
+
+            def global_tqdm_step_fn():
+                pass
 
         # Run the experiment
         self.experiment_fn(

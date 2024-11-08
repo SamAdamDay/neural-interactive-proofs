@@ -3,10 +3,11 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import BinarificationMethodType
 
 
+@register_parameter_class
 @dataclass
 class DatasetParameters(SubParameters):
     """Additional parameters for the dataset.

@@ -55,11 +55,11 @@ class TimeInfoPrinter:
             if self.previous_time is not None:
                 time_diff = (current_time - self.previous_time).total_seconds()
                 time_diff = round(time_diff, self.num_digits)
-                print(
+                print(  # noqa: T201
                     f"{current_time.strftime('%H:%M:%S.%f')} "
                     f"[{time_diff:{self.num_digits+1}.{self.num_digits}f}] "
                     f"{message}"
                 )
             else:
-                print(f"{current_time.strftime('%H:%M:%S.%f')} {message}")
+                print(f"{current_time.strftime('%H:%M:%S.%f')} {message}")  # noqa: T201
         self.previous_time = current_time

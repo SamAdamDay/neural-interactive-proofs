@@ -1,14 +1,14 @@
-"""The parameters of the experiment.
+"""The hyper-parameters of the experiment.
 
-An experiment should be completely reproducible from its parameters (up to hardware
-quirks).
+An experiment should be completely reproducible from its hyper-parameters (up to
+hardware quirks).
 
-The parameters are initialised by constructing a `Parameters` object. This object
+The parameters are initialised by constructing a `HyperParameters` object. This object
 completely defines the experiment, and is passed around to all experiment components.
 
 Some experiment parameters are sub-parameters, which are defined in separate classes.
-When the `Parameters` object is initialised, these sub-parameters may be initialised as
-well, according to the values of the main parameters.
+When the `HyperParameters` object is initialised, these sub-parameters may be
+initialised as well, according to the values of the main parameters.
 
 When creating sub-parameters, you can either pass then as an object of the appropriate
 sub-parameter class, or as a dictionary. The advantage of the former is that you can use
@@ -16,13 +16,13 @@ symbol inspection (e.g. in VS Code) to have easy access to the parameter names a
 descriptions. If you pass a dictionary, it will be converted to the appropriate
 sub-parameter class.
 
-The parameters object can be converted to a dictionary using `Parameters.to_dict`.
+The parameters object can be converted to a dictionary using `HyperParameters.to_dict`.
 
 Examples
 --------
 1. Create a parameters object, using default values for ppo parameters, and others
 
->>> params = Parameters(
+>>> hyper_params = HyperParameters(
 ...     scenario=Scenario.GRAPH_ISOMORPHISM,
 ...     trainer=Trainer.PPO,
 ...     dataset="eru10000",
@@ -36,12 +36,12 @@ Examples
 
 2. Convert the parameters object to a dictionary
 
->>> params.to_dict()
+>>> hyper_params.to_dict()
 {'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
 
 3. Create a parameters object using a dictionary for the ppo parameters
 
->>> params = Parameters(
+>>> hyper_params = HyperParameters(
 ...     scenario=Scenario.GRAPH_ISOMORPHISM,
 ...     trainer=Trainer.PPO,
 ...     dataset="eru10000",
@@ -53,9 +53,14 @@ Examples
 """
 
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
-from .base import BaseParameters, SubParameters, ParameterValue
+from .parameters_base import (
+    BaseHyperParameters,
+    SubParameters,
+    ParameterValue,
+    register_parameter_class,
+)
 from .types import (
     ScenarioType,
     SpgVariant,
@@ -76,6 +81,7 @@ from .agents import (
     RandomAgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
+    PureTextAgentParameters,
     CodeValidationAgentParameters,
     AgentsParameters,
 )
@@ -86,13 +92,15 @@ from .trainers import (
     SpgParameters,
     ReinforceParameters,
     SoloAgentParameters,
-    EiParameters,
+    PureTextEiParameters,
+    TextRlParameters,
 )
 from .protocol import (
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
     MnipProtocolParameters,
+    ZkProtocolParameters,
 )
 from .scenario import ImageClassificationParameters, CodeValidationParameters
 from .dataset import DatasetParameters
@@ -136,9 +144,13 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
 }
 
 
+@register_parameter_class
 @dataclass
-class Parameters(BaseParameters):
-    """Parameters of the experiment.
+class HyperParameters(BaseHyperParameters):
+    """The hyper-parameters of the experiment.
+
+    An experiment should be completely reproducible from its hyper-parameters (up to
+    hardware quirks).
 
     Parameters
     ----------
@@ -199,6 +211,9 @@ class Parameters(BaseParameters):
     solo_agent : SoloAgentParameters, optional
         Additional parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
+    pure_text_ei : PureTextEiParameters, optional
+        Additional parameters for the expert iteration trainer which works with agents
+        that call a text-based APIs.
     image_classification : ImageClassificationParameters, optional
         Additional parameters for the image classification task.
     code_validation : CodeValidationParameters, optional
@@ -207,11 +222,11 @@ class Parameters(BaseParameters):
         Additional parameters for the dataset.
     """
 
-    scenario: ScenarioType
-    trainer: TrainerType
+    scenario: ScenarioType | str
+    trainer: TrainerType | str
     dataset: str
 
-    interaction_protocol: InteractionProtocolType = InteractionProtocolType.PVG
+    interaction_protocol: InteractionProtocolType | str = InteractionProtocolType.PVG
 
     seed: int = 6198
 
@@ -235,7 +250,8 @@ class Parameters(BaseParameters):
     spg: Optional[SpgParameters | dict] = None
     reinforce: Optional[ReinforceParameters | dict] = None
     solo_agent: Optional[SoloAgentParameters | dict] = None
-    ei: Optional[EiParameters | dict] = None
+    text_rl: Optional[TextRlParameters | dict] = None
+    pure_text_ei: Optional[PureTextEiParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
     code_validation: Optional[CodeValidationParameters | dict] = None
@@ -246,36 +262,53 @@ class Parameters(BaseParameters):
     pvg_protocol: Optional[PvgProtocolParameters | dict] = None
     debate_protocol: Optional[DebateProtocolParameters | dict] = None
     mnip_protocol: Optional[MnipProtocolParameters | dict] = None
+    zk_protocol: Optional[ZkProtocolParameters | dict] = None
 
     message_regression: Optional[MessageRegressionParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums
         if not isinstance(self.scenario, ScenarioType):
-            self.scenario = ScenarioType[self.scenario]
+            self.scenario = ScenarioType[self.scenario.upper()]
         if not isinstance(self.trainer, TrainerType):
-            self.trainer = TrainerType[self.trainer]
+            self.trainer = TrainerType[self.trainer.upper()]
         if not isinstance(self.interaction_protocol, InteractionProtocolType):
             self.interaction_protocol = InteractionProtocolType[
-                self.interaction_protocol
+                self.interaction_protocol.upper()
             ]
+
+        # TODO: do this better
+        for protocol_common_field in fields(CommonProtocolParameters):
+            if protocol_common_field.name == "zero_knowledge":
+                default_zero_knowledge = protocol_common_field.default
+        if isinstance(self.protocol_common, CommonProtocolParameters):
+            zero_knowledge = self.protocol_common.zero_knowledge
+        elif isinstance(self.protocol_common, dict):
+            zero_knowledge = self.protocol_common.get(
+                "zero_knowledge", default_zero_knowledge
+            )
+        else:
+            zero_knowledge = default_zero_knowledge
 
         if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
             self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
             self._process_agents_params(
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         elif self.scenario == ScenarioType.CODE_VALIDATION:
             self._process_agents_params(
                 CodeValidationAgentParameters,
                 RandomAgentParameters,
+                zero_knowledge,
             )
 
         # Add PPO parameters for specific variants to the appropriate class
@@ -293,8 +326,9 @@ class Parameters(BaseParameters):
         self,
         agent_params_class: type[AgentParameters],
         random_agent_params_class: type[RandomAgentParameters],
+        zero_knowledge: bool,
     ) -> AgentsParameters:
-        """Process agent parameters passed to `Parameters`.
+        """Process agent parameters passed to `HyperParameters`.
 
         Fills in missing agent parameters with the default parameters for the scenario.
         Also validates the agent parameters.
@@ -305,8 +339,8 @@ class Parameters(BaseParameters):
             The class of the agent parameters for the scenario.
         random_agent_params_class : type[RandomAgentParameters]
             The class of the random agent parameters for the scenario.
-        protocol_params_class : type[ProtocolParameters]
-            The class of the interaction protocol parameters for the scenario.
+        zero_knowledge : bool
+            Whether the protocol is zero-knowledge.
         """
 
         # If no agent parameters are provided, use the default parameters for the
@@ -315,7 +349,7 @@ class Parameters(BaseParameters):
             self.agents = AgentsParameters(
                 **{
                     name: agent_params_class()
-                    for name in AGENT_NAMES[self.interaction_protocol]
+                    for name in get_protocol_agent_names(self, zero_knowledge)
                 }
             )
 
@@ -354,9 +388,32 @@ class Parameters(BaseParameters):
 
         # Make sure the agent names match the agent names expected by the protocol
         agent_names = tuple(self.agents.keys())
-        if set(agent_names) != set(AGENT_NAMES[self.interaction_protocol]):
+        if set(agent_names) != set(get_protocol_agent_names(self, zero_knowledge)):
             raise ValueError(
                 f"Agent names {agent_names} do not match the agent names expected"
                 f"by interaction protocol {self.interaction_protocol}: "
-                f"{AGENT_NAMES[self.interaction_protocol]}."
+                f"{get_protocol_agent_names(self, zero_knowledge)}."
             )
+
+
+def get_protocol_agent_names(
+    hyper_params: HyperParameters, zero_knowledge: bool
+) -> list[str]:
+    """Get the agent names required for the protocol.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    zero_knowledge : bool
+        Whether the protocol is zero-knowledge.
+
+    Returns
+    -------
+    list[str]
+        The agent names required for the protocol.
+    """
+    agent_names = list(AGENT_NAMES[hyper_params.interaction_protocol])
+    if zero_knowledge:
+        agent_names.extend(["simulator", "adversarial_verifier"])
+    return agent_names

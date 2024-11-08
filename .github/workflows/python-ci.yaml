@@ -30,10 +30,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install wheel
         pip install -r requirements_dev.txt
+    - name: Test with pytest
+      run: |
+        python -m pytest
     - name: Check formatting with black
       run: |
         # stop the build if there are black formatting errors
         black --check .
-    - name: Test with pytest
+    - name: Check linting with ruff
       run: |
-        python -m pytest
+        # stop the build if there are ruff linting errors
+        ruff check .

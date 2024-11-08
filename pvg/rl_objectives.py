@@ -682,7 +682,7 @@ class SpgLoss(ClipPPOLossImproved):
                 score_coefficient = {}
                 pg_coefficient = {}
 
-                for l in self.leaders[j]:
+                for l in self.leaders[j]:  # noqa E741
                     p = jacobian_terms(i, l)
 
                     # Score coefficient
@@ -948,8 +948,8 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
             self.actor_network = actor_network
 
         if separate_losses:
-            # we want to make sure there are no duplicates in the params: the
-            # params of critic must be refs to actor if they're shared
+            # we want to make sure there are no duplicates in the hyper_params: the
+            # hyper_params of critic must be refs to actor if they're shared
             policy_params = list(actor_network.parameters())
         else:
             policy_params = None
