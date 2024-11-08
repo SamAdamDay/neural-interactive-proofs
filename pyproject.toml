@@ -39,6 +39,7 @@ exclude = [
     "site-packages",
     "venv",
     "pvg/utils/future/typing.py",
+    "playground",
 ]
 
 # Same as Black.
