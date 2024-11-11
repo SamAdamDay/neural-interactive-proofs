@@ -465,7 +465,7 @@ class PureTextAgentParameters(AgentParameters):
     max_response_words: int = 150
 
     max_tokens_per_message: int | None = None
-    num_invalid_generation_retries: int = 5
+    num_invalid_generation_retries: int = 10
 
     @classmethod
     def construct_test_params(cls) -> "PureTextAgentParameters":

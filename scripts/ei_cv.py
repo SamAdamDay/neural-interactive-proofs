@@ -32,7 +32,7 @@ from pvg.constants import WANDB_CV_PROJECT
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
-    num_iterations=[1],
+    num_iterations=[8],
     rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
