@@ -31,8 +31,9 @@ interactive black boxes". arXiv:2206.00759
 
 from math import ceil, floor
 
-import torch
 from torch import Tensor
+
+from tensordict import TensorDictBase
 
 from einops import rearrange
 
@@ -44,6 +45,7 @@ from pvg.protocols.protocol_base import (
     DeterministicSingleVerifierProtocolHandler,
 )
 from pvg.protocols.registry import register_protocol_handler
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -437,6 +439,44 @@ class MnipProtocol(PvgProtocol):
                         return False
                 elif agent_name == "verifier":
                     return round_id % 2 == 1
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
+    ):
+        """Compute the rewards for the other agents and add them to the current reward.
+
+        Both provers receive the same reward, which is the 1 if the verifier accepts and
+        0 otherwise.
+
+        The `reward` tensor is updated in place, adding in the rewards for the agents
+        at the appropriate indices.
+
+        Parameters
+        ----------
+        verifier_decision_made : Bool[Tensor, "..."]
+            A boolean mask indicating whether the verifier has made a decision.
+        verifier_decision : Int[Tensor, "..."]
+            The verifier's decision.
+        reward : Float[Tensor, "... agent"]
+            The currently computed reward, which should include the reward for the
+            verifier.
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
+        """
+
+        if self.hyper_params.protocol_common.shared_reward:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = reward[..., self.verifier_index]
+        else:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * self.hyper_params.protocol_common.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
