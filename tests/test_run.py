@@ -191,10 +191,10 @@ def test_prepare_run_experiment(param_spec: dict):
     agents_param = {}
     agent_names = list(AGENT_NAMES[protocol_type])
     if zero_knowledge:
-        agent_names.extend(["simulator", "adversarial_verifier"])
+        agent_names.extend(["simulator", "adversarial_verifier"]) # LH-TODO update this
     for agent_name in agent_names:
         if is_random and agent_name != "verifier":
-            agents_param[agent_name] = {"is_random": True}
+            agents_param[agent_name] = {"is_random": True} # LH-TODO update this (for is_simulator)
         else:
             agents_param[agent_name] = basic_agent_params[scenario_type]
     if manual_architecture is not None:

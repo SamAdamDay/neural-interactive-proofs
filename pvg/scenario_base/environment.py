@@ -326,6 +326,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
         - `linear_message_history`: The linear message history, if it is included.
+        - `y`: The label, which is only used by the simulator(s).
 
         Returns
         -------
@@ -361,6 +362,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 self.message_history_shape[-1],
                 shape=self.message_history_shape,
                 dtype=torch.float,
+                device=self.device,
+            ),
+            y=DiscreteTensorSpec(
+                2,
+                shape=(self.num_envs,),
+                dtype=torch.long,
                 device=self.device,
             ),
             shape=(self.num_envs,),
@@ -618,6 +625,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         next_td.set(
             "decision_restriction", torch.zeros_like(shared_done, dtype=self._int_dtype)
         )
+        # Update the sequence probabilities if using a zero-knowledge protocol
+        # if self.hyper_params.protocol_common.zero_knowledge:
+        #     next_td["trajectory_log_probs"] = self.protocol_handler.get_trajectory_probs(env_td)
 
         return next_td
 

@@ -8,6 +8,7 @@ from functools import cached_property
 
 import torch
 from torch import Tensor, as_tensor
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDictBase
 
@@ -59,6 +60,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 f"protocol (`can_be_zero_knowledge=False`)."
             )
 
+        self.is_zero_knowledge = True
+
         self.base_protocol = base_protocol_cls(hyper_params, settings)
 
         if self.base_protocol.verifier_names != ["verifier"]:
@@ -80,7 +83,37 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         
         self.use_multiple_simulators = hyper_params.zk_protocol.use_multiple_simulators
 
-    verifier_names = ["verifier", "adversarial_verifier"]
+        # The cached property doesn't get inherited properly for some reason (and simialrly if we use ), so we need to redefine it
+        self.agent_first_active_round = {}
+        for round_id in range(100):
+            for agent_name in set(self.agent_names) - set(
+                self.agent_first_active_round.keys()
+            ):
+                if self.can_agent_be_active_any_channel(agent_name, round_id):
+                    self.agent_first_active_round[agent_name] = round_id
+            if len(self.agent_first_active_round) == len(self.agent_names):
+                break
+        else:
+            raise ValueError(
+                "Could not determine the first active round for all agents."
+            )
+
+    # verifier_names = ["verifier", "adversarial_verifier"]
+
+    # # The cached property doesn't get inherited, so we need to redefine it
+    # agents_first_active_rounds = {}
+    # for round_id in range(100):
+    #     for agent_name in set(self.agent_names) - set(
+    #         self.agents_first_active_rounds.keys()
+    #     ):
+    #         if self.can_agent_be_active_any_channel(agent_name, round_id):
+    #             self.agents_first_active_rounds[agent_name] = round_id
+    #     if len(self.agents_first_active_rounds) == len(self.agent_names):
+    #         break
+    # else:
+    #     raise ValueError(
+    #         "Could not determine the first active round for all agents."
+    #     )
 
     @property
     def max_message_rounds(self) -> int:
@@ -102,10 +135,16 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         adversarial verifier and the simulator.
         """
         if self.use_multiple_simulators:
-            simulator_names = [f"{a}_simulator" for a in self.base_protocol.agent_names]
+            simulator_names = [f"simulator_{a}" for a in self.base_protocol.agent_names]
         else:
             simulator_names = ["simulator"]
         return self.base_protocol.agent_names + ["adversarial_verifier"] + simulator_names
+    
+    @property
+    def base_agent_indices(self) -> list[int]:
+        """The indices of the agents in the base protocol.
+        """
+        return [self.agent_names.index(name) for name in self.base_protocol.agent_names]
 
     @property
     def simulator_names(self) -> list[str]:
@@ -116,6 +155,11 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     def verifier_index(self) -> int:
         """The index of the verifier in the agent names."""
         return self.agent_names.index(self.base_protocol.verifier_name)
+    
+    @property
+    def prover_indices(self) -> int:
+        """The indices of the provers in the agent names."""
+        return [self.agent_names.index(name) for name in self.base_protocol.prover_names]
 
     @property
     def adversarial_verifier_index(self) -> int:
@@ -134,8 +178,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         if not self.use_multiple_simulators:
             return [self.agent_names.index("simulator")]
         else:
-            simulator_indices = [self.agent_names.index(f"{name}_simulator") for name in self.base_protocol.agent_names if name != "verifier"]
-            return [self.agent_names.index("verifier_simulator")] + simulator_indices
+            simulator_indices = [self.agent_names.index(f"simulator_{name}") for name in self.base_protocol.agent_names if name != "verifier"]
+            return [self.agent_names.index("simulator_verifier")] + simulator_indices
 
     @property
     def standard_channel_names(self) -> list[str]:
@@ -217,13 +261,41 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 )
             if self.use_multiple_simulators:
                 agent_channel_visibility.append(
-                    (f"{agent_name}_simulator", channel_name + "_simulator")
+                    (f"simulator_{agent_name}", channel_name + "_simulator")
                 )
         if not self.use_multiple_simulators:
             for channel_name in self.base_protocol.message_channel_names:
                 agent_channel_visibility.append("simulator", channel_name + "_simulator")
 
         return agent_channel_visibility
+
+    # # For some reason this is equal to None if we try to inherit directly from ProtocolHandler, so we need to redefine it
+    # @cached_property
+    # def agent_first_active_round(self) -> dict[str, int]:
+    #     """The first round in which each agent is or can be active.
+
+    #     For non-deterministic protocols, this is the first round in which the agent has
+    #     some probability of being active.
+
+    #     Returns
+    #     -------
+    #     agents_first_active_rounds : dict[str, int]
+    #         The first round in which each agent is active
+    #     """
+
+    #     agents_first_active_rounds = {}
+    #     for round_id in range(100):
+    #         for agent_name in set(self.agent_names) - set(
+    #             agents_first_active_rounds.keys()
+    #         ):
+    #             if self.can_agent_be_active_any_channel(agent_name, round_id):
+    #                 agents_first_active_rounds[agent_name] = round_id
+    #         if len(agents_first_active_rounds) == len(self.agent_names):
+    #             break
+    #     else:
+    #         raise ValueError(
+    #             "Could not determine the first active round for all agents."
+    #         )
 
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
@@ -235,7 +307,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # verifier is active. The adversarial verifier and simulator are not active in
         # the standard channels, but the provers are
         if channel_suffix == "standard":
-            if agent_name in ["adversarial_verifier", "simulator"]:
+            if "adversarial" in agent_name or "simulator" in agent_name:
                 return False
             elif agent_name == "verifier":
                 return self.base_protocol.can_agent_be_active(
@@ -246,7 +318,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # protocol verifier is active. The verifier and simulator are not active in the
         # adversarial channels, but the provers are
         elif channel_suffix == "adversarial":
-            if agent_name in ["verifier", "simulator"]:
+            if agent_name == "verifier" or "simulator" in agent_name:
                 return False
             elif agent_name == "adversarial_verifier":
                 return self.base_protocol.can_agent_be_active(
@@ -256,9 +328,9 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # When there are multiple simulators, they copy the visibility of the corresponding base agent. Otherwise the (single) simulator is always active. No other agents are active in the simulator channel(s).
         elif channel_suffix == "simulator":
             if self.use_multiple_simulators:
-                if "_simulator" in agent_name:
+                if "simulator_" in agent_name:
                     return self.base_protocol.can_agent_be_active(
-                        agent_name[:-10], round_id, base_channel_name
+                        agent_name[10:], round_id, base_channel_name
                     )
                 else:
                     return False
@@ -343,6 +415,12 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # active_mask[..., -1, -num_base_channels:] = True
 
         return active_mask
+
+    def get_trajectory_probs(self):
+
+
+
+        pass
 
     def get_verifier_guess_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
@@ -476,7 +554,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             dim=-1,
         )
 
-        simulator_reward: Float[Tensor, "... agent"] = self._get_simulator_reward(
+        simulator_reward: Float[Tensor, "... agent"] = self.get_simulator_reward(
             round_id=round_id,
             seed=seed,
             main_message_logits=main_message_logits,
@@ -486,29 +564,31 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # Add the simulator rewards to the reward tensor
         reward[..., self.simulator_indices] = simulator_reward
 
-        # The adversarial verifier reward is the negative of the (mean) simulator reward
-        mean_simulator_reward = simulator_reward.mean(dim=-1) #TODO
-        reward[..., self.adversarial_verifier_index] = -mean_simulator_reward
+        # The adversarial verifier reward is the negative of the simulator reward
+        total_simulator_reward = simulator_reward.sum(dim=-1) #TODO
+        reward[..., self.adversarial_verifier_index] = -total_simulator_reward
 
-        # Prover rewards
-        expanded_simulator_reward = repeat(
-            mean_simulator_reward,
-            "... -> ... agent",
-            agent=len(self.base_protocol.prover_names),
-        )
-        prover_indices = [self.agent_names.index(name) for name in self.base_protocol.prover_names if "simulator" not in name]
-        reward[..., prover_indices] += (
-            self.prover_zk_loss_coefficient * expanded_simulator_reward
-        )
+        # For now we don't actually add the prover ZK rewards here because we can used supervised learning instead of RL, and this messes up the advantage calculation
+        # expanded_simulator_reward = repeat(
+        #     total_simulator_reward,
+        #     "... -> ... agent",
+        #     agent=len(self.base_protocol.prover_names),
+        # )
+        # prover_indices = [self.agent_names.index(name) for name in self.base_protocol.prover_names if "simulator" not in name]
+        # reward[..., prover_indices] += (
+        #     self.prover_zk_loss_coefficient * expanded_simulator_reward / self.hyper_params.zk_protocol.simulator_reward_coefficient
+        # )
 
         return shared_done, agent_done, terminated, reward
 
-    def _get_simulator_reward(
+    def get_simulator_reward(
         self,
         round_id: Int[Tensor, "..."],
         seed: Int[Tensor, "..."],
         main_message_logits: Float[Tensor, "... agent channel position logit"],
         decision_logits: Float[Tensor, "... agent 3"],
+        distance_function = torch.cosine_similarity,
+        use_log_probs = False,
     ) -> Float[Tensor, "..."]:
         """Get the simulator reward(s).
 
@@ -580,8 +660,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Set the logits to zero where the adversarial verifier and simulator are not
         # active
-        adversarial_channel_logits[~adversarial_channel_mask] = 0.0
-        simulator_channel_logits[~simulator_channel_mask] = 0.0
+        adversarial_channel_logits = adversarial_channel_logits * adversarial_channel_mask.unsqueeze(-1)
+        simulator_channel_logits = simulator_channel_logits * simulator_channel_mask.unsqueeze(-1)
 
         # # Extract the logits for the corresponding agents
         # adversarial_channel_logits[..., self.adversarial_indices,:,:]
@@ -599,7 +679,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Compute the cosine similarity between the adversarial verifier and simulator
         # active message logits
-        simulator_reward: Float[Tensor, "..."] = torch.cosine_similarity(
+        simulator_reward: Float[Tensor, "..."] = distance_function(
             adversarial_channel_logits[..., self.adversarial_indices,:,:], simulator_channel_logits[..., self.simulator_indices,:,:], dim=-1
         ).sum(dim=-1)
 
@@ -612,24 +692,26 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         adversarial_verifier_decision_logits: Float[Tensor, "... 3"] = decision_logits[
             ..., self.adversarial_verifier_index, :
         ]
-        simulated_verifier_index = self.agent_names.index("verifier_simulator") if self.use_multiple_simulators else self.agent_names.index("simulator")
+        simulated_verifier_index = self.agent_names.index("simulator_verifier") if self.use_multiple_simulators else self.agent_names.index("simulator")
         simulator_decision_logits: Float[Tensor, "... 3"] = decision_logits[
             ..., simulated_verifier_index, :
         ]
 
         # Set the decision logits to zero where the adversarial verifier cannot make a
         # decision
-        adversarial_verifier_decision_logits[~adversarial_verifier_guess_mask] = 0.0
-        simulator_decision_logits[~adversarial_verifier_guess_mask] = 0.0
+        adversarial_verifier_decision_logits = adversarial_verifier_decision_logits * adversarial_verifier_guess_mask.unsqueeze(-1)
+        simulator_decision_logits = simulator_decision_logits * adversarial_verifier_guess_mask.unsqueeze(-1)
 
         # Add the cosine similarity of the adversarial verifier and simulator decision
         # logits where the adversarial verifier can make a decision to the relevant simulator's loss
-        simulator_reward[:, 0] += torch.cosine_similarity(
+        additional_reward = [torch.zeros_like(simulator_reward[:, 0]) for _ in range(simulator_reward.shape[-1])]
+        additional_reward[0] = distance_function(
             adversarial_verifier_decision_logits, simulator_decision_logits, dim=-1
         )
+        simulator_reward = simulator_reward + torch.stack(additional_reward,dim=-1)
 
         # Scale the reward by the coefficient
-        simulator_reward *= self.hyper_params.zk_protocol.simulator_reward_coefficient
+        simulator_reward = simulator_reward * self.simulator_reward_coefficient
 
         return simulator_reward
 
@@ -648,3 +730,16 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """
 
         return self.hyper_params.zk_protocol.aux_prover_reward_coefficient
+
+    @property
+    def simulator_reward_coefficient(self) -> float:
+        """The coefficient of the simulator reward.
+
+        Note
+        ----
+        Eventually this should dynamically update the coefficient to allow for
+        lexicographic optimisation, as in
+        https://www.ijcai.org/proceedings/2022/0476.pdf
+        """
+
+        return self.hyper_params.zk_protocol.simulator_reward_coefficient

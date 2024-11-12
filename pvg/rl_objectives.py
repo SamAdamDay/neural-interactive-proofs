@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, make_dataclass, field, fields
 from typing import Iterable, NamedTuple, Optional
+from jaxtyping import Int, Float
+from functools import cached_property
 import contextlib
 from abc import ABC, abstractmethod
 import warnings
@@ -26,7 +28,7 @@ from pvg.utils.maths import dot_td, ihvp, compute_sos_update
 from pvg.utils.torch import flatten_batch_dims
 from pvg.utils.distributions import CompositeCategoricalDistribution
 from pvg.utils.tensordict import get_key_batch_size
-
+from pvg.protocols.zero_knowledge import ZeroKnowledgeProtocol
 
 class Objective(LossModule, ABC):
     """Base class for all RL objectives.
@@ -41,6 +43,8 @@ class Objective(LossModule, ABC):
     """
 
     action_keys: Iterable[NestedKey] = ("action",)
+    names: list[str] = []
+    zk_protocol: Optional[ZeroKnowledgeProtocol] = None
 
     @dataclass
     class _BaseAcceptedKeys:
@@ -196,7 +200,6 @@ class Objective(LossModule, ABC):
                     f"Not all action keys have the same batch size. Key {key!r} has "
                     f"batch size {batch_size} but expected {actions_batch_size}."
                 )
-
         action_tensordict = TensorDict(actions, batch_size=actions_batch_size)
 
         with (
@@ -257,6 +260,47 @@ class Objective(LossModule, ABC):
 
         return advantage
 
+    def _get_zk_rewards(self, gain: torch.Tensor, tensordict: TensorDictBase):
+        """Update the gain tensor with zero knowledge rewards.
+
+        Parameters
+        ----------
+        gain : torch.Tensor
+            The gain tensor.
+        tensordict : TensorDictBase
+            The input TensorDict.
+        """
+        # Get simulator rewards
+        simulator_reward = self.zk_protocol.get_simulator_reward(
+                tensordict.get("round"),
+                tensordict.get("seed"),
+                tensordict.get(("agents","main_message_logits")),
+                tensordict.get(("agents","decision_logits")),
+            )
+        
+        # Simulator gains
+        new_gains = [torch.zeros_like(gain[...,0]) for _ in range(len(self.names))]
+        for i, index in enumerate(self.zk_protocol.simulator_indices):
+            new_gains[index] = simulator_reward[..., i]
+
+        # Adversarial verifier gains
+        total_simulator_reward = simulator_reward.sum(dim=-1)
+        new_gains[self.zk_protocol.adversarial_verifier_index] = -total_simulator_reward
+
+        # Prover gains
+        for i, index in enumerate(self.zk_protocol.prover_indices):
+            new_gains[index] = torch.ones_like(gain[...,0]) * self.zk_protocol.prover_zk_loss_coefficient * total_simulator_reward / self.zk_protocol.simulator_reward_coefficient
+
+        # Add the new gains to the existing gain tensor
+        gain = self.base_agent_mask * gain
+        gain = gain + torch.stack(new_gains,dim=-1)
+
+        return gain
+
+    @cached_property
+    def base_agent_mask(self):
+        return torch.tensor([1 if i in self.zk_protocol.base_agent_indices else 0 for i in range(len(self.names))])
+
     @abstractmethod
     def backward(self, loss_vals: TensorDictBase):
         """Perform the backward pass for the loss.
@@ -302,12 +346,16 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
                 entropy_flat.mean(dim=0).sum().detach(),
             )
             loss_entropy_per_agent = (-self.entropy_coef * entropy_flat).mean(dim=0)
+            if self.zk_protocol is not None:
+                loss_entropy_per_agent = self.base_agent_mask * loss_entropy_per_agent
             td_out.set("loss_entropy", loss_entropy_per_agent.sum())
             td_out.set(("agents", "loss_entropy"), loss_entropy_per_agent)
         if self.critic_coef:
             loss_critic_per_agent = flatten_batch_dims(
                 self._loss_critic(tensordict), num_batch_dims
             ).mean(dim=0)
+            if self.zk_protocol is not None:
+                loss_entropy_per_agent = self.base_agent_mask * loss_critic_per_agent
             td_out.set("loss_critic", loss_critic_per_agent.sum())
             td_out.set(("agents", "loss_critic"), loss_critic_per_agent)
 
@@ -371,6 +419,8 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
 
+        torch.autograd.set_detect_anomaly(True)
+
         num_batch_dims = len(tensordict.batch_size)
 
         # Compute the advantage
@@ -378,6 +428,14 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 
         # Compute the log weights
         _, log_weight, dist = self._log_weight(tensordict)
+
+        # main_message_logits: Float[Tensor, "... agent channel position logit"],
+        # decision_logits: Float[Tensor, "... agent 3"],
+
+        # Update losses for zero knowledge protocols
+        # if self.zk_protocol is not None:
+        #     advantage[..., self.zk_protocol.simulator_indices] = 0
+        #     # log_weight = log_weight[..., self.standard_indices]
 
         gain1 = log_weight.exp() * advantage
 
@@ -388,6 +446,10 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 
         # Compute the KL divergence for logging
         kl = -log_weight.mean(0)
+
+        # Update losses for zero knowledge protocols
+        if self.zk_protocol is not None:
+            gain = self._get_zk_rewards(gain, tensordict)
 
         loss_objective_per_agent = -flatten_batch_dims(gain, num_batch_dims).mean(dim=0)
         loss_objective = loss_objective_per_agent.sum()
@@ -425,6 +487,10 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
         _, log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
+        # Update losses for zero knowledge protocols
+        if self.zk_protocol is not None:
+            neg_loss = self._get_zk_rewards(neg_loss, tensordict)
+
         # Compute KL penalty
         kl = -log_weight.mean(0)
         if self.beta.shape == torch.Size([]):
@@ -437,6 +503,10 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
                 self.beta[i].data *= self.increment
             elif kl[i] < self.dtarg / 1.5:
                 self.beta[i].data *= self.decrement
+
+        if self.zk_protocol is not None:
+            neg_loss = self._get_zk_rewards(neg_loss, tensordict)
+            kl_penalty = self.base_agent_mask * kl_penalty
 
         loss_objective_per_agent = -neg_loss.mean(dim=0) + kl_penalty
         loss_objective = loss_objective_per_agent.sum()
@@ -985,6 +1055,8 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
 
         # Compute the loss
         loss_actor_per_agent = -log_prob * loss_weighting.detach()
+        if self.zk_protocol is not None:
+            loss_actor_per_agent = -self._get_zk_rewards(-loss_actor_per_agent, tensordict)
         loss_actor_per_agent = loss_actor_per_agent.mean(dim=0)
         td_out = TensorDict(
             {

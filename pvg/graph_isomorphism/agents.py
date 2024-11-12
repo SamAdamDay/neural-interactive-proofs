@@ -278,13 +278,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     @property
     def env_level_in_keys(self) -> tuple[str, ...]:
 
-        env_level_in_keys = ("x", "adjacency", "message", "node_mask")
+        env_level_in_keys = ("x", "adjacency", "message", "node_mask", "y")
 
         if self.hyper_params.include_linear_message_space:
             env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
-        if "simulator" in self.agent_name:
-            env_level_in_keys = (*env_level_in_keys, "y") #LH-TODO maybe make this true for all agents?
+        # if "simulator" in self.agent_name:
+        #     env_level_in_keys = (*env_level_in_keys, "y") #LH-TODO maybe make this true for all agents?
 
         return env_level_in_keys
 
@@ -588,6 +588,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
               the "message" field is set to a dummy value.
             - "linear_message_history" : (... round channel position linear_message),
               optional: The linear message history, if using.
+            - "y" (... 1): The target output, provided only to the simulator(s).
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -2040,6 +2041,7 @@ class GraphIsomorphismCombinedBody(CombinedBody):
         - "node_mask" (... pair node): Which nodes actually exist.
         - "linear_message_history" : (... round channel position linear_message),
           optional: The linear message history, if using.
+        - "y": The label, only provided to the simulator(s).
 
     Output:
         - ("agents", "node_level_repr") (... agent pair max_nodes d_representation): The
@@ -2094,6 +2096,10 @@ class GraphIsomorphismCombinedBody(CombinedBody):
                     input_dict[key] = self._restrict_input_to_visible_channels(
                         agent_name, data[key], "... round channel position pair node"
                     )
+                # elif key == "y": # LH-TODO do we need this?
+                #     input_dict[key] = self._restrict_input_to_visible_channels(
+                #         agent_name, data[key], "... 1"
+                #     )
                 else:
                     input_dict[key] = data[key]
             input_td = TensorDict(

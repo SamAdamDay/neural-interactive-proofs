@@ -52,6 +52,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
             )
         elif self.hyper_params.ppo.loss_type == PpoLossType.KL_PENALTY:
             loss_module = KLPENPPOLossImproved(
+                names=self.agent_names,
                 actor=self.policy_operator,
                 critic=self.value_operator,
                 dtarg=self.hyper_params.ppo.kl_target,
@@ -65,6 +66,9 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 loss_critic_type=self.hyper_params.rl.loss_critic_type,
                 clip_value=self.clip_value,
             )
+        if self.hyper_params.protocol_common.zero_knowledge:
+            loss_module.names = self.agent_names
+            loss_module.zk_protocol = self.scenario_instance.protocol_handler
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
             action=self.train_environment.action_keys,

@@ -40,11 +40,11 @@ class SpgTrainer(ReinforcementLearningTrainer):
             for group in self.hyper_params.spg.stackelberg_sequence
         ]
         loss_module = SpgLoss(
+            names=self.agent_names,
             actor=self.policy_operator,
             critic=self.value_operator,
             variant=self.hyper_params.spg.variant,
             stackelberg_sequence=stackelberg_sequence_int,
-            names=self.agent_names,
             ihvp={
                 "variant": self.hyper_params.spg.ihvp_variant,
                 "num_iterations": self.hyper_params.spg.ihvp_num_iterations,
@@ -65,6 +65,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
             loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
         )
+        if self.hyper_params.protocol_common.zero_knowledge:
+            loss_module.zk_protocol = self.scenario_instance.protocol_handler
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
             action=self.train_environment.action_keys,

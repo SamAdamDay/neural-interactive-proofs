@@ -72,7 +72,7 @@ class BaseHyperParameters(ParameterValue, ABC):
         """Convert the parameters object to a dictionary.
 
         Turns enums into strings, and sub-parameters into dictionaries. Includes the
-        is_random parameter if it exists.
+        is_random and is_simulator parameters if they exist.
 
         Returns
         -------

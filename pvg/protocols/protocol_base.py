@@ -34,6 +34,7 @@ class ProtocolHandler(ABC):
     """
 
     can_be_zero_knowledge: ClassVar[bool] = True
+    is_zero_knowledge: ClassVar[bool] = False
 
     def __init__(self, hyper_params: HyperParameters, settings: ExperimentSettings):
         self.hyper_params = hyper_params

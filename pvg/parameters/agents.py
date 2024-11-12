@@ -96,6 +96,8 @@ class AgentParameters(SubParameters, ABC):
         networks.
     orthogonal_initialisation_gain: float
         The gain when using orthogonal initialisation.
+    is_simulator : bool, optional
+        Whether the agent is a simulator or not.
     """
 
     agent_lr_factor: Optional[LrFactors | dict] = None
@@ -125,13 +127,15 @@ class AgentParameters(SubParameters, ABC):
     ]
 
     is_random: ClassVar[bool] = False
+    is_simulator: ClassVar[bool] = False
 
     def to_dict(self) -> dict:
         params_dict = super().to_dict()
 
-        # Add the is_random parameter. This is not a field of the parameters object, but
-        # we want to include it in the dictionary.
+        # Add the is_random and is_simulator parameters. These are not fields of the parameters object, but
+        # we want to include them in the dictionary.
         params_dict["is_random"] = self.is_random
+        params_dict["is_simulator"] = self.is_simulator
 
         return params_dict
 
@@ -153,6 +157,9 @@ class AgentParameters(SubParameters, ABC):
         # Remove the is_random parameter from the dictionary
         if "is_random" in params_dict:
             params_dict.pop("is_random")
+        # Remove the is_simulator parameter from the dictionary
+        if "is_simulator" in params_dict:
+            params_dict.pop("is_simulator")
 
         return super().from_dict(params_dict)
 
@@ -171,6 +178,7 @@ class AgentParameters(SubParameters, ABC):
             if field.name in wandb_config:
                 setattr(self, field.name, wandb_config[field.name])
         setattr(self, "is_random", wandb_config["is_random"])
+        setattr(self, "is_simulator", wandb_config["is_simulator"])
 
 
 @register_parameter_class

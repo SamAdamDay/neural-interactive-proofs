@@ -4,6 +4,7 @@ from argparse import Namespace
 import os
 import logging
 import dataclasses
+from copy import deepcopy
 
 import torch
 
@@ -44,7 +45,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
-    interaction_protocol=[InteractionProtocolType.PVG],
+    interaction_protocol=[InteractionProtocolType.DEBATE],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -106,8 +107,10 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    zero_knowledge=[False],
-
+    zero_knowledge=[True],
+    use_multiple_simulators=[True],
+    simulator_reward_coefficient=[None],
+    aux_prover_reward_coefficient=[None],
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
@@ -228,12 +231,14 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             f"Unknown interaction protocol: {combo['interaction_protocol']}"
         )
     if combo["zero_knowledge"]:
-        agents_params_dict["adversarial_verifier"] = verifier_params
+        # We need to create fresh copies of the parameters for the adversarial verifier and simulator agents
+        original_agent_names = list(agents_params_dict.keys())
+        agents_params_dict["adversarial_verifier"] = dataclasses.replace(verifier_params)
         if combo["use_multiple_simulators"]:
-            for agent_name in agents_params_dict:
-                agents_params_dict[f"{agent_name}_simulator"] = agents_params_dict[agent_name]
+            for agent_name in original_agent_names:
+                agents_params_dict[f"simulator_{agent_name}"] = dataclasses.replace(agents_params_dict[agent_name])
         else:
-            agents_params_dict["simulator"] = verifier_params
+            agents_params_dict["simulator"] = dataclasses.replace(verifier_params)
 
     hyper_params = HyperParameters(
         scenario=ScenarioType.GRAPH_ISOMORPHISM,

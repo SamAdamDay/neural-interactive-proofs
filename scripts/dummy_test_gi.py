@@ -4,6 +4,7 @@ from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
 
 import torch
+import dataclasses
 
 from pvg import (
     HyperParameters,
@@ -44,37 +45,98 @@ def run(cmd_args: Namespace):
     # Create the parameters object
     interaction_protocol = InteractionProtocolType.DEBATE
     zero_knowledge = True
+    use_multiple_simulators = True
     scenario = ScenarioType.GRAPH_ISOMORPHISM
     trainer = TrainerType.VANILLA_PPO
     dataset = "eru10000"
 
-    hyper_params = HyperParameters(
-        scenario=scenario,
-        trainer=trainer,
-        dataset=dataset,
-        agents=AgentsParameters(
-            **{
-                agent_name: GraphIsomorphismAgentParameters(
+    verifier_params = GraphIsomorphismAgentParameters(
                     num_gnn_layers=1,
                     num_transformer_layers=1,
                     use_manual_architecture=False,
                     agent_lr_factor={"actor": 1.0, "critic": 1.0},
                     use_orthogonal_initialisation=False,
                 )
-                for agent_name in get_protocol_agent_names(
-                    HyperParameters(
-                        interaction_protocol=interaction_protocol,
-                        protocol_common=CommonProtocolParameters(
-                            zero_knowledge=zero_knowledge
-                        ),
-                        zk_protocol=ZkProtocolParameters(),
-                        scenario=scenario,
-                        trainer=trainer,
-                        dataset=dataset,
-                    ),
+    prover_params = GraphIsomorphismAgentParameters(
+                    num_gnn_layers=1,
+                    num_transformer_layers=1,
+                    use_manual_architecture=False,
+                    agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                    use_orthogonal_initialisation=False,
                 )
-            }
-        ),
+
+    agents_params_dict = {}
+    if interaction_protocol in (
+        InteractionProtocolType.PVG,
+        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+    ):
+        # agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
+        agents_params_dict["verifier"] = verifier_params
+        agents_params_dict["prover"] = prover_params
+    elif interaction_protocol in (
+        InteractionProtocolType.DEBATE,
+        InteractionProtocolType.MERLIN_ARTHUR,
+        InteractionProtocolType.MNIP,
+    ):
+        prover0_params = dataclasses.replace(prover_params)
+        prover1_params = dataclasses.replace(prover_params)
+        agents_params_dict["verifier"] = verifier_params
+        agents_params_dict["prover0"] = prover0_params
+        agents_params_dict["prover1"] = prover1_params
+        # agents_params = AgentsParameters(
+        #     verifier=verifier_params, prover0=prover0_params, prover1=prover1_params
+        # )
+    else:
+        raise NotImplementedError(
+            f"Unknown interaction protocol: {interaction_protocol}"
+        )
+    if zero_knowledge:
+        # We need to create fresh copies of the parameters for the adversarial verifier and simulator agents
+        original_agent_names = list(agents_params_dict.keys())
+        agents_params_dict["adversarial_verifier"] = dataclasses.replace(verifier_params)
+        if use_multiple_simulators:
+            for agent_name in original_agent_names:
+                if "verifier" in agent_name:
+                    agents_params_dict[f"simulator_{agent_name}"] = dataclasses.replace(verifier_params)
+                elif "prover" in agent_name:
+                    agents_params_dict[f"simulator_{agent_name}"] = dataclasses.replace(prover_params)
+                else:
+                    raise ValueError(f"Unknown agent name: {agent_name}")
+                # agents_params_dict[f"{agent_name}_simulator"] = dataclasses.replace(agents_params_dict[agent_name])
+        else:
+            agents_params_dict["simulator"] = dataclasses.replace(verifier_params)
+
+
+
+    hyper_params = HyperParameters(
+        scenario=scenario,
+        trainer=trainer,
+        dataset=dataset,
+        agents=AgentsParameters(agents_params_dict),
+        # agents=AgentsParameters(
+        #     **{
+        #         agent_name: GraphIsomorphismAgentParameters(
+        #             num_gnn_layers=1,
+        #             num_transformer_layers=1,
+        #             use_manual_architecture=False,
+        #             agent_lr_factor={"actor": 1.0, "critic": 1.0},
+        #             use_orthogonal_initialisation=False,
+        #             # is_simulator=("simulator" in agent_name),
+        #         )
+        #         for agent_name in get_protocol_agent_names(
+        #             HyperParameters(
+        #                 interaction_protocol=interaction_protocol,
+        #                 protocol_common=CommonProtocolParameters(
+        #                     zero_knowledge=zero_knowledge
+        #                 ),
+        #                 zk_protocol=ZkProtocolParameters(),
+        #                 scenario=scenario,
+        #                 trainer=trainer,
+        #                 dataset=dataset,
+        #             ),
+        #         )
+        #     }
+        # ),
         rl=RlTrainerParameters(
             num_iterations=100,
             num_epochs=1,

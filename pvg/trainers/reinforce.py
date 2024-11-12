@@ -92,7 +92,11 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             functional=self.hyper_params.functionalize_modules,
             loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
+            get_simulator_reward=self.hyper_params.zk_protocol.get_simulator_reward,
         )
+        if self.hyper_params.protocol_common.zero_knowledge:
+            loss_module.names = self.agent_names
+            loss_module.zk_protocol = self.scenario_instance.protocol_handler
         loss_module.set_keys(
             reward=self.train_environment.reward_key,
             action=self.train_environment.action_keys,

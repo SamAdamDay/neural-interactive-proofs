@@ -410,7 +410,7 @@ def get_protocol_agent_names(
     agent_names = list(AGENT_NAMES[hyper_params.interaction_protocol])
     if hyper_params.protocol_common.zero_knowledge:
         if hyper_params.zk_protocol.use_multiple_simulators:
-            agent_names.extend([f"{agent_name}_simulator" for agent_name in agent_names])
+            agent_names.extend([f"simulator_{agent_name}" for agent_name in agent_names])
         else:
             agent_names.append("simulator")
         agent_names.append("adversarial_verifier")
