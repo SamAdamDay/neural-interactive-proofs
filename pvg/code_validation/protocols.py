@@ -26,6 +26,7 @@ from pvg.protocols.main_protocols import (
     AdpProtocol,
     MerlinArthurProtocol,
     MnipProtocol,
+    SoloVerifierProtocol,
 )
 from pvg.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from pvg.utils.nested_array_dict import NestedArrayDict
@@ -564,3 +565,21 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
                 "Expert_2", channel_order=["prover0_channel", "prover1_channel"]
             ),
         }
+
+
+@register_protocol_handler(
+    InteractionProtocolType.SOLO_VERIFIER, ScenarioType.CODE_VALIDATION
+)
+class SoloVerifierCodeValidationProtocol(
+    CodeValidationProtocolHandler, SoloVerifierProtocol
+):
+    agent_specs = {"verifier": CodeValidationAgentSpec("Verifier")}
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+        env_td: NestedArrayDict,
+    ):
+        pass

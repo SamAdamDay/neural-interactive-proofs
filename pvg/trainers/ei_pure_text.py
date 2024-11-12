@@ -5,7 +5,7 @@ import numpy as np
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
-from pvg.utils.nested_array_dict import NestedArrayDict
+from pvg.utils.nested_array_dict import NestedArrayDict, stack_nested_array_dicts
 
 
 @register_trainer(TrainerType.PURE_TEXT_EI)

@@ -746,6 +746,8 @@ class PureTextRlTrainer(Trainer, ABC):
         ----------
         rollouts : NestedArrayDict
             The rollouts to get the statistics for.
+        train : bool, default=True
+            Whether the rollouts are from the training environment.
 
         Returns
         -------
@@ -1078,12 +1080,12 @@ def _sample_single_rollout(
 
     environment, max_message_rounds, combined_agent, data_batch = args
 
-    done = False
+    ended = False
     env_state = environment.reset(data_batch=data_batch)
     env_states = []
 
     for _ in range(max_message_rounds):
-        if not done:
+        if not ended:
 
             # Run the forward pass on all agents to sample actions
             env_state = combined_agent.forward(env_state, environment)
@@ -1092,9 +1094,9 @@ def _sample_single_rollout(
             # in the "next" sub-dictionary.
             env_state = environment.step(env_state)
 
-            # Check if the environment is done. The state has batch size 1, so we
-            # only need to check the first element.
-            done = env_state["next", "done"][0]
+            # Check if the environment is done or terminated. The state has batch size
+            # 1, so we only need to check the first element.
+            ended = env_state["next", "done"][0] or env_state["next", "terminated"][0]
 
             # Append the current state to the environment states
             env_states.append(env_state)

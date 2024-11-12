@@ -105,6 +105,11 @@ class InteractionProtocolType(StrEnum):
         The Debate protocol.
     MERLIN_ARTHUR
         The Merlin-Arthur classifier protocol.
+    MNIP
+        The Prover-Verifier Game protocol with two provers.
+    SOLO_VERIFIER
+        A protocol consisting of a single verifier, which makes a decision without
+        interacting with a prover.
     MULTI_CHANNEL_TEST
         A protocol for testing multi-channel communication.
     """
@@ -114,6 +119,7 @@ class InteractionProtocolType(StrEnum):
     DEBATE = enum_auto()
     MERLIN_ARTHUR = enum_auto()
     MNIP = enum_auto()
+    SOLO_VERIFIER = enum_auto()
     MARKET_MAKING = enum_auto()  # TODO
     MULTI_CHANNEL_TEST = enum_auto()
 
