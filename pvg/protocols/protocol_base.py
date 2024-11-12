@@ -357,7 +357,7 @@ class ProtocolHandler(ABC):
 
         verifier_decision_made = guess_mask & (decision != 2)
         verifier_decision_made = verifier_decision_made & (
-            round_id >= self.min_message_rounds
+            round_id >= self.min_message_rounds  # TODO: Maybe this should be -1
         )
 
         return verifier_decision_made
@@ -515,10 +515,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         terminated = terminated | (
-            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
+            self._get_new_terminated_mask(round_id, verifier_decision_made)
         )
         reward[verifier_idx][
-            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
+            self._get_new_terminated_mask(round_id, verifier_decision_made)
         ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
@@ -536,6 +536,29 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         agent_done = agent_done | shared_done[..., None]
 
         return shared_done, agent_done, terminated, reward
+
+    def _get_new_terminated_mask(
+        self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]
+    ) -> Bool[Tensor, "..."]:
+        """Get a mask indicating whether the episode has been newly terminated.
+
+        "Newly terminated" means that the episode has been terminated this round. This
+        happens when the max number of rounds has been reached and the verifier has not
+        guessed.
+
+        Parameters
+        ----------
+        round_id : Int[Tensor, "..."]
+            The round number.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+
+        Returns
+        -------
+        terminated : Bool[Tensor, "..."]
+            A mask indicating whether the episode has been newly terminated.
+        """
+        return (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
 
     def _include_prover_rewards(
         self,

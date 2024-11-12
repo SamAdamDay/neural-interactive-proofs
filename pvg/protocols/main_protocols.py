@@ -479,6 +479,78 @@ class MnipProtocol(PvgProtocol):
                 ).float() * self.hyper_params.protocol_common.prover_reward
 
 
+@register_protocol_handler(InteractionProtocolType.SOLO_VERIFIER)
+class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
+    """Implementation of the Solo Verifier protocol.
+
+    The protocol consists of a single verifier, who makes a decision without interacting
+    with a prover.
+
+    Note
+    ----
+
+    The implementation of NumPy StringDType arrays appears to be buggy with shapes like
+    (1, 1, n). For this reason, we set the maximum number of message rounds to 2, but
+    always terminate the episode after the first round.
+
+    An example of the bug:
+
+    - https://github.com/numpy/numpy/issues/27737
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    """
+
+    agent_names = ["verifier"]
+    message_channel_names = ["main"]
+    agent_channel_visibility = [("verifier", "main")]
+    min_message_rounds = 0
+    max_verifier_turns = 1
+
+    # The maximum number of message rounds is set to 2, but the episode is always
+    # terminated after the first round. See the note in the class docstring.
+    max_message_rounds = 2
+
+    def is_agent_active(
+        self, agent_name: str, round_id: int, channel_name: str
+    ) -> bool:
+        return round_id == 0
+
+    def _get_new_terminated_mask(
+        self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]
+    ) -> Bool[Tensor, "..."]:
+        """Get a mask indicating whether the episode has been newly terminated.
+
+        "Newly terminated" means that the episode has been terminated this round.
+
+        Since this protocol has only one round, the episode is terminated if the
+        verifier has not made a decision.
+
+        Parameters
+        ----------
+        round_id : Int[Tensor, "..."]
+            The round number.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+
+        Returns
+        -------
+        terminated : Bool[Tensor, "..."]
+            A mask indicating whether the episode has been newly terminated.
+        """
+        return ~verifier_decision_made
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+    ):
+        pass
+
+
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
 class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""

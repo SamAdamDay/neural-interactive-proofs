@@ -120,6 +120,7 @@ AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
     InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
     InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
+    InteractionProtocolType.SOLO_VERIFIER: ("verifier",),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         "verifier",
         "prover0",
@@ -137,6 +138,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
     InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
     InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
     InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
+    InteractionProtocolType.SOLO_VERIFIER: (("verifier",),),
     InteractionProtocolType.MULTI_CHANNEL_TEST: (
         ("verifier",),
         ("prover0", "prover1", "prover2"),

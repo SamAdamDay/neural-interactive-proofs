@@ -1060,15 +1060,15 @@ class PureTextEnvironment(Environment, ABC):
                             f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
-                    message_history[0, round_id, channel_id] = message
-                    message_agent_id[0, round_id, channel_id] = agent_id
+                    message_history[0, round_id.item(), channel_id] = message
+                    message_agent_id[0, round_id.item(), channel_id] = agent_id
 
         next_state["message_history"] = message_history
         next_state["message_agent_id"] = message_agent_id
 
         # Add the raw messages to the raw message history
         raw_message_history = env_state["raw_message_history"].copy()
-        raw_message_history[0, round_id] = env_state["agents", "raw_message"][0]
+        raw_message_history[0, round_id.item()] = env_state["agents", "raw_message"][0]
         next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
