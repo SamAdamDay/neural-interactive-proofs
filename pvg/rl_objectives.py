@@ -302,13 +302,16 @@ class Objective(LossModule, ABC):
         new_gain_coefficients[self.zk_protocol.adversarial_verifier_index] = 1/len(self.zk_protocol.simulator_names)
 
         with torch.no_grad():
-            normaliser = torch.tensor([
-                (torch.abs(gain[:,i]).sum() / torch.abs(new_gain[:,i]).sum()) * new_gain_coefficients[i] if 
-                    i in self.zk_protocol.prover_indices + [self.zk_protocol.adversarial_verifier_index] 
-                    and torch.abs(gain[:,i]).sum() > 0 
-                    and torch.abs(new_gain[:,i]).sum() > 0 
-                else new_gain_coefficients[i] for i in range(len(self.names))
-            ])
+            if normalise:
+                normaliser = torch.tensor([
+                    (torch.abs(gain[:,i]).sum() / torch.abs(new_gain[:,i]).sum()) * new_gain_coefficients[i] if 
+                        i in self.zk_protocol.prover_indices + [self.zk_protocol.adversarial_verifier_index] 
+                        and torch.abs(gain[:,i]).sum() > 0 
+                        and torch.abs(new_gain[:,i]).sum() > 0 
+                    else new_gain_coefficients[i] for i in range(len(self.names))
+                ], device=gain.device)
+            else:
+                normaliser = torch.ones(len(self.names), device=gain.device)
 
         gain = (self.base_agent_mask * gain) + (normaliser * new_gain)
         # gain = gain + (normaliser * new_gain)
@@ -317,7 +320,7 @@ class Objective(LossModule, ABC):
 
     @cached_property
     def base_agent_mask(self):
-        return torch.tensor([0 if i in self.zk_protocol.simulator_indices else 1 for i in range(len(self.names))])
+        return torch.tensor([0 if i in self.zk_protocol.simulator_indices else 1 for i in range(len(self.names))], device=next(self.parameters()).device)
 
     @abstractmethod
     def backward(self, loss_vals: TensorDictBase):
