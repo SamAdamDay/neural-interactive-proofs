@@ -45,7 +45,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
-    interaction_protocol=[InteractionProtocolType.DEBATE],
+    interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -110,7 +110,7 @@ param_grid = dict(
     zero_knowledge=[True],
     use_multiple_simulators=[True],
     simulator_reward_coefficient=[None],
-    aux_prover_reward_coefficient=[None],
+    aux_prover_reward_coefficient=[0.0,0.1,0.5,1.0],
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
