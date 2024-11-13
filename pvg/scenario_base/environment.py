@@ -586,6 +586,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 "linear_message",
                 "round",
                 "decision_restriction",
+                "trajectory_log_prob_diff",
             ]:
                 next_td[key] = env_td[key]
 
@@ -614,7 +615,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         next_td["x"] = next_td["message_history"].clone()
 
         # Compute the done signal and reward
-        shared_done, agent_done, terminated, reward = (
+        shared_done, agent_done, terminated, reward, trajectory_log_prob_diff  = (
             self.protocol_handler.step_interaction_protocol(env_td)
         )
         shared_done = shared_done | terminated  # TODO: Improve handling of terminated
@@ -625,9 +626,11 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         next_td.set(
             "decision_restriction", torch.zeros_like(shared_done, dtype=self._int_dtype)
         )
+        next_td.set("trajectory_log_prob_diff", trajectory_log_prob_diff)
         # Update the sequence probabilities if using a zero-knowledge protocol
         # if self.hyper_params.protocol_common.zero_knowledge:
         #     next_td["trajectory_log_probs"] = self.protocol_handler.get_trajectory_probs(env_td)
+        # trajectory_log_prob_diff
 
         return next_td
 
@@ -752,6 +755,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             new_mask = torch.ones(
                 *self.batch_size, dtype=torch.bool, device=self.device
             )
+            env_td.set("trajectory_log_prob_diff", (torch.zeros_like(env_td["y"], dtype=torch.float)))
 
         else:
             new_mask = env_td["done"]
@@ -821,6 +825,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         env_td["agents", "done"][mask] = False
         env_td["terminated"][mask] = False
         env_td["decision_restriction"][mask] = 0
+        env_td["trajectory_log_prob_diff"][mask] = torch.zeros_like(env_td["trajectory_log_prob_diff"][mask], dtype=torch.float)
 
         pretrained_model_names = self.dataset.pretrained_model_names
         for model_name in pretrained_model_names:
@@ -1022,7 +1027,7 @@ class PureTextEnvironment(Environment, ABC):
         next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
-        shared_done, agent_done, terminated, reward = (
+        shared_done, agent_done, terminated, reward, _ = (
             self.protocol_handler.step_interaction_protocol(env_state)
         )
         next_state["done"] = shared_done.numpy()

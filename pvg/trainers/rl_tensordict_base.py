@@ -564,6 +564,9 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             .item()
         )
 
+        # Compute the mean probability difference (for the simulator) for the done episodes
+        log_stats[f"{prefix}epsilon_k"] = 0.5 * torch.abs(1.0 - torch.exp(tensordict_data["trajectory_log_prob_diff"][done])).float().mean().item()
+
         # Log the loss values
         if mean_loss_vals is not None:
 

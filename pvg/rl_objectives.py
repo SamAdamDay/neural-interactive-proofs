@@ -260,7 +260,7 @@ class Objective(LossModule, ABC):
 
         return advantage
 
-    def _get_zk_rewards(self, gain: torch.Tensor, tensordict: TensorDictBase):
+    def _get_zk_rewards(self, gain: torch.Tensor, tensordict: TensorDictBase, normalise: bool = True):
         """Update the gain tensor with zero knowledge rewards.
 
         Parameters
@@ -283,23 +283,41 @@ class Objective(LossModule, ABC):
         for i, index in enumerate(self.zk_protocol.simulator_indices):
             new_gains[index] = simulator_reward[..., i]
 
+        # Note that for this supervised loss, the updates to the gains only take into account the corresponding simulator rewards (which aren't already included in the advantage estimate). The way the coefficients are current;l calculated is fairly ad hoc.
+
         # Adversarial verifier gains
-        total_simulator_reward = simulator_reward.sum(dim=-1)
-        new_gains[self.zk_protocol.adversarial_verifier_index] = -total_simulator_reward
+        new_gains[self.zk_protocol.adversarial_verifier_index] = -new_gains[self.zk_protocol.simulated_verifier_index]
 
         # Prover gains
-        for i, index in enumerate(self.zk_protocol.prover_indices):
-            new_gains[index] = torch.ones_like(gain[...,0]) * self.zk_protocol.prover_zk_loss_coefficient * total_simulator_reward / self.zk_protocol.simulator_reward_coefficient
+        for prover_name in self.zk_protocol.base_protocol.prover_names:
+            new_gains[self.zk_protocol.agent_names.index(prover_name)] = new_gains[self.zk_protocol.agent_names.index(f"simulator_{prover_name}")]
+
+        # # Prover gains
+        # for i, index in enumerate(self.zk_protocol.prover_indices):
+        #     new_gains[index] = torch.ones_like(gain[...,0]) * self.zk_protocol.prover_zk_loss_coefficient * total_simulator_reward / self.zk_protocol.simulator_reward_coefficient
 
         # Add the new gains to the existing gain tensor
-        gain = self.base_agent_mask * gain
-        gain = gain + torch.stack(new_gains,dim=-1)
+        new_gain = torch.stack(new_gains,dim=-1)
+        new_gain_coefficients = [self.zk_protocol.prover_zk_loss_coefficient / self.zk_protocol.simulator_reward_coefficient if i in self.zk_protocol.prover_indices else 1 for i in range(len(self.zk_protocol.agent_names))]
+        new_gain_coefficients[self.zk_protocol.adversarial_verifier_index] = 1/len(self.zk_protocol.simulator_names)
+
+        with torch.no_grad():
+            normaliser = torch.tensor([
+                (torch.abs(gain[:,i]).sum() / torch.abs(new_gain[:,i]).sum()) * new_gain_coefficients[i] if 
+                    i in self.zk_protocol.prover_indices + [self.zk_protocol.adversarial_verifier_index] 
+                    and torch.abs(gain[:,i]).sum() > 0 
+                    and torch.abs(new_gain[:,i]).sum() > 0 
+                else new_gain_coefficients[i] for i in range(len(self.names))
+            ])
+
+        gain = (self.base_agent_mask * gain) + (normaliser * new_gain)
+        # gain = gain + (normaliser * new_gain)
 
         return gain
 
     @cached_property
     def base_agent_mask(self):
-        return torch.tensor([1 if i in self.zk_protocol.base_agent_indices else 0 for i in range(len(self.names))])
+        return torch.tensor([0 if i in self.zk_protocol.simulator_indices else 1 for i in range(len(self.names))])
 
     @abstractmethod
     def backward(self, loss_vals: TensorDictBase):

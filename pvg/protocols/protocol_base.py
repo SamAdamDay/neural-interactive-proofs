@@ -340,6 +340,9 @@ class ProtocolHandler(ABC):
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
+        trajectory_log_prob_diff: Float[Tensor, "..."]
+            The difference in log probability of the trajectory. This is only calculated
+            when the protocol is zero-knowledge.
         """
 
     def _get_agent_decision_made_mask(
@@ -490,6 +493,9 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
+        trajectory_log_prob_diff: Float[Tensor, "..."]
+            The difference in log probability of the trajectory. This is only calculated
+            when the protocol is zero-knowledge.
         """
 
         protocol_params = self.hyper_params.protocol_common
@@ -556,7 +562,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         # The agent-specific done signal is the same as the shared done signal
         agent_done = agent_done | shared_done[..., None]
 
-        return shared_done, agent_done, terminated, reward
+        return shared_done, agent_done, terminated, reward, torch.zeros_like(y)
 
     @abstractmethod
     def _include_prover_rewards(

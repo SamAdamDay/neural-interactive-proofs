@@ -168,5 +168,5 @@ class ZkProtocolParameters(LongProtocolParameters):
     """
 
     simulator_reward_coefficient: float = 1.0
-    aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually
+    aux_prover_reward_coefficient: float = 0.3  # We may want to change this eventually
     use_multiple_simulators: bool = True

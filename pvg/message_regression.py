@@ -73,6 +73,10 @@ class MessageRegressor(ABC):
 
         for agent_name in self.agent_names:
 
+            # TODO (we probably want to use this, but because simulators are never active, this produces an error at the moment)
+            if "simulator" in agent_name:
+                continue
+
             # Select the data for the first round in which the agent is active
             round_mask = (
                 data["round"]
