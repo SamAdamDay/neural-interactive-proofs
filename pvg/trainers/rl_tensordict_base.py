@@ -499,6 +499,14 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
             rollouts_split["round"].max(dim=-1).values.float().mean().item() + 1
         )
 
+        # Compute the mean probability difference (for the simulator) for the done episodes
+        # TODO should this use rollouts_split?
+        log_stats[f"{prefix}epsilon_k"] = 0.5 * torch.abs(1.0 - torch.exp(rollouts["trajectory_log_prob_diff"][done])).float().mean().item()
+
+        # Compute the mean probability difference (for the simulator) for the done episodes
+        # This time we use rollouts_split
+        log_stats[f"{prefix}epsilon_k_v2"] = 0.5 * torch.abs(1.0 - torch.exp(rollouts_split["trajectory_log_prob_diff"].max(dim=-1).values)).float().mean().item()
+
         for i, agent_name in enumerate(self.agent_names):
             # The mean reward per step is just the mean over the tensor dict
             log_stats[f"{agent_name}.{prefix}mean_step_reward"] = (
@@ -629,9 +637,6 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         log_stats[f"{prefix}worst_datapoint_accuracy"] = (
             mean_accuracy_per_datapoint.min().item()
         )
-
-        # Compute the mean probability difference (for the simulator) for the done episodes
-        log_stats[f"{prefix}epsilon_k"] = 0.5 * torch.abs(1.0 - torch.exp(tensordict_data["trajectory_log_prob_diff"][done])).float().mean().item()
 
         # Log the loss values
         if mean_loss_vals is not None:
