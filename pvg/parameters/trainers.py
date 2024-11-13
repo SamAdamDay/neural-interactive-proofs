@@ -68,7 +68,8 @@ class RlTrainerParameters(SubParameters):
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
-        The number of iterations to run the test for.
+        The number of iterations to run the test for. In each iteration we sample
+        `frames_per_batch` frames, as in training.
     """
 
     # Sampling
@@ -238,6 +239,23 @@ class TextRlParameters(SubParameters):
     fine_tune_on_all_previous_rollouts : bool
         Whether to fine-tune the agents on the rollouts from all iterations so far. If
         `False`, only the rollouts from the current iteration are used.
+    verifier_guess_replacement_proportion : float
+        When fine-tuning on the rollouts, replace the verifier's guess with the true
+        label for this proportion of the rollouts. This only changes the last message of
+        the verifier, and leaves the rest of the transcript unchanged.
+    verifier_guess_replacement_annealing : Literal["none", "linear", "exponential"]
+        The annealing schedule for the proportion of rollouts where the verifier's guess
+        is replaced. Possible values are:
+
+        - "none": No annealing.
+        - "linear": Linear annealing with rate
+          `verifier_guess_replacement_annealing_rate`.
+        - "exponential": Exponential annealing with base
+          `1-verifier_guess_replacement_annealing_rate`.
+
+    verifier_guess_replacement_annealing_rate : float
+        The rate of annealing for the proportion of rollouts where the verifier's guess
+        is replaced.
     save_transcripts : bool
         Whether to save the transcripts of the rollouts. Note that the raw rollouts are
         always saved, and the transcripts can be extracted from them. So this is mostly
@@ -246,14 +264,24 @@ class TextRlParameters(SubParameters):
         The format to save the transcripts in.
     run_test_loop : bool
         Whether to run the test loop after training.
+    test_on_whole_dataset : bool
+        Whether to run the test loop on the whole dataset or only on a single
+        iteration-worth of rollouts.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
+
+    verifier_guess_replacement_proportion: float = 0.0
+    verifier_guess_replacement_annealing: Literal["none", "linear", "exponential"] = (
+        "none"
+    )
+    verifier_guess_replacement_annealing_rate: float = 0.1
 
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
 
     run_test_loop: bool = False
+    test_on_whole_dataset: bool = True
 
 
 @register_parameter_class

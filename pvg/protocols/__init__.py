@@ -20,5 +20,6 @@ from .main_protocols import (
     DebateProtocol,
     AdpProtocol,
     MnipProtocol,
+    SoloVerifierProtocol,
     MultiChannelTestProtocol,
 )

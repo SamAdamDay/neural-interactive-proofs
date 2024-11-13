@@ -146,6 +146,7 @@ def run(cmd_args: Namespace):
             frames_per_batch=16,
             use_shared_body=False,
             num_normalization_steps=10,
+            num_test_iterations=10,
         ),
         spg=SpgParameters(
             variant=SpgVariant.PSOS,

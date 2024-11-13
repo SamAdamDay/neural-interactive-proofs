@@ -5,7 +5,7 @@ import numpy as np
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
-from pvg.utils.nested_array_dict import NestedArrayDict
+from pvg.utils.nested_array_dict import NestedArrayDict, stack_nested_array_dicts
 
 
 @register_trainer(TrainerType.PURE_TEXT_EI)
@@ -31,16 +31,63 @@ class PureTextEiTrainer(PureTextRlTrainer):
             The rollouts sampled in this iteration.
         """
 
-        for agent_name, agent_whole in self.agent_wholes.items():
+        for group_name, shared_model_group in self.shared_model_groups.items():
 
-            # Select the rollouts to fine-tune on
-            selected_rollouts = self._select_rollouts_for_fine_tuning(
-                rollouts, agent_name
+            # Select the rollouts to fine-tune on for each agent in the shared model
+            # group. If the agent is a verifier, we take a proportion of the rollouts
+            # and replace the verifier guess with the true label.
+            selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
+            guess_replaced_rollouts: dict[str, NestedArrayDict] = {}
+            for agent_name in shared_model_group.agent_names:
+
+                if agent_name in self.scenario_instance.protocol_handler.verifier_names:
+
+                    replace_proportion = (
+                        self._get_verifier_guess_replacement_proportion(
+                            self.state.iteration
+                        )
+                    )
+                    replace_size = int(replace_proportion * len(rollouts))
+
+                    # Permute the rollouts. We make sure that the permutation is
+                    # determined by the seed, the iteration, and the agent name. This
+                    # way we can ensure reproducibility even when the code changes.
+                    random_number_generator = np.random.default_rng(
+                        (
+                            self.hyper_params.seed
+                            + self.state.iteration
+                            + hash(agent_name)
+                        )
+                        % 2**64
+                    )
+                    permutation = random_number_generator.permutation(len(rollouts))
+                    permuted_rollouts = rollouts[permutation]
+
+                    # Choose the first `replace_size` rollouts to replace the verifier
+                    # guess with the true label, and from the rest, select the rollouts
+                    # to fine-tune on based on the reward.
+                    guess_replaced_rollouts[agent_name] = permuted_rollouts[
+                        :replace_size
+                    ]
+                    selected_rollouts_per_agent[agent_name] = (
+                        self._select_rollouts_for_fine_tuning(
+                            permuted_rollouts[replace_size:], agent_name
+                        )
+                    )
+
+                else:
+                    selected_rollouts_per_agent[agent_name] = (
+                        self._select_rollouts_for_fine_tuning(rollouts, agent_name)
+                    )
+
+            self.settings.logger.info(
+                f"Creating fine-tune job for group {group_name!r}"
             )
 
-            # Create a fine-tune job for these rollouts
-            self.settings.logger.info(f"Creating fine-tune job for {agent_name!r}")
-            agent_whole.create_fine_tune_job(selected_rollouts)
+            shared_model_group.create_fine_tune_job(
+                selected_rollouts_per_agent,
+                guess_replaced_rollouts,
+            )
 
     def _select_rollouts_for_fine_tuning(
         self, rollouts: NestedArrayDict, agent_name: str

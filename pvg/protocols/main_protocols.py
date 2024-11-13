@@ -31,8 +31,9 @@ interactive black boxes". arXiv:2206.00759
 
 from math import ceil, floor
 
-import torch
 from torch import Tensor
+
+from tensordict import TensorDictBase
 
 from einops import rearrange
 
@@ -44,6 +45,7 @@ from pvg.protocols.protocol_base import (
     DeterministicSingleVerifierProtocolHandler,
 )
 from pvg.protocols.registry import register_protocol_handler
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 @register_protocol_handler(InteractionProtocolType.PVG)
@@ -103,23 +105,6 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
                 return round_id % 2 == 0
             elif agent_name == "verifier":
                 return round_id % 2 == 1
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        protocol_params = self.hyper_params.protocol_common
-        verifier_index = (..., self.agent_names.index("verifier"))
-        prover_index = (..., self.agent_names.index("prover"))
-
-        if protocol_params.shared_reward:
-            reward[prover_index] = reward[verifier_index]
-        else:
-            reward[prover_index] = (
-                verifier_decision_made & (verifier_decision == 1)
-            ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.ABSTRACT_DECISION_PROBLEM)
@@ -266,38 +251,6 @@ class DebateProtocol(PvgProtocol):
     def min_message_rounds(self) -> int:
         return self.hyper_params.debate_protocol.min_message_rounds
 
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        """Include rewards for the provers based on the verifier's decision.
-
-        Normally, "prover0" is rewarded if the verifier decides 0, and "prover1" is
-        rewarded if the verifier decides 1.
-
-        If `shared_reward` is set, both provers get the same reward as the verifier.
-
-        Parameters
-        ----------
-        verifier_decision_made : Bool[Tensor, "..."]
-            A boolean mask indicating whether the verifier has made a decision.
-        verifier_decision : Int[Tensor, "..."]
-            The verifier's decision.
-        reward : Float[Tensor, "... agent"]
-            The reward tensor to update. This will be updated in-place.
-        """
-        protocol_params = self.hyper_params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
-
 
 @register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
@@ -380,22 +333,6 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             return round_id == 0
         elif agent_name == "verifier":
             return round_id == 1
-
-    def _include_prover_rewards(
-        self,
-        verifier_decision_made: Bool[Tensor, "..."],
-        verifier_decision: Int[Tensor, "..."],
-        reward: Float[Tensor, "... agent"],
-    ):
-        protocol_params = self.hyper_params.protocol_common
-
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
-        else:
-            for prover_num in range(2):
-                reward[..., prover_num] = (
-                    verifier_decision_made & (verifier_decision == prover_num)
-                ).float() * protocol_params.prover_reward
 
 
 @register_protocol_handler(InteractionProtocolType.MNIP)
@@ -508,17 +445,110 @@ class MnipProtocol(PvgProtocol):
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
     ):
-        protocol_params = self.hyper_params.protocol_common
+        """Compute the rewards for the other agents and add them to the current reward.
 
-        if protocol_params.shared_reward:
-            reward[..., 0] = reward[..., 1] = reward[..., 2]
+        Both provers receive the same reward, which is the 1 if the verifier accepts and
+        0 otherwise.
+
+        The `reward` tensor is updated in place, adding in the rewards for the agents
+        at the appropriate indices.
+
+        Parameters
+        ----------
+        verifier_decision_made : Bool[Tensor, "..."]
+            A boolean mask indicating whether the verifier has made a decision.
+        verifier_decision : Int[Tensor, "..."]
+            The verifier's decision.
+        reward : Float[Tensor, "... agent"]
+            The currently computed reward, which should include the reward for the
+            verifier.
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
+        """
+
+        if self.hyper_params.protocol_common.shared_reward:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = reward[..., self.verifier_index]
         else:
-
-            for prover_num in range(2):
-                reward[..., prover_num] = (
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = (
                     verifier_decision_made & (verifier_decision == 1)
-                ).float() * protocol_params.prover_reward
+                ).float() * self.hyper_params.protocol_common.prover_reward
+
+
+@register_protocol_handler(InteractionProtocolType.SOLO_VERIFIER)
+class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
+    """Implementation of the Solo Verifier protocol.
+
+    The protocol consists of a single verifier, who makes a decision without interacting
+    with a prover.
+
+    Note
+    ----
+
+    The implementation of NumPy StringDType arrays appears to be buggy with shapes like
+    (1, 1, n). For this reason, we set the maximum number of message rounds to 2, but
+    always terminate the episode after the first round.
+
+    An example of the bug:
+
+    - https://github.com/numpy/numpy/issues/27737
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    """
+
+    agent_names = ["verifier"]
+    message_channel_names = ["main"]
+    agent_channel_visibility = [("verifier", "main")]
+    min_message_rounds = 0
+    max_verifier_turns = 1
+
+    # The maximum number of message rounds is set to 2, but the episode is always
+    # terminated after the first round. See the note in the class docstring.
+    max_message_rounds = 2
+
+    def is_agent_active(
+        self, agent_name: str, round_id: int, channel_name: str
+    ) -> bool:
+        return round_id == 0
+
+    def _get_new_terminated_mask(
+        self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]
+    ) -> Bool[Tensor, "..."]:
+        """Get a mask indicating whether the episode has been newly terminated.
+
+        "Newly terminated" means that the episode has been terminated this round.
+
+        Since this protocol has only one round, the episode is terminated if the
+        verifier has not made a decision.
+
+        Parameters
+        ----------
+        round_id : Int[Tensor, "..."]
+            The round number.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+
+        Returns
+        -------
+        terminated : Bool[Tensor, "..."]
+            A mask indicating whether the episode has been newly terminated.
+        """
+        return ~verifier_decision_made
+
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        reward: Float[Tensor, "... agent"],
+    ):
+        pass
 
 
 @register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)

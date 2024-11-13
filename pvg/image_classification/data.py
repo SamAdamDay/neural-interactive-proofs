@@ -177,6 +177,8 @@ class ImageClassificationDataset(TensorDictDataset):
         - "y" (dataset_size): The labels of the images.
     """
 
+    instance_keys = ("image", "x")
+
     x_dtype = torch.float32
     y_dtype = torch.int64
 

@@ -146,8 +146,9 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
               exchanged between the agents in each channel.
             - "question" (... round): The coding question.
             - "solution" (... round): The proposed solution to the coding question.
-            - "verdict" (...): The verdict that the prover is arguing for, where 0 means
-              "reject" and 1 means "accept".
+            - "prover_stance" (...): When randomizing the prover stance, the verdict
+              that the prover is arguing for, where 0 means "reject" and 1 means
+              "accept".
 
 
         Returns

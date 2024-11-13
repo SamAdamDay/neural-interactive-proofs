@@ -54,6 +54,13 @@ class ProtocolHandler(ABC):
         This includes the prover simulator(s)."""
         return [agent_name for agent_name in self.agent_names if "prover" in agent_name]
 
+    @cached_property
+    def prover_indices(self) -> list[int]:
+        """The indices of the provers in the list of agent names."""
+        return [
+            self.agent_names.index(prover_name) for prover_name in self.prover_names
+        ]
+
     @property
     def verifier_names(self) -> list[str]:
         """The names of the verifiers in the protocol.
@@ -301,8 +308,10 @@ class ProtocolHandler(ABC):
                 break
         else:
             raise ValueError(
-                "Could not determine the first active round for all agents."
+                f"Could not determine the first active round for all agents. Missing: "
+                f"{set(self.agent_names) - set(agents_first_active_rounds.keys())}"
             )
+        return agents_first_active_rounds
 
     @abstractmethod
     def step_interaction_protocol(
@@ -381,7 +390,7 @@ class ProtocolHandler(ABC):
 
         verifier_decision_made = guess_mask & (decision != 2)
         verifier_decision_made = verifier_decision_made & (
-            round_id >= self.min_message_rounds
+            round_id >= self.min_message_rounds  # TODO: Maybe this should be -1
         )
 
         return verifier_decision_made
@@ -542,10 +551,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         terminated = terminated | (
-            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
+            self._get_new_terminated_mask(round_id, verifier_decision_made)
         )
         reward[verifier_idx][
-            (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
+            self._get_new_terminated_mask(round_id, verifier_decision_made)
         ] = protocol_params.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
@@ -556,7 +565,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         # Compute the rewards for the other agents and add them
         self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_idx], reward
+            verifier_decision_made, decision[verifier_idx], reward, env_td
         )
 
         # The agent-specific done signal is the same as the shared done signal
@@ -564,14 +573,46 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         return shared_done, agent_done, terminated, reward, torch.zeros_like(y)
 
-    @abstractmethod
+    def _get_new_terminated_mask(
+        self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]
+    ) -> Bool[Tensor, "..."]:
+        """Get a mask indicating whether the episode has been newly terminated.
+
+        "Newly terminated" means that the episode has been terminated this round. This
+        happens when the max number of rounds has been reached and the verifier has not
+        guessed.
+
+        Parameters
+        ----------
+        round_id : Int[Tensor, "..."]
+            The round number.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+
+        Returns
+        -------
+        terminated : Bool[Tensor, "..."]
+            A mask indicating whether the episode has been newly terminated.
+        """
+        return (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
+
     def _include_prover_rewards(
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
         reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
     ):
         """Compute the rewards for the other agents and add them to the current reward.
+
+        The default implementation is as follows:
+
+        - If there is one prover, they are rewarded when the verifier guesses "accept".
+        - If there are two provers, the first is rewarded when the verifier guesses
+          "reject" and the second is rewarded when the verifier guesses "accept".
+
+        Implement a custom method for protocols with more than two provers, or for
+        protocols with different reward schemes.
 
         The `reward` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
@@ -585,7 +626,33 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
             verifier.
+        env_td : TensorDictBase | NestedArrayDict
+            The current observation and state. If a `NestedArrayDict`, it is converted
+            to a `TensorDictBase`.
         """
+
+        if len(self.prover_names) > 2:
+            raise NotImplementedError(
+                "The default _include_prover_rewards method only supports protocols "
+                "with two provers. Implement a custom method for protocols with more "
+                "than two provers."
+            )
+
+        if self.hyper_params.protocol_common.shared_reward:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index] = reward[..., self.verifier_index]
+        else:
+            if len(self.prover_names) == 1:
+                reward[..., self.prover_indices[0]] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * self.hyper_params.protocol_common.prover_reward
+            else:
+                reward[..., self.prover_indices[0]] = (
+                    verifier_decision_made & (verifier_decision == 0)
+                ).float() * self.hyper_params.protocol_common.prover_reward
+                reward[..., self.prover_indices[1]] = (
+                    verifier_decision_made & (verifier_decision == 1)
+                ).float() * self.hyper_params.protocol_common.prover_reward
 
 
 class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, ABC):

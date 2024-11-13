@@ -46,6 +46,7 @@ param_specs = [
             InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
             InteractionProtocolType.MERLIN_ARTHUR,
             InteractionProtocolType.MNIP,
+            InteractionProtocolType.SOLO_VERIFIER,
         ],
     },
     # Test pretraining the agents

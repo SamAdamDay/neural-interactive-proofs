@@ -1401,9 +1401,6 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
               node-level representations.
             - "message" (...): The most recent message from the other agent.
             - "round" (optional) (...): The current round number.
-            - "linear_message_selected_logits" (... d_linear_message_space) (optional):
-              A logit for each linear message, indicating the probability that this
-              linear message should be sent as a message to the verifier.
 
         hooks : GraphIsomorphismAgentHooks, optional
             Hooks to run at various points in the agent forward pass.
@@ -1501,7 +1498,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
             - "node_selected_logits" (... channel position 2*max_nodes): A logit for
               each node, indicating the probability that this node should be sent as a
               message to the verifier.
-            - "decision_logits" (... channel position 3): A logit for each of the three
+            - "decision_logits" (... 3): A logit for each of the three
               options: guess that the graphs are isomorphic,  guess that the graphs are
               not isomorphic, or continue exchanging messages. Set to zeros when the
               decider is not present.
@@ -1533,7 +1530,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         # Remove the message channel and position dims (which we assume are singletons)
         message = rearrange(message, "... 1 1 pair node -> ... pair node")
 
-        # The agents's best guess about whether the graphs are isomorphic
+        # The agent's best guess about whether the graphs are isomorphic
         # (batch)
         isomorphic_guess = (
             torch.abs((graph_level_repr[..., 0, :] - graph_level_repr[..., 1, :])).mean(
@@ -1613,7 +1610,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
                 node_distance * 1e3,
             )
             out_dict["node_selected_logits"] = rearrange(
-                node_selected_logits, "... pair_node -> ... 1 pair_node"
+                node_selected_logits, "... pair_node -> ... 1 1 pair_node"
             )
 
             out_dict["decision_logits"] = torch.zeros(

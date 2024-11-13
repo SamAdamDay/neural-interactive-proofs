@@ -2,11 +2,11 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Literal, Iterable
-from itertools import repeat
 from multiprocessing import Pool
 from functools import cached_property
 from pathlib import Path
 import pickle
+import dataclasses
 from dataclasses import dataclass
 import json
 from time import sleep
@@ -17,7 +17,9 @@ import torch
 
 import numpy as np
 
-from jaxtyping import Bool
+from einops import reduce
+
+from jaxtyping import Bool, Int, Float
 
 from wandb import Artifact
 import wandb
@@ -25,17 +27,20 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
-from pvg.parameters import HyperParameters
-from pvg.factory import ScenarioInstance
-from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base.data import NestedArrayDictDataLoader, NestedArrayDictDataset
-from pvg.scenario_base.environment import PureTextEnvironment
-from pvg.scenario_base.agents import PureTextWholeAgent
+from pvg.scenario_base.data import NestedArrayDictDataLoader
+from pvg.scenario_base.environment import PureTextEnvironment, PromptMessage
+from pvg.scenario_base.agents import (
+    PureTextWholeAgent,
+    PureTextCombinedWhole,
+    PureTextSharedModelGroup,
+    PureTextSharedModelGroupState,
+)
 from pvg.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
 )
 from pvg.trainers.trainer_base import Trainer
+from pvg.utils.maths import aggregate_mean_grouped_by_class
 from pvg.utils.data import VariableDataCycler, truncated_iterator
 from pvg.utils.nested_array_dict import (
     NestedArrayDict,
@@ -49,6 +54,8 @@ from pvg.constants import (
     RAW_TRANSCRIPT_ARTIFACT_TYPE,
     PROCESSED_TRANSCRIPT_ARTIFACT_PREFIX,
     PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
+    PROMPTS_ARTIFACT_PREFIX,
+    PROMPTS_ARTIFACT_TYPE,
 )
 
 
@@ -77,6 +84,9 @@ class PureTextRlTrainer(Trainer, ABC):
             "test",
             "done",
         ] = "sample_rollouts"
+        shared_model_groups: dict[str, PureTextSharedModelGroupState] = (
+            dataclasses.field(default_factory=dict)
+        )
 
     _state: State
 
@@ -86,9 +96,9 @@ class PureTextRlTrainer(Trainer, ABC):
         if not hasattr(self, "_state"):
             self._state = self.State()
 
-        # Get the state of the agents to fill out the `agents` field
-        for agent_name, agent_whole in self.scenario_instance.agents.items():
-            self._state.agents[agent_name] = agent_whole.get_state()
+        # Get the state of the agents to fill out the `shared_model_groups` field
+        for group_name, shared_model_group in self.shared_model_groups.items():
+            self._state.shared_model_groups[group_name] = shared_model_group.get_state()
 
         return self._state
 
@@ -96,10 +106,12 @@ class PureTextRlTrainer(Trainer, ABC):
     def state(self, state: State):
         self._state = state
 
-        for agent_name, agent in self.scenario_instance.agents.items():
-            if agent_name not in state.agents:
-                raise ValueError(f"Agent {agent_name!r} not found in state.")
-            agent.set_state(state.agents[agent_name])
+        for group_name, shared_model_group in self.shared_model_groups.items():
+            if group_name not in state.shared_model_groups:
+                raise ValueError(
+                    f"Shared model group {group_name!r} not found in state."
+                )
+            shared_model_group.set_state(state.shared_model_groups[group_name])
 
     @property
     def train_environment(self) -> PureTextEnvironment:
@@ -122,8 +134,13 @@ class PureTextRlTrainer(Trainer, ABC):
             for agent_name, agent in self.scenario_instance.agents.items()
         }
 
+    @cached_property
+    def shared_model_groups(self) -> dict[str, PureTextSharedModelGroup]:
+        """The agents grouped by having a shared model."""
+        return self.scenario_instance.shared_model_groups
+
     @property
-    def combined_agent(self) -> PureTextWholeAgent:
+    def combined_agent(self) -> PureTextCombinedWhole:
         """The agents combined into a single operator."""
         return self.scenario_instance.combined_whole
 
@@ -141,6 +158,11 @@ class PureTextRlTrainer(Trainer, ABC):
     def processed_transcripts_dir(self) -> Path:
         """The directory to save the processed transcripts to."""
         return self.checkpoint_base_dir.joinpath("processed_transcripts")
+
+    @property
+    def prompts_dir(self) -> Path:
+        """The directory to save the prompts to."""
+        return self.checkpoint_base_dir.joinpath("prompts")
 
     @property
     def checkpoint_analysis_dir(self) -> Path:
@@ -342,7 +364,7 @@ class PureTextRlTrainer(Trainer, ABC):
         )
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, self.state.iteration)
+        self._save_rollouts(rollouts, self.state.iteration, self.train_environment)
 
         return rollouts
 
@@ -376,16 +398,16 @@ class PureTextRlTrainer(Trainer, ABC):
         while True:
 
             num_successful_jobs = 0
-            for agent_name, agent_whole in self.agent_wholes.items():
-                if agent_whole.get_fine_tune_job_status() == "succeeded":
+            for group_name, shared_model_group in self.shared_model_groups.items():
+                if shared_model_group.get_fine_tune_job_status() == "succeeded":
                     num_successful_jobs += 1
-                elif agent_whole.get_fine_tune_job_status() == "failed":
+                elif shared_model_group.get_fine_tune_job_status() == "failed":
                     raise RuntimeError(
-                        f"Fine-tune job for {agent_name!r} failed. "
-                        f"{agent_whole.get_fine_tune_job_error_repr()}"
+                        f"Fine-tune job for group {group_name!r} failed. "
+                        f"{shared_model_group.get_fine_tune_job_error_repr()}"
                     )
 
-            if num_successful_jobs == len(self.agent_wholes):
+            if num_successful_jobs == len(self.shared_model_groups):
                 self.settings.logger.info("All fine-tune jobs succeeded")
                 break
 
@@ -393,8 +415,8 @@ class PureTextRlTrainer(Trainer, ABC):
             sleep(60)
 
         # Make all the agents use the new, fine-tuned models
-        for agent_name, agent_whole in self.agent_wholes.items():
-            agent_whole.switch_to_next_model()
+        for shared_model_group in self.shared_model_groups.values():
+            shared_model_group.switch_to_next_model()
 
     def _stage_run_test_loop(self):
         """Training stage: run the test loop."""
@@ -409,7 +431,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats)
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, "test")
+        self._save_rollouts(rollouts, "test", self.test_environment)
 
     def _sample_rollouts(
         self,
@@ -426,12 +448,10 @@ class PureTextRlTrainer(Trainer, ABC):
 
         Parameters
         ----------
-        dataset : NestedArrayDictDataset
-            The dataset of task instances.
-        iteration : int | Literal["test"]
-            The iteration number, or "test" if the rollouts are from the test set.
         environment : PureTextEnvironment
             The environment to sample rollouts in.
+        iteration : int | Literal["test"]
+            The iteration number, or "test" if the rollouts are from the test set.
         use_tqdm : bool
             Whether to create a tqdm progress bar for the rollouts.
         tqdm_desc : str
@@ -446,20 +466,36 @@ class PureTextRlTrainer(Trainer, ABC):
 
         generator = torch.Generator()
         generator.manual_seed(self.hyper_params.seed)
+        if iteration == "test":
+            initial_skip = 0
+        else:
+            initial_skip = environment.num_envs * iteration
         dataloader = NestedArrayDictDataLoader(
             environment.dataset,
             batch_size=environment.batch_size[0],
             shuffle=True,
             generator=generator,
-            initial_skip=environment.num_envs * iteration,
+            initial_skip=initial_skip,
         )
         data_cycler = VariableDataCycler(
             dataloader, default_batch_size=environment.batch_size[0]
         )
 
+        if iteration == "test":
+            if self.hyper_params.text_rl.test_on_whole_dataset:
+                num_rollouts = (
+                    len(environment.dataset) * self.hyper_params.rl.num_test_iterations
+                )
+            else:
+                num_rollouts = (
+                    environment.num_envs * self.hyper_params.rl.num_test_iterations
+                )
+        else:
+            num_rollouts = environment.num_envs
+
         arg_iterator = (
             (environment, self.max_message_rounds, self.combined_agent, data_batch)
-            for data_batch in truncated_iterator(data_cycler, environment.num_envs)
+            for data_batch in truncated_iterator(data_cycler, num_rollouts)
         )
 
         def get_rollouts(rollout_iterator: Iterable) -> list[NestedArrayDict]:
@@ -467,7 +503,7 @@ class PureTextRlTrainer(Trainer, ABC):
             if use_tqdm:
                 rollout_iterator = tqdm(
                     rollout_iterator,
-                    total=environment.num_envs,
+                    total=num_rollouts,
                     desc=tqdm_desc,
                 )
 
@@ -489,8 +525,53 @@ class PureTextRlTrainer(Trainer, ABC):
 
         return stack_nested_array_dicts(rollout_list, dim=0)
 
+    def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
+        """Get the proportion of rollouts where we replace the guess with the true label
+
+        For this proportion of the sampled rollouts, we replace the verifier guess with
+        either "Decision: accept" or "Decision: reject" based on the true label.
+
+        This value can be annealed over the course of the training.
+
+        Parameters
+        ----------
+        iteration : int
+            The current iteration number.
+
+        Returns
+        -------
+        proportion : float
+            The proportion of rollouts where we replace the guess with the true label.
+
+        Raises
+        ------
+        ValueError
+            If the annealing type is invalid.
+        """
+
+        anneal_type = self.hyper_params.text_rl.verifier_guess_replacement_annealing
+        initial_proportion = (
+            self.hyper_params.text_rl.verifier_guess_replacement_proportion
+        )
+        rate = self.hyper_params.text_rl.verifier_guess_replacement_annealing_rate
+
+        if anneal_type == "none":
+            return initial_proportion
+        elif anneal_type == "linear":
+            return max(initial_proportion - iteration * rate, 0)
+        elif anneal_type == "exponential":
+            return initial_proportion * (1 - rate) ** iteration
+        else:
+            raise ValueError(
+                f"Invalid annealing type {anneal_type!r} for verifier guess "
+                f"replacement."
+            )
+
     def _save_rollouts(
-        self, rollouts: NestedArrayDict, iteration: int | Literal["test"]
+        self,
+        rollouts: NestedArrayDict,
+        iteration: int | Literal["test"],
+        environment: PureTextEnvironment,
     ):
         """Save the rollouts to the checkpoint directory.
 
@@ -500,10 +581,14 @@ class PureTextRlTrainer(Trainer, ABC):
             The rollouts to save.
         iteration : int | Literal["test"]
             The iteration number, or "test" if the rollouts are from the test set.
+        environment : PureTextEnvironment
+            The environment the rollouts were sampled in.
         """
 
         if self.hyper_params.text_rl.save_transcripts:
-            raw_transcripts, processed_transcripts = self._extract_transcripts(rollouts)
+            raw_transcripts, processed_transcripts, prompts = (
+                self._extract_transcripts_and_prompts(rollouts, environment)
+            )
 
         # If we are running a test run, we don't want to save the rollouts
         if self.settings.test_run:
@@ -529,6 +614,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
             self.raw_transcripts_dir.mkdir(parents=True, exist_ok=True)
             self.processed_transcripts_dir.mkdir(parents=True, exist_ok=True)
+            self.prompts_dir.mkdir(parents=True, exist_ok=True)
 
             if self.hyper_params.text_rl.transcript_format == "yaml":
                 file_extension = "yaml"
@@ -546,6 +632,9 @@ class PureTextRlTrainer(Trainer, ABC):
             processed_transcript_path = self.processed_transcripts_dir.joinpath(
                 f"processed_{iteration}.{file_extension}"
             )
+            prompts_path = self.prompts_dir.joinpath(
+                f"prompts_{iteration}.{file_extension}"
+            )
 
             with open(raw_transcript_path, "w") as f:
                 if self.hyper_params.text_rl.transcript_format == "yaml":
@@ -559,6 +648,12 @@ class PureTextRlTrainer(Trainer, ABC):
                 elif self.hyper_params.text_rl.transcript_format == "json":
                     json.dump(processed_transcripts, f, indent=4)
 
+            with open(prompts_path, "w") as f:
+                if self.hyper_params.text_rl.transcript_format == "yaml":
+                    yaml.dump(prompts, f)
+                elif self.hyper_params.text_rl.transcript_format == "json":
+                    json.dump(prompts, f, indent=4)
+
             # If using W&B, also log the transcripts as artifacts
             if self.settings.wandb_run is not None:
                 self._add_file_to_wandb_artifact(
@@ -571,6 +666,11 @@ class PureTextRlTrainer(Trainer, ABC):
                     f"{self.settings.wandb_run.name}",
                     PROCESSED_TRANSCRIPT_ARTIFACT_TYPE,
                     processed_transcript_path,
+                )
+                self._add_file_to_wandb_artifact(
+                    f"{PROMPTS_ARTIFACT_PREFIX}{self.settings.wandb_run.name}",
+                    PROMPTS_ARTIFACT_TYPE,
+                    prompts_path,
                 )
 
     def _load_rollouts(self, iterations: int | Iterable[int]) -> NestedArrayDict:
@@ -646,6 +746,8 @@ class PureTextRlTrainer(Trainer, ABC):
         ----------
         rollouts : NestedArrayDict
             The rollouts to get the statistics for.
+        train : bool, default=True
+            Whether the rollouts are from the training environment.
 
         Returns
         -------
@@ -658,10 +760,16 @@ class PureTextRlTrainer(Trainer, ABC):
         else:
             prefix = "test_"
 
-        done: Bool[np.ndarray, "..."] = rollouts["done"]
-        next_done: Bool[np.ndarray, "..."] = rollouts["next", "done"]
-        next_terminated: Bool[np.ndarray, "..."] = rollouts["next", "terminated"]
-        padding: Bool[np.ndarray, "..."] = rollouts["padding"]
+        reward: Float[np.ndarray, "rollout round agent"] = rollouts[
+            "next", "agents", "reward"
+        ]
+        done: Bool[np.ndarray, "rollout round"] = rollouts["done"]
+        next_done: Bool[np.ndarray, "rollout round"] = rollouts["next", "done"]
+        next_terminated: Bool[np.ndarray, "rollout round"] = rollouts[
+            "next", "terminated"
+        ]
+        padding: Bool[np.ndarray, "rollout round"] = rollouts["padding"]
+        datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
 
         last_timestep = (next_done | next_terminated) & ~padding
 
@@ -670,9 +778,7 @@ class PureTextRlTrainer(Trainer, ABC):
         for agent_index, agent_name in enumerate(self.agent_names):
 
             # Get the total episode reward for each agent
-            episode_reward = rollouts["next", "agents", "reward"][..., agent_index].sum(
-                axis=-1
-            )
+            episode_reward = reward[..., agent_index].sum(axis=-1)
             log_stats[f"{agent_name}.{prefix}mean_episode_reward"] = (
                 episode_reward.mean().item()
             )
@@ -710,7 +816,18 @@ class PureTextRlTrainer(Trainer, ABC):
         log_stats[f"{prefix}mean_accuracy"] = accuracy.mean().item()
         log_stats[f"{prefix}std_accuracy"] = accuracy.std().item()
 
-        # Get the mean and accuracy of the verifier by class
+        # Get the min mean accuracy over the datapoints.
+        mean_accuracy_per_datapoint = aggregate_mean_grouped_by_class(
+            accuracy.astype(float), datapoint_id
+        )
+        mean_accuracy_per_datapoint = mean_accuracy_per_datapoint[
+            ~np.isnan(mean_accuracy_per_datapoint)
+        ]
+        log_stats[f"{prefix}worst_datapoint_accuracy"] = (
+            mean_accuracy_per_datapoint.min().item()
+        )
+
+        # Get the mean and std accuracy of the verifier by class
         for class_value in [0, 1]:
             class_mask = rollouts["y"][last_timestep] == class_value
             class_accuracy = verifier_decision[last_timestep][class_mask] == class_value
@@ -751,10 +868,10 @@ class PureTextRlTrainer(Trainer, ABC):
 
         return log_stats
 
-    def _extract_transcripts(
-        self, rollouts: NestedArrayDict
-    ) -> tuple[list[dict], list[dict]]:
-        """Extract the raw and processed transcripts from the rollouts.
+    def _extract_transcripts_and_prompts(
+        self, rollouts: NestedArrayDict, environment: PureTextEnvironment
+    ) -> tuple[list[dict], list[dict], list[list[dict[str, list[PromptMessage]]]]]:
+        """Extract the raw and processed transcripts, and prompts, from the rollouts.
 
         The raw transcript is the sequence of outputs generated by the models, per
         agent, while the processed transcript is the result of processing these and
@@ -778,12 +895,19 @@ class PureTextRlTrainer(Trainer, ABC):
               generated each message in the message history.
             - ("agents", "raw_message") (batch round agent) : The raw message generated
               by each model in each timestep.
+            - ("agents", "prompt") (batch round agent message field) : The prompt used
+              by to generate the message for each agent in each timestep.
             - ("agents", "decision") (batch round agent) : The decision made by each
+              agent in each timestep.
+            - ("agents", "reward") (batch round agent) : The reward received by each
               agent in each timestep.
 
             The nested array dict also contains keys which specify the datapoint for
             each rollout, as extracted by
             `environment.get_datapoint_from_env_state_as_dict`.
+
+        environment : PureTextEnvironment
+            The environment the rollouts were sampled in.
 
         Returns
         -------
@@ -798,12 +922,24 @@ class PureTextRlTrainer(Trainer, ABC):
             value at "transcript" is a list of dictionaries whose keys are
             `f"{active_agent_name}@{channel_name}"` and values are the messages in each
             channel.
+        prompts : list[list[dict[str, list[PromptMessage]]]]
+            The prompts used to generate the messages at each timestep. This is a list
+            containing for each batch item a list of dictionaries, one for each round.
+            Each dictionary has the agent names as keys and the prompts used by the
+            agents the as values. The prompts are a list of dictionaries, whose type is
+            specified by the `PromptMessage` class.
         """
 
         message_history = rollouts["message_history"]
         message_agent_id = rollouts["message_agent_id"]
         raw_message = rollouts["agents", "raw_message"]
+        prompt = rollouts["agents", "prompt"]
         decision = rollouts["agents", "decision"]
+        reward = reduce(
+            rollouts["next", "agents", "reward"],
+            "batch round agent -> batch agent",
+            "sum",
+        )
         num_rollouts = rollouts.batch_size[0]
 
         protocol_handler = self.scenario_instance.protocol_handler
@@ -812,11 +948,13 @@ class PureTextRlTrainer(Trainer, ABC):
 
         raw_transcripts = []
         processed_transcripts = []
+        prompts = []
 
         for rollout_id in range(num_rollouts):
 
             raw_transcript = []
             processed_transcript = []
+            prompts_by_round = []
 
             for round_id in range(self.max_message_rounds):
 
@@ -878,23 +1016,39 @@ class PureTextRlTrainer(Trainer, ABC):
                 if processed_transcript_round:
                     processed_transcript.append(processed_transcript_round)
 
+                # Get the prompts used by each agent in this round. If this is empty for
+                # an agent, it means the agent did not message in this round.
+                prompt_round = {}
+                for agent_id, agent_name in enumerate(agent_names):
+                    agent_prompt = environment.prompt_array_to_list(
+                        prompt[rollout_id, round_id, agent_id]
+                    )
+                    if len(agent_prompt) > 0:
+                        prompt_round[agent_name] = agent_prompt
+                prompts_by_round.append(prompt_round)
+
             metadata = self.train_environment.get_datapoint_from_env_state_as_dict(
                 rollouts[rollout_id, 0]
             )
+            metadata["reward"] = {
+                agent_name: reward[rollout_id, agent_id].item()
+                for agent_id, agent_name in enumerate(agent_names)
+            }
 
             raw_transcripts.append(dict(transcript=raw_transcript, **metadata))
             processed_transcripts.append(
                 dict(transcript=processed_transcript, **metadata)
             )
+            prompts.append(prompts_by_round)
 
-        return raw_transcripts, processed_transcripts
+        return raw_transcripts, processed_transcripts, prompts
 
 
 def _sample_single_rollout(
     args: tuple[
         PureTextEnvironment,
         int,
-        PureTextWholeAgent,
+        PureTextCombinedWhole,
         Optional[NestedArrayDict],
     ]
 ) -> NestedArrayDict:
@@ -912,7 +1066,7 @@ def _sample_single_rollout(
         The environment to sample a rollout in.
     max_message_rounds : int
         The maximum number of message rounds in the rollout.
-    combined_agent : PureTextWholeAgent
+    combined_agent : PureTextCombinedWhole
         The combined agent to use for the rollout.
     data_batch : NestedArrayDict, optional
         The data batch to use for the rollout. If None, the data batch will be
@@ -926,23 +1080,23 @@ def _sample_single_rollout(
 
     environment, max_message_rounds, combined_agent, data_batch = args
 
-    done = False
+    ended = False
     env_state = environment.reset(data_batch=data_batch)
     env_states = []
 
     for _ in range(max_message_rounds):
-        if not done:
+        if not ended:
 
             # Run the forward pass on all agents to sample actions
-            env_state = combined_agent.forward(env_state)
+            env_state = combined_agent.forward(env_state, environment)
 
             # Step the environment to get the next state. This writes the next state
             # in the "next" sub-dictionary.
             env_state = environment.step(env_state)
 
-            # Check if the environment is done. The state has batch size 1, so we
-            # only need to check the first element.
-            done = env_state["next", "done"][0]
+            # Check if the environment is done or terminated. The state has batch size
+            # 1, so we only need to check the first element.
+            ended = env_state["next", "done"][0] or env_state["next", "terminated"][0]
 
             # Append the current state to the environment states
             env_states.append(env_state)

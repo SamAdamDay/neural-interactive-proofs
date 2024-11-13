@@ -158,3 +158,6 @@ playground/benchmarking/results
 
 # Experiment checkpoints
 experiment_checkpoints/*
+
+# Playground cache
+playground/cache/*

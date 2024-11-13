@@ -17,6 +17,10 @@ class CommonProtocolParameters(SubParameters):
     ----------
     verifier_first : bool
         Whether the verifier goes first in the protocol.
+    randomize_prover_stance : bool
+        Whether, for each datapoint, the verdict the prover arguing for is randomized.
+        This is only relevant when there is a single prover, and when using a text-based
+        protocol.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
     verifier_reward : float
@@ -38,6 +42,7 @@ class CommonProtocolParameters(SubParameters):
     """
 
     verifier_first: bool = True
+    randomize_prover_stance: bool = False
 
     prover_reward: float = 1.0
     verifier_reward: float = 1.0
@@ -108,14 +113,10 @@ class PvgProtocolParameters(LongProtocolParameters):
 @register_parameter_class
 @dataclass
 class DebateProtocolParameters(LongProtocolParameters):
-    """Additional parameters for the debate interaction protocol.
+    """Additional parameters for the Debate interaction protocol.
 
     Parameters
     ----------
-    sequential : bool
-        Whether the provers send messages one after the other, or both simultaneously.
-    prover0_first : bool
-        When the provers send messages sequentially, whether prover 0 goes first.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -125,23 +126,28 @@ class DebateProtocolParameters(LongProtocolParameters):
     min_message_rounds_scheduler : MinMessageRoundsScheduler
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
+    randomize_channel_order : bool
+        Whether to randomize the order of the channels when prompting the verifier. Only
+        relevant in text-based protocols.
     """
 
     sequential: bool = False
     prover0_first: bool = True
+
+    randomize_channel_order: bool = True
 
 
 @register_parameter_class
 @dataclass
 class MnipProtocolParameters(LongProtocolParameters):
-    """Additional parameters for the Mnip interaction protocol.
+    """Additional parameters for the MNIP interaction protocol.
 
     Parameters
     ----------
-    sequential : bool
-        Whether the provers send messages one after the other, or both simultaneously.
-    prover0_first : bool
-        When the provers send messages sequentially, whether prover 0 goes first.
     max_message_rounds : int
         The maximum number of rounds of the game. Each round corresponds to one move by
         one or more agents.
@@ -151,20 +157,31 @@ class MnipProtocolParameters(LongProtocolParameters):
     min_message_rounds_scheduler : MinMessageRoundsScheduler
         The scheduler to use for the minimum number of message rounds, allowing it to
         change over time. TODO: not currently implemented.
+    sequential : bool
+        Whether the provers send messages one after the other, or both simultaneously.
+    prover0_first : bool
+        When the provers send messages sequentially, whether prover 0 goes first.
+    randomize_channel_order : bool
+        Whether to randomize the order of the channels when prompting the verifier. Only
+        relevant in text-based protocols.
     """
 
     sequential: bool = False
     prover0_first: bool = True
 
+    randomize_channel_order: bool = True
+
 
 @dataclass
-class ZkProtocolParameters(LongProtocolParameters):
-    """Additional parameters for the debate interaction protocol.
+class ZkProtocolParameters(SubParameters):
+    """Additional parameters for zero-knowledge versions of the interaction protocols.
 
     Parameters
     ----------
     simulator_reward_coefficient : float
         The coefficient to multiply the logit closeness by to get the simulator reward.
+    aux_prover_reward_coefficient : float
+        The coefficient of the simulator reward in the prover reward.
     """
 
     simulator_reward_coefficient: float = 1.0

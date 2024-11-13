@@ -417,10 +417,9 @@ class ImageClassificationAgentParameters(AgentParameters):
         )
 
 
-@register_parameter_class
 @dataclass
-class CodeValidationAgentParameters(AgentParameters):
-    """Additional parameters for agents in the code validation experiment.
+class PureTextAgentParameters(AgentParameters):
+    """Additional parameters for text-based agents who use APIs to generate responses.
 
     Parameters
     ----------
@@ -431,6 +430,12 @@ class CodeValidationAgentParameters(AgentParameters):
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
+    shared_model_group : str | None
+        The group of agents which share the same model. When two agents share this
+        value, they will use the same model inference. For fine-tuning, this model is
+        trained on a copy of the rollouts and rewards for each agent in the group. When
+        this is `None`, the agent is in a group whose name is the same as the agent's
+        name.
     temperature : float | None
         The temperature to use when sampling from the model. If `None`, the model uses
         the default temperature. Only one of `temperature` and `top_p` should be set.
@@ -457,6 +462,7 @@ class CodeValidationAgentParameters(AgentParameters):
     model_provider: Literal["OpenAI"] = "OpenAI"
     model_name: str = "gpt-4o-mini-2024-07-18"
     use_dummy_api: bool = False
+    shared_model_group: Optional[str] = None
 
     temperature: float | None = None
     top_p: float | None = None
@@ -467,11 +473,54 @@ class CodeValidationAgentParameters(AgentParameters):
     max_response_words: int = 150
 
     max_tokens_per_message: int | None = None
-    num_invalid_generation_retries: int = 5
+    num_invalid_generation_retries: int = 10
 
     @classmethod
-    def construct_test_params(cls) -> "CodeValidationAgentParameters":
+    def construct_test_params(cls) -> "PureTextAgentParameters":
         return cls(use_dummy_api=True)
+
+
+@register_parameter_class
+@dataclass
+class CodeValidationAgentParameters(PureTextAgentParameters):
+    """Additional parameters for agents in the code validation experiment.
+
+    Parameters
+    ----------
+    model_provider : Literal["OpenAI"]
+        The provider of the model and API to use.
+    model_name : str
+        The name of the model to use.
+    use_dummy_api : bool
+        Whether to use a dummy API instead of the real API. This is useful for testing
+        the agent without making real API requests.
+    shared_model_group : str | None
+        The group of agents which share the same model. When two agents share this
+        value, they will use the same model inference. For fine-tuning, this model is
+        trained on a copy of the rollouts and rewards for each agent in the group. When
+        this is `None`, the agent is in a group on its own.
+    temperature : float | None
+        The temperature to use when sampling from the model. If `None`, the model uses
+        the default temperature. Only one of `temperature` and `top_p` should be set.
+    top_p : float | None
+        The top-p value to use when sampling from the model. A value 0.1 means only the
+        top 10% of tokens are considered when sampling. If `None`, the model uses the
+        default top-p value. Only one of `temperature` and `top_p` should be set.
+    fine_tune_from_scratch : bool
+        Whether to fine-tune the model from scratch each iteration, or continue
+        fine-tuning from the previous iteration.
+    freeze_agent : bool
+        Whether to freeze the agent (i.e. not fine-tune it).
+    max_response_words : int
+        In the system prompt, we say that the agent should respond with a message of at
+        most this many words.
+    max_tokens_per_message : int | None
+        The maximum number of tokens which the model is allowed to generate in a single
+        message. If `None`, this is calculated based on the `max_response_words`.
+    num_invalid_generation_retries : int
+        The number of times to retry generating a message if the model returns an
+        invalid response.
+    """
 
 
 @register_parameter_value_class
