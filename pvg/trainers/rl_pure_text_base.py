@@ -10,6 +10,7 @@ import dataclasses
 from dataclasses import dataclass
 import json
 from time import sleep
+from warnings import warn
 
 import yaml
 
@@ -109,11 +110,21 @@ class PureTextRlTrainer(Trainer, ABC):
         self._state = state
 
         for group_name, shared_model_group in self.shared_model_groups.items():
-            if group_name not in state.shared_model_groups:
+
+            if group_name in state.shared_model_groups:
+                shared_model_group.set_state(state.shared_model_groups[group_name])
+
+            elif group_name in state.agents:
+                shared_model_group.set_state(state.agents[group_name])
+                warn(
+                    "Experiment state does not contain shared model group state. Using "
+                    "agent state instead."
+                )
+
+            else:
                 raise ValueError(
                     f"Shared model group {group_name!r} not found in state."
                 )
-            shared_model_group.set_state(state.shared_model_groups[group_name])
 
     @property
     def train_environment(self) -> PureTextEnvironment:
@@ -177,7 +188,8 @@ class PureTextRlTrainer(Trainer, ABC):
 
         if rerun_tests:
             self.settings.logger.info(
-                "Rerunning tests from base run. Loading the state from the base run."
+                f"Rerunning tests from base run {self.hyper_params.base_run.run_id!r}. "
+                f"Loading the state from the base run."
             )
             base_run_state_artifact_version = self.state.base_run_state_artifact_version
 
