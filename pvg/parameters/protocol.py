@@ -172,6 +172,7 @@ class MnipProtocolParameters(LongProtocolParameters):
     randomize_channel_order: bool = True
 
 
+@register_parameter_class
 @dataclass
 class ZkProtocolParameters(SubParameters):
     """Additional parameters for zero-knowledge versions of the interaction protocols.

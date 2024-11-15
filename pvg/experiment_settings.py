@@ -8,9 +8,8 @@ from dataclasses import dataclass, field, fields
 
 import torch
 
-from openai import OpenAI
-
 import wandb
+import wandb.apis.public
 
 from tqdm import tqdm
 
@@ -37,6 +36,9 @@ class ExperimentSettings:
         The W&B run to log to, if any.
     silence_wandb : bool, default=True
         Whether to suppress W&B output.
+    base_wandb_run : wandb.apis.public.Run, optional
+        The base W&B run, if using. This is an already complete run loaded using the W&B
+        API.
     stat_logger : StatLogger, optional
         The logger to use for logging statistics. If not provided, a dummy logger is
         used, which does nothing.
@@ -96,6 +98,7 @@ class ExperimentSettings:
     run_id: Optional[str] = None
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
+    base_wandb_run: Optional[wandb.apis.public.Run] = None
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None

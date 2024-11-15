@@ -1,10 +1,11 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional, Literal
+from typing import NamedTuple, Optional, Literal, Annotated
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
+from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
 
 
@@ -98,7 +99,7 @@ class RlTrainerParameters(SubParameters):
     use_shared_body: bool = True
 
     # Testing
-    num_test_iterations: int = 10
+    num_test_iterations: Annotated[int, BaseRunPreserve("rerun_tests")] = 10
 
 
 @register_parameter_class
@@ -267,6 +268,9 @@ class TextRlParameters(SubParameters):
     test_on_whole_dataset : bool
         Whether to run the test loop on the whole dataset or only on a single
         iteration-worth of rollouts.
+    test_every_iteration : bool
+        Whether to run the test loop after every iteration. If `False`, the test loop is
+        only run after training is complete.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
@@ -280,8 +284,9 @@ class TextRlParameters(SubParameters):
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
 
-    run_test_loop: bool = False
-    test_on_whole_dataset: bool = True
+    run_test_loop: Annotated[bool, BaseRunPreserve("rerun_tests")] = False
+    test_on_whole_dataset: Annotated[bool, BaseRunPreserve("rerun_tests")] = True
+    test_every_iteration: Annotated[bool, BaseRunPreserve("rerun_tests")] = False
 
 
 @register_parameter_class

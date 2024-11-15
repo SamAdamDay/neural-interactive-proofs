@@ -11,14 +11,18 @@ import dataclasses
 import json
 from logging import getLogger
 import sys
+from tempfile import TemporaryDirectory
 
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
 import wandb
 from wandb import Artifact
+from wandb.sdk.wandb_run import Run as WandbActiveRun
+from wandb.apis.public import Run as WandbFinishedRun
 
 from tqdm import tqdm
+import wandb.apis
 
 from pvg.scenario_base.agents import AgentState
 from pvg.parameters import HyperParameters
@@ -49,6 +53,8 @@ class Trainer(ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    _wandb_api: Optional[wandb.Api] = None
+
     @dataclass
     class State:
         """Base class for storing the state of an experiment.
@@ -77,6 +83,13 @@ class Trainer(ABC):
         """The names of the agents in the scenario."""
         return self.scenario_instance.protocol_handler.agent_names
 
+    @property
+    def wandb_api(self) -> wandb.Api:
+        """The Weights and Biases API instance"""
+        if self._wandb_api is None:
+            self._wandb_api = wandb.Api()
+        return self._wandb_api
+
     def __init__(
         self,
         hyper_params: HyperParameters,
@@ -96,12 +109,13 @@ class Trainer(ABC):
             self._initialise_state()
         else:
             try:
-                self.state = self._load_checkpoint()
+                self.load_and_set_state_from_checkpoint()
+            except CheckPointNotFoundError:
+                self._initialise_state()
+            else:
                 self.settings.logger.info(
                     f"Restoring experiment state from iteration {self.state.iteration}"
                 )
-            except CheckPointNotFoundError:
-                self._initialise_state()
 
     @abstractmethod
     def train(self):
@@ -117,8 +131,13 @@ class Trainer(ABC):
             Whether to log the checkpointing.
         """
 
-        # If we are running a test run, we don't want to save the rollouts
+        # If we are running a test run, we don't want to save the state
         if self.settings.test_run:
+            return
+
+        # If we are rerunning tests, we don't want to save the state because we're
+        # following the state of the base run
+        if self.hyper_params.base_run.base_run_type == "rerun_tests":
             return
 
         # Create the checkpoint directory if it doesn't exist
@@ -197,13 +216,49 @@ class Trainer(ABC):
 
         return self.checkpoint_base_dir.joinpath("hyper_params.json")
 
-    def _load_checkpoint(self) -> State:
-        """Load the experiment state from a checkpoint, if available.
+    def load_and_set_state_from_checkpoint(
+        self,
+        from_base_run: bool = False,
+        version: str = "latest",
+    ):
+        """Load and set the experiment state from a checkpoint, if available.
+
+        Parameters
+        ----------
+        from_base_run: bool, default=False
+            Whether to load the checkpoint artifact from the base run. By default, the
+            artifact is loaded form the current active run.
+        version : str, default="latest"
+            The version of the checkpoint to load. If "latest", the latest checkpoint is
+            loaded. Otherwise, the version should be a string representing the version
+            of the checkpoint to load from W&B. This must be "latest" if `from_base_run`
+            is False.
+
+        Raises
+        ------
+        CheckPointNotFoundError
+            If the checkpoint file is not found.
+        """
+
+        if from_base_run:
+            state_dict = self._load_state_dict_from_base_run_checkpoint(version=version)
+        else:
+            if version != "latest":
+                raise ValueError(
+                    "Version must be 'latest' when loading a checkpoint for the "
+                    "current run."
+                )
+            state_dict = self._load_state_dict_from_active_run_checkpoint()
+
+        self.state = self.State(**state_dict)
+
+    def _load_state_dict_from_active_run_checkpoint(self) -> dict:
+        """Load the experiment state from a checkpoint for the active run, if available.
 
         Returns
         -------
-        state : State
-            The state of the experiment.
+        state_dict : dict
+            The state as a dictionary, loaded from W&B
 
         Raises
         ------
@@ -225,13 +280,14 @@ class Trainer(ABC):
                     artifact_name,
                     type=CHECKPOINT_STATE_ARTIFACT_TYPE,
                 )
-                artifact.download(self.checkpoint_base_dir)
             except wandb.errors.CommError as e:
                 # W&B doesn't use subclasses for errors, so we have to check the
                 # message. If the error was not that the artifact was not found, we
                 # re-raise it.
                 if f"artifact '{artifact_name}' not found in" not in e.message:
                     raise e
+            else:
+                artifact.download(self.checkpoint_base_dir)
 
         if (
             self.checkpoint_state_path is None
@@ -264,7 +320,70 @@ class Trainer(ABC):
         with open(self.checkpoint_state_path, "r") as f:
             state_dict = json.load(f)
 
-        return self.State(**state_dict)
+        return state_dict
+
+    def _load_state_dict_from_base_run_checkpoint(
+        self,
+        version: str = "latest",
+    ) -> dict:
+        """Load the experiment state from a base run checkpoint.
+
+        Parameters
+        ----------
+        version : str, default="latest"
+            The version of the checkpoint to load. If "latest", the latest checkpoint is
+            loaded. Otherwise, the version should be a string representing the version
+            of the checkpoint to load from W&B.
+
+        Returns
+        -------
+        state_dict : dict
+            The state as a dictionary, loaded from W&B
+
+        Raises
+        ------
+        CheckPointNotFoundError
+            If the checkpoint file is not found.
+        """
+
+        # We download the checkpoint to a temporary directory and load it from there.
+        with TemporaryDirectory() as tempdir:
+
+            checkpoint_base_dir = Path(tempdir)
+            checkpoint_state_path = checkpoint_base_dir / "state.json"
+
+            # Try to download the state from the artifact
+            artifact_name = (
+                f"{self.hyper_params.base_run.wandb_entity}"
+                f"/{self.hyper_params.base_run.wandb_project}"
+                f"/{CHECKPOINT_STATE_ARTIFACT_PREFIX}"
+                f"{self.hyper_params.base_run.run_id}"
+                f":{version}"
+            )
+            try:
+                artifact: Artifact = self.wandb_api.artifact(
+                    artifact_name, type=CHECKPOINT_STATE_ARTIFACT_TYPE
+                )
+            except wandb.errors.CommError as e:
+                # W&B doesn't use subclasses for errors, so we have to check the
+                # message. If the error was not that the artifact was not found, we
+                # re-raise it.
+                if f"artifact '{artifact_name}' not found in" not in e.message:
+                    raise e
+            else:
+                artifact.download(checkpoint_base_dir)
+
+            if (
+                checkpoint_state_path is None
+                or not checkpoint_state_path.exists()
+                or not checkpoint_state_path.is_file()
+            ):
+                raise CheckPointNotFoundError
+
+            with open(checkpoint_state_path, "r") as f:
+                state_dict = json.load(f)
+
+        return state_dict
 
     def _add_file_to_wandb_artifact(
         self, artifact_name: str, artifact_type: str, file_path: Path

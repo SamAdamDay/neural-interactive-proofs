@@ -39,7 +39,7 @@ from pvg.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
 )
-from pvg.trainers.trainer_base import Trainer
+from pvg.trainers.trainer_base import Trainer, CheckPointNotFoundError
 from pvg.utils.maths import aggregate_mean_grouped_by_class
 from pvg.utils.data import VariableDataCycler, truncated_iterator
 from pvg.utils.nested_array_dict import (
@@ -81,6 +81,7 @@ class PureTextRlTrainer(Trainer, ABC):
             "log_stats",
             "create_fine_tune_jobs",
             "await_fine_tune_jobs",
+            "test_during_training",
             "test",
             "done",
         ] = "sample_rollouts"
@@ -171,17 +172,53 @@ class PureTextRlTrainer(Trainer, ABC):
 
     def train(self):
 
+        rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
+
+        if rerun_tests:
+            state_artifact_version = 0
+            self.settings.logger.info(
+                "Rerunning tests from base run. Loading the state from the base run."
+            )
+
+        # Should we test during the "log_stats" stage instead of the
+        # "test_during_training" stage? This is a bit of a hack, to allow testing during
+        # training when rerunning older runs which didn't have a "test_during_training"
+        # stage
+        test_during_log_stats_stage = (
+            rerun_tests
+            and self.hyper_params.base_run.rerun_tests_force_test_during_training_state
+        )
+
         rollouts: Optional[NestedArrayDict] = None
 
         while self.state.iteration < self.hyper_params.rl.num_iterations:
 
-            self.settings.logger.info(
-                f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] "
-                f"Iteration begins."
-            )
+            if rerun_tests:
+                try:
+                    self.load_and_set_state_from_checkpoint(
+                        from_base_run=True, version=f"v{state_artifact_version}"
+                    )
+                except CheckPointNotFoundError:
+                    self.settings.logger.info(
+                        f"Reached the end of the base run. Iteration: "
+                        f"{self.state.iteration}, stage: "
+                        f"{self.state.train_loop_stage!r}."
+                    )
+                    break
+                else:
+                    self.settings.logger.info(
+                        f"Loaded state artifact version 'v{state_artifact_version}'. "
+                        f"Iteration: {self.state.iteration}, stage: "
+                        f"{self.state.train_loop_stage!r}."
+                    )
 
             # Sample rollouts from the training environment
-            if self.state.train_loop_stage == "sample_rollouts":
+            if self.state.train_loop_stage == "sample_rollouts" and not rerun_tests:
+
+                self.settings.logger.info(
+                    f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] "
+                    f"Iteration begins."
+                )
 
                 rollouts = self._stage_sample_rollouts()
 
@@ -191,7 +228,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 self.save_checkpoint()
 
             # Log the statistics of the rollouts
-            if self.state.train_loop_stage == "log_stats":
+            elif self.state.train_loop_stage == "log_stats" and not rerun_tests:
 
                 # Load the rollouts if they are not already set (i.e. if we are resuming
                 # this stage)
@@ -201,12 +238,44 @@ class PureTextRlTrainer(Trainer, ABC):
                 self._stage_log_stats(rollouts)
 
                 # Advance to the next stage
+                self.state.train_loop_stage = "test_during_training"
+
+                self.save_checkpoint()
+
+            # Run the test loop during training. This may happen during the "log_stats"
+            # stage. See the comment above.
+            elif (
+                self.state.train_loop_stage == "test_during_training"
+                and not test_during_log_stats_stage
+            ) or (
+                self.state.train_loop_stage == "log_stats"
+                and test_during_log_stats_stage
+            ):
+
+                if test_during_log_stats_stage:
+                    self.settings.logger.info(
+                        "Testing during 'log_stats' stage for compatibility with older "
+                        "runs without a 'test_during_training' stage."
+                    )
+
+                # If we are running the test loop during training, we run it here
+                if (
+                    self.hyper_params.text_rl.run_test_loop
+                    and self.hyper_params.text_rl.test_every_iteration
+                ):
+                    self._stage_run_test_loop()
+
+                # Advance to the next stage
                 self.state.train_loop_stage = "create_fine_tune_jobs"
 
                 self.save_checkpoint()
 
-            # We don't fine-tune on the last iteration
-            if self.state.iteration == self.hyper_params.rl.num_iterations - 1:
+            # If we've done the above stages and we're at the last iteration, we don't
+            # need to create fine-tune jobs, so we can advance to the test stage
+            elif (
+                self.state.iteration == self.hyper_params.rl.num_iterations - 1
+                and not rerun_tests
+            ):
 
                 # Advance to the test stage
                 self.state.iteration = self.hyper_params.rl.num_iterations
@@ -217,7 +286,10 @@ class PureTextRlTrainer(Trainer, ABC):
                 break
 
             # Create fine-tune jobs for each agent
-            if self.state.train_loop_stage == "create_fine_tune_jobs":
+            elif (
+                self.state.train_loop_stage == "create_fine_tune_jobs"
+                and not rerun_tests
+            ):
 
                 # Load all the rollouts if we are fine-tuning on all previous rollouts
                 if self.hyper_params.text_rl.fine_tune_on_all_previous_rollouts:
@@ -236,7 +308,10 @@ class PureTextRlTrainer(Trainer, ABC):
                 self.save_checkpoint()
 
             # Await the completion of the fine-tune jobs
-            if self.state.train_loop_stage == "await_fine_tune_jobs":
+            elif (
+                self.state.train_loop_stage == "await_fine_tune_jobs"
+                and not rerun_tests
+            ):
 
                 self._stage_await_fine_tune_jobs()
 
@@ -246,10 +321,20 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 self.save_checkpoint()
 
+            # If we're rerunning tests, step the state artifact version number so that
+            # we get the next state in the base run
+            if rerun_tests:
+                state_artifact_version += 1
+
         if self.state.train_loop_stage == "test":
 
-            if self.hyper_params.text_rl.run_test_loop:
-
+            # Only run the test loop if we are not running it during training, because
+            # when we are running it during training, it gets run in the last iteration
+            # too.
+            if (
+                self.hyper_params.text_rl.run_test_loop
+                and not self.hyper_params.text_rl.test_every_iteration
+            ):
                 self._stage_run_test_loop()
 
             # Mark the experiment as done
@@ -364,7 +449,7 @@ class PureTextRlTrainer(Trainer, ABC):
         )
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, self.state.iteration, self.train_environment)
+        self._save_rollouts(rollouts, self.train_environment)
 
         return rollouts
 
@@ -431,7 +516,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats)
 
         # Save the rollouts to the checkpoint directory
-        self._save_rollouts(rollouts, "test", self.test_environment)
+        self._save_rollouts(rollouts, self.test_environment)
 
     def _sample_rollouts(
         self,
@@ -570,8 +655,8 @@ class PureTextRlTrainer(Trainer, ABC):
     def _save_rollouts(
         self,
         rollouts: NestedArrayDict,
-        iteration: int | Literal["test"],
         environment: PureTextEnvironment,
+        iteration: Optional[int] = None,
     ):
         """Save the rollouts to the checkpoint directory.
 
@@ -579,11 +664,19 @@ class PureTextRlTrainer(Trainer, ABC):
         ----------
         rollouts : NestedArrayDict
             The rollouts to save.
-        iteration : int | Literal["test"]
-            The iteration number, or "test" if the rollouts are from the test set.
         environment : PureTextEnvironment
             The environment the rollouts were sampled in.
+        iteration : int, optional
+            The iteration number. If not provided, the current iteration number is used.
         """
+
+        if iteration is None:
+            iteration = self.state.iteration
+
+        if environment.train:
+            base_name = f"{iteration}"
+        else:
+            base_name = f"test_{iteration}"
 
         if self.hyper_params.text_rl.save_transcripts:
             raw_transcripts, processed_transcripts, prompts = (
@@ -596,7 +689,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 
-        rollout_path = self.checkpoint_rollouts_dir.joinpath(f"{iteration}.pt")
+        rollout_path = self.checkpoint_rollouts_dir.joinpath(f"{base_name}.pt")
 
         with open(rollout_path, "wb") as f:
             pickle.dump(rollouts, f)
@@ -627,13 +720,13 @@ class PureTextRlTrainer(Trainer, ABC):
                 )
 
             raw_transcript_path = self.raw_transcripts_dir.joinpath(
-                f"raw_{iteration}.{file_extension}"
+                f"raw_{base_name}.{file_extension}"
             )
             processed_transcript_path = self.processed_transcripts_dir.joinpath(
-                f"processed_{iteration}.{file_extension}"
+                f"processed_{base_name}.{file_extension}"
             )
             prompts_path = self.prompts_dir.joinpath(
-                f"prompts_{iteration}.{file_extension}"
+                f"prompts_{base_name}.{file_extension}"
             )
 
             with open(raw_transcript_path, "w") as f:

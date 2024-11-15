@@ -20,6 +20,7 @@ from .parameters import (
     PvgProtocolParameters,
     DebateProtocolParameters,
     MessageRegressionParameters,
+    BaseRunParameters,
     ScenarioType,
     TrainerType,
     PpoLossType,

@@ -19,6 +19,7 @@ from pvg import (
     PvgProtocolParameters,
     DebateProtocolParameters,
     PureTextEiParameters,
+    BaseRunParameters,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -30,7 +31,7 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
-    interaction_protocol=[InteractionProtocolType.SOLO_VERIFIER],
+    interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     num_iterations=[8],
     rollouts_per_iteration=[200],
@@ -58,6 +59,8 @@ param_grid = dict(
     debate_prover0_first=[True],
     run_test_loop=[True],
     num_test_iterations=[1],
+    test_every_iteration=[False],
+    rerun_tests=[None],
 )
 
 
@@ -113,6 +116,15 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             f"{combo['interaction_protocol']} protocol."
         )
 
+    if combo["rerun_tests"] is not None:
+        base_run_params = BaseRunParameters(
+            base_run_type="rerun_tests",
+            run_id=combo["rerun_tests"],
+            wandb_project=WANDB_CV_PROJECT,
+        )
+    else:
+        base_run_params = BaseRunParameters(base_run_type="none")
+
     return HyperParameters(
         scenario=ScenarioType.CODE_VALIDATION,
         trainer=TrainerType.PURE_TEXT_EI,
@@ -125,6 +137,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         ),
         text_rl=TextRlParameters(
             run_test_loop=combo["run_test_loop"],
+            test_every_iteration=combo["test_every_iteration"],
             fine_tune_on_all_previous_rollouts=combo[
                 "fine_tune_on_all_previous_rollouts"
             ],
@@ -159,6 +172,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             sequential=combo["debate_sequential"],
             prover0_first=combo["debate_prover0_first"],
         ),
+        base_run=base_run_params,
     )
 
 
