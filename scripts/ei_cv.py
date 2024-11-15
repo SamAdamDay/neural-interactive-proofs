@@ -59,8 +59,8 @@ param_grid = dict(
     debate_prover0_first=[True],
     run_test_loop=[True],
     num_test_iterations=[1],
-    test_every_iteration=[True],
-    rerun_tests=["ei_cv_test_2024-11-15_14-30-16_0"],
+    test_every_iteration=[False],
+    rerun_tests=[None],
 )
 
 
