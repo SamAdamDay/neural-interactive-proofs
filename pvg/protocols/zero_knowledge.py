@@ -502,7 +502,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         adv_log_prob += torch.gather(adversarial_verifier_decision_log_probs, -1, indices["decision"][...,self.adversarial_verifier_index].unsqueeze(dim=-1)).sum(dim=dims_to_sum)
         sim_log_prob += torch.gather(simulator_decision_log_probs, -1, indices["decision"][...,self.adversarial_verifier_index].unsqueeze(dim=-1)).sum(dim=dims_to_sum)
 
-        return torch.stack((adv_log_prob, sim_log_prob))
+        return torch.stack((adv_log_prob, sim_log_prob), dim=-1)
 
     def get_verifier_guess_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]

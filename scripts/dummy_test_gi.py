@@ -139,7 +139,7 @@ def run(cmd_args: Namespace):
         # ),
         rl=RlTrainerParameters(
             num_iterations=100,
-            num_epochs=1,
+            num_epochs=2,
             lr=0.001,
             anneal_lr=True,
             minibatch_size=4,
