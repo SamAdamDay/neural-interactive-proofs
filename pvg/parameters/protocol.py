@@ -187,3 +187,4 @@ class ZkProtocolParameters(SubParameters):
     simulator_reward_coefficient: float = 1.0
     aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually
     use_multiple_simulators: bool = True
+    use_mixed_sl_and_rl: bool = False

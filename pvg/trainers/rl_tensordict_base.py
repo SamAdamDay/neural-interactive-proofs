@@ -501,11 +501,26 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
         # Compute the mean probability difference (for the simulator) for the done episodes
         # TODO should this use rollouts_split?
-        log_stats[f"{prefix}epsilon_k"] = 0.5 * torch.abs(1.0 - torch.exp(rollouts["trajectory_log_prob_diff"][done])).float().mean().item()
+        log_stats[f"{prefix}epsilon_k_mean_importance_weighted"] = 0.5 * torch.abs(1.0 - torch.exp(rollouts["trajectory_log_probs"][done][...,1] - rollouts["trajectory_log_probs"][done][...,0])).float().mean().item()
+        log_stats[f"{prefix}epsilon_k_mean"] = 0.5 * torch.abs(torch.exp(rollouts["trajectory_log_probs"][done][...,0]) - torch.exp(rollouts["trajectory_log_probs"][done][...,1])).float().mean().item()
 
-        # Compute the mean probability difference (for the simulator) for the done episodes
-        # This time we use rollouts_split
-        log_stats[f"{prefix}epsilon_k_v2"] = 0.5 * torch.abs(1.0 - torch.exp(rollouts_split["trajectory_log_prob_diff"].max(dim=-1).values)).float().mean().item()
+        # Calculate the max over epsilon_k per datum
+        epsilon_k = 0.5 * torch.abs(torch.exp(rollouts_split.get("trajectory_log_probs")[...,0]) - torch.exp(rollouts_split.get("trajectory_log_probs")[...,1])).mean(dim=-1)
+        epsilon_k_importance_weighted = 0.5 * torch.abs(1.0 - torch.exp(rollouts_split.get("trajectory_log_probs")[...,1] - rollouts_split.get("trajectory_log_probs")[...,0])).mean(dim=-1)
+        
+        epsilon_k_per_datapoint = (
+            aggregate_mean_grouped_by_class(
+            epsilon_k, datapoint_id_split, sum=True)
+        )
+        epsilon_k_importance_weighted_per_datapoint = (
+            aggregate_mean_grouped_by_class(
+            epsilon_k_importance_weighted, datapoint_id_split)
+        )
+
+        log_stats[f"{prefix}epsilon_k"] = epsilon_k_per_datapoint[
+            ~epsilon_k_per_datapoint.isnan()
+        ].max().item()
+        log_stats[f"{prefix}epsilon_k_importance_weighted"] = epsilon_k_importance_weighted_per_datapoint[~epsilon_k_importance_weighted_per_datapoint.isnan()].max().item()
 
         for i, agent_name in enumerate(self.agent_names):
             # The mean reward per step is just the mean over the tensor dict

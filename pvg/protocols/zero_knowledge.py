@@ -428,18 +428,81 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         return active_mask
 
-    def get_trajectory_log_prob_diff(self, tensordict: TensorDictBase) -> Float[Tensor, "..."]:
+    def get_trajectory_log_probs(self, tensordict: TensorDictBase) -> Float[Tensor, "..."]:
 
-        simulator_reward = self.get_simulator_reward(
-                tensordict.get("round"),
-                tensordict.get("seed"),
-                tensordict.get(("agents","main_message_logits")),
-                tensordict.get(("agents","decision_logits")),
-                distance_function = lambda adv, sim : (sim - adv).sum(dim=-1), # It's important that it's this way round when it comes to computing the overall trajectory log_prob differences using importance sampling
-                use_log_probs = True,
-            )
+        round_id = tensordict.get("round")
+        seed = tensordict.get("seed")
+        main_message_logits = tensordict.get(("agents","main_message_logits"))
+        decision_logits = tensordict.get(("agents","decision_logits"))
+        indices = {"decision": tensordict.get(("agents","decision")).to(torch.int64),
+                    "main_message": tensordict.get(("agents","node_selected")).to(torch.int64),
+        }
+        l_p = lambda x : F.log_softmax(x, dim=-1)
+        num_base_channels = self.base_protocol.num_message_channels
 
-        return simulator_reward.sum(dim=-1)
+        # Get the main message logits. Group the channels by kind (standard,
+        # adversarial, simulator) and flatten the position dimension
+        grouped_message_logits = rearrange(
+            main_message_logits,
+            "... agent (group base_channel) position logit "
+            "-> ... agent group base_channel (position logit)",
+            group=2,
+        )
+        indices["main_message"] = rearrange(
+            indices["main_message"],
+            "... agent (group base_channel) node"
+            "-> ... agent group base_channel node",
+        group=2,
+        )
+
+        # Get the message logits for the adversarial channels
+        adversarial_channel_logits: Float[Tensor, "... base_channel flat_logit"] = (
+            grouped_message_logits[..., 1, :, :]
+        )
+        indices["main_message"] = indices["main_message"][...,1,:,:]
+
+        # Get the active agent masks for the adversarial channel
+        adversarial_channel_mask: Bool[
+            Tensor, "... base_channel"
+        ] = self.get_active_agents_mask_from_rounds_and_seed(round_id, seed)[
+            ..., num_base_channels : 2 * num_base_channels,
+        ]
+        restricted_adversarial_channel_mask = adversarial_channel_mask[...,self.adversarial_indices,:].unsqueeze(-1)
+
+        # Set the logits to zero where the adversarial verifier and simulator are not
+        # active
+        adversarial_log_probs = l_p(adversarial_channel_logits[...,self.adversarial_indices,:,:]) * restricted_adversarial_channel_mask
+        simulator_log_probs = l_p(adversarial_channel_logits[...,self.simulator_indices,:,:]) * restricted_adversarial_channel_mask
+
+        # Get the log probabilities of the main message logits
+        dims_to_sum = tuple(i for i in range(adversarial_log_probs.dim()) if i != 0)
+        adv_log_prob = torch.gather(adversarial_log_probs, -1, indices["main_message"][...,self.adversarial_indices,:,:]).sum(dim=dims_to_sum)
+        sim_log_prob = torch.gather(simulator_log_probs, -1, indices["main_message"][...,self.adversarial_indices,:,:]).sum(dim=dims_to_sum)
+
+        # Get the mask for which batch items the adversarial verifier can make a guess
+        verifier_guess_mask: Float[Tensor, "..."] = (
+            self.get_verifier_guess_mask_from_rounds_and_seed(round_id, seed)
+        ).unsqueeze(-1)
+
+        # Get the decision logits for the adversarial verifier and the relevant simulator
+        adversarial_verifier_decision_logits: Float[Tensor, "... 3"] = decision_logits[
+            ..., self.adversarial_verifier_index, :
+        ]
+        simulator_decision_logits: Float[Tensor, "... 3"] = decision_logits[
+            ..., self.simulated_verifier_index, :
+        ]
+
+        # Set the decision logits to zero where the adversarial verifier cannot make a
+        # decision
+        adversarial_verifier_decision_log_probs = l_p(adversarial_verifier_decision_logits) * verifier_guess_mask
+        simulator_decision_log_probs = l_p(simulator_decision_logits) * verifier_guess_mask
+
+        # Get the log probabilities of the decision logits
+        dims_to_sum = tuple(i for i in range(adversarial_verifier_decision_log_probs.dim()) if i != 0)
+        adv_log_prob += torch.gather(adversarial_verifier_decision_log_probs, -1, indices["decision"][...,self.adversarial_verifier_index].unsqueeze(dim=-1)).sum(dim=dims_to_sum)
+        sim_log_prob += torch.gather(simulator_decision_log_probs, -1, indices["decision"][...,self.adversarial_verifier_index].unsqueeze(dim=-1)).sum(dim=dims_to_sum)
+
+        return torch.stack((adv_log_prob, sim_log_prob))
 
     def get_verifier_guess_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
@@ -507,8 +570,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
-        trajectory_log_prob_diff: Float[Tensor, "..."]
-            The difference in log probability of the trajectory.
+        trajectory_log_probs: Float[Tensor, "..., 2"]
+            The trajectory log_probs for the adversarial and simulator interactions, respectively. This is only calculated when the protocol is zero-knowledge.
         """
 
         y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
@@ -521,7 +584,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         decision_logits: Float[Tensor, "... agent 3"] = as_tensor(
             env_td["agents", "decision_logits"]
         )
-        trajectory_log_prob_diff: Float[Tensor, "..."] = as_tensor(env_td["trajectory_log_prob_diff"])
+        trajectory_log_probs: Float[Tensor, "..."] = as_tensor(env_td["trajectory_log_probs"])
 
         # Create a copy of the environment tensor dict with the agents restricted to the
         # base protocol agents
@@ -535,7 +598,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             self.base_protocol.step_interaction_protocol(env_td_restricted)
         )
 
-        trajectory_log_prob_diff += self.get_trajectory_log_prob_diff(env_td).unsqueeze(dim=-1)
+        trajectory_log_probs += self.get_trajectory_log_probs(env_td)
 
         # Get the mask of the batch items where the adversarial verifier can make a
         # guess
@@ -588,15 +651,27 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # Add the simulator rewards to the reward tensor
         reward[..., self.simulator_indices] = simulator_reward
 
-        # IMPORTANT: For now we don't actually add the full ZK rewards here because we can used supervised learning instead of RL for the other parts, and including them here effectively double counts them
         total_simulator_reward = simulator_reward.sum(dim=-1) #TODO
-        # reward[..., self.adversarial_verifier_index] = -total_simulator_reward
-        reward[..., self.adversarial_verifier_index] = -(total_simulator_reward - reward[..., self.simulated_verifier_index])
-        for prover_name in self.base_protocol.prover_names:
-            reward[..., self.agent_names.index(prover_name)] += (
-                self.prover_zk_loss_coefficient * (total_simulator_reward - reward[..., self.agent_names.index(f"simulator_{prover_name}")]) / self.simulator_reward_coefficient
-            )
-        
+
+        if self.use_mixed_sl_and_rl:
+
+            # Here, we don't actually add the full ZK rewards here because we can used supervised learning instead of RL for the other parts, and including them here effectively double counts them
+            reward[..., self.adversarial_verifier_index] = -(total_simulator_reward - reward[..., self.simulated_verifier_index])
+            for prover_name in self.base_protocol.prover_names:
+                reward[..., self.agent_names.index(prover_name)] += (
+                    self.prover_zk_loss_coefficient * (total_simulator_reward - reward[..., self.agent_names.index(f"simulator_{prover_name}")]) / self.simulator_reward_coefficient
+                )
+
+        else:
+
+            # Add the simulator rewards to the adversarial verifier's loss
+            reward[..., self.adversarial_verifier_index] = -total_simulator_reward
+            # Add the simulator rewards to the provers' rewards
+            for prover_name in self.base_protocol.prover_names:
+                reward[..., self.agent_names.index(prover_name)] += (
+                    self.prover_zk_loss_coefficient * total_simulator_reward / self.simulator_reward_coefficient
+                )
+            
         # expanded_simulator_reward = repeat(
         #     total_simulator_reward,
         #     "... -> ... agent",
@@ -607,7 +682,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         #     self.prover_zk_loss_coefficient * expanded_simulator_reward / self.hyper_params.zk_protocol.simulator_reward_coefficient
         # )
 
-        return shared_done, agent_done, terminated, reward, trajectory_log_prob_diff
+        return shared_done, agent_done, terminated, reward, trajectory_log_probs
 
     def get_simulator_reward(
         self,
@@ -616,7 +691,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         main_message_logits: Float[Tensor, "... agent channel position logit"],
         decision_logits: Float[Tensor, "... agent 3"],
         distance_function = lambda adv, sim : torch.cosine_similarity(adv, sim, dim=-1),
-        use_log_probs = False,
     ) -> Float[Tensor, "..."]:
         """Get the simulator reward(s).
 
@@ -655,11 +729,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             The simulator reward.
         """
 
-        if use_log_probs:
-            l_p = lambda x : F.log_softmax(x, dim=-1)
-        else:
-            l_p = lambda x : x
-
         num_base_channels = self.base_protocol.num_message_channels
 
         # Get the main message logits. Group the channels by kind (standard,
@@ -671,7 +740,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             group=2,
         )
 
-        # Get the message logits for the adversarial and simulation channels
+        # Get the message logits for the adversarial channels
         adversarial_channel_logits: Float[Tensor, "... base_channel flat_logit"] = (
             grouped_message_logits[..., 1, :, :]
         )
@@ -694,8 +763,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Set the logits to zero where the adversarial verifier and simulator are not
         # active
-        adversarial_logits = l_p(adversarial_channel_logits[...,self.adversarial_indices,:,:]) * restricted_adversarial_channel_mask
-        simulator_logits = l_p(adversarial_channel_logits[...,self.simulator_indices,:,:]) * restricted_adversarial_channel_mask
+        adversarial_logits = adversarial_channel_logits[...,self.adversarial_indices,:,:] * restricted_adversarial_channel_mask
+        simulator_logits = adversarial_channel_logits[...,self.simulator_indices,:,:] * restricted_adversarial_channel_mask
 
         # # Extract the logits for the corresponding agents
         # adversarial_channel_logits[..., self.adversarial_indices,:,:]
@@ -713,7 +782,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Compute the cosine similarity between the adversarial verifier and simulator
         # active message logits
-        simulator_reward: Float[Tensor, "..."] = distance_function(adversarial_logits, simulator_logits).sum(dim=-1)
+
+        simulator_reward = distance_function(adversarial_logits, simulator_logits).sum(dim=-1)
 
         # Get the mask for which batch items the adversarial verifier can make a guess
         verifier_guess_mask: Float[Tensor, "..."] = (
@@ -730,13 +800,15 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # Set the decision logits to zero where the adversarial verifier cannot make a
         # decision
-        adversarial_verifier_decision_logits = l_p(adversarial_verifier_decision_logits) * verifier_guess_mask
-        simulator_decision_logits = l_p(simulator_decision_logits) * verifier_guess_mask
+        adversarial_verifier_decision_logits = adversarial_verifier_decision_logits * verifier_guess_mask
+        simulator_decision_logits = simulator_decision_logits * verifier_guess_mask
 
         # Add the cosine similarity (or other difference function) of the adversarial verifier and simulator decision
         # logits where the adversarial verifier can make a decision to the relevant simulator's loss
         additional_reward = [torch.zeros_like(simulator_reward[:, 0]) for _ in range(simulator_reward.shape[-1])]
+
         additional_reward[0] = distance_function(adversarial_verifier_decision_logits, simulator_decision_logits)
+
         simulator_reward = simulator_reward + torch.stack(additional_reward,dim=-1)
 
         # Scale the reward by the coefficient
@@ -772,3 +844,10 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """
 
         return self.hyper_params.zk_protocol.simulator_reward_coefficient
+
+    @property
+    def use_mixed_sl_and_rl(self) -> bool:
+        """Whether to use supervised learning for some terms in the adversarial verifier and provers' losses and RL for others. Defaults to False.
+        """
+
+        return self.hyper_params.zk_protocol.use_mixed_sl_and_rl

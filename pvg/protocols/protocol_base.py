@@ -349,9 +349,8 @@ class ProtocolHandler(ABC):
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
-        trajectory_log_prob_diff: Float[Tensor, "..."]
-            The difference in log probability of the trajectory. This is only calculated
-            when the protocol is zero-knowledge.
+        trajectory_log_probs: Float[Tensor, "..., 2"]
+            The trajectory log_probs for the adversarial and simulator interactions, respectively. This is only calculated when the protocol is zero-knowledge.
         """
 
     def _get_agent_decision_made_mask(
@@ -502,9 +501,8 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             the max number of rounds has been reached and the verifier has not guessed.
         reward : Float[Tensor, "... agent"]
             The reward for the agents.
-        trajectory_log_prob_diff: Float[Tensor, "..."]
-            The difference in log probability of the trajectory. This is only calculated
-            when the protocol is zero-knowledge.
+        trajectory_log_probs: Float[Tensor, "..., 2"]
+            The trajectory log_probs for the adversarial and simulator interactions, respectively. This is only calculated when the protocol is zero-knowledge.
         """
 
         protocol_params = self.hyper_params.protocol_common

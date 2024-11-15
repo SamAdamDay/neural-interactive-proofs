@@ -379,6 +379,7 @@ def aggregate_mean_grouped_by_class(
     values: Float[Tensor | np.ndarray, "batch"],
     classes: Int[Tensor | np.ndarray, "batch"],
     num_classes: Optional[int] = None,
+    sum: Optional[bool] = False,
 ) -> Float[Tensor | np.ndarray, "class"]:
     """Compute the mean of values grouped by class.
 
@@ -397,6 +398,8 @@ def aggregate_mean_grouped_by_class(
         The class labels for each value.
     num_classes : int, optional
         The number of classes. If not provided, it is inferred from the class labels.
+    sum : bool, optional
+        If True, the sum of the values for each class is computed instead of the mean.
 
     Returns
     -------
@@ -431,7 +434,10 @@ def aggregate_mean_grouped_by_class(
     class_counts = torch.bincount(classes, minlength=num_classes)
     sum_per_class = torch.bincount(classes, values, minlength=num_classes)
 
-    mean_values = sum_per_class / class_counts.float()
+    if not sum:
+        mean_values = sum_per_class / class_counts.float()
+    else:
+        mean_values = sum_per_class
 
     if was_numpy:
         mean_values = mean_values.cpu().detach().numpy()

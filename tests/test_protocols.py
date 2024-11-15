@@ -408,7 +408,7 @@ def test_zero_knowledge_pvg_step_method():
     env_td["agents", "decision_logits"] = decision_logits
 
     # Run the step method for both the zero-knowledge and base protocols
-    shared_done, agent_done, terminated, reward, trajectory_log_prob_diff = (
+    shared_done, agent_done, terminated, reward, _ = (
         protocol_handler.step_interaction_protocol(env_td)
     )
     _, base_agent_done, base_terminated, base_reward, _ = (

@@ -283,18 +283,19 @@ class Objective(LossModule, ABC):
         for i, index in enumerate(self.zk_protocol.simulator_indices):
             new_gains[index] = simulator_reward[..., i]
 
-        # Note that for this supervised loss, the updates to the gains only take into account the corresponding simulator rewards (which aren't already included in the advantage estimate). The way the coefficients are current;l calculated is fairly ad hoc.
+        if self.zk_protocol.use_mixed_sl_and_rl:
+            # Note that for this supervised loss, the updates to the gains only take into account the corresponding simulator rewards (which aren't already included in the advantage estimate). The way the coefficients are currently calculated is fairly ad hoc.
 
-        # Adversarial verifier gains
-        new_gains[self.zk_protocol.adversarial_verifier_index] = -new_gains[self.zk_protocol.simulated_verifier_index]
+            # Adversarial verifier gains
+            new_gains[self.zk_protocol.adversarial_verifier_index] = -new_gains[self.zk_protocol.simulated_verifier_index]
 
-        # Prover gains
-        for prover_name in self.zk_protocol.base_protocol.prover_names:
-            new_gains[self.zk_protocol.agent_names.index(prover_name)] = new_gains[self.zk_protocol.agent_names.index(f"simulator_{prover_name}")]
+            # Prover gains
+            for prover_name in self.zk_protocol.base_protocol.prover_names:
+                new_gains[self.zk_protocol.agent_names.index(prover_name)] = new_gains[self.zk_protocol.agent_names.index(f"simulator_{prover_name}")]
 
-        # # Prover gains
-        # for i, index in enumerate(self.zk_protocol.prover_indices):
-        #     new_gains[index] = torch.ones_like(gain[...,0]) * self.zk_protocol.prover_zk_loss_coefficient * total_simulator_reward / self.zk_protocol.simulator_reward_coefficient
+            # # Prover gains
+            # for i, index in enumerate(self.zk_protocol.prover_indices):
+            #     new_gains[index] = torch.ones_like(gain[...,0]) * self.zk_protocol.prover_zk_loss_coefficient * total_simulator_reward / self.zk_protocol.simulator_reward_coefficient
 
         # Add the new gains to the existing gain tensor
         new_gain = torch.stack(new_gains,dim=-1)
