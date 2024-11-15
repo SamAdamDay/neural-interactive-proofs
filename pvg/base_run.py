@@ -8,6 +8,7 @@ hyper-parameters object with the hyper-parameters of the previous run.
 """
 
 from typing import Optional, Annotated, get_origin
+from types import GenericAlias
 import dataclasses
 from warnings import warn
 from inspect import isclass
@@ -114,7 +115,7 @@ def get_base_wandb_run_and_new_hyper_params(
             # Look through the elements of the origin type considered as a union.
             for sub_type in get_union_elements(origin_type):
 
-                if not isclass(sub_type):
+                if not isclass(sub_type) or type(sub_type) is GenericAlias:
                     continue
 
                 # If any the union element subclasses `SubParameters`, this means the
