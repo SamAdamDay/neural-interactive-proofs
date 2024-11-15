@@ -88,6 +88,7 @@ class PureTextRlTrainer(Trainer, ABC):
         shared_model_groups: dict[str, PureTextSharedModelGroupState] = (
             dataclasses.field(default_factory=dict)
         )
+        base_run_state_artifact_version: int = 0
 
     _state: State
 
@@ -175,10 +176,10 @@ class PureTextRlTrainer(Trainer, ABC):
         rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
 
         if rerun_tests:
-            state_artifact_version = 0
             self.settings.logger.info(
                 "Rerunning tests from base run. Loading the state from the base run."
             )
+            base_run_state_artifact_version = self.state.base_run_state_artifact_version
 
         # Should we test during the "log_stats" stage instead of the
         # "test_during_training" stage? This is a bit of a hack, to allow testing during
@@ -196,7 +197,8 @@ class PureTextRlTrainer(Trainer, ABC):
             if rerun_tests:
                 try:
                     self.load_and_set_state_from_checkpoint(
-                        from_base_run=True, version=f"v{state_artifact_version}"
+                        from_base_run=True,
+                        version=f"v{base_run_state_artifact_version}",
                     )
                 except CheckPointNotFoundError:
                     self.settings.logger.info(
@@ -205,12 +207,19 @@ class PureTextRlTrainer(Trainer, ABC):
                         f"{self.state.train_loop_stage!r}."
                     )
                     break
-                else:
-                    self.settings.logger.info(
-                        f"Loaded state artifact version 'v{state_artifact_version}'. "
-                        f"Iteration: {self.state.iteration}, stage: "
-                        f"{self.state.train_loop_stage!r}."
-                    )
+
+                self.state.base_run_state_artifact_version = (
+                    base_run_state_artifact_version
+                )
+
+                self.settings.logger.info(
+                    f"Loaded state artifact version "
+                    f"'v{self.state.base_run_state_artifact_version}'. Iteration: "
+                    f"{self.state.iteration}, stage: "
+                    f"{self.state.train_loop_stage!r}."
+                )
+
+                self.save_checkpoint()
 
             # Sample rollouts from the training environment
             if self.state.train_loop_stage == "sample_rollouts" and not rerun_tests:
@@ -324,7 +333,7 @@ class PureTextRlTrainer(Trainer, ABC):
             # If we're rerunning tests, step the state artifact version number so that
             # we get the next state in the base run
             if rerun_tests:
-                state_artifact_version += 1
+                base_run_state_artifact_version += 1
 
         if self.state.train_loop_stage == "test":
 

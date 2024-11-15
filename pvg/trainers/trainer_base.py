@@ -135,11 +135,6 @@ class Trainer(ABC):
         if self.settings.test_run:
             return
 
-        # If we are rerunning tests, we don't want to save the state because we're
-        # following the state of the base run
-        if self.hyper_params.base_run.base_run_type == "rerun_tests":
-            return
-
         # Create the checkpoint directory if it doesn't exist
         self.checkpoint_base_dir.mkdir(parents=True, exist_ok=True)
 
