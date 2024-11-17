@@ -283,9 +283,6 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         if self.hyper_params.include_linear_message_space:
             env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
-        # if "simulator" in self.agent_name:
-        #     env_level_in_keys = (*env_level_in_keys, "y") #LH-TODO maybe make this true for all agents?
-
         return env_level_in_keys
 
     agent_level_out_keys = ("graph_level_repr", "node_level_repr")
@@ -796,7 +793,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
 
         # Run the transformer input through the encoder first
         # (..., 2 + 2 * node, d_transformer)
-        transformer_input = self.gnn_transformer_encoder(transformer_input) # LH-TODO change input dims of gnn_transformer_encoder (defined in line 424), change in features
+        transformer_input = self.gnn_transformer_encoder(transformer_input)
 
         self._run_recorder_hook(hooks, "transformer_input", transformer_input)
 
@@ -1277,11 +1274,9 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     def env_level_in_keys(self):
 
         if self.has_decider is not None and self.agent_params.include_round_in_decider:
-            env_level_in_keys = ("message", "round")
+            return ("message", "round")
         else:
-            env_level_in_keys = ("message",)
-
-        return env_level_in_keys
+            return ("message",)
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:

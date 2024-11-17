@@ -270,6 +270,9 @@ class Objective(LossModule, ABC):
         tensordict : TensorDictBase
             The input TensorDict.
         """
+
+        # return gain
+
         # Get simulator rewards
         simulator_reward = self.zk_protocol.get_simulator_reward(
                 tensordict.get("round"),
@@ -441,7 +444,7 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
 
-        torch.autograd.set_detect_anomaly(True)
+        # torch.autograd.set_detect_anomaly(True)
 
         num_batch_dims = len(tensordict.batch_size)
 

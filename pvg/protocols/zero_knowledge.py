@@ -98,23 +98,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 "Could not determine the first active round for all agents."
             )
 
-    # verifier_names = ["verifier", "adversarial_verifier"]
-
-    # # The cached property doesn't get inherited, so we need to redefine it
-    # agents_first_active_rounds = {}
-    # for round_id in range(100):
-    #     for agent_name in set(self.agent_names) - set(
-    #         self.agents_first_active_rounds.keys()
-    #     ):
-    #         if self.can_agent_be_active_any_channel(agent_name, round_id):
-    #             self.agents_first_active_rounds[agent_name] = round_id
-    #     if len(self.agents_first_active_rounds) == len(self.agent_names):
-    #         break
-    # else:
-    #     raise ValueError(
-    #         "Could not determine the first active round for all agents."
-    #     )
-
     @property
     def max_message_rounds(self) -> int:
         return self.base_protocol.max_message_rounds
@@ -157,8 +140,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         return self.agent_names.index(self.base_protocol.verifier_name)
     
     @property
-    def prover_indices(self) -> int:
-        """The indices of the provers in the agent names."""
+    def base_prover_indices(self) -> int:
+        """The indices of the provers in the agent names for the base protocol."""
         return [self.agent_names.index(name) for name in self.base_protocol.prover_names]
 
     @property
@@ -208,17 +191,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             for channel_name in self.base_protocol.message_channel_names
         ]
 
-    # @property
-    # def simulator_channel_names(self) -> list[str]:
-    #     """The names of the simulator message channels in the protocol.
-
-    #     These are the same as the base protocol, with the suffix "_simulator" added.
-    #     """
-    #     return [
-    #         f"{channel_name}_simulator"
-    #         for channel_name in self.base_protocol.message_channel_names
-    #     ]
-
     @cached_property
     def message_channel_names(self) -> list[str]:
         """The names of the message channels in the protocol.
@@ -239,7 +211,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         return (
             self.standard_channel_names
             + self.adversarial_channel_names
-            # + self.simulator_channel_names
         )
 
     @property
@@ -266,43 +237,13 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
                 )
             if self.use_multiple_simulators:
                 agent_channel_visibility.append(
-                    # (f"simulator_{agent_name}", channel_name + "_simulator")
                     (f"simulator_{agent_name}", channel_name + "_adversarial")
                 )
         if not self.use_multiple_simulators:
             for channel_name in self.base_protocol.message_channel_names:
-                # agent_channel_visibility.append("simulator", channel_name + "_simulator")
                 agent_channel_visibility.append("simulator", channel_name + "_adversarial")
 
         return agent_channel_visibility
-
-    # # For some reason this is equal to None if we try to inherit directly from ProtocolHandler, so we need to redefine it
-    # @cached_property
-    # def agent_first_active_round(self) -> dict[str, int]:
-    #     """The first round in which each agent is or can be active.
-
-    #     For non-deterministic protocols, this is the first round in which the agent has
-    #     some probability of being active.
-
-    #     Returns
-    #     -------
-    #     agents_first_active_rounds : dict[str, int]
-    #         The first round in which each agent is active
-    #     """
-
-    #     agents_first_active_rounds = {}
-    #     for round_id in range(100):
-    #         for agent_name in set(self.agent_names) - set(
-    #             agents_first_active_rounds.keys()
-    #         ):
-    #             if self.can_agent_be_active_any_channel(agent_name, round_id):
-    #                 agents_first_active_rounds[agent_name] = round_id
-    #         if len(agents_first_active_rounds) == len(self.agent_names):
-    #             break
-    #     else:
-    #         raise ValueError(
-    #             "Could not determine the first active round for all agents."
-    #         )
 
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
@@ -388,9 +329,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             ).clone()
         
         # Duplicate channels for the verifier, adversarial verifier and simulator(s)
-        # active_mask: Bool[Tensor, f"... {new_num_agents} base_channel*3"] = repeat(
-        #     active_mask, "... agent channel -> ... agent (3 channel)"
-        # ).clone()
         active_mask: Bool[Tensor, f"... {new_num_agents} base_channel*2"] = repeat(
             active_mask, "... agent channel -> ... agent (2 channel)"
         ).clone()
@@ -399,10 +337,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # channels that are not theirs
         active_mask[..., self.verifier_index, num_base_channels:] = False
         active_mask[..., self.adversarial_verifier_index, :num_base_channels] = False
-        # active_mask[..., self.adversarial_verifier_index, 2 * num_base_channels :] = (
-        #     False
-        # )
-        # active_mask[..., self.simulator_indices, : 2 * num_base_channels] = False
         active_mask[..., self.simulator_indices, :] = False
 
         # Set the base agents to inactive in the simulator channels
