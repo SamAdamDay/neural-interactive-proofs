@@ -47,7 +47,7 @@ param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["eru10000"],
-    num_iterations=[5000],
+    num_iterations=[20000],
     num_epochs=[10],
     minibatch_size=[256],
     frames_per_batch=[2048],
@@ -110,7 +110,7 @@ param_grid = dict(
     zero_knowledge=[True],
     use_multiple_simulators=[True],
     simulator_reward_coefficient=[1.0],
-    aux_prover_reward_coefficient=[1.0],
+    aux_prover_reward_coefficient=[0.0],
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
