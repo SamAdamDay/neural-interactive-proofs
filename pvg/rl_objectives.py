@@ -260,7 +260,7 @@ class Objective(LossModule, ABC):
 
         return advantage
 
-    def _get_zk_rewards(self, gain: torch.Tensor, tensordict: TensorDictBase, normalise: bool = True):
+    def _get_zk_rewards(self, gain: torch.Tensor, tensordict: TensorDictBase, normalise: bool = False):
         """Update the gain tensor with zero knowledge rewards.
 
         Parameters
@@ -380,7 +380,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
                 self._loss_critic(tensordict), num_batch_dims
             ).mean(dim=0)
             if self.zk_protocol is not None:
-                loss_entropy_per_agent = self.base_agent_mask * loss_critic_per_agent
+                loss_critic_per_agent = self.base_agent_mask * loss_critic_per_agent
             td_out.set("loss_critic", loss_critic_per_agent.sum())
             td_out.set(("agents", "loss_critic"), loss_critic_per_agent)
 

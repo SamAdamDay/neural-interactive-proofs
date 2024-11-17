@@ -585,7 +585,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # Add the simulator rewards to the reward tensor
         reward[..., self.simulator_indices] = simulator_reward
 
-        total_simulator_reward = simulator_reward.sum(dim=-1) #TODO
+        total_simulator_reward = simulator_reward.sum(dim=-1)
 
         if self.use_mixed_sl_and_rl:
 
