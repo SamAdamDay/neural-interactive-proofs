@@ -53,8 +53,6 @@ class Trainer(ABC):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
-    _wandb_api: Optional[wandb.Api] = None
-
     @dataclass
     class State:
         """Base class for storing the state of an experiment.
@@ -82,13 +80,6 @@ class Trainer(ABC):
     def agent_names(self) -> list[str]:
         """The names of the agents in the scenario."""
         return self.scenario_instance.protocol_handler.agent_names
-
-    @property
-    def wandb_api(self) -> wandb.Api:
-        """The Weights and Biases API instance"""
-        if self._wandb_api is None:
-            self._wandb_api = wandb.Api()
-        return self._wandb_api
 
     def __init__(
         self,
@@ -341,6 +332,8 @@ class Trainer(ABC):
             If the checkpoint file is not found.
         """
 
+        wandb_api = wandb.Api()
+
         # We download the checkpoint to a temporary directory and load it from there.
         with TemporaryDirectory() as tempdir:
 
@@ -356,7 +349,7 @@ class Trainer(ABC):
                 f":{version}"
             )
             try:
-                artifact: Artifact = self.wandb_api.artifact(
+                artifact: Artifact = wandb_api.artifact(
                     artifact_name, type=CHECKPOINT_STATE_ARTIFACT_TYPE
                 )
             except wandb.errors.CommError as e:
