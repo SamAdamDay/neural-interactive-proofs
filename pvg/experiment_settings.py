@@ -96,6 +96,12 @@ class ExperimentSettings:
     num_api_generation_timeouts : int, default=100
         The number of timeouts to allow when generating API outputs. If the number of
         timeouts exceeds this value, the experiment will be stopped.
+    num_api_connection_errors : int, default=100
+        The number of connection errors to allow when generating API outputs. The
+        generation request is retried with exponential back-off with the formual `0.01 *
+        2 ** num_attempts`, so this value should not be higher than around 12. This
+        error type is more general that timeouts, which have their own counter. If the
+        number of connection errors exceeds this value, the experiment will be stopped.
     do_not_load_checkpoint : bool, default=False
         If True, the experiment will not load a checkpoint if one exists.
     test_run : bool, default=False
@@ -128,6 +134,7 @@ class ExperimentSettings:
     )
     pretrained_embeddings_batch_size: int = 256
     num_api_generation_timeouts: int = 100
+    num_api_connection_errors: int = 10
     do_not_load_checkpoint: bool = False
     test_run: bool = False
 

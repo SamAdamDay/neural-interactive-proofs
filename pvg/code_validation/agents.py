@@ -26,7 +26,13 @@ from einops import rearrange
 
 from jaxtyping import Bool
 
-from openai import OpenAI, APITimeoutError, APIStatusError, RateLimitError
+from openai import (
+    OpenAI,
+    APITimeoutError,
+    APIStatusError,
+    RateLimitError,
+    APIConnectionError,
+)
 from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
 
 from pvg.scenario_base.agents import (
@@ -464,6 +470,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         # Try the generation a number of times
         num_generation_errors = 0
         num_timeouts = 0
+        num_connection_errors = 0
         while True:
             try:
 
@@ -508,10 +515,21 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
             # Retry if there is a timeout, but wait a bit first
             except APITimeoutError as e:
+                print("API timeout. Retrying in 10 seconds...")  # noqa: T001
                 num_timeouts += 1
                 if num_timeouts == self.settings.num_api_generation_timeouts:
                     raise e
                 sleep(10)
+
+            except APIConnectionError as e:
+                sleep_seconds = 0.01 * 2**num_connection_errors
+                print(  # noqa: T001
+                    f"API Connection error: {e}. Retrying in {sleep_seconds} seconds..."
+                )
+                num_connection_errors += 1
+                if num_connection_errors == self.settings.num_api_connection_errors:
+                    raise e
+                sleep(sleep_seconds)
 
     def _build_chat_messages_prompt(
         self,
