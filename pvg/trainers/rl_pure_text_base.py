@@ -279,11 +279,8 @@ class PureTextRlTrainer(Trainer, ABC):
                         "runs without a 'test_during_training' stage."
                     )
 
-                # If we are running the test loop during training, we run it here
-                if (
-                    self.hyper_params.text_rl.run_test_loop
-                    and self.hyper_params.text_rl.test_every_iteration
-                ):
+                # Run the test loop if we're doing that this iteration
+                if self._check_if_run_test_loop():
                     self._stage_run_test_loop()
 
                 # Advance to the next stage
@@ -347,22 +344,11 @@ class PureTextRlTrainer(Trainer, ABC):
             if rerun_tests:
                 base_run_state_artifact_version += 1
 
-        if self.state.train_loop_stage == "test":
+        # Mark the experiment as done
+        self.state.train_loop_stage = "done"
 
-            # Only run the test loop if we are not running it during training, because
-            # when we are running it during training, it gets run in the last iteration
-            # too.
-            if (
-                self.hyper_params.text_rl.run_test_loop
-                and not self.hyper_params.text_rl.test_every_iteration
-            ):
-                self._stage_run_test_loop()
-
-            # Mark the experiment as done
-            self.state.train_loop_stage = "done"
-
-            # Save the final checkpoint
-            self.save_checkpoint()
+        # Save the final checkpoint
+        self.save_checkpoint()
 
         self.settings.logger.info("Training complete.")
 
@@ -538,6 +524,31 @@ class PureTextRlTrainer(Trainer, ABC):
 
         # Save the rollouts to the checkpoint directory
         self._save_rollouts(rollouts, self.test_environment)
+
+    def _check_if_run_test_loop(self) -> bool:
+        """Check if the test loop should be run in the current iteration.
+
+        Returns
+        -------
+        run_test_loop : bool
+            Whether the test loop should be run.
+        """
+
+        if self.hyper_params.text_rl.test_scheme == "none":
+            return False
+        elif self.hyper_params.text_rl.test_scheme == "all":
+            return True
+        elif self.hyper_params.text_rl.test_scheme == "last":
+            return self.state.iteration == self.hyper_params.rl.num_iterations - 1
+        elif self.hyper_params.text_rl.test_scheme == "first_and_last":
+            return (
+                self.state.iteration == 0
+                or self.state.iteration == self.hyper_params.rl.num_iterations - 1
+            )
+        else:
+            raise ValueError(
+                f"Invalid test scheme {self.hyper_params.text_rl.test_scheme!r}"
+            )
 
     def _sample_rollouts(
         self,

@@ -9,6 +9,10 @@ from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
 
 
+TestSchemeType = Literal["none", "all", "last", "first_and_last"]
+"""Enum specifying on which iterations to test the model during training."""
+
+
 @register_parameter_class
 @dataclass
 class RlTrainerParameters(SubParameters):
@@ -263,8 +267,8 @@ class TextRlParameters(SubParameters):
         for convenience (and comes with a small processing overhead).
     transcript_format : Literal["json", "yaml"]
         The format to save the transcripts in.
-    run_test_loop : bool
-        Whether to run the test loop after training.
+    test_scheme : TestSchemeType
+        When to run the test loop during training. See `TestSchemeType` for options.
     test_on_whole_dataset : bool
         Whether to run the test loop on the whole dataset or only on a single
         iteration-worth of rollouts.
@@ -284,9 +288,8 @@ class TextRlParameters(SubParameters):
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
 
-    run_test_loop: Annotated[bool, BaseRunPreserve("rerun_tests")] = False
+    test_scheme: Annotated[TestSchemeType, BaseRunPreserve("rerun_tests")] = "none"
     test_on_whole_dataset: Annotated[bool, BaseRunPreserve("rerun_tests")] = True
-    test_every_iteration: Annotated[bool, BaseRunPreserve("rerun_tests")] = False
 
 
 @register_parameter_class

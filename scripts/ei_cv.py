@@ -57,9 +57,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    run_test_loop=[True],
+    test_scheme=["none"],
     num_test_iterations=[1],
-    test_every_iteration=[False],
     rerun_tests=[None],
 )
 
@@ -136,8 +135,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             num_test_iterations=combo["num_test_iterations"],
         ),
         text_rl=TextRlParameters(
-            run_test_loop=combo["run_test_loop"],
-            test_every_iteration=combo["test_every_iteration"],
+            test_scheme=combo["test_scheme"],
             fine_tune_on_all_previous_rollouts=combo[
                 "fine_tune_on_all_previous_rollouts"
             ],

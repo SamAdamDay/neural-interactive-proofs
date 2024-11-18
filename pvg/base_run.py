@@ -68,7 +68,7 @@ def get_base_wandb_run_and_new_hyper_params(
     )
 
     # First create the new hyper-parameters object by using the W&B run config dict
-    new_hyper_params = HyperParameters.from_dict(run.config)
+    new_hyper_params = HyperParameters.from_dict(run.config, ignore_extra_keys=True)
 
     def revert_preserved_hyper_params(
         hyper_params: BaseHyperParameters,

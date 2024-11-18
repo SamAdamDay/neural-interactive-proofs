@@ -86,6 +86,7 @@ from .agents import (
     AgentsParameters,
 )
 from .trainers import (
+    TestSchemeType,
     RlTrainerParameters,
     CommonPpoParameters,
     VanillaPpoParameters,
