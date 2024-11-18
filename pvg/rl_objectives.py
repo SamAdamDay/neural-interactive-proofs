@@ -274,12 +274,16 @@ class Objective(LossModule, ABC):
         # return gain
 
         # Get simulator rewards
-        simulator_reward = self.zk_protocol.get_simulator_reward(
-                tensordict.get("round"),
-                tensordict.get("seed"),
-                tensordict.get(("agents","main_message_logits")),
-                tensordict.get(("agents","decision_logits")),
-            )
+        if self.zk_protocol.use_actual_actions_in_loss("simulators"):
+            trajectory_log_probs = tensordict.get("trajectory_log_probs")
+            simulator_reward = torch.abs(torch.exp(trajectory_log_probs[...,1]) - torch.exp(trajectory_log_probs[...,0]))
+        else:
+            simulator_reward = self.zk_protocol.get_simulator_reward(
+                    tensordict.get("round"),
+                    tensordict.get("seed"),
+                    tensordict.get(("agents","main_message_logits")),
+                    tensordict.get(("agents","decision_logits")),
+                )
         
         # Simulator gains
         new_gains = [torch.zeros_like(gain[...,0]) for _ in range(len(self.names))]

@@ -1,7 +1,7 @@
 """Parameters for the interaction protocols."""
 
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
@@ -188,3 +188,6 @@ class ZkProtocolParameters(SubParameters):
     aux_prover_reward_coefficient: float = 1.0  # We may want to change this eventually
     use_multiple_simulators: bool = True
     use_mixed_sl_and_rl: bool = False
+    distance_function: str = "kl_divergence"
+    use_dists_in_simulator_losses: bool = True
+    use_dists_in_other_losses: bool = True

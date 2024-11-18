@@ -362,7 +362,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         return active_mask
 
-    def get_trajectory_log_probs(self, tensordict: TensorDictBase) -> Float[Tensor, "..."]:
+    def get_trajectory_log_probs(self, tensordict: TensorDictBase, logits: bool = False) -> Float[Tensor, "..."]:
 
         round_id = tensordict.get("round")
         seed = tensordict.get("seed")
@@ -371,7 +371,10 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         indices = {"decision": tensordict.get(("agents","decision")).to(torch.int64),
                     "main_message": tensordict.get(("agents","node_selected")).to(torch.int64),
         }
-        l_p = lambda x : F.log_softmax(x, dim=-1)
+        if logits:
+            l_p = lambda x : x
+        else:
+            l_p = lambda x : F.log_softmax(x, dim=-1)
         num_base_channels = self.base_protocol.num_message_channels
 
         # Get the main message logits. Group the channels by kind (standard,
@@ -532,7 +535,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             self.base_protocol.step_interaction_protocol(env_td_restricted)
         )
 
-        trajectory_log_probs += self.get_trajectory_log_probs(env_td)
+        new_trajectory_log_probs = self.get_trajectory_log_probs(env_td)
+        trajectory_log_probs += new_trajectory_log_probs
 
         # Get the mask of the batch items where the adversarial verifier can make a
         # guess
@@ -575,6 +579,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             dim=-1,
         )
 
+        # Get the simulator reward by comparing the logits of the full distributions
         simulator_reward: Float[Tensor, "... agent"] = self.get_simulator_reward(
             round_id=round_id,
             seed=seed,
@@ -582,24 +587,36 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             decision_logits=decision_logits,
         )
 
-        # Add the simulator rewards to the reward tensor
-        reward[..., self.simulator_indices] = simulator_reward
-
         total_simulator_reward = simulator_reward.sum(dim=-1)
+        abs_prob_distance = 0.5 * torch.abs(torch.exp(new_trajectory_log_probs[...,1]) - torch.exp(new_trajectory_log_probs[...,0]))
+
+        # Add the simulator rewards to the reward tensor
+        if self.use_dists_in_simulator_losses:
+            reward[..., self.simulator_indices] = simulator_reward
+        else:
+            reward[..., self.simulator_indices] = -abs_prob_distance.unsqueeze(-1)
+
+        # Set the rewards for the provers and the adversarial verifier
+        if self.use_dists_in_other_losses:
+            prover_reward = total_simulator_reward
+            adversarial_verifier_reward = -total_simulator_reward
+        else:
+            prover_reward = -abs_prob_distance
+            adversarial_verifier_reward = abs_prob_distance
 
         if self.use_mixed_sl_and_rl:
 
             # Here, we don't actually add the full ZK rewards here because we can used supervised learning instead of RL for the other parts, and including them here effectively double counts them
-            reward[..., self.adversarial_verifier_index] = -(total_simulator_reward - reward[..., self.simulated_verifier_index])
+            reward[..., self.adversarial_verifier_index] = adversarial_verifier_reward + reward[..., self.simulated_verifier_index]
             for prover_name in self.base_protocol.prover_names:
                 reward[..., self.agent_names.index(prover_name)] += (
-                    self.prover_zk_loss_coefficient * (total_simulator_reward - reward[..., self.agent_names.index(f"simulator_{prover_name}")]) / self.simulator_reward_coefficient
+                    self.prover_zk_loss_coefficient * (prover_reward - reward[..., self.agent_names.index(f"simulator_{prover_name}")]) / self.simulator_reward_coefficient
                 )
 
         else:
 
-            # Add the simulator rewards to the adversarial verifier's loss
-            reward[..., self.adversarial_verifier_index] = -total_simulator_reward
+            # Add the simulator rewards to the adversarial verifier's reward
+            reward[..., self.adversarial_verifier_index] = adversarial_verifier_reward
             # Add the simulator rewards to the provers' rewards
             for prover_name in self.base_protocol.prover_names:
                 reward[..., self.agent_names.index(prover_name)] += (
@@ -624,7 +641,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         seed: Int[Tensor, "..."],
         main_message_logits: Float[Tensor, "... agent channel position logit"],
         decision_logits: Float[Tensor, "... agent 3"],
-        distance_function = lambda adv, sim : torch.cosine_similarity(adv, sim, dim=-1),
+        # distance_function = lambda adv, sim : torch.cosine_similarity(adv, sim, dim=-1),
+        distance_function: str = "kl_divergence",
     ) -> Float[Tensor, "..."]:
         """Get the simulator reward(s).
 
@@ -785,3 +803,31 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """
 
         return self.hyper_params.zk_protocol.use_mixed_sl_and_rl
+    
+    @property
+    def use_dists_in_simulator_losses(self) -> bool:
+        """Whether to use the difference between the full distribution over actions or between the actual actions when computing the simulation rewards for the simulators (who use supervised learning). Defaults to False.
+        """
+
+        return self.hyper_params.zk_protocol.use_dists_in_simulator_losses
+    
+    @property
+    def use_dists_in_other_losses(self) -> bool:
+        """Whether to use the difference between the full distribution over actions or between the actual actions when computing the simulation rewards for the non-simulators (who typically use RL). Defaults to Trye.
+        """
+
+        return self.hyper_params.zk_protocol.use_dists_in_other_losses
+
+
+    def distance_function(self, adv: Float[Tensor, "..."], sim: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
+        """Whether to use the actual actions when computing the simulation rewards for the agents (compared to the difference between the full distribution over actions). Defaults to False for the simulators (who use supervised learning) and True otherwise (for the agents tha learn using RL).
+        """
+
+        if self.hyper_params.zk_protocol.distance_function == "cosine_similarity":
+            return torch.cosine_similarity(adv, sim, dim=-1)
+        elif self.hyper_params.zk_protocol.distance_function == "total_variation":
+            return 0.5*torch.abs(torch.exp(adv) - torch.exp(sim)).sum(dim=-1)
+        elif self.hyper_params.zk_protocol.distance_function == "kl_divergence":
+            return F.softmax(adv, dim=-1) * (F.log_softmax(adv, dim=-1) - F.log_softmax(sim, dim=-1))
+        else:
+            raise ValueError(f"Unknown distance function {self.hyper_params.zk_protocol.distance_function}")
