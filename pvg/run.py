@@ -26,6 +26,7 @@ from pvg.utils.env import load_env_once
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 from pvg.protocols import build_protocol_handler
 from pvg.stat_logger import WandbStatLogger, DummyStatLogger
+from pvg.base_run import get_base_wandb_run_and_new_hyper_params
 import pvg.graph_isomorphism
 import pvg.image_classification
 import pvg.code_validation
@@ -126,6 +127,9 @@ def run_experiment(
     # Load the environment variables.
     load_env_once()
 
+    # Get the base run and new hyper-parameters, if using a base run
+    base_run, hyper_params = get_base_wandb_run_and_new_hyper_params(hyper_params)
+
     # Set up Weights & Biases.
     if use_wandb:
         if run_id is None and not allow_auto_generated_run_id:
@@ -162,6 +166,7 @@ def run_experiment(
         logger=logger,
         profiler=profiler,
         ignore_cache=ignore_cache,
+        base_wandb_run=base_run,
         num_dataset_threads=num_dataset_threads,
         num_rollout_workers=num_rollout_workers,
         pin_memory=pin_memory,

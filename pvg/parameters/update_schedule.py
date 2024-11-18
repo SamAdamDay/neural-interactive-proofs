@@ -6,6 +6,7 @@ and does not update.
 """
 
 from abc import ABC, abstractmethod
+import dataclasses
 
 from pvg.parameters.parameters_base import (
     ParameterValue,
@@ -31,13 +32,18 @@ class AgentUpdateSchedule(ParameterValue, ABC):
         return as_dict
 
     @classmethod
-    def from_dict(cls, params_dict: dict) -> "AgentUpdateSchedule":
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "AgentUpdateSchedule":
         """Create an agent update schedule from a dictionary.
 
         Parameters
         ----------
         params_dict : dict
             A dictionary of the agent update schedule.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
 
         Returns
         -------
@@ -53,6 +59,13 @@ class AgentUpdateSchedule(ParameterValue, ABC):
                 "Missing agent update schedule class ('_type') in dictionary"
             )
         schedule_class = get_parameter_or_parameter_value_class(class_name)
+
+        if ignore_extra_keys:
+            params_dict = {
+                key: value
+                for key, value in params_dict.items()
+                if key in {field.name for field in dataclasses.fields(schedule_class)}
+            }
 
         # Create the schedule
         arguments = params_dict.get(class_name, {})
