@@ -111,15 +111,26 @@ param_grid = dict(
     zero_knowledge=[True],
     use_multiple_simulators=[True],
     simulator_reward_coefficient=[1.0],
-    aux_prover_reward_coefficient=[1.0],
-    distance_function=["total_variation"],
-    use_dists_in_simulator_losses=[False],
-    use_dists_in_other_losses=[True],
+    aux_prover_reward_coefficient=[0.0,1.0,10.0,100.0],
+    distance_function=["kl_divergence"],
+    use_dists_in_simulator_losses=[True],
+    use_dists_in_other_losses=[False],
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
     max_train_size=[None],
-    seed=[8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030],
+    seed=[
+        8144,
+        820,
+        4173, 
+        3992, 
+        4506, 
+        9876, 
+        5074, 
+        446, 
+        5147, 
+        9030
+        ],
 )
 
 
