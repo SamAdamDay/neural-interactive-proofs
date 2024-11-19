@@ -15,6 +15,7 @@ from .parameters import (
     TextRlParameters,
     PureTextEiParameters,
     ImageClassificationParameters,
+    CodeValidationParameters,
     DatasetParameters,
     CommonProtocolParameters,
     PvgProtocolParameters,

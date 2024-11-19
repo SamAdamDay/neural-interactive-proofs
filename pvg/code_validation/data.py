@@ -271,6 +271,19 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     NeurIPS-21
     """
 
+    @property
+    def processed_dir(self) -> str:
+        """The path to the directory containing the processed data."""
+        split_dir = "train" if self.train else "test"
+        difficulty_dir = self.hyper_params.code_validation.apps_difficulty
+        return os.path.join(
+            CV_DATA_DIR,
+            self.dataset_filepath_name,
+            "processed",
+            difficulty_dir,
+            split_dir,
+        )
+
     def _load_raw_dataset(self) -> HuggingFaceDataset:
         split = "train" if self.train else "test"
         return load_dataset(

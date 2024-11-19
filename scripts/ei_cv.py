@@ -19,6 +19,7 @@ from pvg import (
     PvgProtocolParameters,
     DebateProtocolParameters,
     PureTextEiParameters,
+    CodeValidationParameters,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -32,6 +33,7 @@ from pvg.constants import WANDB_CV_PROJECT
 param_grid = dict(
     interaction_protocol=[InteractionProtocolType.SOLO_VERIFIER],
     dataset_name=["lrhammond/buggy-apps"],
+    apps_difficulty=["interview"],
     num_iterations=[8],
     rollouts_per_iteration=[200],
     verifier_model=["gpt-4o-mini-2024-07-18"],
@@ -158,6 +160,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             max_message_rounds=combo["max_message_rounds"],
             sequential=combo["debate_sequential"],
             prover0_first=combo["debate_prover0_first"],
+        ),
+        code_validation=CodeValidationParameters(
+            apps_difficulty=combo["apps_difficulty"],
         ),
     )
 
