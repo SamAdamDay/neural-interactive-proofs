@@ -734,7 +734,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # Compute the cosine similarity between the adversarial verifier and simulator
         # active message logits
 
-        simulator_reward = self.distance_function(adversarial_logits, simulator_logits).sum(dim=-1)
+        simulator_reward = -self.distance_function(adversarial_logits, simulator_logits).sum(dim=-1)
 
         # Get the mask for which batch items the adversarial verifier can make a guess
         verifier_guess_mask: Float[Tensor, "..."] = (
@@ -758,7 +758,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         # logits where the adversarial verifier can make a decision to the relevant simulator's loss
         additional_reward = [torch.zeros_like(simulator_reward[:, 0]) for _ in range(simulator_reward.shape[-1])]
 
-        additional_reward[0] = self.distance_function(adversarial_verifier_decision_logits, simulator_decision_logits)
+        additional_reward[0] = -self.distance_function(adversarial_verifier_decision_logits, simulator_decision_logits)
 
         simulator_reward = simulator_reward + torch.stack(additional_reward,dim=-1)
 
@@ -823,7 +823,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """
 
         if self.hyper_params.zk_protocol.distance_function == "cosine_similarity":
-            return torch.cosine_similarity(adv, sim, dim=-1)
+            return -torch.cosine_similarity(adv, sim, dim=-1)
         elif self.hyper_params.zk_protocol.distance_function == "total_variation":
             return 0.5*torch.abs(F.softmax(adv) - F.softmax(sim)).sum(dim=-1)
         elif self.hyper_params.zk_protocol.distance_function == "kl_divergence":
