@@ -266,6 +266,17 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             2,
         )
 
+    @property
+    def empty_channel_message(self) -> OrderedDict[str, str]:
+        """An empty message for each channel
+
+        This is used as a placeholder when the model fails to generate a valid response.
+        """
+
+        return OrderedDict(
+            [(channel_name, "") for channel_name in self.message_channel_names]
+        )
+
     def _parse_decision(self, completion_text: str) -> int:
         """Parse a completion text to extract the decision.
 

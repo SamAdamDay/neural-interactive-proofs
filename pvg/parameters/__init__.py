@@ -86,6 +86,7 @@ from .agents import (
     AgentsParameters,
 )
 from .trainers import (
+    TestSchemeType,
     RlTrainerParameters,
     CommonPpoParameters,
     VanillaPpoParameters,
@@ -111,6 +112,7 @@ from .update_schedule import (
     AlternatingPeriodicUpdateSchedule,
 )
 from .message_regression import MessageRegressionParameters
+from .base_run import BaseRunParameters, BaseRunPreserve
 
 # The agent names required for each protocol
 AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
@@ -182,8 +184,8 @@ class HyperParameters(BaseHyperParameters):
     d_representation : int
         The dimension of each agent's body representation output.
     message_size : int
-        The size of the message sent by agents. This is a dimension of the message
-        space and effectively allows sending multiple messages simultaneously.
+        The size of the message sent by agents. This is a dimension of the message space
+        and effectively allows sending multiple messages simultaneously.
     include_linear_message_space : bool
         Whether to include a 1-dimensional message space in addition to the message
         space specified by the scenario. This allows sending a single number as a
@@ -194,34 +196,46 @@ class HyperParameters(BaseHyperParameters):
     d_linear_message_space : int
         The dimension of the linear message space (i.e. the number of possible messages
         which can sent). This is only used if `include_linear_message_space` is `True`.
-    batch_size : int
-        The number of simultaneous environments to run in parallel.
     agents : AgentsParameters | dict[str, AgentParameters], optional
-        Additional parameters for the agents. The keys are the names of the agents, and
-        the values are the parameters for each agent. If not provided, the default
-        parameters are used for each agent for a given scenario.
+        Parameters for the agents. The keys are the names of the agents, and the values
+        are the parameters for each agent. If not provided, the default parameters are
+        used for each agent for a given scenario.
     rl : RlTrainerParams, optional
         Common parameters for all RL trainers.
     ppo : PpoParameters, optional
         Common parameters for PPO trainers.
     vanilla_ppo : VanillaPpoParameters, optional
-        Additional parameters for the vanilla PPO trainer.
+        Parameters for the vanilla PPO trainer.
     spg : SpgParameters, optional
-        Additional parameters for SPG and its variants.
+        Parameters for SPG and its variants.
     reinforce : ReinforceParameters, optional
-        Additional parameters for the REINFORCE trainer.
+        Parameters for the REINFORCE trainer.
     solo_agent : SoloAgentParameters, optional
-        Additional parameters for running agents in isolation. Used when the trainer is
+        Parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
     pure_text_ei : PureTextEiParameters, optional
-        Additional parameters for the expert iteration trainer which works with agents
-        that call a text-based APIs.
+        Parameters for the expert iteration trainer which works with agents that call a
+        text-based APIs.
     image_classification : ImageClassificationParameters, optional
-        Additional parameters for the image classification task.
+        Parameters for the image classification task.
     code_validation : CodeValidationParameters, optional
-        Additional parameters for the code validation task.
+        Parameters for the code validation task.
     dataset_options : DatasetParameters, optional
-        Additional parameters for the dataset.
+        Parameters for the dataset.
+    protocol_common : CommonProtocolParameters, optional
+        Parameters common to all protocols.
+    pvg_protocol : PvgProtocolParameters, optional
+        Parameters for the PVG protocol.
+    debate_protocol : DebateProtocolParameters, optional
+        Parameters for the debate protocol.
+    mnip_protocol : MnipProtocolParameters, optional
+        Parameters for the MNIP protocol.
+    zk_protocol : ZkProtocolParameters, optional
+        Parameters for zero-knowledge protocols.
+    message_regression : MessageRegressionParameters, optional
+        Parameters for doing regression analysis on the messages.
+    base_run : BaseRunParameters, optional
+        Parameters for basing the current experiment on a previous W&B run.
     """
 
     scenario: ScenarioType | str
@@ -267,6 +281,8 @@ class HyperParameters(BaseHyperParameters):
     zk_protocol: Optional[ZkProtocolParameters | dict] = None
 
     message_regression: Optional[MessageRegressionParameters | dict] = None
+
+    base_run: Optional[BaseRunParameters | dict] = None
 
     def __post_init__(self):
         # Convert any strings to enums

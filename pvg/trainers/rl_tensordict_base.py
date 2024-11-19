@@ -119,6 +119,12 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
     ):
         super().__init__(hyper_params, scenario_instance, settings)
 
+        if hyper_params.base_run.base_run_type not in ["none", "parameters"]:
+            raise NotImplementedError(
+                f"The {hyper_params.trainer!r} trainer has not implemented using a "
+                f"base run with type {hyper_params.base_run.base_run_type!r}."
+            )
+
         # Update clip value to be a float or None
         self.clip_value = self.hyper_params.rl.clip_value
         if self.clip_value == True:

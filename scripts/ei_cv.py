@@ -20,6 +20,7 @@ from pvg import (
     DebateProtocolParameters,
     PureTextEiParameters,
     CodeValidationParameters,
+    BaseRunParameters,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -31,7 +32,7 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
-    interaction_protocol=[InteractionProtocolType.SOLO_VERIFIER],
+    interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["lrhammond/buggy-apps"],
     apps_difficulty=["interview"],
     num_iterations=[8],
@@ -58,8 +59,9 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    run_test_loop=[True],
+    test_scheme=["none"],
     num_test_iterations=[1],
+    rerun_tests=[None],
 )
 
 
@@ -115,6 +117,15 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             f"{combo['interaction_protocol']} protocol."
         )
 
+    if combo["rerun_tests"] is not None:
+        base_run_params = BaseRunParameters(
+            base_run_type="rerun_tests",
+            run_id=combo["rerun_tests"],
+            wandb_project=WANDB_CV_PROJECT,
+        )
+    else:
+        base_run_params = BaseRunParameters(base_run_type="none")
+
     return HyperParameters(
         scenario=ScenarioType.CODE_VALIDATION,
         trainer=TrainerType.PURE_TEXT_EI,
@@ -126,7 +137,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             num_test_iterations=combo["num_test_iterations"],
         ),
         text_rl=TextRlParameters(
-            run_test_loop=combo["run_test_loop"],
+            test_scheme=combo["test_scheme"],
             fine_tune_on_all_previous_rollouts=combo[
                 "fine_tune_on_all_previous_rollouts"
             ],
@@ -164,6 +175,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         code_validation=CodeValidationParameters(
             apps_difficulty=combo["apps_difficulty"],
         ),
+        base_run=base_run_params,
     )
 
 

@@ -29,7 +29,9 @@ class ParameterValue(ABC):
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, params_dict: dict) -> "ParameterValue":
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "ParameterValue":
         """Create a parameter value from a serialised dictionary."""
 
     @classmethod
@@ -95,13 +97,18 @@ class BaseHyperParameters(ParameterValue, ABC):
         return params_dict
 
     @classmethod
-    def from_dict(cls, params_dict: dict) -> "BaseHyperParameters":
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "BaseHyperParameters":
         """Create a parameters object from a dictionary.
 
         Parameters
         ----------
         params_dict : dict
             A dictionary of the parameters.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
 
         Returns
         -------
@@ -119,6 +126,14 @@ class BaseHyperParameters(ParameterValue, ABC):
                     f"Invalid parameter class: {param_class_name!r} is not a subclass "
                     f"of {cls.__name__!r}"
                 )
+
+        # Remove extra keys if necessary
+        if ignore_extra_keys:
+            params_dict = {
+                key: value
+                for key, value in params_dict.items()
+                if key in {field.name for field in dataclasses.fields(cls)}
+            }
 
         # Call `from_dict` on all fields that are ParameterValues
         for param in dataclasses.fields(cls):
@@ -161,7 +176,9 @@ class BaseHyperParameters(ParameterValue, ABC):
                     )
 
             # Replace the dictionary with the `ParameterValue` subclass
-            params_dict[param.name] = param_class.from_dict(param_value)
+            params_dict[param.name] = param_class.from_dict(
+                param_value, ignore_extra_keys=ignore_extra_keys
+            )
 
         # Create the parameters object from the modified dictionary
         return cls(**params_dict)
