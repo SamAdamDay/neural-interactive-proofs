@@ -47,7 +47,7 @@ param_grid = dict(
     trainer=[TrainerType.VANILLA_PPO],
     interaction_protocol=[InteractionProtocolType.PVG],
     dataset_name=["eru10000"],
-    num_iterations=[20000],
+    num_iterations=[5000],
     num_epochs=[10],
     minibatch_size=[256],
     frames_per_batch=[2048],
@@ -107,15 +107,30 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
+    # ZK parameters
     zero_knowledge=[True],
     use_multiple_simulators=[True],
     simulator_reward_coefficient=[1.0],
-    aux_prover_reward_coefficient=[0.0],
+    aux_prover_reward_coefficient=[0.0,1.0,10.0,100.0],
+    distance_function=["kl_divergence"],
+    use_dists_in_simulator_losses=[True],
+    use_dists_in_other_losses=[False],
     # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
     # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
     update_spec=[None],
     max_train_size=[None],
-    seed=[8144, 820, 4173, 3992],
+    seed=[
+        8144,
+        820,
+        4173, 
+        3992, 
+        4506, 
+        9876, 
+        5074, 
+        446, 
+        5147, 
+        9030
+        ],
 )
 
 
@@ -302,6 +317,9 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             simulator_reward_coefficient = combo["simulator_reward_coefficient"],
             aux_prover_reward_coefficient = combo["aux_prover_reward_coefficient"],
             use_multiple_simulators = combo["use_multiple_simulators"],
+            distance_function = combo["distance_function"],
+            use_dists_in_simulator_losses = combo["use_dists_in_simulator_losses"],
+            use_dists_in_other_losses = combo["use_dists_in_other_losses"],
         ),
         pretrain_agents=pretrain_agents,
         d_representation=combo["d_representation"],

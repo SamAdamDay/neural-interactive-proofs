@@ -191,4 +191,4 @@ class ZkProtocolParameters(SubParameters):
     use_mixed_sl_and_rl: bool = False
     distance_function: str = "kl_divergence"
     use_dists_in_simulator_losses: bool = True
-    use_dists_in_other_losses: bool = True
+    use_dists_in_other_losses: bool = False
