@@ -1,11 +1,16 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional, Literal
+from typing import NamedTuple, Optional, Literal, Annotated
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
+from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
+
+
+TestSchemeType = Literal["none", "all", "last", "first_and_last"]
+"""Enum specifying on which iterations to test the model during training."""
 
 
 @register_parameter_class
@@ -98,7 +103,7 @@ class RlTrainerParameters(SubParameters):
     use_shared_body: bool = True
 
     # Testing
-    num_test_iterations: int = 10
+    num_test_iterations: Annotated[int, BaseRunPreserve("rerun_tests")] = 10
 
 
 @register_parameter_class
@@ -262,11 +267,14 @@ class TextRlParameters(SubParameters):
         for convenience (and comes with a small processing overhead).
     transcript_format : Literal["json", "yaml"]
         The format to save the transcripts in.
-    run_test_loop : bool
-        Whether to run the test loop after training.
+    test_scheme : TestSchemeType
+        When to run the test loop during training. See `TestSchemeType` for options.
     test_on_whole_dataset : bool
         Whether to run the test loop on the whole dataset or only on a single
         iteration-worth of rollouts.
+    test_every_iteration : bool
+        Whether to run the test loop after every iteration. If `False`, the test loop is
+        only run after training is complete.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
@@ -280,8 +288,8 @@ class TextRlParameters(SubParameters):
     save_transcripts: bool = True
     transcript_format: Literal["json", "yaml"] = "yaml"
 
-    run_test_loop: bool = False
-    test_on_whole_dataset: bool = True
+    test_scheme: Annotated[TestSchemeType, BaseRunPreserve("rerun_tests")] = "none"
+    test_on_whole_dataset: Annotated[bool, BaseRunPreserve("rerun_tests")] = True
 
 
 @register_parameter_class

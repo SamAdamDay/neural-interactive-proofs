@@ -1,5 +1,7 @@
 """Parameters specific to each scenario."""
 
+from typing import Literal
+
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
@@ -30,12 +32,12 @@ class CodeValidationParameters(SubParameters):
 
     Parameters
     ----------
-    app_difficulty : str
+    app_difficulty : Literal["introductory", "interview", "competition"]
         The difficulty level of the APPS dataset, if using.
     app_solution_number : int
         Each question in the APPS dataset has multiple solutions. This parameter
         specifies which solution to use.
     """
 
-    apps_difficulty: str = "interview"
+    apps_difficulty: Literal["introductory", "interview", "competition"] = "interview"
     apps_solution_number: int = 0

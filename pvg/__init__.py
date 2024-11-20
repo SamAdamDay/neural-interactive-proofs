@@ -15,12 +15,14 @@ from .parameters import (
     TextRlParameters,
     PureTextEiParameters,
     ImageClassificationParameters,
+    CodeValidationParameters,
     DatasetParameters,
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
     ZkProtocolParameters,
     MessageRegressionParameters,
+    BaseRunParameters,
     ScenarioType,
     TrainerType,
     PpoLossType,
@@ -38,6 +40,7 @@ from .parameters import (
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     AGENT_NAMES,
+    TestSchemeType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment, PreparedExperimentInfo

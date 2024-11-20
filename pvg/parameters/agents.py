@@ -140,13 +140,18 @@ class AgentParameters(SubParameters, ABC):
         return params_dict
 
     @classmethod
-    def from_dict(cls, params_dict: dict) -> "AgentsParameters":
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "AgentsParameters":
         """Create a parameters object from a dictionary.
 
         Parameters
         ----------
         params_dict : dict
             A dictionary of the parameters.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
 
         Returns
         -------
@@ -161,7 +166,7 @@ class AgentParameters(SubParameters, ABC):
         if "is_simulator" in params_dict:
             params_dict.pop("is_simulator")
 
-        return super().from_dict(params_dict)
+        return super().from_dict(params_dict, ignore_extra_keys=ignore_extra_keys)
 
     def load_from_wandb_config(self, wandb_config: dict):
         """Load the parameters from a W&B config dictionary.
@@ -473,7 +478,7 @@ class PureTextAgentParameters(AgentParameters):
     max_response_words: int = 150
 
     max_tokens_per_message: int | None = None
-    num_invalid_generation_retries: int = 10
+    num_invalid_generation_retries: int = 20
 
     @classmethod
     def construct_test_params(cls) -> "PureTextAgentParameters":
@@ -557,13 +562,19 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
         return params_dict
 
     @classmethod
-    def from_dict(cls, params_dict: dict) -> "AgentsParameters":
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "AgentsParameters":
         """Create a parameters object from a dictionary.
 
         Parameters
         ----------
         params_dict : dict
             A dictionary of the parameters.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
+
 
         Returns
         -------
@@ -580,7 +591,9 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
             class_name: AgentParameters = cls._get_param_class_from_dict(
                 agent_params_dict
             )
-            agent_params = class_name.from_dict(agent_params_dict)
+            agent_params = class_name.from_dict(
+                agent_params_dict, ignore_extra_keys=ignore_extra_keys
+            )
             agents_params[agent_name] = agent_params
 
         agents_params_obj = cls(**agents_params)
