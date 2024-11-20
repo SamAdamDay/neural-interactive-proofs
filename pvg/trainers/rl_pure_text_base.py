@@ -839,13 +839,14 @@ class PureTextRlTrainer(Trainer, ABC):
                     artifact_name,
                     type=ROLLOUTS_ARTIFACT_TYPE,
                 )
-                artifact.download(self.checkpoint_rollouts_dir)
             except wandb.errors.CommError as e:
                 # W&B doesn't use subclasses for errors, so we have to check the
                 # message. If the error was not that the artifact was not found, we
                 # re-raise it.
                 if f"artifact '{artifact_name}' not found in" not in e.message:
                     raise e
+            else:
+                artifact.download(self.checkpoint_rollouts_dir)
 
         checkpoints = []
         for iteration, checkpoint_filepath in zip(iterations, checkpoint_filepaths):

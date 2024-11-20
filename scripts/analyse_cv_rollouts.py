@@ -5,10 +5,20 @@ import json
 
 import numpy as np
 
+import wandb
+
 from pvg import HyperParameters, ExperimentSettings, ScenarioType
 from pvg.factory import build_scenario_instance
 from pvg.trainers import PureTextEiTrainer, build_trainer
 from pvg.scenario_base import ROLLOUT_ANALYSERS
+from pvg.constants import (
+    WANDB_ENTITY,
+    WANDB_CV_PROJECT,
+    CHECKPOINT_STATE_ARTIFACT_PREFIX,
+    CHECKPOINT_STATE_ARTIFACT_TYPE,
+    ROLLOUTS_ARTIFACT_PREFIX,
+    ROLLOUTS_ARTIFACT_TYPE,
+)
 import pvg.code_validation.rollout_analysis
 
 available_analysers = []
@@ -61,15 +71,57 @@ arg_parser.add_argument(
 # Get the arguments
 cmd_args = arg_parser.parse_args()
 
-# Load the parameters
+# Try to download the checkpoint state
+wandb_api = wandb.Api()
 checkpoint_dir = PureTextEiTrainer.get_checkpoint_base_dir_from_run_id(
     cmd_args.checkpoint_name
 )
+artifact_name = (
+    f"{WANDB_ENTITY}"
+    f"/{WANDB_CV_PROJECT}"
+    f"/{CHECKPOINT_STATE_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
+    f":latest"
+)
+try:
+    artifact: wandb.Artifact = wandb_api.artifact(
+        artifact_name, type=CHECKPOINT_STATE_ARTIFACT_TYPE
+    )
+except wandb.errors.CommError as e:
+    # W&B doesn't use subclasses for errors, so we have to check the
+    # message. If the error was not that the artifact was not found, we
+    # re-raise it.
+    if f"artifact '{artifact_name}' not found in" not in e.message:
+        raise e
+else:
+    artifact.download(checkpoint_dir)
+
+# Try to download the rollouts
+rollouts_dir = checkpoint_dir.joinpath("rollouts")
+artifact_name = (
+    f"{WANDB_ENTITY}"
+    f"/{WANDB_CV_PROJECT}"
+    f"/{ROLLOUTS_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
+    f":latest"
+)
+try:
+    artifact: wandb.Artifact = wandb_api.artifact(
+        artifact_name, type=ROLLOUTS_ARTIFACT_TYPE
+    )
+except wandb.errors.CommError as e:
+    # W&B doesn't use subclasses for errors, so we have to check the
+    # message. If the error was not that the artifact was not found, we
+    # re-raise it.
+    if f"artifact '{artifact_name}' not found in" not in e.message:
+        raise e
+else:
+    artifact.download(rollouts_dir)
+
+# Load the parameters
 params_path = checkpoint_dir.joinpath("hyper_params.json")
 with open(params_path, "r") as params_file:
     params_dict = json.load(params_file)
 
-hyper_params = HyperParameters.from_dict(params_dict)
+hyper_params = HyperParameters.from_dict(params_dict, ignore_extra_keys=True)
 
 # Build the experiment
 settings = ExperimentSettings(
