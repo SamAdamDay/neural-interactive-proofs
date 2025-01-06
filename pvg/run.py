@@ -213,7 +213,7 @@ def run_experiment(
 
 @dataclass
 class PreparedExperimentInfo:
-    """Information about an experiment that has been prepared using `prepare_experiment`
+    """Information about an experiment prepared using `prepare_experiment`.
 
     Parameters
     ----------

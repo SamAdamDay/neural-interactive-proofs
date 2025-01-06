@@ -1,4 +1,4 @@
-"""Implementations of RL objectives, extending those of TorchRL"""
+"""Implementations of RL objectives, extending those of TorchRL."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
 from typing import Iterable, NamedTuple, Optional
@@ -49,7 +49,8 @@ class Objective(LossModule, ABC):
         This class defines which tensordict keys can be set using
         '.set_keys(key_name=key_value)' and their default values
 
-        Attributes:
+        Attributes
+        ----------
             advantage (NestedKey): The input tensordict key where the advantage is
             expected.
                 Will be used for the underlying value estimator. Defaults to
@@ -269,7 +270,7 @@ class Objective(LossModule, ABC):
 
 
 class PPOLossImproved(Objective, PPOLoss, ABC):
-    """Base PPO loss class which allows multiple actions keys and normalises advantages
+    """Base PPO loss class which allows multiple actions keys and normalises advantages.
 
     See `torchrl.objectives.PPOLoss` for more details
     """
@@ -327,7 +328,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
         loss_value.backward()
 
     def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """Convenience method for getting the critic loss without the clip fraction
+        """Get the critic loss without the clip fraction.
 
         TorchRL's `loss_critic` method returns a tuple with the critic loss and the
         clip fraction. This method returns only the critic loss.
@@ -336,13 +337,13 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
 
 
 class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
-    """Clipped PPO loss which allows multiple actions keys and normalises advantages
+    """Clipped PPO loss which allows multiple actions keys and normalises advantages.
 
-    See `torchrl.objectives.ClipPPOLoss` for more details
+    See `torchrl.objectives.ClipPPOLoss` for more details.
     """
 
     def _set_ess(self, num_batch_dims: int, td_out: TensorDictBase, log_weight: Tensor):
-        """Set the ESS in the output TensorDict, for logging
+        """Set the ESS in the output TensorDict, for logging.
 
         Parameters
         ----------
@@ -369,6 +370,19 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 
     # We modify the loss function to normalise per agent
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Compute the loss for the PPO algorithm with clipping.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        td_out : TensorDictBase
+            The output TensorDict containing the losses.
+        """
+
         tensordict = tensordict.clone(False)
 
         num_batch_dims = len(tensordict.batch_size)
@@ -410,12 +424,25 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 
 
 class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
-    """KL penalty PPO loss which allows multiple actions keys and normalises advantages
+    """KL penalty PPO loss which allows multiple actions keys and normalises advantages.
 
     See `torchrl.objectives.KLPENPPOLoss` for more details
     """
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
+        """Compute the loss for the PPO algorithm with a KL penalty.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        td_out : TensorDict
+            The output TensorDict containing the losses.
+        """
+
         tensordict = tensordict.clone(False)
 
         # Compute the advantage
@@ -458,8 +485,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 
 
 class SpgLoss(ClipPPOLossImproved):
-    """Loss for Stackelberg Policy Gradient and several variants, including LOLA and
-    POLA.
+    """Loss for Stackelberg Policy Gradient and variants, including LOLA and POLA.
 
     We return losses per agent, as well as the sum of the log probabilities, in order to
     then compute the scores later on in the backward function.
@@ -526,44 +552,65 @@ class SpgLoss(ClipPPOLossImproved):
             "clip_epsilon", torch.tensor(clip_epsilon, device=self.device)
         )
 
-    def get_followers(self):
+    def get_followers(self) -> tuple[dict[int, tuple[int]], dict[int, tuple[int]]]:
+        """Get dictionaries of the followers of each agent.
+
+        For each agent in the Stackelberg sequence, we get the agents in the group
+        immediately following them, as well as all the agents in the groups following
+        them. This is returned as two dictionaries.
+
+        Returns
+        -------
+        immediate_followers : dict[int, tuple[int]
+            A dictionary where the keys are agent indices and the values are tuples of
+            agent indices for the immediate followers of each agent.
+        descendent_followers : dict[int, tuple[int]
+            A dictionary where the keys are agent indices and the values are tuples of
+            agent indices for all the followers of each agent (i.e. the immediate
+            followers, as well as all the followers of the immediate followers, and so
+            on).
         """
-        Returns a dictionary of followers for each element in the stackelberg_sequence.
 
-        Returns:
-            dict: A dictionary where the keys are elements in the stackelberg_sequence
-            and the values are the followers.
-        """
+        immediate_followers: dict[int, tuple[int]] = {}
+        descendent_followers: dict[int, tuple[int]] = {}
 
-        followers = {}
-        all_followers = {}
+        for group_id in range(len(self.stackelberg_sequence)):
+            if group_id != len(self.stackelberg_sequence) - 1:
 
-        for g in range(len(self.stackelberg_sequence)):
-            if g != len(self.stackelberg_sequence) - 1:
-                all = []
-                for gg in range(g + 1, len(self.stackelberg_sequence)):
-                    all += self.stackelberg_sequence[gg]
-                for i in self.stackelberg_sequence[g]:
-                    followers[i] = self.stackelberg_sequence[g + 1]
-                    all_followers[i] = tuple(all)
+                # Flatten the remaining groups
+                remaining_agent_ids = []
+                for subsequent_group_id in range(
+                    group_id + 1, len(self.stackelberg_sequence)
+                ):
+                    remaining_agent_ids += self.stackelberg_sequence[
+                        subsequent_group_id
+                    ]
+                remaining_agent_ids = tuple(remaining_agent_ids)
+
+                for follower_id in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower_id] = self.stackelberg_sequence[
+                        group_id + 1
+                    ]
+                    descendent_followers[follower_id] = remaining_agent_ids
+
             else:
-                for i in self.stackelberg_sequence[g]:
-                    followers[i] = ()
-                    all_followers[i] = ()
+                for follower_id in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower_id] = ()
+                    descendent_followers[follower_id] = ()
 
-        return followers, all_followers
+        return immediate_followers, descendent_followers
 
     def get_actor_params(
         self, grads=False
     ):  # This probably isn't the most memory efficient way to do things
-        """
-        Returns a dictionary containing the split gradients for each agent.
+        """Return a dictionary containing the split gradients for each agent.
 
-        Returns:
-            actor_params (dict): A dictionary where the keys are agent indices and the
-            values are dictionaries
-                                containing the parameters or the gradients thereof for
-                                each agent.
+        Returns
+        -------
+        actor_params : dict
+            A dictionary where the keys are agent indices and the values are
+            dictionaries containing the parameters or the gradients thereof for each
+            agent.
         """
         actor_params = {i: {} for i in self.agent_indices}
         for i in self.agent_indices:
@@ -581,6 +628,18 @@ class SpgLoss(ClipPPOLossImproved):
 
     # Define the (variants of the) SPG loss @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Compute the loss for the Stackelberg Policy Gradient algorithm.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        td_out : TensorDictBase
+            The output TensorDict containing the losses.
+        """
 
         tensordict = tensordict.clone(False)
         num_batch_dims = len(tensordict.batch_size)
@@ -828,7 +887,7 @@ class SpgLoss(ClipPPOLossImproved):
 
 
 class ReinforceLossImproved(Objective, ReinforceLoss):
-    """Reinforce loss which allows multiple actions keys and normalises advantages
+    """Reinforce loss which allows multiple actions keys and normalises advantages.
 
     The implementation is also tweaked slightly to allow it to work without a critic. In
     this case reward-to-go is used instead of the advantage.
@@ -971,6 +1030,19 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
             self.critic_network_params = None
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Compute the loss for the given input TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        TensorDictBase
+            The output TensorDict containing the loss values.
+        """
+
         # Compute the weighting used in the loss, which is either the reward-to-go or
         # the advantage, depending on whether a critic is used
         if self.loss_weighting_type == "reward_to_go":
@@ -1022,7 +1094,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         loss_value.backward()
 
     def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """Convenience method for getting the critic loss without the clip fraction
+        """Get the critic loss without the clip fraction.
 
         TorchRL's `loss_critic` method returns a tuple with the critic loss and the
         clip fraction. This method returns only the critic loss.

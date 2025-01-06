@@ -1,10 +1,10 @@
-"""Utilities for timing pieces of code"""
+"""Utilities for timing pieces of code."""
 
 from datetime import datetime
 
 
 class TimeInfoPrinter:
-    """Class to print the current time and a message
+    """Class to print the current time and a message.
 
     Parameters
     ----------
@@ -21,19 +21,19 @@ class TimeInfoPrinter:
 
     @property
     def enabled(self):
-        """bool: Whether the printer is enabled"""
+        """Whether the printer is enabled."""
         return self._enabled and not self.FORCE_DISABLE
 
     def enable(self):
-        """Enable the printer"""
+        """Enable the printer."""
         self._enabled = True
 
     def disable(self):
-        """Disable the printer"""
+        """Disable the printer."""
         self._enabled = False
 
     def set_enabled_state(self, state: bool):
-        """Set the enabled state
+        """Set the enabled state.
 
         Parameters
         ----------
@@ -43,7 +43,7 @@ class TimeInfoPrinter:
         self._enabled = state
 
     def print(self, message: str = ""):
-        """Print the current time and the message
+        """Print the current time and the message.
 
         Parameters
         ----------

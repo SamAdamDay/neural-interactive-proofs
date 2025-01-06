@@ -84,14 +84,14 @@ class CodeValidationAgentSpec:
 
 
 class CodeValidationProtocolHandler(ProtocolHandler, ABC):
-    """Mixin for code validation protocol handlers"""
+    """Mixin for code validation protocol handlers."""
 
     prover_stance_can_be_randomized: bool = False
 
     @property
     @abstractmethod
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
-        """A dictionary mapping agent names to specifications"""
+        """A dictionary mapping agent names to specifications."""
 
     @property
     def system_prompt_directory(self) -> str:
@@ -171,7 +171,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         )
 
     def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
-        """An iterator over the channels ordered for the agent.
+        """Get an iterator over the channels ordered for the agent.
 
         Channels can be ordered differently for each agent, when creating the request to
         the model.
@@ -183,10 +183,10 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         seed : int
             The random seed to use for shuffling the channels, if necessary.
 
-        Returns
-        -------
-        channel_order : list[str]
-            The order of channels for the agent.
+        Yields
+        ------
+        channel_name : str
+            The name of the channel.
         """
 
         if self.agent_specs[agent_name].channel_order is not None:
@@ -205,7 +205,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
     def parse_chat_completion(
         self, completion_text: str, agent_name: str, round_id: int
     ) -> tuple[OrderedDict[str, str] | None, int]:
-        """Parse a chat completion into a message to each channel and a decision
+        """Parse a chat completion into a message to each channel and a decision.
 
         Parameters
         ----------
@@ -268,7 +268,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
     @property
     def empty_channel_message(self) -> OrderedDict[str, str]:
-        """An empty message for each channel
+        """An empty message for each channel.
 
         This is used as a placeholder when the model fails to generate a valid response.
         """
@@ -464,6 +464,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
 @register_protocol_handler(InteractionProtocolType.PVG, ScenarioType.CODE_VALIDATION)
 class PvgCodeValidationProtocol(CodeValidationProtocolHandler, PvgProtocol):
+    """The PVG protocol for code validation."""
 
     prover_stance_can_be_randomized = True
 
@@ -481,6 +482,7 @@ class PvgCodeValidationProtocol(CodeValidationProtocolHandler, PvgProtocol):
     InteractionProtocolType.ABSTRACT_DECISION_PROBLEM, ScenarioType.CODE_VALIDATION
 )
 class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
+    """The abstract decision problem protocol for code validation."""
 
     prover_stance_can_be_randomized = True
 
@@ -492,10 +494,11 @@ class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
 
 @register_protocol_handler(InteractionProtocolType.DEBATE, ScenarioType.CODE_VALIDATION)
 class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol):
+    """The debate protocol for code validation."""
 
     @property
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
-        """A dictionary mapping agent names to specifications"""
+        """A dictionary mapping agent names to specifications."""
 
         if self.hyper_params.debate_protocol.randomize_channel_order:
             verifier_channel_order = [{"prover0_channel", "prover1_channel"}]
@@ -532,6 +535,7 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
 class MerlinArthurCodeValidationProtocol(
     CodeValidationProtocolHandler, MerlinArthurProtocol
 ):
+    """The Merlin-Arthur protocol for code validation."""
 
     agent_specs = {
         "verifier": CodeValidationAgentSpec("Verifier"),
@@ -546,12 +550,13 @@ class MerlinArthurCodeValidationProtocol(
 
 @register_protocol_handler(InteractionProtocolType.MNIP, ScenarioType.CODE_VALIDATION)
 class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
+    """The MNIP protocol for code validation."""
 
     prover_stance_can_be_randomized = True
 
     @property
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
-        """A dictionary mapping agent names to specifications"""
+        """A dictionary mapping agent names to specifications."""
 
         if self.hyper_params.mnip_protocol.randomize_channel_order:
             verifier_channel_order = [{"prover0_channel", "prover1_channel"}]
@@ -584,6 +589,8 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
 class SoloVerifierCodeValidationProtocol(
     CodeValidationProtocolHandler, SoloVerifierProtocol
 ):
+    """A protocol where the verifier acts alone."""
+
     agent_specs = {"verifier": CodeValidationAgentSpec("Verifier")}
 
     def _include_prover_rewards(

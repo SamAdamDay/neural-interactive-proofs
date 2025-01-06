@@ -25,11 +25,11 @@ class DummyTqdm:
     def __exit__(self, *args):
         pass
 
-    def update(self, *args):
+    def update(self, *args):  # noqa: D102
         pass
 
-    def close(self):
+    def close(self):  # noqa: D102
         pass
 
-    def set_description(self, *args):
+    def set_description(self, *args):  # noqa: D102
         pass

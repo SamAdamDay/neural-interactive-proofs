@@ -6,7 +6,7 @@ from torch.optim import Optimizer
 
 
 class ParamGroupFreezer:
-    """A class for freezing groups of parameters during training
+    """A class for freezing groups of parameters during training.
 
     The `param_group_groups` collects the optimizer's parameter groups into named
     collections. Each collection can be frozen and unfrozen at any point.
@@ -56,7 +56,7 @@ class ParamGroupFreezer:
                         self._original_requires_grad[id(param)] = param.requires_grad
 
     def freeze(self, collection_name: str):
-        """Freeze the parameter groups in the named collection
+        """Freeze the parameter groups in the named collection.
 
         Parameters
         ----------
@@ -73,7 +73,7 @@ class ParamGroupFreezer:
                     param.requires_grad = False
 
     def unfreeze(self, collection_name: str):
-        """Unfreeze the parameter groups in the named collection
+        """Unfreeze the parameter groups in the named collection.
 
         Parameters
         ----------

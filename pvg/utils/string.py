@@ -36,7 +36,8 @@ def get_hash_parity(input_string: str) -> int:
     Args:
         input_string (str): The string to be hashed.
 
-    Returns:
+    Returns
+    -------
         int: 0 if the hash is even, 1 if the hash is odd.
     """
 

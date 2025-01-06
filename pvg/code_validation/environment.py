@@ -39,6 +39,21 @@ class CodeValidationEnvironment(PureTextEnvironment):
         return observation_spec
 
     def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+        """Get the datapoint from a single-element environment state as a dictionary.
+
+        This returns a dictionary which specifies the datapoint for the environment
+        state.
+
+        Parameters
+        ----------
+        env_state : NestedArrayDict
+            The environment state.
+
+        Returns
+        -------
+        datapoint : dict
+            The datapoint.
+        """
 
         datapoint = super().get_datapoint_from_env_state_as_dict(env_state)
 

@@ -294,7 +294,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
 
         def filter_instance(instance: dict[str, str | int]) -> bool:
-            """Filter based on the hyper_params"""
+            """Filter based on the hyper_params."""
 
             return (
                 instance["difficulty"]

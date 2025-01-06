@@ -25,7 +25,7 @@ def register_protocol_handler(
     protocol_handler: InteractionProtocolType,
     scenario_type: Optional[ScenarioType] = None,
 ) -> Callable[[type[P]], type[P]]:
-    """Decorator to register a protocol handler."""
+    """Register a protocol handler."""
 
     def decorator(cls: type[P]) -> type[P]:
         PROTOCOL_HANDLER_REGISTRY[protocol_handler, scenario_type] = cls
@@ -37,7 +37,7 @@ def register_protocol_handler(
 def build_protocol_handler(
     hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ProtocolHandler:
-    """Factory function for building a trainer from parameters.
+    """Build a trainer from the parameters.
 
     Parameters
     ----------

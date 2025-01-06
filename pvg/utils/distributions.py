@@ -1,4 +1,4 @@
-"""PyTorch distributions"""
+"""PyTorch distributions."""
 
 from typing import Callable
 
@@ -99,7 +99,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         )
 
     def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
-        """Computes the log probability of a sample for the composite distribution
+        """Compute the log probability of a sample for the composite distribution.
 
         Adapted from `tensordict.nn.distributions.CompositeDistribution.log_prob`.
 
@@ -131,7 +131,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         return sample
 
     def entropy(self, batch_size: int | tuple[int, ...]) -> Tensor:
-        """Computes the entropy of the composite distribution
+        """Compute the entropy of the composite distribution.
 
         Parameters
         ----------

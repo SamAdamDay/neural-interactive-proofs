@@ -31,6 +31,18 @@ class SpgVariant(StrEnum):
 
 
 class IhvpVariant(StrEnum):
+    """Enum for the variants of the inverse Hessian-vector product computation.
+
+    Enums
+    -----
+    CONJ_GRAD
+        Use the conjugate gradient method.
+    NEUMANN
+        Use the Neumann series method.
+    NYSTROM
+        Use the Nyström method.
+    """
+
     CONJ_GRAD = enum_auto()
     NEUMANN = enum_auto()
     NYSTROM = enum_auto()

@@ -1,4 +1,4 @@
-"""Dummy graph isomorphism test script, for debugging purposes"""
+"""Dummy graph isomorphism test script, for debugging purposes."""
 
 from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
@@ -31,6 +31,14 @@ from pvg.parameters import get_protocol_agent_names
 
 
 def run(cmd_args: Namespace):
+    """Run the dummy graph isomorphism test.
+
+    Parameters
+    ----------
+    cmd_args : Namespace
+        The command-line arguments.
+    """
+
     if cmd_args.use_cpu or not torch.cuda.is_available():
         print("Using CPU")  # noqa: T201
         device = torch.device("cpu")

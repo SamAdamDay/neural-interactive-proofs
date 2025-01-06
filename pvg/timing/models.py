@@ -17,7 +17,7 @@ from pvg.parameters import (
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import TensorDictDataLoader
 from pvg.factory import build_scenario_instance
-from pvg.utils.data import max_length_iterator
+from pvg.utils.data import truncated_iterator
 from pvg.timing.timeables import Timeable, register_timeable
 from pvg.utils.maths import set_seed
 
@@ -118,7 +118,7 @@ class ModelTimeable(Timeable, ABC):
             shuffle=True,
             generator=self.generator,
         )
-        dataloader = max_length_iterator(cycle(dataloader), self.num_batches)
+        dataloader = truncated_iterator(cycle(dataloader), self.num_batches)
 
         with torch.no_grad():
             for data in dataloader:

@@ -23,6 +23,13 @@ class AgentUpdateSchedule(ParameterValue, ABC):
     """
 
     def to_dict(self) -> dict:
+        """Convert the agent update schedule to a dictionary.
+
+        Returns
+        -------
+        as_dict : dict
+            A dictionary representation of the agent update schedule.
+        """
 
         as_dict = dict(_type=type(self).__name__)
 

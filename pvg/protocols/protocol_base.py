@@ -204,7 +204,7 @@ class ProtocolHandler(ABC):
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent can be active in a given round and channel.
+        """Specify whether an agent can be active in a given round and channel.
 
         For non-deterministic protocols, this is true if the agent has some probability
         of being active.
@@ -216,7 +216,7 @@ class ProtocolHandler(ABC):
         """
 
     def can_agent_be_active_any_channel(self, agent_name: str, round_id: int) -> bool:
-        """Specifies whether an agent can be active in any channel in a given round.
+        """Specify whether an agent can be active in any channel in a given round.
 
         For non-deterministic protocols, this is true if the agent has some probability
         of being active.
@@ -330,7 +330,7 @@ class ProtocolHandler(ABC):
         *,
         follow_force_guess: bool = True,
     ) -> Bool[Tensor, "..."]:
-        """Get a mask indicating whether an agent has made a decision
+        """Get a mask indicating whether an agent has made a decision.
 
         Parameters
         ----------
@@ -651,7 +651,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     def is_agent_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent is active in a given round and channel.
+        """Specify whether an agent is active in a given round and channel.
 
         An agent must only send a message in a channel which is visible to them.
 
@@ -664,7 +664,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent can be active in a given round and channel.
+        """Specify whether an agent can be active in a given round and channel.
 
         For deterministic protocols, this is the same as `is_agent_active`.
 

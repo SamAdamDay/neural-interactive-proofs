@@ -1,4 +1,4 @@
-"""Dummy image classification test script, for debugging purposes"""
+"""Dummy image classification test script, for debugging purposes."""
 
 from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
@@ -30,6 +30,14 @@ from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 
 def run(cmd_args: Namespace):
+    """Run the dummy image classification test.
+
+    Parameters
+    ----------
+    cmd_args : Namespace
+        The command-line arguments.
+    """
+
     if cmd_args.use_cpu or not torch.cuda.is_available():
         print("Using CPU")  # noqa: T201
         device = torch.device("cpu")

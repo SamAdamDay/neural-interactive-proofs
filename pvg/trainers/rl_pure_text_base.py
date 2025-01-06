@@ -95,6 +95,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
     @property
     def state(self) -> State:
+        """The state of the experiment."""
 
         if not hasattr(self, "_state"):
             self._state = self.State()
@@ -183,6 +184,21 @@ class PureTextRlTrainer(Trainer, ABC):
         return self.checkpoint_base_dir.joinpath("analysis")
 
     def train(self):
+        """Train the agents in the environment.
+
+        Runs the training loop for the specified number of iterations. The training loop
+        consists of the following stages:
+
+        1. Sample rollouts from the training environment.
+        2. Log the statistics of the rollouts.
+        3. Run the test loop during training.
+        4. Create fine-tune jobs for each agent.
+        5. Await the completion of the fine-tune jobs.
+
+        The training loop can be resumed from a previous checkpoint. If the training
+        loop is resumed, the state of the experiment is loaded from the checkpoint, and
+        the training loop is resumed from the last stage.
+        """
 
         rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
 
@@ -643,7 +659,7 @@ class PureTextRlTrainer(Trainer, ABC):
         return stack_nested_array_dicts(rollout_list, dim=0)
 
     def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
-        """Get the proportion of rollouts where we replace the guess with the true label
+        """Get the proportion of rollouts to replace the guess with the true label.
 
         For this proportion of the sampled rollouts, we replace the verifier guess with
         either "Decision: accept" or "Decision: reject" based on the true label.

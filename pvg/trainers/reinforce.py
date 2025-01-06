@@ -33,7 +33,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
     """
 
     def _get_replay_buffer(self, transform: Optional[Transform] = None) -> ReplayBuffer:
-        """Construct the replay buffer, which will store the rollouts
+        """Construct the replay buffer, which will store the rollouts.
 
         When not using the advantage, the reward-to-go transform is added to the list of
         transforms.
@@ -69,7 +69,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
         return super()._get_replay_buffer(transform=transform)
 
     def _get_loss_module_and_gae(self) -> tuple[ReinforceLossImproved, GAE | None]:
-        """Construct the loss module and the generalized advantage estimator
+        """Construct the loss module and the generalized advantage estimator.
 
         Returns
         -------

@@ -35,7 +35,7 @@ class RolloutAnalyser(ABC):
 
     @abstractmethod
     def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
-        """The pairs of agent names and channel names that are to be analysed.
+        """Return an iterator over agent names and channel names to be analysed.
 
         Yields
         ------
@@ -82,7 +82,7 @@ A = TypeVar("A", bound=RolloutAnalyser)
 
 
 def register_rollout_analyser(scenario: ScenarioType) -> Callable[[type[A]], type[A]]:
-    """Decorator to register a rollout analyser."""
+    """Register a rollout analyser."""
 
     def register(cls: type[A]) -> type[A]:
         ROLLOUT_ANALYSERS[scenario, cls.name] = cls

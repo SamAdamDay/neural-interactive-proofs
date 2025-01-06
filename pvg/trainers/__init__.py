@@ -28,7 +28,7 @@ def build_trainer(
     scenario_instance: ScenarioInstance,
     settings: ExperimentSettings,
 ) -> Trainer:
-    """Factory function for building a trainer from parameters.
+    """Build a trainer from parameters (factory function).
 
     Parameters
     ----------

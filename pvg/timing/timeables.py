@@ -205,7 +205,7 @@ T = TypeVar[Timeable]
 def register_timeable(
     _timeable: Optional[type[Timeable] | Callable] = None, *, name: Optional[str] = None
 ) -> Callable | type[Timeable]:
-    """Decorator to register a timeable.
+    """Register a timeable.
 
     If a callable is given, a subclass of Timeable is created with the callable as the
     run method.

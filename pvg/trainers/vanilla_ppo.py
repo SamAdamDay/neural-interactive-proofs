@@ -27,7 +27,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
     """
 
     def _get_loss_module_and_gae(self) -> tuple[ClipPPOLossImproved, GAE]:
-        """Construct the loss module and the generalized advantage estimator
+        """Construct the loss module and the generalized advantage estimator.
 
         Returns
         -------

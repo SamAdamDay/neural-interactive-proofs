@@ -69,6 +69,13 @@ class GraphIsomorphismDataset(TensorDictDataset):
         )
 
     def build_tensor_dict(self) -> TensorDict:
+        """Build the tensor dict dataset from the raw data.
+
+        Returns
+        -------
+        dataset : TensorDict
+            The dataset as a tensor dict.
+        """
         data_dict = torch.load(os.path.join(self.raw_dir, "data.pt"))
 
         num_graph_pairs = len(data_dict["wl_scores"])

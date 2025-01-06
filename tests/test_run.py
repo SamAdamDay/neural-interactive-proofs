@@ -1,4 +1,8 @@
-import random
+"""Tests for running experiments with different parameters.
+
+These are basic tests which just run various experiments to make sure there are no
+errors. They do not check that the experiments are correct.
+"""
 
 import pytest
 

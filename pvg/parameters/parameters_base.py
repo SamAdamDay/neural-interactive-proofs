@@ -255,14 +255,36 @@ P = TypeVar("P", bound=BaseHyperParameters)
 
 
 def register_parameter_value_class(cls: type[V]) -> type[V]:
-    """Decorator to register a parameter value class."""
+    """Register a parameter value class.
+
+    Parameters
+    ----------
+    cls : type[P]
+        The parameter value class to register.
+
+    Returns
+    -------
+    cls : type[P]
+        The same class that was passed in.
+    """
 
     PARAMETER_VALUE_CLASSES[cls.__name__] = cls
     return cls
 
 
 def register_parameter_class(cls: type[P]) -> type[P]:
-    """Decorator to register a parameter class."""
+    """Register a parameter class.
+
+    Parameters
+    ----------
+    cls : type[P]
+        The class to register.
+
+    Returns
+    -------
+    cls : type[P]
+        The same class that was passed in.
+    """
 
     PARAMETER_CLASSES[cls.__name__] = cls
     return cls

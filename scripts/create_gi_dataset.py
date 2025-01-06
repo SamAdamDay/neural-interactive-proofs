@@ -1,4 +1,4 @@
-"""Generate a graph isomorphism dataset"""
+"""Generate a graph isomorphism dataset."""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 

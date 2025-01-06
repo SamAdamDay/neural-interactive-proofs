@@ -23,7 +23,6 @@ The structure of all agent bodies is the same:
 
 Notes
 -----
-
 In all dimension annotations, "channel" refers to the the message channel dimension,
 which is how different groups of agents can communicate with each other. There is a
 terminology overlap with the channel dimension in images and convolutional layers. Such 
@@ -199,7 +198,6 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     Notes
     -----
-
     In all dimension annotations, "channel" refers to the the message channel dimension,
     which is how different groups of agents can communicate with each other. There is a
     terminology overlap with the channel dimension in images and convolutional layers.
@@ -210,6 +208,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     @property
     def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys for the agent body."""
 
         env_level_in_keys = ("x", "image", "message")
 
@@ -228,6 +227,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     @property
     def required_pretrained_models(self) -> list[str]:
+        """The pretrained models required by the agent body.
+
+        If the agent body uses pretrained embeddings, the name of the pretrained model
+        is returned. Otherwise, an empty list is returned.
+        """
         if self.include_pretrained_embeddings:
             return [self.pretrained_model_name]
         else:
@@ -698,7 +702,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         return TensorDictSequential(*final_encoder)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        """Run the image classification body
+        """Run the image classification body.
 
         Parameters
         ----------
@@ -787,7 +791,21 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         return data
 
-    def to(self, device: Optional[TorchDevice] = None):
+    def to(
+        self, device: Optional[TorchDevice] = None
+    ) -> "ImageClassificationAgentBody":
+        """Move the agent body to a new device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent body to. If not given, the CPU is used.
+
+        Returns
+        -------
+        self : ImageClassificationAgentBody
+            The agent body on the new device.
+        """
         super().to(device)
         self.device = device
         self.message_history_upsampler = self.message_history_upsampler.to(device)
@@ -854,7 +872,7 @@ class ImageClassificationDummyAgentBody(
     agent_level_out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        """Returns dummy outputs.
+        """Return dummy outputs.
 
         Parameters
         ----------
@@ -914,7 +932,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         flatten_output: bool = True,
         out_key: str = "latent_pixel_mlp_output",
     ) -> TensorDictModule:
-        """Builds an MLP which acts on the latent-pixel-level representations.
+        """Build an MLP which acts on the latent-pixel-level representations.
 
         Shapes
         ------
@@ -983,7 +1001,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         out_key: str = "image_level_mlp_output",
         squeeze: bool = False,
     ) -> TensorDictSequential:
-        """Builds an MLP which acts on the image-level representations.
+        """Build an MLP which acts on the image-level representations.
 
         Shapes
         ------
@@ -1074,7 +1092,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
     def _build_decider(
         self, d_out: int = 3, include_round: Optional[bool] = None
     ) -> TensorDictModule:
-        """Builds the module which produces a image-level output.
+        """Build the module which produces a image-level output.
 
         By default it is used to decide whether to continue exchanging messages. In this
         case it outputs a single triple of logits for the three options: guess a
@@ -1154,6 +1172,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     @property
     def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys."""
         if self.decider is not None and self.agent_params.include_round_in_decider:
             return ("round",)
         else:
@@ -1161,6 +1180,10 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:
+        """The agent-level output keys.
+
+        These are the keys that are returned by the forward method of this class.
+        """
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
@@ -1204,7 +1227,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         self._init_weights()
 
     def _build_latent_pixel_selector(self) -> TensorDictModule:
-        """Builds the module which selects which latent pixel to send as a message.
+        """Build the module which selects which latent pixel to send as a message.
 
         Returns
         -------
@@ -1233,7 +1256,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDictSequential(latent_pixel_mlp, rearranger)
 
     def _build_linear_message_selector(self) -> TensorDictModule:
-        """Builds the module which selects which linear message to send.
+        """Build the module which selects which linear message to send.
 
         Returns
         -------
@@ -1265,7 +1288,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDictSequential(image_level_mlp, rearranger)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the policy head on the given body output.
+        """Run the policy head on the given body output.
 
         Runs the latent pixel selector module and the decider module if present.
 
@@ -1330,6 +1353,13 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDict(out_dict, batch_size=body_output.batch_size)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent policy head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent policy head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.latent_pixel_selector.to(device)
@@ -1367,6 +1397,10 @@ class ImageClassificationRandomAgentPolicyHead(
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:
+        """The agent-level output keys.
+
+        These are the outputs of the agent head.
+        """
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
@@ -1379,7 +1413,7 @@ class ImageClassificationRandomAgentPolicyHead(
         return agent_level_out_keys
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Outputs a uniform distribution.
+        """Output a uniform distribution.
 
         Parameters
         ----------
@@ -1455,7 +1489,8 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
     agent_level_in_keys = ("image_level_repr",)
 
     @property
-    def env_level_in_keys(self):
+    def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys."""
         if self.agent_params.include_round_in_value:
             return ("round",)
         else:
@@ -1480,7 +1515,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self.value_mlp = self._build_mlp()
 
     def _build_mlp(self) -> TensorDictModule:
-        """Builds the module which computes the value function.
+        """Build the module which computes the value function.
 
         Returns
         -------
@@ -1500,7 +1535,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self._init_weights()
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the value head on the given body output.
+        """Run the value head on the given body output.
 
         Parameters
         ----------
@@ -1521,6 +1556,13 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         return self.value_mlp(body_output)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.value_mlp.to(device)
@@ -1548,7 +1590,7 @@ class ImageClassificationConstantAgentValueHead(
     agent_level_out_keys = ("value",)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Returns a constant value.
+        """Return a constant value.
 
         Parameters
         ----------
@@ -1616,7 +1658,7 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         self._init_weights()
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the solo agent head on the given body output.
+        """Run the solo agent head on the given body output.
 
         Parameters
         ----------
@@ -1638,6 +1680,13 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         return self.decider(body_output)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.decider.to(device)
@@ -1678,7 +1727,6 @@ class ImageClassificationCombinedBody(CombinedBody):
 
     Notes
     -----
-
     In all dimension annotations, "channel" refers to the the message channel dimension,
     which is how different groups of agents can communicate with each other. There is a
     terminology overlap with the channel dimension in images and convolutional layers.
@@ -1690,6 +1738,19 @@ class ImageClassificationCombinedBody(CombinedBody):
     additional_out_keys = ("round",)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
+        """Run the agent bodies and combines their outputs.
+
+        Parameters
+        ----------
+        data : TensorDictBase
+            The data to run the bodies on.
+
+        Returns
+        -------
+        data : TensorDict
+            The data updated in place with the output of the agent bodies.
+        """
+
         round_id: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
@@ -1973,4 +2034,9 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 @register_scenario_class(IC_SCENARIO, Agent)
 @dataclass
 class ImageClassificationAgent(Agent):
+    """An agent for the image classification task.
+
+    A dataclass which holds all the agent parts.
+    """
+
     message_logits_key: ClassVar[str] = "latent_pixel_selected_logits"
