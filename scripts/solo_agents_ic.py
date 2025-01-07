@@ -44,15 +44,15 @@ param_grid = dict(
     no_body_lr_factor=[True],
     prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
-    prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_block_type=["conv2d"],
     prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
-    verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_block_type=["conv2d"],
     verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
-    binarification_method=[BinarificationMethodType.SELECT_TWO],
+    binarification_method=["select_two"],
     binarification_seed=[None],
     selected_classes=[None],
     seed=[8144, 820, 4173, 3992],
@@ -61,8 +61,8 @@ param_grid = dict(
 
 def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     return HyperParameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.SOLO_AGENT,
+        scenario="image_classification",
+        trainer="solo_agent",
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(

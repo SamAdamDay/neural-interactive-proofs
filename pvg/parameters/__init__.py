@@ -23,8 +23,8 @@ Examples
 1. Create a parameters object, using default values for ppo parameters, and others
 
 >>> hyper_params = HyperParameters(
-...     scenario=Scenario.GRAPH_ISOMORPHISM,
-...     trainer=Trainer.PPO,
+...     scenario="graph_isomorphism",
+...     trainer="ppo",
 ...     dataset="eru10000",
 ...     agents=AgentsParams(
 ...         [
@@ -42,8 +42,8 @@ Examples
 3. Create a parameters object using a dictionary for the ppo parameters
 
 >>> hyper_params = HyperParameters(
-...     scenario=Scenario.GRAPH_ISOMORPHISM,
-...     trainer=Trainer.PPO,
+...     scenario="graph_isomorphism",
+...     trainer="ppo",
 ...     dataset="eru10000",
 ...     ppo={
 ...         "num_epochs": 100,
@@ -53,6 +53,7 @@ Examples
 """
 
 from typing import Optional
+import typing
 from dataclasses import dataclass, fields
 
 from .parameters_base import (
@@ -63,9 +64,9 @@ from .parameters_base import (
 )
 from .types import (
     ScenarioType,
-    SpgVariant,
-    IhvpVariant,
-    Guess,
+    SpgVariantType,
+    IhvpVariantType,
+    GuessType,
     TrainerType,
     PpoLossType,
     BinarificationMethodType,
@@ -116,14 +117,14 @@ from .base_run import BaseRunParameters, BaseRunPreserve
 
 # The agent names required for each protocol
 AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
-    InteractionProtocolType.PVG: ("verifier", "prover"),
-    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: ("verifier", "prover"),
-    InteractionProtocolType.DEBATE: ("prover0", "prover1", "verifier"),
-    InteractionProtocolType.MERLIN_ARTHUR: ("prover0", "prover1", "verifier"),
-    InteractionProtocolType.MARKET_MAKING: ("verifier", "prover"),
-    InteractionProtocolType.MNIP: ("prover0", "prover1", "verifier"),
-    InteractionProtocolType.SOLO_VERIFIER: ("verifier",),
-    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+    "pvg": ("verifier", "prover"),
+    "abstract_decision_problem": ("verifier", "prover"),
+    "debate": ("prover0", "prover1", "verifier"),
+    "merlin_arthur": ("prover0", "prover1", "verifier"),
+    "market_making": ("verifier", "prover"),
+    "mnip": ("prover0", "prover1", "verifier"),
+    "solo_verifier": ("verifier",),
+    "multi_channel_test": (
         "verifier",
         "prover0",
         "prover1",
@@ -134,14 +135,14 @@ AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
 DEFAULT_STACKELBERG_SEQUENCE: dict[
     InteractionProtocolType, tuple[tuple[str, ...], ...]
 ] = {
-    InteractionProtocolType.PVG: (("verifier",), ("prover",)),
-    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM: (("verifier",), ("prover",)),
-    InteractionProtocolType.DEBATE: (("verifier",), ("prover0", "prover1")),
-    InteractionProtocolType.MERLIN_ARTHUR: (("verifier",), ("prover0", "prover1")),
-    InteractionProtocolType.MARKET_MAKING: (("verifier",), ("prover",)),
-    InteractionProtocolType.MNIP: (("verifier",), ("prover0", "prover1")),
-    InteractionProtocolType.SOLO_VERIFIER: (("verifier",),),
-    InteractionProtocolType.MULTI_CHANNEL_TEST: (
+    "pvg": (("verifier",), ("prover",)),
+    "abstract_decision_problem": (("verifier",), ("prover",)),
+    "debate": (("verifier",), ("prover0", "prover1")),
+    "merlin_arthur": (("verifier",), ("prover0", "prover1")),
+    "market_making": (("verifier",), ("prover",)),
+    "mnip": (("verifier",), ("prover0", "prover1")),
+    "solo_verifier": (("verifier",),),
+    "multi_channel_test": (
         ("verifier",),
         ("prover0", "prover1", "prover2"),
     ),
@@ -158,13 +159,13 @@ class HyperParameters(BaseHyperParameters):
 
     Parameters
     ----------
-    scenario : Scenario
+    scenario : ScenarioType
         The name of the scenario to run, which specifies the domain, task and agents.
-    trainer : Trainer
+    trainer : TrainerType
         The RL trainer to use.
     dataset : str
         The dataset to use.
-    interaction_protocol : Protocol
+    interaction_protocol : InteractionProtocolType
         The interaction protocol between the agents.
     seed : int
         The random seed.
@@ -238,11 +239,11 @@ class HyperParameters(BaseHyperParameters):
         Parameters for basing the current experiment on a previous W&B run.
     """
 
-    scenario: ScenarioType | str
-    trainer: TrainerType | str
+    scenario: ScenarioType
+    trainer: TrainerType
     dataset: str
 
-    interaction_protocol: InteractionProtocolType | str = InteractionProtocolType.PVG
+    interaction_protocol: InteractionProtocolType = "pvg"
 
     seed: int = 6198
 
@@ -285,15 +286,6 @@ class HyperParameters(BaseHyperParameters):
     base_run: Optional[BaseRunParameters | dict] = None
 
     def __post_init__(self):
-        # Convert any strings to enums
-        if not isinstance(self.scenario, ScenarioType):
-            self.scenario = ScenarioType[self.scenario.upper()]
-        if not isinstance(self.trainer, TrainerType):
-            self.trainer = TrainerType[self.trainer.upper()]
-        if not isinstance(self.interaction_protocol, InteractionProtocolType):
-            self.interaction_protocol = InteractionProtocolType[
-                self.interaction_protocol.upper()
-            ]
 
         # TODO: do this better
         for protocol_common_field in fields(CommonProtocolParameters):
@@ -308,21 +300,21 @@ class HyperParameters(BaseHyperParameters):
         else:
             zero_knowledge = default_zero_knowledge
 
-        if self.scenario == ScenarioType.GRAPH_ISOMORPHISM:
+        if self.scenario == "graph_isomorphism":
             self._process_agents_params(
                 GraphIsomorphismAgentParameters,
                 RandomAgentParameters,
                 zero_knowledge,
             )
 
-        elif self.scenario == ScenarioType.IMAGE_CLASSIFICATION:
+        elif self.scenario == "image_classification":
             self._process_agents_params(
                 ImageClassificationAgentParameters,
                 RandomAgentParameters,
                 zero_knowledge,
             )
 
-        elif self.scenario == ScenarioType.CODE_VALIDATION:
+        elif self.scenario == "code_validation":
             self._process_agents_params(
                 CodeValidationAgentParameters,
                 RandomAgentParameters,
@@ -330,7 +322,7 @@ class HyperParameters(BaseHyperParameters):
             )
 
         # Add PPO parameters for specific variants to the appropriate class
-        if self.trainer == TrainerType.SPG:
+        if self.trainer == "spg":
             if self.spg is None:
                 self.spg = SpgParameters(
                     stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[

@@ -11,7 +11,7 @@ import numpy as np
 
 from jaxtyping import Float, Int
 
-from pvg.parameters import IhvpVariant
+from pvg.parameters import IhvpVariantType
 
 
 def set_seed(seed: int):
@@ -227,7 +227,7 @@ def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho)
         The computed IHVP.
     """
 
-    if variant == IhvpVariant.CONJ_GRAD:  # TODO not yet implemented
+    if variant == "conj_grad":  # TODO not yet implemented
         ihvp = conjugate_gradient(
             f_loss,
             l_loss,
@@ -236,7 +236,7 @@ def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho)
             num_iterations,
             lr=1.0,
         )
-    elif variant == IhvpVariant.NEUMANN:  # TODO not yet implemented
+    elif variant == "neumann":  # TODO not yet implemented
         ihvp = neumann(
             f_loss,
             l_loss,
@@ -245,7 +245,7 @@ def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho)
             num_iterations,
             lr=1.0,
         )
-    elif variant == IhvpVariant.NYSTROM:
+    elif variant == "nystrom":
         ihvp = nystrom(
             f_loss,
             l_loss,

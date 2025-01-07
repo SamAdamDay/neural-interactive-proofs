@@ -94,7 +94,7 @@ from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 from pvg.image_classification.pretrained_models import PretrainedImageModel
 
 
-IC_SCENARIO = ScenarioType.IMAGE_CLASSIFICATION
+IC_SCENARIO = "image_classification"
 
 
 class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
@@ -506,7 +506,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
                 # Create the appropriate building block
                 match self.agent_params.building_block_type:
-                    case ImageBuildingBlockType.CONV2D:
+                    case "conv2d":
                         building_block = Conv2dSimulateBatchDims(
                             in_channels=in_channels,
                             out_channels=out_channels,
@@ -514,7 +514,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                             stride=stride,
                             padding="same",
                         )
-                    case ImageBuildingBlockType.RESIDUAL_BASIC:
+                    case "residual_basic":
                         if stride != 1 or in_channels != out_channels:
                             downsample = Sequential(
                                 Conv2d(

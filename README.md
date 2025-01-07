@@ -48,8 +48,6 @@ run_experiment(hyper_params)
 
 - `additional_parameters` can include nested dictionaries. See the `parameters` module
   for details.
-- The first three arguments are string enums, so you can use e.g.
-  `ScenarioType.SCENARIO_NAME` instead.
 - `run_experiment` takes additional parameters, like the device and whether to log to
   Weights and Biases.
 - The `pvg.utils.experiment` contains utility classes for running hyperparameter

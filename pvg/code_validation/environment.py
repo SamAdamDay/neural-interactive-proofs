@@ -18,7 +18,7 @@ from pvg.utils.nested_array_dict import (
 )
 
 
-@register_scenario_class(ScenarioType.CODE_VALIDATION, Environment)
+@register_scenario_class("code_validation", Environment)
 class CodeValidationEnvironment(PureTextEnvironment):
     """The RL environment for code validation."""
 

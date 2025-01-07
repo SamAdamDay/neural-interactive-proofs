@@ -188,7 +188,7 @@ def build_message_regressor(
     )
 
 
-@register_protocol_handler(MessageRegressionMethodType.MLP)
+@register_protocol_handler("mlp")
 class MlpMessageRegressor(MessageRegressor):
     """Regressor that uses an MLP to regress on the message data.
 

@@ -361,10 +361,10 @@ def build_scenario_instance(
 
     # Build additional components if the trainer is an RL trainer
     if (
-        hyper_params.trainer == TrainerType.VANILLA_PPO
-        or hyper_params.trainer == TrainerType.SPG
-        or hyper_params.trainer == TrainerType.REINFORCE
-        or hyper_params.trainer == TrainerType.PURE_TEXT_EI
+        hyper_params.trainer == "vanilla_ppo"
+        or hyper_params.trainer == "spg"
+        or hyper_params.trainer == "reinforce"
+        or hyper_params.trainer == "pure_text_ei"
     ):
         additional_rl_components = _build_components_for_rl_trainer(
             hyper_params=hyper_params,
@@ -466,9 +466,9 @@ def _build_agents(
                     agent_dict[name] = build_part(AgentBody)
 
         if (
-            hyper_params.trainer == TrainerType.VANILLA_PPO
-            or hyper_params.trainer == TrainerType.SPG
-            or hyper_params.trainer == TrainerType.REINFORCE
+            hyper_params.trainer == "vanilla_ppo"
+            or hyper_params.trainer == "spg"
+            or hyper_params.trainer == "reinforce"
         ):
             if agent_params.is_random:
                 agent_dict["policy_head"] = build_part(RandomAgentPolicyHead)
@@ -478,7 +478,7 @@ def _build_agents(
                 agent_dict["policy_head"] = build_part(AgentPolicyHead)
                 if use_critic:
                     agent_dict["value_head"] = build_part(AgentValueHead)
-        if hyper_params.trainer == TrainerType.SOLO_AGENT or (
+        if hyper_params.trainer == "solo_agent" or (
             hyper_params.pretrain_agents and not agent_params.is_random
         ):
             if agent_params.is_random:

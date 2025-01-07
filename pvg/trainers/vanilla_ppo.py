@@ -9,7 +9,7 @@ from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType, PpoLossType
 
 
-@register_trainer(TrainerType.VANILLA_PPO)
+@register_trainer("vanilla_ppo")
 class VanillaPpoTrainer(ReinforcementLearningTrainer):
     """Vanilla Proximal Policy Optimization trainer.
 
@@ -38,7 +38,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
         """
 
         # Construct the loss module
-        if self.hyper_params.ppo.loss_type == PpoLossType.CLIP:
+        if self.hyper_params.ppo.loss_type == "clip":
             loss_module = ClipPPOLossImproved(
                 actor=self.policy_operator,
                 critic=self.value_operator,
@@ -50,7 +50,7 @@ class VanillaPpoTrainer(ReinforcementLearningTrainer):
                 loss_critic_type=self.hyper_params.rl.loss_critic_type,
                 clip_value=self.clip_value,
             )
-        elif self.hyper_params.ppo.loss_type == PpoLossType.KL_PENALTY:
+        elif self.hyper_params.ppo.loss_type == "kl_penalty":
             loss_module = KLPENPPOLossImproved(
                 actor=self.policy_operator,
                 critic=self.value_operator,

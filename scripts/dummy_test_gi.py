@@ -20,8 +20,8 @@ from pvg import (
     SpgParameters,
     MessageRegressionParameters,
     PpoLossType,
-    SpgVariant,
-    Guess,
+    SpgVariantType,
+    GuessType,
     AGENT_NAMES,
     run_experiment,
     prepare_experiment,
@@ -49,10 +49,10 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = InteractionProtocolType.DEBATE
+    interaction_protocol = "debate"
     zero_knowledge = False
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
-    trainer = TrainerType.VANILLA_PPO
+    scenario = "graph_isomorphism"
+    trainer = "vanilla_ppo"
     dataset = "eru10000"
 
     hyper_params = HyperParameters(
@@ -94,10 +94,10 @@ def run(cmd_args: Namespace):
             num_test_iterations=10,
         ),
         spg=SpgParameters(
-            variant=SpgVariant.PSOS,
+            variant="psos",
         ),
         ppo=CommonPpoParameters(
-            loss_type=PpoLossType.CLIP,
+            loss_type="clip",
             normalize_advantage=True,
         ),
         reinforce=ReinforceParameters(

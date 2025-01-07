@@ -9,7 +9,7 @@ from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
 
 
-@register_trainer(TrainerType.SPG)
+@register_trainer("spg")
 class SpgTrainer(ReinforcementLearningTrainer):
     """Stackelberg Policy Gradient trainer.
 
@@ -52,7 +52,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 "rho": self.hyper_params.spg.ihvp_rho,
             },
             additional_lola_term=self.hyper_params.spg.additional_lola_term,
-            sos_params=self.hyper_params.spg.sos_params,
+            sos_a_param=self.hyper_params.spg.sos_a_param,
+            sos_b_param=self.hyper_params.spg.sos_b_param,
             agent_lr_factors=[
                 agent_params.agent_lr_factor
                 for agent_params in self.hyper_params.agents.values()

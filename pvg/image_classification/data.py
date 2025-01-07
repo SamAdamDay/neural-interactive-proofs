@@ -5,11 +5,11 @@ classification task. The dataset is a binary classification problem, where the c
 are selected from a torchvision dataset. The dataset is binarified using one of the
 following methods:
 
-- `BinarificationMethodType.MERGE`: The classes are shuffled and merged into two
+- `"merge"`: The classes are shuffled and merged into two
   classes.
-- `BinarificationMethodType.SELECT_TWO`: Two classes are selected from the original
+- `"select_two"`: Two classes are selected from the original
     dataset.
-- `BinarificationMethodType.RANDOM`: The classes are selected at random.
+- `"random"`: The classes are selected at random.
 """
 
 import os
@@ -187,7 +187,7 @@ class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
         )
 
 
-@register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
+@register_scenario_class("image_classification", Dataset)
 class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
@@ -260,10 +260,7 @@ class ImageClassificationDataset(TensorDictDataset):
         binurification_generator = torch.Generator()
         binurification_generator.manual_seed(self.binarification_seed)
 
-        if (
-            self.hyper_params.dataset_options.binarification_method
-            == BinarificationMethodType.MERGE
-        ):
+        if self.hyper_params.dataset_options.binarification_method == "merge":
             # Shuffle the classes and merge them into two classes
             num_classes = len(torch.unique(labels))
             shuffled_classes = torch.randperm(
@@ -272,10 +269,7 @@ class ImageClassificationDataset(TensorDictDataset):
             shuffled_labels = shuffled_classes[labels]
             labels = torch.where(shuffled_labels < num_classes // 2, 0, 1)
 
-        elif (
-            self.hyper_params.dataset_options.binarification_method
-            == BinarificationMethodType.SELECT_TWO
-        ):
+        elif self.hyper_params.dataset_options.binarification_method == "select_two":
             # Select the classes we want for binary classification
             index = (labels == self.selected_classes[0]) | (
                 labels == self.selected_classes[1]
@@ -285,10 +279,7 @@ class ImageClassificationDataset(TensorDictDataset):
             rearrange_index = rearrange_index[index]
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
 
-        elif (
-            self.hyper_params.dataset_options.binarification_method
-            == BinarificationMethodType.RANDOM
-        ):
+        elif self.hyper_params.dataset_options.binarification_method == "random":
             # Select labels at random
             labels = torch.randint(
                 0,
@@ -353,11 +344,11 @@ class ImageClassificationDataset(TensorDictDataset):
         processed_name += f"_{self.hyper_params.message_size}"
 
         processed_name = str(self.binarification_method).lower()
-        if self.binarification_method == BinarificationMethodType.SELECT_TWO:
+        if self.binarification_method == "select_two":
             processed_name += f"_{self.selected_classes[0]}_{self.selected_classes[1]}"
         elif (
-            self.binarification_method == BinarificationMethodType.MERGE
-            or self.binarification_method == BinarificationMethodType.RANDOM
+            self.binarification_method == "merge"
+            or self.binarification_method == "random"
         ):
             processed_name += f"_{self.binarification_seed}"
 

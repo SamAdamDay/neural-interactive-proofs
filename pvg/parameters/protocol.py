@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
-from pvg.parameters.types import Guess, MinMessageRoundsSchedulerType
+from pvg.parameters.types import GuessType, MinMessageRoundsSchedulerType
 
 
 @register_parameter_class
@@ -34,7 +34,7 @@ class CommonProtocolParameters(SubParameters):
     shared_reward : bool
         Whether to use a shared reward function, where the prover gets the same reward
         as the verifier. This overrides `prover_reward`.
-    force_guess: Guess, optional
+    force_guess: GuessType, optional
         The guess to force the verifier to make. If not provided, the verifier makes a
         guess using its policy.
     zero_knowledge: bool
@@ -51,7 +51,7 @@ class CommonProtocolParameters(SubParameters):
     verifier_no_guess_reward: float = 0.0
     shared_reward: bool = False
 
-    force_guess: Optional[Guess] = None
+    force_guess: Optional[GuessType] = None
 
     zero_knowledge: bool = False
 
@@ -75,20 +75,7 @@ class LongProtocolParameters(SubParameters, ABC):
 
     max_message_rounds: int = 8
     min_message_rounds: int = 0
-    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = (
-        MinMessageRoundsSchedulerType.CONSTANT
-    )
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # Convert the scheduler to an enum type
-        if not isinstance(
-            self.min_message_rounds_scheduler, MinMessageRoundsSchedulerType
-        ):
-            self.min_message_rounds_scheduler = MinMessageRoundsSchedulerType[
-                self.min_message_rounds_scheduler.upper()
-            ]
+    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = "constant"
 
 
 @register_parameter_class

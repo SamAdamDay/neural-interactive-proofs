@@ -202,7 +202,7 @@ class AdjacencyMatrixSpec(TensorSpec):
         )
 
 
-@register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Environment)
+@register_scenario_class("graph_isomorphism", Environment)
 class GraphIsomorphismEnvironment(TensorDictEnvironment):
     """The graph isomorphism RL environment.
 

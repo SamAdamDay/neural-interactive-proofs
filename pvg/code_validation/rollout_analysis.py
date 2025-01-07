@@ -64,7 +64,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
             use_dummy_api=use_dummy_api,
         )
 
-        if hyper_params.interaction_protocol == InteractionProtocolType.MERLIN_ARTHUR:
+        if hyper_params.interaction_protocol == "merlin_arthur":
             raise NotImplementedError(
                 "Rollout analysers are not implemented for the Merlin-Arthur protocol."
             )
@@ -407,7 +407,7 @@ class ProverAnalyserMixin:
             yield agent_name, channel_name
 
 
-@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
+@register_rollout_analyser("code_validation")
 class ProverRoleConformanceAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """A watchdog to evaluate how well the prover(s) are conforming to their roles.
 
@@ -432,7 +432,7 @@ class ProverRoleConformanceAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     )
 
 
-@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
+@register_rollout_analyser("code_validation")
 class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """Analyse when the prover directly quotes the solution.
 
@@ -454,7 +454,7 @@ class ProverDirectQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     )
 
 
-@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
+@register_rollout_analyser("code_validation")
 class ProverAccurateQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser):
     """Analyse whether the prover quotes accurately from the solution.
 
@@ -478,7 +478,7 @@ class ProverAccurateQuotationAnalyser(ProverAnalyserMixin, BinaryRolloutAnalyser
     )
 
 
-@register_rollout_analyser(ScenarioType.CODE_VALIDATION)
+@register_rollout_analyser("code_validation")
 class FollowUpAnalyser(BinaryRolloutAnalyser):
     """Analyse whether the prover quotes accurately from the solution.
 

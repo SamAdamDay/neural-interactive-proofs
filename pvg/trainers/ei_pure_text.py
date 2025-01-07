@@ -8,7 +8,7 @@ from pvg.parameters import TrainerType
 from pvg.utils.nested_array_dict import NestedArrayDict, stack_nested_array_dicts
 
 
-@register_trainer(TrainerType.PURE_TEXT_EI)
+@register_trainer("pure_text_ei")
 class PureTextEiTrainer(PureTextRlTrainer):
     """Expert Iteration (EI) trainer for text-based environments which only use APIs.
 

@@ -1,10 +1,10 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional, Literal, Annotated
+from typing import Optional, Literal, Annotated
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
-from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
+from pvg.parameters.types import PpoLossType, SpgVariantType, IhvpVariantType
 from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
 
@@ -134,7 +134,7 @@ class CommonPpoParameters(SubParameters):
     """
 
     # Loss function
-    loss_type: PpoLossType = PpoLossType.CLIP
+    loss_type: PpoLossType = "clip"
     clip_epsilon: float = 0.2
     kl_target: float = 0.01
     kl_beta: float = 1.0
@@ -151,9 +151,6 @@ class VanillaPpoParameters(SubParameters):
     """Additional parameters for the vanilla PPO trainer."""
 
 
-SosParams = NamedTuple("SosParams", [("a", float), ("b", float)])
-
-
 @register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
@@ -161,16 +158,18 @@ class SpgParameters(SubParameters):
 
     Parameters
     ----------
-    variant : SpgVariant
+    variant : SpgVariantType
         The variant of SPG to use.
     stackelberg_sequence : tuple[tuple[str]]
         The sequence of agents to use in the Stackelberg game. The leaders first then
         their respective followers, and so forth.
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
-    sos_params : NamedTuple
-        The parameters for the SOS loss.
-    ihvp_variant : IhvpVariant
+    sos_a_param: float
+        The `a` parameter for the SOS loss.
+    sos_b_param: float
+        The `b` parameter for the SOS loss.
+    ihvp_variant : IhvpVariantType
         The variant of IHVP to use.
     ihvp_num_iterations : int
         The number of iterations to use in the IHVP approximation.
@@ -180,15 +179,14 @@ class SpgParameters(SubParameters):
         The damping factor to use in the IHVP approximation.
     """
 
-    variant: SpgVariant = SpgVariant.PSOS
+    variant: SpgVariantType = "psos"
     stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
     additional_lola_term: bool = True
-    sos_params: NamedTuple = SosParams(
-        a=0.5, b=0.1
-    )  # Default values taken from the original paper
+    sos_a_param: float = 0.5
+    sos_b_param: float = 0.1
 
     # IHVP
-    ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
+    ihvp_variant: IhvpVariantType = "nystrom"
     ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
     ihvp_rank: int = 5  # Default value taken from hypergrad package example
     ihvp_rho: float = 0.1  # Default value taken from hypergrad package example

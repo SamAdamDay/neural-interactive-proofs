@@ -1,7 +1,7 @@
 """Implementations of RL objectives, extending those of TorchRL."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable, NamedTuple, Optional
+from typing import Iterable, Optional
 import contextlib
 from abc import ABC, abstractmethod
 import warnings
@@ -21,7 +21,7 @@ from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
-from pvg.parameters import SpgVariant, LrFactors
+from pvg.parameters import SpgVariantType, LrFactors
 from pvg.utils.maths import dot_td, ihvp, compute_sos_update
 from pvg.utils.torch import flatten_batch_dims
 from pvg.utils.distributions import CompositeCategoricalDistribution
@@ -495,12 +495,13 @@ class SpgLoss(ClipPPOLossImproved):
         self,
         actor,
         critic,
-        variant: SpgVariant,
+        variant: SpgVariantType,
         stackelberg_sequence: tuple[tuple[int]],
         names: list[str],
         ihvp: dict,
         additional_lola_term: bool,
-        sos_params: NamedTuple,
+        sos_a_param: float,
+        sos_b_param: float,
         agent_lr_factors: list[Optional[LrFactors | dict]],
         lr: float,
         clip_epsilon,
@@ -538,7 +539,8 @@ class SpgLoss(ClipPPOLossImproved):
         }
         self.ihvp = ihvp
         self.additional_lola_term = additional_lola_term
-        self.sos_params = sos_params
+        self.sos_a_param = sos_a_param
+        self.sos_b_param = sos_b_param
         self.agent_lr_factors = agent_lr_factors
         self.lr = lr
         self.names = names
@@ -654,11 +656,7 @@ class SpgLoss(ClipPPOLossImproved):
         gains = {}
 
         # Use vanilla A2C losses for SPG and LOLA and SOS
-        if (
-            self.variant == SpgVariant.SPG
-            or self.variant == SpgVariant.LOLA
-            or self.variant == SpgVariant.SOS
-        ):
+        if self.variant == "spg" or self.variant == "lola" or self.variant == "sos":
             probs = log_prob.exp()
             for i in self.agent_indices:
                 gains[i] = flatten_batch_dims(
@@ -666,11 +664,7 @@ class SpgLoss(ClipPPOLossImproved):
                 ).mean(dim=0)
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
-        elif (
-            self.variant == SpgVariant.PSPG
-            or self.variant == SpgVariant.POLA
-            or self.variant == SpgVariant.PSOS
-        ):
+        elif self.variant == "pspg" or self.variant == "pola" or self.variant == "psos":
             gains = {}
             for i in self.agent_indices:
                 gain1 = log_weight.exp() * advantage[..., i].unsqueeze(dim=-1)
@@ -781,7 +775,7 @@ class SpgLoss(ClipPPOLossImproved):
         # TODO This is not very memory-efficient but it does prevent the gradients of
         # the parameters getting messed up between calculating JVPs and assigning
         # gradients
-        if self.variant == SpgVariant.SPG or self.variant == SpgVariant.PSPG:
+        if self.variant == "spg" or self.variant == "pspg":
             actor_params = self.get_actor_params()
             ihvps = {
                 i: {
@@ -820,10 +814,7 @@ class SpgLoss(ClipPPOLossImproved):
 
                     # Compute (an approximation of) the true Stackelberg gradient using an
                     # inverse Hessian vector product
-                    if (
-                        self.variant == SpgVariant.SPG
-                        or self.variant == SpgVariant.PSPG
-                    ):
+                    if self.variant == "spg" or self.variant == "pspg":
                         multiplier = ihvps[i][j]
                     # If using other algorithms we effectively assume that the inverse Hessian
                     # is the identity matrix
@@ -839,10 +830,7 @@ class SpgLoss(ClipPPOLossImproved):
                     )
 
                     for k in total_derivatives[i].keys():
-                        if (
-                            self.variant == SpgVariant.SPG
-                            or self.variant == SpgVariant.PSPG
-                        ):
+                        if self.variant == "spg" or self.variant == "pspg":
                             lr_coefficient = 1.0
                             H_0_xi_term = 0.0
                         # For LOLA and POLA we need to multiply the gradients by the
@@ -851,8 +839,8 @@ class SpgLoss(ClipPPOLossImproved):
                             lr_coefficient = self.agent_lr_factors[j].actor * self.lr
                             if (
                                 self.additional_lola_term
-                                or self.variant == SpgVariant.SOS
-                                or self.variant == SpgVariant.PSOS
+                                or self.variant == "sos"
+                                or self.variant == "psos"
                             ):
                                 H_0_xi_term = (
                                     H_0_xi_pg_term * objective_loss_grads[i][i][k]
@@ -867,9 +855,9 @@ class SpgLoss(ClipPPOLossImproved):
                             chi_term + H_0_xi_term
                         )
 
-        if self.variant == SpgVariant.SOS or self.variant == SpgVariant.PSOS:
+        if self.variant == "sos" or self.variant == "psos":
             update = compute_sos_update(
-                xi, H_0_xi, chi, self.sos_params.a, self.sos_params.b
+                xi, H_0_xi, chi, self.sos_a_param, self.sos_b_param
             )
         else:
             update = {}

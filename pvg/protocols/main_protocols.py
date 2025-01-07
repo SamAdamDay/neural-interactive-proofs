@@ -47,7 +47,7 @@ from pvg.protocols.registry import register_protocol_handler
 from pvg.utils.nested_array_dict import NestedArrayDict
 
 
-@register_protocol_handler(InteractionProtocolType.PVG)
+@register_protocol_handler("pvg")
 class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
     """Handler for the PVG protocol.
 
@@ -109,7 +109,7 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
                 return round_id % 2 == 1
 
 
-@register_protocol_handler(InteractionProtocolType.ABSTRACT_DECISION_PROBLEM)
+@register_protocol_handler("abstract_decision_problem")
 class AdpProtocol(PvgProtocol):
     """Implementation of the Abstract Decision Problem protocol.
 
@@ -130,7 +130,7 @@ class AdpProtocol(PvgProtocol):
     verifier_first = False
 
 
-@register_protocol_handler(InteractionProtocolType.DEBATE)
+@register_protocol_handler("debate")
 class DebateProtocol(PvgProtocol):
     """Implementation of the Debate protocol[^1].
 
@@ -256,7 +256,7 @@ class DebateProtocol(PvgProtocol):
         return self.hyper_params.debate_protocol.min_message_rounds
 
 
-@register_protocol_handler(InteractionProtocolType.MERLIN_ARTHUR)
+@register_protocol_handler("merlin_arthur")
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     """Implementation of the Merlin-Arthur protocol.
 
@@ -339,7 +339,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
             return round_id == 1
 
 
-@register_protocol_handler(InteractionProtocolType.MNIP)
+@register_protocol_handler("mnip")
 class MnipProtocol(PvgProtocol):
     """Implementation of the MNIP protocol.
 
@@ -483,7 +483,7 @@ class MnipProtocol(PvgProtocol):
                 ).float() * self.hyper_params.protocol_common.prover_reward
 
 
-@register_protocol_handler(InteractionProtocolType.SOLO_VERIFIER)
+@register_protocol_handler("solo_verifier")
 class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
     """Implementation of the Solo Verifier protocol.
 
@@ -573,7 +573,7 @@ class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
         pass
 
 
-@register_protocol_handler(InteractionProtocolType.MULTI_CHANNEL_TEST)
+@register_protocol_handler("multi_channel_test")
 class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
     """A protocol for testing multi-channel communication between agents."""
 

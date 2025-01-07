@@ -271,7 +271,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         The learning rate factor for the GNN part of the model (split across the actor and the critic). The final LR for the GNN is obtained by multiplying this factor by the body LR. This allows updating the GNN at a different rate to the rest of the model.
     """
 
-    activation_function: ActivationType = ActivationType.TANH
+    activation_function: ActivationType = "tanh"
 
     num_gnn_layers: int = 5
     d_gnn: int = 16
@@ -394,9 +394,9 @@ class ImageClassificationAgentParameters(AgentParameters):
         Whether to include the round number in the agents's value MLP.
     """
 
-    activation_function: ActivationType = ActivationType.TANH
+    activation_function: ActivationType = "tanh"
 
-    building_block_type: ImageBuildingBlockType = ImageBuildingBlockType.CONV2D
+    building_block_type: ImageBuildingBlockType = "conv2d"
     num_blocks_per_group: int = 2
     kernel_size: int = 3
     stride: int = 1
@@ -430,7 +430,7 @@ class ImageClassificationAgentParameters(AgentParameters):
             The test parameters.
         """
         return cls(
-            building_block_type=ImageBuildingBlockType.CONV2D,
+            building_block_type="conv2d",
             num_blocks_per_group=1,
             d_latent_pixel_selector=1,
             num_latent_pixel_selector_layers=1,

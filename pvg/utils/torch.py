@@ -23,11 +23,11 @@ import einops
 from jaxtyping import Float, Bool
 
 
-ACTIVATION_CLASSES = dict(
-    relu=nn.ReLU,
-    tanh=nn.Tanh,
-    sigmoid=nn.Sigmoid,
-)
+ACTIVATION_CLASSES = {
+    "relu": nn.ReLU,
+    "tanh": nn.Tanh,
+    "sigmoid": nn.Sigmoid,
+}
 
 
 def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:

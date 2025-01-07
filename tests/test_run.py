@@ -18,7 +18,7 @@ from pvg import (
     RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
-    SpgVariant,
+    SpgVariantType,
     ScenarioType,
     PpoLossType,
     TrainerType,
@@ -34,23 +34,23 @@ param_specs = [
     # Test the two tensor scenarios with the vanilla PPO trainer
     {
         "scenario": [
-            ScenarioType.GRAPH_ISOMORPHISM,
-            ScenarioType.IMAGE_CLASSIFICATION,
+            "graph_isomorphism",
+            "image_classification",
         ],
         "message_size": [3],
     },
     # Test the code validation scenario with the expert iteration trainer with various
     # protocols
     {
-        "scenario": [ScenarioType.CODE_VALIDATION],
-        "trainer": [TrainerType.PURE_TEXT_EI],
+        "scenario": ["code_validation"],
+        "trainer": ["pure_text_ei"],
         "protocol": [
-            InteractionProtocolType.PVG,
-            InteractionProtocolType.DEBATE,
-            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-            InteractionProtocolType.MERLIN_ARTHUR,
-            InteractionProtocolType.MNIP,
-            InteractionProtocolType.SOLO_VERIFIER,
+            "pvg",
+            "debate",
+            "abstract_decision_problem",
+            "merlin_arthur",
+            "mnip",
+            "solo_verifier",
         ],
     },
     # Test pretraining the agents
@@ -63,53 +63,53 @@ param_specs = [
     },
     # Test the KL penalty loss
     {
-        "ppo_loss": [PpoLossType.KL_PENALTY],
+        "ppo_loss": ["kl_penalty"],
     },
     # Test the using non-shared bodies
     {
         "scenario": [
-            ScenarioType.GRAPH_ISOMORPHISM,
-            ScenarioType.IMAGE_CLASSIFICATION,
+            "graph_isomorphism",
+            "image_classification",
         ],
         "use_shared_body": [False],
     },
     # Test the SPG trainer with different variants
     {
-        "trainer": [TrainerType.SPG],
+        "trainer": ["spg"],
         "spg_variant": [
-            SpgVariant.SPG,
-            SpgVariant.PSPG,
-            SpgVariant.LOLA,
-            SpgVariant.POLA,
-            SpgVariant.PSOS,
-            SpgVariant.SOS,
+            "spg",
+            "pspg",
+            "lola",
+            "pola",
+            "psos",
+            "sos",
         ],
     },
     # Test the other trainers
     {
         "trainer": [
-            TrainerType.SOLO_AGENT,
-            TrainerType.REINFORCE,
+            "solo_agent",
+            "reinforce",
         ],
     },
     # Test the other protocols
     {
         "protocol": [
-            InteractionProtocolType.DEBATE,
-            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-            InteractionProtocolType.MERLIN_ARTHUR,
-            InteractionProtocolType.MNIP,
+            "debate",
+            "abstract_decision_problem",
+            "merlin_arthur",
+            "mnip",
         ],
     },
     # Test the zero-knowledge protocols
     {
         "zero_knowledge": [True],
         "protocol": [
-            InteractionProtocolType.PVG,
-            InteractionProtocolType.DEBATE,
-            InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-            InteractionProtocolType.MERLIN_ARTHUR,
-            InteractionProtocolType.MNIP,
+            "pvg",
+            "debate",
+            "abstract_decision_problem",
+            "merlin_arthur",
+            "mnip",
         ],
     },
     # Test manual architectures
@@ -123,8 +123,8 @@ param_specs = [
     # Test the including a linear message space
     {
         "scenario": [
-            ScenarioType.GRAPH_ISOMORPHISM,
-            ScenarioType.IMAGE_CLASSIFICATION,
+            "graph_isomorphism",
+            "image_classification",
         ],
         "include_linear_message": [True],
     },
@@ -144,13 +144,13 @@ def test_prepare_run_experiment(param_spec: dict):
 
     # Very basic agent parameters for each scenario
     basic_agent_params = {}
-    basic_agent_params[ScenarioType.GRAPH_ISOMORPHISM] = (
+    basic_agent_params["graph_isomorphism"] = (
         GraphIsomorphismAgentParameters.construct_test_params()
     )
-    basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
+    basic_agent_params["image_classification"] = (
         ImageClassificationAgentParameters.construct_test_params()
     )
-    basic_agent_params[ScenarioType.CODE_VALIDATION] = (
+    basic_agent_params["code_validation"] = (
         CodeValidationAgentParameters.construct_test_params()
     )
 
@@ -162,22 +162,22 @@ def test_prepare_run_experiment(param_spec: dict):
         frames_per_batch=8,
     )
     trainer_params = {
-        TrainerType.SOLO_AGENT: SoloAgentParameters(
+        "solo_agent": SoloAgentParameters(
             num_epochs=1,
             batch_size=1,
         ),
-        TrainerType.VANILLA_PPO: None,
-        TrainerType.SPG: SpgParameters(),
-        TrainerType.REINFORCE: None,
-        TrainerType.PURE_TEXT_EI: None,
+        "vanilla_ppo": None,
+        "spg": SpgParameters(),
+        "reinforce": None,
+        "pure_text_ei": None,
     }
     common_ppo_params = CommonPpoParameters()
 
     # Extract the parameters, using defaults if not specified
-    scenario_type = param_spec.get("scenario", ScenarioType.GRAPH_ISOMORPHISM)
-    trainer_type = param_spec.get("trainer", TrainerType.VANILLA_PPO)
-    ppo_loss_type = param_spec.get("ppo_loss", PpoLossType.CLIP)
-    protocol_type = param_spec.get("protocol", InteractionProtocolType.PVG)
+    scenario_type = param_spec.get("scenario", "graph_isomorphism")
+    trainer_type = param_spec.get("trainer", "vanilla_ppo")
+    ppo_loss_type = param_spec.get("ppo_loss", "clip")
+    protocol_type = param_spec.get("protocol", "pvg")
     zero_knowledge = param_spec.get("zero_knowledge", False)
     is_random = param_spec.get("is_random", False)
     pretrain_agents = param_spec.get("pretrain_agents", False)
@@ -208,7 +208,7 @@ def test_prepare_run_experiment(param_spec: dict):
 
     # Construct the trainer parameters
     trainer_param = trainer_params[trainer_type]
-    if trainer_type == TrainerType.SPG:
+    if trainer_type == "spg":
         trainer_param.variant = param_spec["spg_variant"]
 
     # Construct the parameters
@@ -225,7 +225,7 @@ def test_prepare_run_experiment(param_spec: dict):
             "pretrain_agents": pretrain_agents,
             "rl": rl_params,
             "ppo": common_ppo_params,
-            str(trainer_type): trainer_param,
+            trainer_type: trainer_param,
             "d_representation": 1,
             "include_linear_message_space": include_linear_message,
             "message_size": message_size,
