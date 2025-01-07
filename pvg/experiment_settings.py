@@ -17,7 +17,7 @@ from pvg.stat_logger import StatLogger, DummyStatLogger
 from pvg.utils.types import TorchDevice, LoggingType
 
 
-def default_global_tqdm_step_fn():
+def _default_global_tqdm_step_fn():
     pass
 
 
@@ -130,7 +130,7 @@ class ExperimentSettings:
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
     global_tqdm_step_fn: Annotated[callable, MarkUnpicklable] = (
-        default_global_tqdm_step_fn
+        _default_global_tqdm_step_fn
     )
     pretrained_embeddings_batch_size: int = 256
     num_api_generation_timeouts: int = 100

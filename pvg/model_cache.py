@@ -22,7 +22,7 @@ from pvg.constants import (
 
 
 class ModelNotFoundError(RuntimeError):
-    """Raised when a model is not found"""
+    """Raised when a model is not found."""
 
     def __init__(self, message: str):
         self.message = message
@@ -33,7 +33,7 @@ class ModelNotFoundError(RuntimeError):
 
 
 def get_cached_models_path(hyper_params: HyperParameters | dict, subdir: str) -> Path:
-    """Get the path to the directory containing the models with the given parameters
+    """Get the path to the directory containing the models with the given parameters.
 
     Parameters
     ----------
@@ -78,7 +78,7 @@ def get_cached_models_path(hyper_params: HyperParameters | dict, subdir: str) ->
 
 
 def cached_models_exist(hyper_params: HyperParameters | dict, subdir: str) -> bool:
-    """Check whether cached models exist with the given parameters
+    """Check whether cached models exist with the given parameters.
 
     Parameters
     ----------
@@ -105,7 +105,7 @@ def save_model_state_dicts(
     subdir: str,
     overwrite=True,
 ):
-    """Save a model and its parameters
+    """Save a model and its parameters.
 
     The model will be saved in a directory named with a hash of the current time.
 
@@ -181,7 +181,7 @@ def load_cached_model_state_dicts(
     hyper_params: HyperParameters | dict,
     subdir: str,
 ):
-    """Load the state dict of cached models into models
+    """Load the state dict of cached models into models.
 
     Parameters
     ----------

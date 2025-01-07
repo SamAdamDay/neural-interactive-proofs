@@ -1,3 +1,5 @@
+"""Tests for the implementation of the agents."""
+
 import pytest
 
 import torch
@@ -29,7 +31,7 @@ from pvg.utils.maths import set_seed
 
 
 def test_graph_isomorphism_combined_agents():
-    """Test the combined agents for the graph isomorphism scenario with three agents
+    """Test the combined agents for the graph isomorphism scenario with three agents.
 
     The idea is to catch dimension bugs caused by the fact that we normally have two
     agents and two graphs. If these dimension are mixed up this should be caught here.
@@ -151,7 +153,7 @@ def test_channel_visibility(
     old_bodies = combined_body.bodies.copy()
 
     class TestBody(TensorDictAgentPartMixin):
-        """A body that checks the data received by the agent"""
+        """A body that checks the data received by the agent."""
 
         def forward(self, data: TensorDict, *args, **kwargs) -> TensorDict:
 

@@ -1,4 +1,4 @@
-"""A factory function for the components of an experiment scenario
+"""A factory function for the components of an experiment scenario.
 
 This is where the logic for creating the agents and environments lives.
 
@@ -67,7 +67,7 @@ T = TypeVar("T")
 
 
 class ParameterSelector:
-    """A data structure for storing and retrieving classes based on parameter values"""
+    """A data structure for storing and retrieving classes based on parameter values."""
 
     # Ordered by specificity, with the most specific filters first
     filter_matchers: list[tuple[dict[str, str], type]]
@@ -220,7 +220,7 @@ class ScenarioInstance:
 def build_scenario_instance(
     hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ScenarioInstance:
-    """Factory function for building a scenario instance from parameters.
+    """Build a scenario instance from parameters.
 
     The `ScenarioInstance` class holds the components of a scenario, which serves to
     abstract away the details of the particular experiment being run.

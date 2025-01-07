@@ -133,15 +133,15 @@ class DummyMessageRegressor(MessageRegressor):
     Used when regression analysis is disabled.
     """
 
-    def fit_score(self, data: TensorDictBase) -> dict[str, float]:
+    def fit_score(self, data: TensorDictBase) -> dict[str, float]:  # noqa: D102
         return {}
 
-    def fit_score_agent(
+    def fit_score_agent(  # noqa: D102
         self, agent_name: str, train_data: TensorDictBase, test_data: TensorDictBase
     ) -> float:
         return 0
 
-    def reset_parameters(self):
+    def reset_parameters(self):  # noqa: D102
         pass
 
 
@@ -153,7 +153,18 @@ R = TypeVar("R", bound=MessageRegressor)
 def register_protocol_handler(
     method: MessageRegressionMethodType,
 ) -> Callable[[type[R]], type[R]]:
-    """Decorator to register a message regressor."""
+    """Register a message regressor.
+
+    Parameters
+    ----------
+    method : MessageRegressionMethodType
+        The method to register the regressor for.
+
+    Returns
+    -------
+    decorator : Callable[[type[R]], type[R]]
+        The decorator to register the regressor.
+    """
 
     def decorator(cls: type[R]) -> type[R]:
         MESSAGE_REGRESSORS[method] = cls
@@ -219,6 +230,22 @@ class MlpMessageRegressor(MessageRegressor):
     def fit_score_agent(
         self, agent_name: str, train_data: TensorDictBase, test_data: TensorDictBase
     ) -> float:
+        """Fit and score the regressor on the data for a single agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        train_data : TensorDictBase
+            A selection of the data for fitting the regressor.
+        test_data : TensorDictBase
+            A selection of the data for testing the regressor.
+
+        Returns
+        -------
+        score : float
+            The regression score.
+        """
 
         # Get the flattened message and label data
         message_train = rearrange(train_data["message"], "batch ... -> batch (...)")

@@ -1,6 +1,6 @@
 """Utilities for working with data."""
 
-from typing import Optional, Any, Iterable
+from typing import Optional, Any, Iterable, Iterator, TypeVar
 
 import torch
 
@@ -9,12 +9,51 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from pvg.utils.types import TorchDevice
 from pvg.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 
+T = TypeVar("T")
 
-def forgetful_cycle(iterable):
-    """A version of cycle that doesn't save copies of the values"""
+
+def forgetful_cycle(iterable: Iterable[T]) -> Iterator[T]:
+    """Return an iterator that cycles through an iterable without saving copies.
+
+    This iterator will keep yielding items from the iterable in order, and will start
+    over once the iterable is exhausted. However, unlike the `itertools.cycle` function,
+    it does not save copies of the items in the iterable.
+
+    Parameters
+    ----------
+    iterable : Iterable
+        The iterable to cycle through.
+
+    Yields
+    ------
+    item : Any
+        The next item in the iterable, cycling through it indefinitely.
+    """
     while True:
         for i in iterable:
             yield i
+
+
+def truncated_iterator(iterable: Iterable[T], maxlen: int) -> Iterator[T]:
+    """Return an iterator that stops after a maximum length.
+
+    Parameters
+    ----------
+    iterable : Iterable
+        The iterable to iterate over.
+    maxlen : int
+        The maximum length to iterate over.
+
+    Yields
+    ------
+    item : Any
+        The next item in the iterable.
+    """
+
+    for i, item in enumerate(iterable):
+        if i >= maxlen:
+            return
+        yield item
 
 
 class VariableDataCycler:
@@ -156,22 +195,6 @@ def tensordict_to_numpy_dict(data: TensorDictBase) -> dict:
     return to_numpy_dict(data)
 
 
-def max_length_iterator(iterable, maxlen):
-    """An iterator that stops after a maximum length.
-
-    Parameters
-    ----------
-    iterable : Iterable
-        The iterable to iterate over.
-    maxlen : int
-        The maximum length to iterate over.
-    """
-    for i, item in enumerate(iterable):
-        if i >= maxlen:
-            break
-        yield item
-
-
 def nested_dict_keys(data: dict) -> list[tuple[str, ...]]:
     """Get the keys of a nested dict as a list of tuples of strings.
 
@@ -262,20 +285,3 @@ def is_nested_key(index: Any) -> bool:
         return all(isinstance(key, str) for key in index)
 
     return False
-
-
-def truncated_iterator(iterable, maxlen):
-    """An iterator that stops after a maximum length.
-
-    Parameters
-    ----------
-    iterable : Iterable
-        The iterable to iterate over.
-    maxlen : int
-        The maximum length to iterate over.
-    """
-
-    for i, item in enumerate(iterable):
-        if i >= maxlen:
-            return
-        yield item

@@ -57,7 +57,7 @@ from pvg.utils.tensordict import tensordict_add, tensordict_scalar_multiply
 
 
 def update_schedule_iterator(schedule: AgentUpdateSchedule):
-    """A True-False iterator which specifies on which iterations to update an agent.
+    """Return a bool iterator which specifies on which iterations to update an agent.
 
     Parameters
     ----------
@@ -327,7 +327,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
                 self.value_operator = None
 
     def _get_data_collectors(self) -> tuple[SyncDataCollector, SyncDataCollector]:
-        """Construct the data collectors, which generate rollouts from the environment
+        """Construct the data collectors, which generate rollouts from the environment.
 
         Constructs a collector for both the train and the test environment.
 
@@ -362,7 +362,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
         return train_collector, test_collector
 
     def _get_replay_buffer(self, transform: Optional[Transform] = None) -> ReplayBuffer:
-        """Construct the replay buffer, which will store the rollouts
+        """Construct the replay buffer, which will store the rollouts.
 
         Parameters
         ----------
@@ -385,7 +385,7 @@ class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
 
     @abstractmethod
     def _get_loss_module_and_gae(self) -> tuple[Objective, GAE | None]:
-        """Construct the loss module and the generalized advantage estimator
+        """Construct the loss module and the generalized advantage estimator.
 
         Returns
         -------

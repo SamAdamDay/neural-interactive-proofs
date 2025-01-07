@@ -1,3 +1,17 @@
+"""Data classes for the image classification task.
+
+Contains the `ImageClassificationDataset` class, which is a dataset for the image
+classification task. The dataset is a binary classification problem, where the classes
+are selected from a torchvision dataset. The dataset is binarified using one of the
+following methods:
+
+- `BinarificationMethodType.MERGE`: The classes are shuffled and merged into two
+  classes.
+- `BinarificationMethodType.SELECT_TWO`: Two classes are selected from the original
+    dataset.
+- `BinarificationMethodType.RANDOM`: The classes are selected at random.
+"""
+
 import os
 from typing import Optional, Any, TypeVar
 from abc import ABC
@@ -71,7 +85,7 @@ D = TypeVar("D", bound=TorchVisionDatasetWrapper)
 
 
 def register_dataset_wrapper_class(dataset_name: str) -> callable:
-    """Decorator to register a dataset wrapper class."""
+    """Register a dataset wrapper class."""
 
     def decorator(wrapper_class: type[D]) -> type[D]:
         DATASET_WRAPPER_CLASSES[dataset_name] = wrapper_class
@@ -106,6 +120,8 @@ class TestDataset(FakeData, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("mnist")
 class MnistDatasetWrapper(MNIST, TorchVisionDatasetWrapper):
+    """The MNIST dataset wrapper."""
+
     num_channels = 1
     width = 28
     height = 28
@@ -113,16 +129,22 @@ class MnistDatasetWrapper(MNIST, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("fashion_mnist")
 class FashionMnistDatasetWrapper(FashionMNIST, MnistDatasetWrapper):
+    """The Fashion-MNIST dataset wrapper."""
+
     pass
 
 
 @register_dataset_wrapper_class("kmnist")
 class KmnistDatasetWrapper(KMNIST, MnistDatasetWrapper):
+    """The Kuzushiji-MNIST dataset wrapper."""
+
     pass
 
 
 @register_dataset_wrapper_class("cifar10")
 class Cifar10DatasetWrapper(CIFAR10, TorchVisionDatasetWrapper):
+    """The CIFAR-10 dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -131,6 +153,8 @@ class Cifar10DatasetWrapper(CIFAR10, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("cifar100")
 class Cifar100DatasetWrapper(CIFAR100, TorchVisionDatasetWrapper):
+    """The CIFAR-100 dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -138,6 +162,8 @@ class Cifar100DatasetWrapper(CIFAR100, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("svhn")
 class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
+    """The Street View House Numbers dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -185,12 +211,32 @@ class ImageClassificationDataset(TensorDictDataset):
     def build_torch_dataset(
         self, *, transform: Optional[Any]
     ) -> TorchVisionDatasetWrapper:
+        """Build the TorchVision dataset.
+
+        Parameters
+        ----------
+        transform : Optional[Any]
+            The transform to apply to the images.
+
+        Returns
+        -------
+        dataset : TorchVisionDatasetWrapper
+            The TorchVision dataset.
+        """
         dataset_class = DATASET_WRAPPER_CLASSES[self.hyper_params.dataset]
         return dataset_class(
             root=self.raw_dir, train=self.train, transform=transform, download=True
         )
 
     def build_tensor_dict(self) -> TensorDict:
+        """Build the dataset as a TensorDict from the raw data.
+
+        Returns
+        -------
+        dataset : TensorDict
+            The dataset as a TensorDict, with the keys "image", "x", and "y".
+        """
+
         # Load the dataset
         transform = transforms.Compose(
             [

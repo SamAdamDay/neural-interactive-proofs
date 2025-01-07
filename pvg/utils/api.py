@@ -6,7 +6,7 @@ from inspect import signature
 
 
 class GenerationError(Exception, ABC):
-    """Base class for exceptions raised during generation of the next message"""
+    """Base class for exceptions raised during generation of the next message."""
 
     def __init__(self, num_retries: Optional[int] = None):
         self.num_retries = num_retries
@@ -38,15 +38,15 @@ class GenerationError(Exception, ABC):
 
 
 class NotGuessedError(GenerationError):
-    """Raised when the agent has not made a decision within the max number of turns"""
+    """Raised when the agent has not made a decision within the max number of turns."""
 
 
 class ContentFilterError(GenerationError):
-    """Raised when the agent's response is blocked by a content filter"""
+    """Raised when the agent's response is blocked by a content filter."""
 
 
 class UnknownFinishReasonError(GenerationError):
-    """Raised when the agent's finishes generating for an unknown reason"""
+    """Raised when the agent's finishes generating for an unknown reason."""
 
     def __init__(self, reason: str, num_retries: Optional[int] = None):
         self.reason = reason
@@ -62,7 +62,7 @@ class UnknownFinishReasonError(GenerationError):
 
 
 class InvalidResponseError(GenerationError):
-    """Raised when the agent's response is invalid"""
+    """Raised when the agent's response is invalid."""
 
     def __init__(self, response_text: str, num_retries: Optional[int] = None):
         self.response_text = response_text
@@ -79,8 +79,8 @@ class InvalidResponseError(GenerationError):
 
 
 class InvalidDecisionError(InvalidResponseError):
-    """Raised when the agent's decision is invalid (i.e. not accept or reject)"""
+    """Raised when the agent's decision is invalid (i.e. not accept or reject)."""
 
 
 class NotAllActiveChannelsInResponseError(InvalidResponseError):
-    """Raised when the response does not contain messages for all active channels"""
+    """Raised when the response does not contain messages for all active channels."""

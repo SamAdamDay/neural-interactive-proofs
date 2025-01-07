@@ -278,7 +278,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     @property
     @abstractmethod
     def main_message_space_shape(self) -> tuple:
-        """The shape of the main message space used by the agents to communicate
+        """The shape of the main message space used by the agents to communicate.
 
         This is typically informed by the type of data in the environment. E.g. for
         images this might have shape "height width"
@@ -287,7 +287,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     @property
     @abstractmethod
     def main_message_out_key(self) -> str:
-        """The tensordict key which contains the main message sent by each agent
+        """The tensordict key which contains the main message sent by each agent.
 
         This key is the main output of an agent. Typically, the agent's forward pass
         will output logits for this key, which will then be selected from.
@@ -295,7 +295,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     @property
     def message_history_shape(self) -> tuple:
-        """The shape of the message history and 'x' tensors
+        """The shape of the message history and 'x' tensors.
 
         This is used to make the specification for these.
 
@@ -641,7 +641,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         message_history_key: str,
         message_shape: tuple[int, ...],
     ) -> TensorDictBase:
-        """Compute the new message history and next message for given keys
+        """Compute the new message history and next message for given keys.
 
         This is a generic method for updating one-hot encoded next message and message
         history tensors given a choice of message for each agent.
@@ -727,7 +727,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         return next_td
 
     def _reset(self, env_td: Optional[TensorDictBase] = None) -> TensorDictBase:
-        """(Partially) reset the environment.
+        """Reset the environment (partially).
 
         For each episode which is done, takes a new sample from the dataset and resets
         the episode.
@@ -1091,6 +1091,24 @@ class PureTextEnvironment(Environment, ABC):
         env_state: Optional[NestedArrayDict] = None,
         data_batch: Optional[NestedArrayDict] = None,
     ) -> NestedArrayDict:
+        """Reset the pure text environment.
+
+        This method resets the environment for the episodes which are done. It samples a
+        new batch of data for these episodes and calls `_masked_reset` to reset the
+        episodes.
+
+        Parameters
+        ----------
+        env_state : Optional[NestedArrayDict]
+            The current environment state.
+        data_batch : Optional[NestedArrayDict]
+            The data batch to use for the episodes that are done.
+
+        Returns
+        -------
+        env_state : NestedArrayDict
+            The reset environment state.
+        """
 
         # If no state is provided, create a new one
         if env_state is None or "done" not in env_state.keys():

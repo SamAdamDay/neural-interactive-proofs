@@ -1,3 +1,5 @@
+"""Type definitions for the PVG package."""
+
 import logging
 from typing import Annotated as String, Any, get_origin, get_args, Union
 from types import UnionType
@@ -14,7 +16,7 @@ NumpyStringDtype = StringDType(na_object=None)
 
 
 def get_union_elements(tp: Any) -> list:
-    """Get the elements of a union type
+    """Get the elements of a union type.
 
     If the type is not a union, returns a singleton list containing the type.
 

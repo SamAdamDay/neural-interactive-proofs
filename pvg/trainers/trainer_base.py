@@ -443,7 +443,7 @@ class TensorDictTrainer(Trainer, ABC):
         self.use_critic, self.use_single_body, _ = get_agent_part_flags(hyper_params)
 
     def _build_train_context(self, stack: ExitStack) -> list[ContextManager]:
-        """Builds the context manager ExitStack for training.
+        """Build the context manager ExitStack for training.
 
         Takes as input an ExitStack and adds the appropriate context managers to it,
         then returns the context managers.
@@ -498,7 +498,7 @@ class TensorDictTrainer(Trainer, ABC):
         return context_managers
 
     def _build_test_context(self, stack: ExitStack) -> list[ContextManager]:
-        """Builds the context manager ExitStack for testing.
+        """Build the context manager ExitStack for testing.
 
         Takes as input an ExitStack and adds the appropriate context managers to it,
         then returns the context managers.
@@ -597,7 +597,7 @@ class IterationContext:
 def attach_progress_bar(
     num_iterations_func: Callable[[Trainer], int]
 ) -> Callable[[Callable], Callable]:
-    """Decorator to attach a progress bar to a Trainer method.
+    """Decorate a `Trainer` method to attach a progress bar.
 
     Decorate a method of a `Trainer` subclass with this decorator to have it run with a
     progress bar and declare the number of iterations that it runs for.

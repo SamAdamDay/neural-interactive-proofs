@@ -74,7 +74,7 @@ def get_base_wandb_run_and_new_hyper_params(
         hyper_params: BaseHyperParameters,
         new_hyper_params: BaseHyperParameters,
     ):
-        """Revert hyper-param values which should be preserved, recursively
+        """Revert hyper-param values which should be preserved, recursively.
 
         Modifies `new_hyper_params` in place, using the values from `hyper_params`
         """

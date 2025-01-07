@@ -82,14 +82,17 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     @property
     def max_message_rounds(self) -> int:
+        """The maximum number of message rounds in the protocol."""
         return self.base_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
+        """The minimum number of message rounds in the protocol."""
         return self.base_protocol.min_message_rounds
 
     @property
     def max_verifier_turns(self) -> int:
+        """The maximum number of verifier turns in the protocol."""
         return self.base_protocol.max_verifier_turns
 
     @property
@@ -174,6 +177,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     @property
     def agent_channel_visibility(self) -> list[tuple[str, str]]:
+        """The visibility settings for the agents in the protocol."""
 
         agent_channel_visibility = []
 
@@ -203,6 +207,32 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
+        """Check if an agent can be active in a given round and channel.
+
+        1. The verifier is active in the standard channels when the base protocol
+        verifier is active. The adversarial verifier and simulator are not active in the
+        standard channels, but the provers are.
+        2. Adversarial verifiers are active in the adversarial channels when the base
+        protocol verifier is active. The verifier and simulator are not active in the
+        adversarial channels, but the provers are.
+        3. The simulator is active in the simulator channels when the base protocol
+        verifier is active. No other agents are active in the simulator channels.
+        4. Whether the provers are active is determined by the base protocol.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        round_id : int
+            The round of the protocol.
+        channel_name : str
+            The name of the channel.
+
+        Returns
+        -------
+        can_be_active : bool
+            Whether the agent can be active in the given round and channel.
+        """
 
         base_channel_name, _, channel_suffix = channel_name.rpartition("_")
 
@@ -246,6 +276,24 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     def get_active_agents_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
     ) -> Bool[Tensor, "... agent channel"]:
+        """Get a boolean mask indicating which agents are active in which channels.
+
+        The adversarial verifier is active in the adversarial channels, the simulator is
+        active in the simulator channels, and the provers are active in all channels. The
+        verifier is active in the standard channels.
+
+        Parameters
+        ----------
+        round_id : Int[Tensor, "..."]
+            The round of the protocol.
+        seed : Int[Tensor, "..."]
+            The per-environment seed.
+
+        Returns
+        -------
+        active_mask : Bool[Tensor, "... agent channel"]
+            A boolean mask indicating which agents are active in which channels.
+        """
 
         num_base_channels = self.base_protocol.num_message_channels
 

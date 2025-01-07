@@ -19,7 +19,6 @@ The following protocols are implemented:
 
 References
 ----------
-
 [^1] Anil et al. 2021. "Learning to give checkable answers with prover-verifier games"
 arXiv:2108.12099
 
@@ -64,10 +63,12 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
 
     @property
     def verifier_first(self) -> bool:
+        """Whether the verifier goes first."""
         return self.hyper_params.protocol_common.verifier_first
 
     @property
     def max_message_rounds(self) -> int:
+        """The maximum number of message rounds."""
         return self.hyper_params.pvg_protocol.max_message_rounds
 
     @property
@@ -80,12 +81,13 @@ class PvgProtocol(DeterministicSingleVerifierProtocolHandler):
 
     @property
     def min_message_rounds(self) -> int:
+        """The minimum number of message rounds."""
         return self.hyper_params.pvg_protocol.min_message_rounds
 
     def is_agent_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent is active in a given round and channel.
+        """Specify whether an agent is active in a given round and channel.
 
         An agent must only send a message in a channel which is visible to them.
 
@@ -161,7 +163,7 @@ class DebateProtocol(PvgProtocol):
     def is_agent_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent is active in a given round and channel.
+        """Specify whether an agent is active in a given round and channel.
 
         In sequential MNIP with verifier first, the order is:
 
@@ -245,10 +247,12 @@ class DebateProtocol(PvgProtocol):
 
     @property
     def max_message_rounds(self) -> int:
+        """The maximum number of message rounds."""
         return self.hyper_params.debate_protocol.max_message_rounds
 
     @property
     def min_message_rounds(self) -> int:
+        """The minimum number of message rounds."""
         return self.hyper_params.debate_protocol.min_message_rounds
 
 
@@ -318,7 +322,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     def can_agent_be_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent can be active in a given round.
+        """Specify whether an agent can be active in a given round.
 
         The provers can only be active in the first round, and the verifier can only be
         active in the second round.
@@ -357,7 +361,7 @@ class MnipProtocol(PvgProtocol):
     def is_agent_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
-        """Specifies whether an agent is active in a given round and channel.
+        """Specify whether an agent is active in a given round and channel.
 
         In sequential MNIP with verifier first, the order is:
 
@@ -516,6 +520,24 @@ class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
     def is_agent_active(
         self, agent_name: str, round_id: int, channel_name: str
     ) -> bool:
+        """Specify whether an agent is active in a given round and channel.
+
+        The verifier (the only agent) is active in the first round.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent (always "verifier").
+        round_id : int
+            The round number.
+        channel_name : str
+            The channel name (always "main").
+
+        Returns
+        -------
+        is_active : bool
+            Whether the agent is active in the given round and channel.
+        """
         return round_id == 0
 
     def _get_new_terminated_mask(
@@ -574,6 +596,7 @@ class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
     max_verifier_turns = 4
 
     def is_agent_active(self, agent_name: str, round_id: int, channel_name: str):
+        """Specify whether an agent is active in a given round and channel."""
         if channel_name == "main":
             if round_id % 3 == 0:
                 return agent_name == "prover1"

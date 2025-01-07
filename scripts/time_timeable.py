@@ -1,4 +1,4 @@
-"""Script to time the timeable action"""
+"""Script to time the timeable action."""
 
 from argparse import ArgumentParser
 from textwrap import indent

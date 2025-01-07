@@ -33,7 +33,8 @@ class LrFactors(SubParameters, ABC):
     """
     Class representing learning rate factors for the actor and critic models.
 
-    Attributes:
+    Attributes
+    ----------
         actor (float): The learning rate factor for the actor model.
         critic (float): The learning rate factor for the critic model.
     """
@@ -45,7 +46,7 @@ class LrFactors(SubParameters, ABC):
 @register_parameter_class
 @dataclass
 class AgentParameters(SubParameters, ABC):
-    """Base class for sub-parameters objects which define agents
+    """Base class for sub-parameters objects which define agents.
 
     Parameters
     ----------
@@ -127,6 +128,16 @@ class AgentParameters(SubParameters, ABC):
     is_random: ClassVar[bool] = False
 
     def to_dict(self) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Adds the `is_random` parameter to the dictionary. This is not a field of the
+        parameters object, but we want to include it in the dictionary for logging.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
         params_dict = super().to_dict()
 
         # Add the is_random parameter. This is not a field of the parameters object, but
@@ -181,7 +192,7 @@ class AgentParameters(SubParameters, ABC):
 @register_parameter_class
 @dataclass
 class RandomAgentParameters(AgentParameters):
-    """Parameters which specify a random agent"""
+    """Parameters which specify a random agent."""
 
     is_random: ClassVar[bool] = True
 
@@ -297,6 +308,15 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 
     @classmethod
     def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
+        """Construct test parameters for the agent.
+
+        We use a simple architecture with one GNN layer and one transformer layer.
+
+        Returns
+        -------
+        test_params : GraphIsomorphismAgentParameters
+            The test parameters.
+        """
         return cls(
             num_gnn_layers=1,
             d_gnn=1,
@@ -400,6 +420,15 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     @classmethod
     def construct_test_params(cls) -> "ImageClassificationAgentParameters":
+        """Construct test parameters for the agent.
+
+        We use a simple architecture with one convolutional layer.
+
+        Returns
+        -------
+        test_params : ImageClassificationAgentParameters
+            The test parameters.
+        """
         return cls(
             building_block_type=ImageBuildingBlockType.CONV2D,
             num_blocks_per_group=1,
@@ -474,6 +503,16 @@ class PureTextAgentParameters(AgentParameters):
 
     @classmethod
     def construct_test_params(cls) -> "PureTextAgentParameters":
+        """Construct test parameters for the agent.
+
+        For this agent, we use the dummy API, so that we don't need to make real API
+        requests.
+
+        Returns
+        -------
+        test_params : PureTextAgentParameters
+            The test parameters.
+        """
         return cls(use_dummy_api=True)
 
 

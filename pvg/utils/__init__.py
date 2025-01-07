@@ -1,1 +1,1 @@
-"""Handy utilities for PVG"""
+"""Various utility functions and classes."""

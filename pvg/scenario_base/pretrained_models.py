@@ -1,3 +1,13 @@
+"""Base classes for dealing with pretrained models for transfer learning.
+
+Pretrained models can by used to generate embeddings for datasets, which can then be
+used by agents instead of raw data. This means the agent starts with a good level of
+knowledge about the data.
+
+This module contains the base class for pretrained models, as well as a registry for
+them.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Iterable, TypeVar
 
@@ -11,7 +21,11 @@ from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedModel(ABC):
-    """Base class for pretrained models
+    """Base class for pretrained models, used to generate embeddings for datasets.
+
+    Pretrained models can by used to generate embeddings for datasets, which can then be
+    used by agents instead of raw data. This means the agent starts with a good level of
+    knowledge about the data.
 
     Parameters
     ----------
@@ -44,7 +58,7 @@ class PretrainedModel(ABC):
     def generate_dataset_embeddings(
         self, datasets: Iterable[TensorDictDataset], delete_model: bool = True
     ) -> torch.Tensor:
-        """Load the model and generate embeddings for the datasets
+        """Load the model and generate embeddings for the datasets.
 
         Parameters
         ----------
@@ -66,7 +80,7 @@ P = TypeVar("P", bound=PretrainedModel)
 
 
 def register_pretrained_model_class(pretrained_model_cls: type[P]) -> type[P]:
-    """Decorator to register a pretrained model class, so it can be built by name
+    """Register a pretrained model class, so it can be built by name.
 
     Parameters
     ----------
@@ -93,7 +107,7 @@ def register_pretrained_model_class(pretrained_model_cls: type[P]) -> type[P]:
 def get_pretrained_model_class(
     model_name: str, hyper_params: HyperParameters
 ) -> type[PretrainedModel]:
-    """Get the class for a pretrained model by name
+    """Get the class for a pretrained model by name.
 
     If the full model name is not found, it tries to find a model with the name:
         f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}"

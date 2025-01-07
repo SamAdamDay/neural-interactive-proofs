@@ -174,10 +174,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
     @property
     def agent_spec(self) -> CodeValidationAgentSpec:
+        """The `CodeValidationAgentSpec` for the agent."""
         return self.protocol_handler.agent_specs[self.agent_name]
 
     @property
     def system_prompt_template(self) -> Template:
+        """The template for the system prompt."""
         return self.protocol_handler.get_agent_system_prompt_template(self.agent_name)
 
     def __init__(
@@ -213,7 +215,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         rollouts: NestedArrayDict,
         replace_verifier_guess_with_true_label: bool = False,
     ) -> list[dict[Literal["messages"], list[PromptMessage]]]:
-        """Build the dataset for fine-tuning the agent given sampled rollouts
+        """Build the dataset for fine-tuning the agent given sampled rollouts.
 
         This method generates a dataset of examples ready to pass to the fine-tune API.
 
@@ -1006,7 +1008,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
-        """Get the status of the fine-tune job"""
+        """Get the status of the fine-tune job."""
 
         if (
             self.shared_agent_params.use_dummy_api
@@ -1027,7 +1029,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
 
     def get_fine_tune_job_error_repr(self) -> str:
-        """Get a string representation of the error for the fine-tune job"""
+        """Get a string representation of the error for the fine-tune job."""
 
         if self.shared_agent_params.use_dummy_api:
             raise ValueError("Cannot get error for dummy API")
@@ -1050,7 +1052,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         return output
 
     def switch_to_next_model(self):
-        """Switch to the next model after fine-tuning"""
+        """Switch to the next model after fine-tuning."""
 
         if self.fine_tune_job_id is None:
             raise ValueError("Fine-tune job ID not set")
@@ -1094,6 +1096,13 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         )
 
     def set_state(self, checkpoint: OpenAiSharedModelGroupState | dict[str, Any]):
+        """Set the state of the shared model group from a checkpoint.
+
+        Parameters
+        ----------
+        checkpoint : AgentCheckpoint
+            The checkpoint to restore the state from.
+        """
 
         if isinstance(checkpoint, dict):
             checkpoint = OpenAiSharedModelGroupState(**checkpoint)
@@ -1102,7 +1111,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         self.fine_tuned_model_name = checkpoint.fine_tuned_model_name
 
     def _get_fine_tune_job(self) -> OpenAIFineTuningJob:
-        """Get the fine-tune job from the OpenAI API"""
+        """Get the fine-tune job from the OpenAI API."""
 
         if self.fine_tune_job_id is None:
             raise ValueError("Fine-tune job ID not set")
@@ -1312,6 +1321,10 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
 @register_scenario_class(CV_SCENARIO, Agent)
 @dataclass
 class CodeValidationAgent(Agent):
+    """A class representing a code validation agent.
+
+    This is a dataclass which holds all the agent parts.
+    """
 
     agent_params: ClassVar[CodeValidationAgentParameters | RandomAgentParameters]
 

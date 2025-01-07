@@ -1,3 +1,5 @@
+"""The PVG experiments package."""
+
 from .parameters import (
     HyperParameters,
     LrFactors,

@@ -1,3 +1,9 @@
+"""Tests for the environment modules.
+
+These tests check that the environments are correctly specified, and that the step
+functions work as expected.
+"""
+
 import pytest
 
 import torch

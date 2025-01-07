@@ -11,7 +11,7 @@ from pvg.parameters import TrainerType
 
 @register_trainer(TrainerType.SPG)
 class SpgTrainer(ReinforcementLearningTrainer):
-    """Stackelberg Policy Gradient trainer
+    """Stackelberg Policy Gradient trainer.
 
     Implements an n-player version of Stackelberg Policy Gradient / Opponent-Shaping
 
@@ -24,7 +24,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
     """
 
     def _get_loss_module_and_gae(self) -> tuple[SpgLoss, GAE]:
-        """Construct the loss module and the generalized advantage estimator
+        """Construct the loss module and the generalized advantage estimator.
 
         Returns
         -------

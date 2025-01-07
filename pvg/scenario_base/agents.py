@@ -177,6 +177,7 @@ class AgentPart(ABC):
 
     @property
     def max_message_rounds(self) -> int:
+        """The maximum number of message rounds in the protocol."""
         return self.protocol_handler.max_message_rounds
 
     @cached_property
@@ -301,7 +302,7 @@ class TensorDictAgentPartMixin(AgentPart, TensorDictModuleBase, ABC):
         self.device = settings.device
 
     def _init_weights(self):
-        """Initialise the module weights
+        """Initialise the module weights.
 
         Should be called at the end of `__init__`
         """
@@ -373,7 +374,7 @@ class PureTextWholeAgent(WholeAgent, ABC):
     def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
-        """Forward pass through the agent
+        """Forward pass through the agent.
 
         Parameters
         ----------
@@ -405,7 +406,7 @@ class PureTextWholeAgent(WholeAgent, ABC):
             The dataset for fine-tuning the agent.
         """
 
-    def __call__(
+    def __call__(  # noqa: D102
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         return self.forward(data, environment)
@@ -417,7 +418,7 @@ class PureTextSharedModelGroupState(ABC):
 
 
 class PureTextSharedModelGroup(ABC):
-    """A class representing a group of pure text agents which share the same model
+    """A class representing a group of pure text agents which share the same model.
 
     The shared model is fine-tuned on the data from all agents in the group.
 
@@ -536,7 +537,7 @@ class PureTextSharedModelGroup(ABC):
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
     ):
-        """Create a fine-tune job for the agent group given sampled rollouts
+        """Create a fine-tune job for the agent group given sampled rollouts.
 
         Parameters
         ----------
@@ -551,15 +552,15 @@ class PureTextSharedModelGroup(ABC):
     def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
-        """Get the status of the fine-tune job"""
+        """Get the status of the fine-tune job."""
 
     @abstractmethod
     def get_fine_tune_job_error_repr(self) -> str:
-        """Get a string representation of the error for the fine-tune job"""
+        """Get a string representation of the error for the fine-tune job."""
 
     @abstractmethod
     def switch_to_next_model(self):
-        """Switch to the next model after fine-tuning"""
+        """Switch to the next model after fine-tuning."""
 
     def set_state(self, checkpoint: PureTextSharedModelGroupState):
         """Set the state of the shared model group from a checkpoint.
@@ -859,6 +860,7 @@ class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
 
     @property
     def device(self) -> TorchDevice:
+        """The device used by the agent part."""
         device = None
         for part in self.parts.values():
             if device is None:
@@ -1059,7 +1061,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         decision_restriction: Int[Tensor, "..."],
         decision_logits: Float[Tensor, "... agents 3"],
     ) -> TensorDictBase:
-        """Make sure the agent's decisions comply with the restrictions
+        """Make sure the agent's decisions comply with the restrictions.
 
         Parameters
         ----------

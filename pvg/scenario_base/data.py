@@ -129,6 +129,7 @@ class TensorDictDataset(Dataset, ABC):
 
     @property
     def keys(self) -> tuple[str]:
+        """The keys (field names) in the dataset."""
 
         keys = super().keys
 
@@ -235,6 +236,7 @@ class TensorDictDataset(Dataset, ABC):
 
     @property
     def device(self) -> TorchDevice:
+        """The device on which the dataset is stored."""
         return self._main_data.device
 
     @property

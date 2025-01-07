@@ -31,7 +31,7 @@ ACTIVATION_CLASSES = dict(
 
 
 def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
-    """Returns a new view of a tensor with the batch dimensions flattened.
+    """Return a new view of a tensor with the batch dimensions flattened.
 
     Parameters
     ----------
@@ -72,13 +72,13 @@ def apply_orthogonal_initialisation(module: nn.Module, gain: float):
 class DummyOptimizer(torch.optim.Optimizer):
     """A dummy optimizer which does nothing."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):  # noqa: D102
         pass
 
-    def step(self, *args, **kwargs):
+    def step(self, *args, **kwargs):  # noqa: D102
         pass
 
-    def zero_grad(self, *args, **kwargs):
+    def zero_grad(self, *args, **kwargs):  # noqa: D102
         pass
 
 
@@ -99,6 +99,19 @@ class SimulateBatchDimsMixin:
         pass
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply the module to the input tensor, simulating multiple batch dimensions.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        out : Tensor
+            The output tensor after applying the module.
+        """
+
         # Get the shape of the batch dims
         batch_shape = x.shape[: -self.feature_dims]
 
@@ -197,6 +210,18 @@ class GlobalMaxPool(nn.Module):
         self.keepdim = keepdim
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply global max pooling to the input tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        Tensor
+            The output tensor after global max pooling.
+        """
         return x.max(dim=self.dim, keepdim=self.keepdim)[0]
 
 
@@ -217,6 +242,18 @@ class CatGraphPairDim(nn.Module):
         self.pair_dim = pair_dim
 
     def forward(self, x: Tensor) -> Tensor:
+        """Concatenate the two node sets for each graph pair.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        x_cat : Tensor
+            The input tensor with the two node sets concatenated.
+        """
         return torch.cat(
             [x.select(self.pair_dim, 0), x.select(self.pair_dim, 1)],
             dim=self.cat_dim - 1,
@@ -259,6 +296,18 @@ class PairedGaussianNoise(nn.Module):
         self._noise = torch.tensor(0, dtype=dtype)
 
     def forward(self, x: Tensor) -> Tensor:
+        """Add Gaussian noise to the input tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        x_noisy : Tensor
+            The input tensor with Gaussian noise added.
+        """
         if self.training and self.sigma != 0:
             # If we're not training sigma, we need to detach `x` when computing the
             # scale so that the gradient doesn't propagate to sigma
@@ -276,7 +325,21 @@ class PairedGaussianNoise(nn.Module):
             x = x + sampled_noise
         return x
 
-    def to(self, *args, **kwargs):
+    def to(self, *args, **kwargs) -> "PairedGaussianNoise":
+        """Move the module to a new device or dtype.
+
+        Parameters
+        ----------
+        *args
+            Arguments to pass to the `to` method of the superclass.
+        **kwargs
+            Keyword arguments to pass to the `to` method of the superclass.
+
+        Returns
+        -------
+        self : PairedGaussianNoise
+            The module itself.
+        """
         super().to(*args, **kwargs)
         self._noise = self._noise.to(*args, **kwargs)
         return self
@@ -305,6 +368,19 @@ class PairInvariantizer(nn.Module):
         self.pair_dim = pair_dim
 
     def forward(self, x: Tensor) -> Tensor:
+        """Transform the input to be invariant to the order of the graphs in a pair.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        transformed_x : Tensor
+            The input tensor transformed to be invariant to the order of the graphs in a
+            pair
+        """
         mean = x.mean(dim=self.pair_dim)
         abs_diff = 0.5 * torch.abs(
             x.select(self.pair_dim, 0) - x.select(self.pair_dim, 1)
@@ -362,10 +438,12 @@ class GIN(TensorDictModuleBase):
 
     @property
     def in_keys(self) -> Iterable[str]:
+        """The keys of the input TensorDict."""
         return (self.feature_in_key, self.adjacency_key, self.node_mask_key)
 
     @property
     def out_keys(self) -> Iterable[str]:
+        """The keys of the output TensorDict."""
         return (self.feature_out_key, self.adjacency_key, self.node_mask_key)
 
     def __init__(
@@ -394,12 +472,28 @@ class GIN(TensorDictModuleBase):
         self.reset_parameters()
 
     def reset_parameters(self):
+        """Reset the parameters of the layer."""
         self.eps.data.fill_(self.initial_eps)
 
     def forward(
         self,
         tensordict: TensorDictBase,
-    ) -> torch.Tensor:
+    ) -> TensorDict:
+        """Apply the GIN layer to the input TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict with a dense representation of the graph. It should
+            have a key for the features, adjacency matrix and (optionally) node mask.
+
+        Returns
+        -------
+        out : TensorDict
+            The input TensorDict with the GIN layer applied. This includes the updated
+            features.
+        """
+
         # Extract the features, adjacency matrix and node mask from the input
         x: Float[Tensor, "... max_nodes feature"] = tensordict[self.feature_in_key]
         adjacency: Float[Tensor, "... max_nodes max_nodes"] = tensordict[
@@ -459,6 +553,18 @@ class Squeeze(nn.Module):
         self.dim = dim
 
     def forward(self, x: Tensor) -> Tensor:
+        """Squeeze the input tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        x_squeezed : Tensor
+            The input tensor with the specified dimension squeezed.
+        """
         return x.squeeze(self.dim)
 
 
@@ -482,6 +588,18 @@ class TensorDictCat(TensorDictModuleBase):
         self.dim = dim
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Concatenate the keys of the input TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        concatenated_tensordict : TensorDictBase
+            The input TensorDict with the keys concatenated.
+        """
         return tensordict.update(
             {
                 self.out_keys[0]: torch.cat(
@@ -522,6 +640,18 @@ class ParallelTensorDictModule(TensorDictModuleBase):
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Apply the module to each key of the input TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        transformed_tensordict : TensorDictBase
+            The input TensorDict with the module applied to each key.
+        """
         return tensordict.update(
             {
                 out_key: self.module(tensordict[in_key])
@@ -557,6 +687,18 @@ class TensorDictCloneKeys(TensorDictModuleBase):
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Clone the keys of the input TensorDict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        cloned_tensordict : TensorDictBase
+            The input TensorDict with the keys cloned.
+        """
         return tensordict.update(
             {
                 out_key: tensordict[in_key]
@@ -579,6 +721,18 @@ class OneHot(nn.Module):
         self.num_classes = num_classes
 
     def forward(self, x: Tensor) -> Tensor:
+        """One-hot encode the input tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        x_one_hot : Tensor
+            The one-hot encoded tensor.
+        """
         return torch.nn.functional.one_hot(x, self.num_classes).float()
 
 
@@ -620,10 +774,12 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
 
     @property
     def in_keys(self) -> Iterable[str]:
+        """The keys of the input TensorDict."""
         return (self.message_in_key,)
 
     @property
     def out_keys(self) -> Iterable[str]:
+        """The keys of the output TensorDict."""
         return (self.message_out_key,)
 
     def __init__(
@@ -730,6 +886,19 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         return self._cached_mean, self._cached_std
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Normalize the message history.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input tensordict.
+
+        Returns
+        -------
+        normalized_tensordict : TensorDictBase
+            The input tensordict with the message history normalized.
+        """
+
         x = tensordict[self.message_in_key]
 
         # Get the mean and standard deviation for the structure shape of `x`
@@ -741,7 +910,21 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         # Store the normalized message history in the output TensorDict
         return tensordict.update({self.message_out_key: x})
 
-    def to(self, *args, **kwargs):
+    def to(self, *args, **kwargs) -> "NormalizeOneHotMessageHistory":
+        """Move the module to a new device or dtype.
+
+        Parameters
+        ----------
+        *args
+            Positional arguments to pass to the `to`
+        **kwargs
+            Keyword arguments to pass to the `to`
+
+        Returns
+        -------
+        self : NormalizeOneHotMessageHistory
+            The module, moved to the new device or dtype.
+        """
         super().to(*args, **kwargs)
         if self._cached_mean is not None:
             self._cached_mean = self._cached_mean.to(*args, **kwargs)
@@ -780,6 +963,18 @@ class Print(nn.Module):
         self.transform = transform
 
     def forward(self, x: Tensor) -> Tensor:
+        """Print the information about the input tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        x : Tensor
+            The input tensor, unchanged.
+        """
         if self.name is not None:
             print(f"{self.name}:")  # noqa: T201
         if self.mode == "value":
@@ -823,6 +1018,18 @@ class TensorDictPrint(TensorDictModuleBase):
         self.print_nan_proportion = print_nan_proportion
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Print the information about the tensors in the input tensordict.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input tensordict.
+
+        Returns
+        -------
+        tensordict : TensorDictBase
+            The input tensordict, unchanged.
+        """
         if self.name is not None:
             print(f"{type(self).__name__} {self.name!r}:")  # noqa: T201
         for key in self.in_keys:

@@ -38,6 +38,7 @@ class AdjacencyMatrixBox(Box):
         self.max_num_nodes = max_num_nodes
 
     def clone(self) -> "AdjacencyMatrixBox":
+        """Create a copy of the adjacency matrix box."""
         return AdjacencyMatrixBox(self.max_num_nodes)
 
 
@@ -171,6 +172,18 @@ class AdjacencyMatrixSpec(TensorSpec):
         return torch.clamp(torch.round(val), min=0, max=1).to(self.dtype)
 
     def to(self, dest: torch.dtype | torch.device | str | int) -> TensorSpec:
+        """Move the adjacency matrix spec to a new device or dtype.
+
+        Parameters
+        ----------
+        dest : torch.dtype | torch.device | str | int
+            The destination device or dtype.
+
+        Returns
+        -------
+        adjacency_matrix_spec : AdjacencyMatrixSpec
+            The adjacency matrix spec on the new device or dtype.
+        """
         if isinstance(dest, torch.dtype):
             self.dtype = dest
         elif isinstance(dest, (torch.device, str, int)):
@@ -180,6 +193,7 @@ class AdjacencyMatrixSpec(TensorSpec):
         return self
 
     def clone(self) -> "AdjacencyMatrixSpec":
+        """Create a copy of the adjacency matrix spec."""
         return AdjacencyMatrixSpec(
             self.max_num_nodes,
             self.shape,
@@ -215,12 +229,18 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
 
     @property
     def max_num_nodes(self) -> int:
+        """The maximum number of nodes in a graph."""
         if self._max_num_nodes is None:
             self._max_num_nodes = self.dataset["x"].shape[-1]
         return self._max_num_nodes
 
     @property
-    def main_message_space_shape(self) -> tuple:
+    def main_message_space_shape(self) -> tuple[int, int]:
+        """The shape of the main message space.
+
+        This is shaped like (pair, max_num_nodes), where pair is 2 (because there are
+        two graphs per problem instance).
+        """
         return (2, self.max_num_nodes)
 
     def _get_observation_spec(self) -> CompositeSpec:

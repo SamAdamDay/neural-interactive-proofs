@@ -25,14 +25,17 @@ def dot_td(td1, td2):
     """
     Calculate the dot product between two (parameter) dictionaries.
 
-    Parameters:
+    Parameters
+    ----------
     td1 (dict): The first dictionary.
     td2 (dict): The second dictionary.
 
-    Returns:
+    Returns
+    -------
     float: The dot product of the two dictionaries.
 
-    Raises:
+    Raises
+    ------
     ValueError: If td1 and td2 do not have the same keys.
     """
     if td1.keys() != td2.keys():
@@ -45,14 +48,17 @@ def sum_td(td1, td2):
     """
     Calculate the sum of two (parameter) dictionaries.
 
-    Parameters:
+    Parameters
+    ----------
     td1 (dict): The first dictionary.
     td2 (dict): The second dictionary.
 
-    Returns:
+    Returns
+    -------
     dict: The sum product of the two dictionaries.
 
-    Raises:
+    Raises
+    ------
     ValueError: If td1 and td2 do not have the same keys.
     """
     if td1.keys() != td2.keys():
@@ -65,11 +71,13 @@ def mul_td(td, c):
     """
     Calculate a scalar multiple of a (parameter) dictionaries.
 
-    Parameters:
+    Parameters
+    ----------
     td (dict): The dictionary.
     c (float): The scalar.
 
-    Returns:
+    Returns
+    -------
     float: The scalar multiple of the dictionary.
     """
     return {k: td[k] * c for k in td.keys()}
@@ -86,7 +94,8 @@ def compute_sos_update(xi, H_0_xi, chi, a, b):
         a (float): A scaling factor (between 0 and 1).
         b (float): A threshold value (between 0 and 1).
 
-    Returns:
+    Returns
+    -------
         dict: The update to be made to the parameters.
 
     """
@@ -112,26 +121,24 @@ def compute_sos_update(xi, H_0_xi, chi, a, b):
     return xi_0
 
 
-def conjugate_gradient(
+def conjugate_gradient(  # noqa: D103
     f_loss: Tensor,
     l_loss: Tensor,
     f_params: Tuple[Tensor, ...],
     l_params: Tuple[Tensor, ...],
     num_iterations: int,
     lr: float,
-) -> Tuple[Tensor, ...]:
-    pass  # TODO
+) -> Tuple[Tensor, ...]: ...  # TODO
 
 
-def neumann(
+def neumann(  # noqa: D103
     f_loss: Tensor,
     l_loss: Tensor,
     f_params: Tuple[Tensor, ...],
     l_params: Tuple[Tensor, ...],
     num_iterations: int,
     lr: float,
-) -> Tuple[Tensor, ...]:
-    pass  # TODO
+) -> Tuple[Tensor, ...]: ...  # TODO
 
 
 # Note that this is adapted from https://github.com/moskomule/hypergrad/blob/main/hypergrad/approx_hypergrad.py
@@ -143,7 +150,7 @@ def nystrom(
     rank: int,
     rho: float,
 ) -> Tuple[Tensor, ...]:
-    """Nystrom method to approximate inverse Hessian vector product
+    """Nystrom method to approximate inverse Hessian vector product.
 
     Args:
         f_loss: Follower objective
@@ -215,7 +222,8 @@ def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho)
         rank: The rank parameter for the Nystrom approximation method.
         rho: The rho parameter for the Nystrom approximation method.
 
-    Returns:
+    Returns
+    -------
         The computed IHVP.
     """
 
@@ -278,19 +286,24 @@ def logit_or_2(
     a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]
 ) -> Float[Tensor, "... logits"]:
     """
-    Computes the logit OR operation for two input tensors using the log-sum-exp trick.
+    Compute the logit OR operation for two input tensors using the log-sum-exp trick.
 
     The logit OR operation is defined as:
         max_logit + log1p(exp(min_logit - max_logit))
     where max_logit is the element-wise maximum of the inputs,
     and min_logit is the element-wise minimum of the inputs.
 
-    Args:
-        a (torch.Tensor): The first input tensor.
-        b (torch.Tensor): The second input tensor.
+    Parameters
+    ----------
+    a : Float[Tensor, "... logits"]
+        The first input tensor.
+    b : Float[Tensor, "... logits"]
+        The second input tensor.
 
-    Returns:
-        torch.Tensor: The result of the logit OR operation applied element-wise to the input tensors.
+    Returns
+    -------
+    torch.Tensor
+        The result of the logit OR operation applied element-wise to the input tensors.
     """
 
     max_logit = torch.maximum(a, b)
@@ -307,7 +320,8 @@ def logit_or_n(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
     dim (int, optional): The dimension along which to apply the OR operation.
                          If None, the operation is applied to all elements.
 
-    Returns:
+    Returns
+    -------
     torch.Tensor: The logit of the OR of input events along the specified dimension.
     """
     if dim is None:

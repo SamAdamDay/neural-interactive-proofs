@@ -47,9 +47,22 @@ from pvg.constants import (
 )
 
 
-# Hack to be able to pickle the command arguments
-# https://stackoverflow.com/a/71010038
-def identity(string):
+def _identity(string: str) -> str:
+    """Return the input string.
+
+    Hack to be able to pickle the command arguments.
+    See: https://stackoverflow.com/a/71010038
+
+    Parameters
+    ----------
+    string : str
+        The input string.
+
+    Returns
+    -------
+    string : str
+        The input string.
+    """
     return string
 
 
@@ -61,10 +74,12 @@ class PrefixLoggerAdapter(logging.LoggerAdapter):
         self.prefix = prefix
 
     def process(self, msg, kwargs):
+        """Process the log message, adding the prefix."""
         return f"{self.prefix}{msg}", kwargs
 
     @property
     def level(self):
+        """Get the log level of the logger."""
         return self.logger.level
 
 
@@ -98,7 +113,7 @@ class MultiLineFormatter(logging.Formatter):
 
 
 class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
-    """A TqdmMultiProcessPool that allows setting maxtasksperchild"""
+    """A TqdmMultiProcessPool that allows setting maxtasksperchild."""
 
     def __init__(self, process_count, max_tasks_per_child=None):
         self.mp_manager = multiprocessing.Manager()
@@ -116,7 +131,7 @@ class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
 
 @dataclass
 class ExperimentFunctionArguments:
-    """Arguments to the function which runs a single experiment
+    """Arguments to the function which runs a single experiment.
 
     Parameters
     ----------
@@ -263,7 +278,11 @@ class HyperparameterExperiment(ABC):
 
     @abstractmethod
     def _run(self, base_logger: logging.Logger):
-        """The function that actually runs the experiment, to be implemented."""
+        """Run the experiment.
+
+        This is the function that actually runs the experiment, and should be
+        implemented by subclasses.
+        """
         pass
 
     @property
@@ -645,7 +664,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
         # Needed so that we can pickle the command arguments
         # https://stackoverflow.com/a/71010038
-        self.parser.register("type", None, identity)
+        self.parser.register("type", None, _identity)
 
         # Add various arguments
         self.parser.add_argument(
@@ -679,7 +698,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         tqdm_func: Callable,
         global_tqdm: tqdm,
     ) -> bool:
-        """The task function which runs on a single worker.
+        """Run a task on a single worker.
 
         Parameters
         ----------

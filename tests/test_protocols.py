@@ -1,3 +1,8 @@
+"""Tests for implementations of protocols.
+
+Currently tests the zero-knowledge extensions of the PVG protocol.
+"""
+
 from itertools import product
 
 import pytest

@@ -1,4 +1,4 @@
-"""Use a language model to do analysis on rollouts"""
+"""Use a language model to do analysis on rollouts."""
 
 import importlib.resources
 from string import Template
@@ -375,11 +375,20 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
 
 class ProverAnalyserMixin:
-    """Mixin class for analysing provers"""
+    """Mixin class for analysing provers."""
 
     protocol_handler: ProtocolHandler
 
     def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
+        """Get the relevant agents and channels for the analysis.
+
+        Yields
+        ------
+        agent_name : str
+            The name of the agent.
+        channel_name : str
+            The name of the channel.
+        """
 
         for agent_name, channel_name in self.protocol_handler.agent_channel_visibility:
 
@@ -493,5 +502,14 @@ class FollowUpAnalyser(BinaryRolloutAnalyser):
     )
 
     def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
+        """Get the relevant agents and channels for the analysis.
+
+        Yields
+        ------
+        agent_name : str
+            The name of the agent.
+        channel_name : str
+            The name of the channel.
+        """
         for agent_name, channel_name in self.protocol_handler.agent_channel_visibility:
             yield agent_name, channel_name

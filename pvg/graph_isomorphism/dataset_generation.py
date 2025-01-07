@@ -400,7 +400,7 @@ def _generate_isomorphic_graphs(
     non_iso_adjacencies: Int32[Tensor, "pair batch node1 node2"],
     non_iso_sizes: Int32[Tensor, "batch"],
 ) -> tuple[Int32[Tensor, "pair batch node1 node2"], Int32[Tensor, "batch"]]:
-    """Generate isomorphic graphs
+    """Generate isomorphic graphs.
 
     Parameters
     ----------

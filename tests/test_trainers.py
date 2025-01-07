@@ -1,3 +1,10 @@
+"""Test the trainer modules.
+
+A trainer is in charge of training the agents in a scenario. Currently these tests check
+that the optimizer is correctly set up with the correct learning rates for the different
+parts of the network.
+"""
+
 import dataclasses
 
 import pytest
