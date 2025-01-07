@@ -199,7 +199,7 @@ class TrainingTimeable(Timeable, ABC):
 
 TIMEABLES: dict[str, Timeable] = {}
 
-T = TypeVar[Timeable]
+T = TypeVar("T", bound=Timeable)
 
 
 def register_timeable(
