@@ -1,7 +1,7 @@
 """Implementations of RL objectives, extending those of TorchRL."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable, NamedTuple, Optional
+from typing import Iterable, Optional
 import contextlib
 from abc import ABC, abstractmethod
 import warnings
@@ -500,7 +500,8 @@ class SpgLoss(ClipPPOLossImproved):
         names: list[str],
         ihvp: dict,
         additional_lola_term: bool,
-        sos_params: NamedTuple,
+        sos_a_param: float,
+        sos_b_param: float,
         agent_lr_factors: list[Optional[LrFactors | dict]],
         lr: float,
         clip_epsilon,
@@ -538,7 +539,8 @@ class SpgLoss(ClipPPOLossImproved):
         }
         self.ihvp = ihvp
         self.additional_lola_term = additional_lola_term
-        self.sos_params = sos_params
+        self.sos_a_param = sos_a_param
+        self.sos_b_param = sos_b_param
         self.agent_lr_factors = agent_lr_factors
         self.lr = lr
         self.names = names
@@ -855,7 +857,7 @@ class SpgLoss(ClipPPOLossImproved):
 
         if self.variant == "sos" or self.variant == "psos":
             update = compute_sos_update(
-                xi, H_0_xi, chi, self.sos_params.a, self.sos_params.b
+                xi, H_0_xi, chi, self.sos_a_param, self.sos_b_param
             )
         else:
             update = {}

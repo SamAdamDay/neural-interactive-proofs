@@ -5,5 +5,4 @@ In the Dockerfile we use Python 3.10, so we can't use the new features of Python
 These are copied from the python source code.
 """
 
-from .enum import StrEnum
 from .typing import TypedDict, NotRequired

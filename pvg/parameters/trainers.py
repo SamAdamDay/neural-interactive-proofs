@@ -1,6 +1,6 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional, Literal, Annotated
+from typing import Optional, Literal, Annotated
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
@@ -151,9 +151,6 @@ class VanillaPpoParameters(SubParameters):
     """Additional parameters for the vanilla PPO trainer."""
 
 
-SosParams = NamedTuple("SosParams", [("a", float), ("b", float)])
-
-
 @register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
@@ -168,8 +165,10 @@ class SpgParameters(SubParameters):
         their respective followers, and so forth.
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
-    sos_params : NamedTuple
-        The parameters for the SOS loss.
+    sos_a_param: float
+        The `a` parameter for the SOS loss.
+    sos_b_param: float
+        The `b` parameter for the SOS loss.
     ihvp_variant : IhvpVariantType
         The variant of IHVP to use.
     ihvp_num_iterations : int
@@ -183,9 +182,8 @@ class SpgParameters(SubParameters):
     variant: SpgVariantType = "psos"
     stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
     additional_lola_term: bool = True
-    sos_params: NamedTuple = SosParams(
-        a=0.5, b=0.1
-    )  # Default values taken from the original paper
+    sos_a_param: float = 0.5
+    sos_b_param: float = 0.1
 
     # IHVP
     ihvp_variant: IhvpVariantType = "nystrom"
