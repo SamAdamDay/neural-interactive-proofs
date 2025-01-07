@@ -83,7 +83,7 @@ from pvg.utils.torch import (
 )
 from pvg.utils.types import TorchDevice
 
-GI_SCENARIO = ScenarioType.GRAPH_ISOMORPHISM
+GI_SCENARIO = "graph_isomorphism"
 
 
 @dataclass
@@ -322,7 +322,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         self.gnn = self._build_gnn()
 
         if self.agent_params.use_manual_architecture:
-            if hyper_params.interaction_protocol != InteractionProtocolType.PVG:
+            if hyper_params.interaction_protocol != "pvg":
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
                     "the PVG interaction protocol."
@@ -1314,7 +1314,7 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
         self.decider = None
 
         if self.agent_params.use_manual_architecture:
-            if hyper_params.interaction_protocol != InteractionProtocolType.PVG:
+            if hyper_params.interaction_protocol != "pvg":
                 raise NotImplementedError(
                     "Manual graph isomorphism agent architecture is only supported for "
                     "the PVG interaction protocol."

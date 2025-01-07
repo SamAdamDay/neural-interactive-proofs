@@ -20,8 +20,8 @@ from pvg import (
     PvgProtocolParameters,
     SpgParameters,
     PpoLossType,
-    SpgVariant,
-    Guess,
+    SpgVariantType,
+    GuessType,
     AGENT_NAMES,
     ImageClassificationParameters,
     run_experiment,
@@ -48,15 +48,15 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = InteractionProtocolType.PVG
+    interaction_protocol = "pvg"
     hyper_params = HyperParameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="image_classification",
+        trainer="vanilla_ppo",
         dataset="cifar10",
         agents=AgentsParameters(
             **{
                 agent_name: ImageClassificationAgentParameters(
-                    building_block_type=ImageBuildingBlockType.CONV2D,
+                    building_block_type="conv2d",
                     d_latent_pixel_selector=1,
                     d_decider=1,
                     num_decider_layers=1,
@@ -85,10 +85,10 @@ def run(cmd_args: Namespace):
             num_normalization_steps=10,
         ),
         spg=SpgParameters(
-            variant=SpgVariant.PSOS,
+            variant="psos",
         ),
         ppo=CommonPpoParameters(
-            loss_type=PpoLossType.CLIP,
+            loss_type="clip",
             normalize_advantage=True,
         ),
         reinforce=ReinforceParameters(
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--use_cpu", action="store_true")
-    parser.add_argument("--ignore_cache", action="store_true")
+    parser.add_argument("--ignore-cache", action="store_true")
     parser.add_argument(
         "--use-wandb",
         action="store_true",

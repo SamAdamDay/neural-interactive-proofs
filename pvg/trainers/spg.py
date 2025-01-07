@@ -9,7 +9,7 @@ from pvg.trainers.registry import register_trainer
 from pvg.parameters import TrainerType
 
 
-@register_trainer(TrainerType.SPG)
+@register_trainer("spg")
 class SpgTrainer(ReinforcementLearningTrainer):
     """Stackelberg Policy Gradient trainer.
 

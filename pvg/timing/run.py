@@ -105,7 +105,7 @@ class RunTimeable(TrainingTimeable, ABC):
         """
 
         # Set the number of steps in the appropriate place
-        if self.trainer == TrainerType.SOLO_AGENT:
+        if self.trainer == "solo_agent":
             for field in fields(SoloAgentParameters):
                 if field.name == "batch_size":
                     default_batch_size = field.default
@@ -159,8 +159,8 @@ class RunTimeable(TrainingTimeable, ABC):
 class GraphIsomorphismSoloAgentRunTimeable(RunTimeable):
     """Timeable for running the graph isomorphism scenario with solo agents."""
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
-    trainer = TrainerType.SOLO_AGENT
+    scenario = "graph_isomorphism"
+    trainer = "solo_agent"
     dataset = "eru10000"
 
 
@@ -168,6 +168,6 @@ class GraphIsomorphismSoloAgentRunTimeable(RunTimeable):
 class GraphIsomorphismPpoRunTimeable(RunTimeable):
     """Timeable for running the graph isomorphism scenario with vanilla PPO."""
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
-    trainer = TrainerType.VANILLA_PPO
+    scenario = "graph_isomorphism"
+    trainer = "vanilla_ppo"
     dataset = "eru10000"

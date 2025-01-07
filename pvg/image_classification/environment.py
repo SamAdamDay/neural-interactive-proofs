@@ -21,7 +21,7 @@ from pvg.factory import register_scenario_class
 from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 
 
-@register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Environment)
+@register_scenario_class("image_classification", Environment)
 class ImageClassificationEnvironment(TensorDictEnvironment):
     """The image classification RL environment.
 

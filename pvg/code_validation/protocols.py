@@ -99,7 +99,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         return (
             f"pvg.code_validation.prompt_templates.system_prompts"
-            f".{self.hyper_params.interaction_protocol!s}"
+            f".{self.hyper_params.interaction_protocol}"
         )
 
     @cache
@@ -462,7 +462,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
                 ).float() * self.hyper_params.protocol_common.prover_reward
 
 
-@register_protocol_handler(InteractionProtocolType.PVG, ScenarioType.CODE_VALIDATION)
+@register_protocol_handler("pvg", "code_validation")
 class PvgCodeValidationProtocol(CodeValidationProtocolHandler, PvgProtocol):
     """The PVG protocol for code validation."""
 
@@ -478,9 +478,7 @@ class PvgCodeValidationProtocol(CodeValidationProtocolHandler, PvgProtocol):
     }
 
 
-@register_protocol_handler(
-    InteractionProtocolType.ABSTRACT_DECISION_PROBLEM, ScenarioType.CODE_VALIDATION
-)
+@register_protocol_handler("abstract_decision_problem", "code_validation")
 class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
     """The abstract decision problem protocol for code validation."""
 
@@ -492,7 +490,7 @@ class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
     }
 
 
-@register_protocol_handler(InteractionProtocolType.DEBATE, ScenarioType.CODE_VALIDATION)
+@register_protocol_handler("debate", "code_validation")
 class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol):
     """The debate protocol for code validation."""
 
@@ -529,9 +527,7 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
         }
 
 
-@register_protocol_handler(
-    InteractionProtocolType.MERLIN_ARTHUR, ScenarioType.CODE_VALIDATION
-)
+@register_protocol_handler("merlin_arthur", "code_validation")
 class MerlinArthurCodeValidationProtocol(
     CodeValidationProtocolHandler, MerlinArthurProtocol
 ):
@@ -548,7 +544,7 @@ class MerlinArthurCodeValidationProtocol(
     }
 
 
-@register_protocol_handler(InteractionProtocolType.MNIP, ScenarioType.CODE_VALIDATION)
+@register_protocol_handler("mnip", "code_validation")
 class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
     """The MNIP protocol for code validation."""
 
@@ -583,9 +579,7 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
         }
 
 
-@register_protocol_handler(
-    InteractionProtocolType.SOLO_VERIFIER, ScenarioType.CODE_VALIDATION
-)
+@register_protocol_handler("solo_verifier", "code_validation")
 class SoloVerifierCodeValidationProtocol(
     CodeValidationProtocolHandler, SoloVerifierProtocol
 ):

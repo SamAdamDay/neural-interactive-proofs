@@ -23,7 +23,7 @@ import pvg.code_validation.rollout_analysis
 
 available_analysers = []
 for scenario, analyser in ROLLOUT_ANALYSERS.keys():
-    if scenario == ScenarioType.CODE_VALIDATION:
+    if scenario == "code_validation":
         available_analysers.append(analyser)
 
 arg_parser = ArgumentParser(

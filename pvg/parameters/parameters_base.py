@@ -7,11 +7,6 @@ import typing
 from typing import Union, Any, TypeVar
 from types import UnionType
 
-try:
-    from enum import StrEnum
-except ImportError:
-    from pvg.utils.future import StrEnum
-
 
 class ParameterValue(ABC):
     """Base class for things which can be used as parameter values."""
@@ -86,9 +81,7 @@ class BaseHyperParameters(ParameterValue, ABC):
         params_dict = {}
         for field in dataclasses.fields(self):
             value = getattr(self, field.name)
-            if isinstance(value, StrEnum):
-                value = value.value
-            elif isinstance(value, ParameterValue):
+            if isinstance(value, ParameterValue):
                 value = value.to_dict()
             params_dict[field.name] = value
 

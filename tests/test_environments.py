@@ -43,12 +43,12 @@ from pvg.utils.maths import set_seed
     "scenario_type, dataset_class, environment_class",
     [
         (
-            ScenarioType.GRAPH_ISOMORPHISM,
+            "graph_isomorphism",
             GraphIsomorphismDataset,
             GraphIsomorphismEnvironment,
         ),
         (
-            ScenarioType.IMAGE_CLASSIFICATION,
+            "image_classification",
             ImageClassificationDataset,
             ImageClassificationEnvironment,
         ),
@@ -72,9 +72,7 @@ def test_environment_specs(
         The environment class to use for the scenario.
     """
 
-    hyper_params = HyperParameters(
-        scenario_type, TrainerType.VANILLA_PPO, "test", message_size=3
-    )
+    hyper_params = HyperParameters(scenario_type, "vanilla_ppo", "test", message_size=3)
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True
     )
@@ -93,8 +91,8 @@ def test_graph_isomorphism_environment_step():
 
     # Set up the environment.
     hyper_params = HyperParameters(
-        ScenarioType.GRAPH_ISOMORPHISM,
-        TrainerType.VANILLA_PPO,
+        "graph_isomorphism",
+        "vanilla_ppo",
         "test",
         rl=RlTrainerParameters(
             frames_per_batch=batch_size * max_message_rounds,
@@ -277,8 +275,8 @@ def test_image_classification_environment_step():
 
     # Set up the environment.
     hyper_params = HyperParameters(
-        ScenarioType.IMAGE_CLASSIFICATION,
-        TrainerType.VANILLA_PPO,
+        "image_classification",
+        "vanilla_ppo",
         "test",
         rl=RlTrainerParameters(
             frames_per_batch=batch_size * max_message_rounds,

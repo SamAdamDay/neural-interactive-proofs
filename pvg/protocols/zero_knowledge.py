@@ -70,8 +70,8 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         # We rely on the message logits, so we need to make sure they are available
         if hyper_params.scenario not in [
-            ScenarioType.GRAPH_ISOMORPHISM,
-            ScenarioType.IMAGE_CLASSIFICATION,
+            "graph_isomorphism",
+            "image_classification",
         ]:
             raise NotImplementedError(
                 "Zero-knowledge protocols are only supported for graph isomorphism and "

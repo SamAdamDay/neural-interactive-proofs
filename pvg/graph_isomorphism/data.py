@@ -16,7 +16,7 @@ from pvg.factory import register_scenario_class
 from pvg.constants import GI_DATA_DIR
 
 
-@register_scenario_class(ScenarioType.GRAPH_ISOMORPHISM, Dataset)
+@register_scenario_class("graph_isomorphism", Dataset)
 class GraphIsomorphismDataset(TensorDictDataset):
     """A dataset for the graph isomorphism experiments.
 

@@ -32,7 +32,7 @@ from pvg.utils.experiments import (
 from pvg.constants import WANDB_CV_PROJECT
 
 param_grid = dict(
-    interaction_protocol=[InteractionProtocolType.PVG],
+    interaction_protocol=["pvg"],
     dataset_name=["lrhammond/buggy-apps"],
     apps_difficulty=["interview"],
     num_iterations=[8],
@@ -106,16 +106,16 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         prover_params_dict["shared_model_group"] = None
 
     if combo["interaction_protocol"] in [
-        InteractionProtocolType.PVG,
-        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+        "pvg",
+        "abstract_decision_problem",
     ]:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
     elif combo["interaction_protocol"] in [
-        InteractionProtocolType.DEBATE,
-        InteractionProtocolType.MNIP,
-        InteractionProtocolType.MERLIN_ARTHUR,
+        "debate",
+        "mnip",
+        "merlin_arthur",
     ]:
         agents_params_dict["prover0"] = CodeValidationAgentParameters(
             **prover_params_dict
@@ -123,7 +123,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         agents_params_dict["prover1"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
-    elif combo["interaction_protocol"] == InteractionProtocolType.SOLO_VERIFIER:
+    elif combo["interaction_protocol"] == "solo_verifier":
         pass
     else:
         raise NotImplementedError(
@@ -141,8 +141,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         base_run_params = BaseRunParameters(base_run_type="none")
 
     return HyperParameters(
-        scenario=ScenarioType.CODE_VALIDATION,
-        trainer=TrainerType.PURE_TEXT_EI,
+        scenario="code_validation",
+        trainer="pure_text_ei",
         dataset=combo["dataset_name"],
         rl=RlTrainerParameters(
             rollouts_per_iteration=combo["rollouts_per_iteration"],

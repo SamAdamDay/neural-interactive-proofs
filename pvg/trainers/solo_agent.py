@@ -28,7 +28,7 @@ from pvg.parameters import AgentsParameters, TrainerType
 from pvg.utils.maths import set_seed
 
 
-@register_trainer(TrainerType.SOLO_AGENT)
+@register_trainer("solo_agent")
 class SoloAgentTrainer(TensorDictTrainer):
     """Trainer for training tensordict agents in isolation.
 

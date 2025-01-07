@@ -261,8 +261,8 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
     # Construct the parameters
     basic_agent_params = GraphIsomorphismAgentParameters.construct_test_params()
     hyper_params = HyperParameters(
-        ScenarioType.GRAPH_ISOMORPHISM,
-        TrainerType.VANILLA_PPO,
+        "graph_isomorphism",
+        "vanilla_ppo",
         "test",
         rl=RlTrainerParameters(lr=lr, use_shared_body=use_shared_body),
         agents=AgentsParameters(
@@ -357,10 +357,10 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
     ParameterGrid(
         {
             "scenario": [
-                ScenarioType.GRAPH_ISOMORPHISM,
-                ScenarioType.IMAGE_CLASSIFICATION,
+                "graph_isomorphism",
+                "image_classification",
             ],
-            "trainer": [TrainerType.VANILLA_PPO, TrainerType.REINFORCE],
+            "trainer": ["vanilla_ppo", "reinforce"],
             "use_shared_body": [True, False],
             "functionalize_modules": [True, False],
         }
@@ -375,10 +375,10 @@ def test_loss_parameters_in_optimizer(param_spec):
 
     # Construct basic agent parameters for each scenario
     basic_agent_params = {}
-    basic_agent_params[ScenarioType.GRAPH_ISOMORPHISM] = (
+    basic_agent_params["graph_isomorphism"] = (
         GraphIsomorphismAgentParameters.construct_test_params()
     )
-    basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
+    basic_agent_params["image_classification"] = (
         ImageClassificationAgentParameters.construct_test_params()
     )
 

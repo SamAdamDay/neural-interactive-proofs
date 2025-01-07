@@ -72,8 +72,6 @@ from pvg.code_validation.protocols import (
     CodeValidationAgentSpec,
 )
 
-CV_SCENARIO = ScenarioType.CODE_VALIDATION
-
 
 class AgentNotActiveInChannelError(Exception):
     """Error raised when an agent is not active in a channel."""
@@ -129,7 +127,7 @@ class _ParsedChatCompletion:
     warning: Literal["max_tokens", "invalid_response"] | None
 
 
-@register_scenario_class(CV_SCENARIO, WholeAgent, {"model_provider": "OpenAI"})
+@register_scenario_class("code_validation", WholeAgent, {"model_provider": "OpenAI"})
 class OpenAiWholeAgent(PureTextWholeAgent):
     """The whole agent for code validation, using OpenAI's API."""
 
@@ -846,7 +844,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
 
 @register_scenario_class(
-    CV_SCENARIO, PureTextSharedModelGroup, {"model_provider": "OpenAI"}
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenAI"}
 )
 class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     """A class representing a group of code validation OpenAI agents sharing a model."""
@@ -1135,12 +1133,12 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         return state
 
 
-@register_scenario_class(CV_SCENARIO, RandomWholeAgent)
+@register_scenario_class("code_validation", RandomWholeAgent)
 class CodeValidationRandomAgentPolicyHead(PureTextWholeAgent, RandomWholeAgent):
     """Random agent for code validation, yielding random strings."""
 
 
-@register_scenario_class(CV_SCENARIO, CombinedWhole)
+@register_scenario_class("code_validation", CombinedWhole)
 class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
     """Module which combines all agents for code validation."""
 
@@ -1318,7 +1316,7 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
         return expanded_output
 
 
-@register_scenario_class(CV_SCENARIO, Agent)
+@register_scenario_class("code_validation", Agent)
 @dataclass
 class CodeValidationAgent(Agent):
     """A class representing a code validation agent.

@@ -53,8 +53,8 @@ param_grid = dict(
 
 def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     return HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.SOLO_AGENT,
+        scenario="graph_isomorphism",
+        trainer="solo_agent",
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=GraphIsomorphismAgentParameters(

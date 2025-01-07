@@ -10,8 +10,8 @@ from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 if __name__ == "__main__":
 
     hyper_params = HyperParameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.SOLO_AGENT,
+        scenario="image_classification",
+        trainer="solo_agent",
         dataset="test",
     )
     for dataset_name in DATASET_WRAPPER_CLASSES.keys():

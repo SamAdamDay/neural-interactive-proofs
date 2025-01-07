@@ -98,7 +98,7 @@ class ModelTimeable(Timeable, ABC):
         """
         return HyperParameters(
             scenario=self.scenario,
-            trainer=TrainerType.SOLO_AGENT,
+            trainer="solo_agent",
             dataset=self.dataset,
             solo_agent=SoloAgentParameters(batch_size=self.batch_size),
         )
@@ -131,6 +131,6 @@ class ModelTimeable(Timeable, ABC):
 class GraphIsomorphismVerifierTimeable(ModelTimeable):
     """Timeable to run the graph isomorphism verifier model."""
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    scenario = "graph_isomorphism"
     dataset = "eru10000"
     agent_name = "verifier"

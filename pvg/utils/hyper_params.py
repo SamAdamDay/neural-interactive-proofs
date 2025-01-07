@@ -25,21 +25,18 @@ def get_agent_part_flags(
         Whether agents are composed of a single part, and are not split body and heads.
     """
 
-    if hyper_params.trainer == TrainerType.SOLO_AGENT:
+    if hyper_params.trainer == "solo_agent":
         return False, True, False
-    elif (
-        hyper_params.trainer == TrainerType.VANILLA_PPO
-        or hyper_params.trainer == TrainerType.SPG
-    ):
+    elif hyper_params.trainer == "vanilla_ppo" or hyper_params.trainer == "spg":
         return True, hyper_params.rl.use_shared_body, False
-    elif hyper_params.trainer == TrainerType.REINFORCE:
+    elif hyper_params.trainer == "reinforce":
         return (
             hyper_params.reinforce.use_advantage_and_critic,
             hyper_params.rl.use_shared_body
             or not hyper_params.reinforce.use_advantage_and_critic,
             False,
         )
-    elif hyper_params.trainer == TrainerType.PURE_TEXT_EI:
+    elif hyper_params.trainer == "pure_text_ei":
         return False, False, True
     else:
         raise ValueError(f"Unknown trainer type: {hyper_params.trainer}")

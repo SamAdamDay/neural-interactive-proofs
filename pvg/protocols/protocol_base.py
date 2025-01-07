@@ -16,7 +16,7 @@ from tensordict.tensordict import TensorDictBase
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import HyperParameters, Guess
+from pvg.parameters import HyperParameters, GuessType
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -348,11 +348,11 @@ class ProtocolHandler(ABC):
         """
 
         if follow_force_guess:
-            if self.hyper_params.protocol_common.force_guess == Guess.ONE:
+            if self.hyper_params.protocol_common.force_guess == "one":
                 decision = torch.ones_like(decision)
-            elif self.hyper_params.protocol_common.force_guess == Guess.ZERO:
+            elif self.hyper_params.protocol_common.force_guess == "zero":
                 decision = torch.zeros_like(decision)
-            elif self.hyper_params.protocol_common.force_guess == Guess.Y:
+            elif self.hyper_params.protocol_common.force_guess == "y":
                 decision = y.squeeze(-1)
 
         verifier_decision_made = guess_mask & (decision != 2)

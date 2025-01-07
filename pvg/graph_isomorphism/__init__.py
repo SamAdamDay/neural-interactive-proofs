@@ -12,7 +12,7 @@ Examples
 >>> from pvg.parameters import HyperParameters, Scenario, Trainer
 >>> from pvg.graph_isomorphism import GraphIsomorphismAgentsBuilder
 >>> hyper_params = HyperParameters(
-...     Scenario.GRAPH_ISOMORPHISM, Trainer.SOLO_AGENT, "eru10000"
+...     "graph_isomorphism", "solo_agent", "eru10000"
 ... )
 >>> agents = GraphIsomorphismAgentsBuilder.build(hyper_params, "cpu")
 """

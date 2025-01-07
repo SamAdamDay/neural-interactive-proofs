@@ -165,9 +165,7 @@ class CodeValidationDataset(Dataset, ABC):
         return output
 
 
-@register_scenario_class(
-    ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "test"}
-)
+@register_scenario_class("code_validation", Dataset, filter={"dataset": "test"})
 class TestCodeValidationDataset(CodeValidationDataset):
     """A test dataset for code validation, with dummy data."""
 
@@ -190,7 +188,7 @@ class TestCodeValidationDataset(CodeValidationDataset):
 
 
 @register_scenario_class(
-    ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "codeparrot/apps"}
+    "code_validation", Dataset, filter={"dataset": "codeparrot/apps"}
 )
 class AppsCodeValidationDataset(CodeValidationDataset):
     """The APPS[^1] dataset for code validation.
@@ -257,7 +255,7 @@ class AppsCodeValidationDataset(CodeValidationDataset):
 
 
 @register_scenario_class(
-    ScenarioType.CODE_VALIDATION, Dataset, filter={"dataset": "lrhammond/buggy-apps"}
+    "code_validation", Dataset, filter={"dataset": "lrhammond/buggy-apps"}
 )
 class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     """An extension of the APPS[^1] dataset with buggy solutions.

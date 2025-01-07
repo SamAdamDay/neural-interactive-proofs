@@ -55,10 +55,10 @@ def test_graph_isomorphism_combined_agents():
         normalize_message_history=False,
     )
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="eru10000",
-        interaction_protocol=InteractionProtocolType.MERLIN_ARTHUR,
+        interaction_protocol="merlin_arthur",
         agents=AgentsParameters(
             prover0=agent_params,
             prover1=agent_params,
@@ -100,8 +100,8 @@ def test_graph_isomorphism_combined_agents():
 @pytest.mark.parametrize(
     "scenario_type, agent_params_class",
     [
-        (ScenarioType.GRAPH_ISOMORPHISM, GraphIsomorphismAgentParameters),
-        (ScenarioType.IMAGE_CLASSIFICATION, ImageClassificationAgentParameters),
+        ("graph_isomorphism", GraphIsomorphismAgentParameters),
+        ("image_classification", ImageClassificationAgentParameters),
     ],
     ids=["graph_isomorphism", "image_classification"],
 )
@@ -128,18 +128,16 @@ def test_channel_visibility(
     basic_agent_params = agent_params_class.construct_test_params()
     hyper_params = HyperParameters(
         scenario_type,
-        TrainerType.VANILLA_PPO,
+        "vanilla_ppo",
         "test",
         agents=AgentsParameters(
             **{
                 agent_name: basic_agent_params
-                for agent_name in AGENT_NAMES[
-                    InteractionProtocolType.MULTI_CHANNEL_TEST
-                ]
+                for agent_name in AGENT_NAMES["multi_channel_test"]
             }
         ),
         rl=RlTrainerParameters(frames_per_batch=max_message_rounds * batch_size),
-        interaction_protocol=InteractionProtocolType.MULTI_CHANNEL_TEST,
+        interaction_protocol="multi_channel_test",
     )
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True

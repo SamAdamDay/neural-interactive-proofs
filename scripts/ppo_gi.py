@@ -19,8 +19,8 @@ from pvg import (
     TrainerType,
     PpoLossType,
     ActivationType,
-    SpgVariant,
-    IhvpVariant,
+    SpgVariantType,
+    IhvpVariantType,
     InteractionProtocolType,
     CommonProtocolParameters,
     PvgProtocolParameters,
@@ -42,8 +42,8 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
-    trainer=[TrainerType.VANILLA_PPO],
-    interaction_protocol=[InteractionProtocolType.PVG],
+    trainer=["vanilla_ppo"],
+    interaction_protocol=["pvg"],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -51,7 +51,7 @@ param_grid = dict(
     frames_per_batch=[2048],
     gamma=[0.95],
     lmbda=[0.95],
-    ppo_loss_type=[PpoLossType.CLIP],
+    ppo_loss_type=["clip"],
     clip_epsilon=[0.2],
     kl_target=[0.01],
     kl_beta=[1.0],
@@ -86,10 +86,10 @@ param_grid = dict(
     random_prover=[False],
     use_shared_body=[False],
     pretrain_agents=[False],
-    activation_function=[ActivationType.TANH],
-    spg_variant=[SpgVariant.SPG],
+    activation_function=["tanh"],
+    spg_variant=["spg"],
     stackelberg_sequence=[None],
-    ihvp_variant=[IhvpVariant.NYSTROM],
+    ihvp_variant=["nystrom"],
     ihvp_num_iterations=[5],
     ihvp_rank=[5],
     ihvp_rho=[0.1],
@@ -210,14 +210,14 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         update_schedule=verifier_update_schedule,
     )
     if combo["interaction_protocol"] in (
-        InteractionProtocolType.PVG,
-        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
+        "pvg",
+        "abstract_decision_problem",
     ):
         agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
     elif combo["interaction_protocol"] in (
-        InteractionProtocolType.DEBATE,
-        InteractionProtocolType.MERLIN_ARTHUR,
-        InteractionProtocolType.MNIP,
+        "debate",
+        "merlin_arthur",
+        "mnip",
     ):
         prover0_params = dataclasses.replace(
             prover_params, update_schedule=prover0_update_schedule
@@ -233,7 +233,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             f"Unknown interaction protocol: {combo['interaction_protocol']}"
         )
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
+        scenario="graph_isomorphism",
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         agents=agents_params,

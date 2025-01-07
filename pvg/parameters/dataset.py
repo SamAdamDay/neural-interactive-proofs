@@ -30,7 +30,7 @@ class DatasetParameters(SubParameters):
         reduced, and the full training set is used.
     """
 
-    binarification_method: BinarificationMethodType = BinarificationMethodType.MERGE
+    binarification_method: BinarificationMethodType = "merge"
     selected_classes: Optional[tuple[int, int]] = None
     binarification_seed: Optional[int] = None
     make_balanced: bool = True

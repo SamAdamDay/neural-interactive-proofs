@@ -34,12 +34,12 @@ from pvg.utils.maths import set_seed
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        InteractionProtocolType.PVG,
-        InteractionProtocolType.DEBATE,
-        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-        InteractionProtocolType.MNIP,
-        InteractionProtocolType.MERLIN_ARTHUR,
-        InteractionProtocolType.MULTI_CHANNEL_TEST,
+        "pvg",
+        "debate",
+        "abstract_decision_problem",
+        "mnip",
+        "merlin_arthur",
+        "multi_channel_test",
     ],
 )
 def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
@@ -55,8 +55,8 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
     """
 
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="test",
         interaction_protocol=base_protocol,
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
@@ -82,12 +82,12 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        InteractionProtocolType.PVG,
-        InteractionProtocolType.DEBATE,
-        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-        InteractionProtocolType.MNIP,
-        InteractionProtocolType.MERLIN_ARTHUR,
-        InteractionProtocolType.MULTI_CHANNEL_TEST,
+        "pvg",
+        "debate",
+        "abstract_decision_problem",
+        "mnip",
+        "merlin_arthur",
+        "multi_channel_test",
     ],
 )
 def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
@@ -103,8 +103,8 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
     """
 
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="test",
         interaction_protocol=base_protocol,
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
@@ -127,12 +127,12 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        InteractionProtocolType.PVG,
-        InteractionProtocolType.DEBATE,
-        InteractionProtocolType.ABSTRACT_DECISION_PROBLEM,
-        InteractionProtocolType.MNIP,
-        InteractionProtocolType.MERLIN_ARTHUR,
-        InteractionProtocolType.MULTI_CHANNEL_TEST,
+        "pvg",
+        "debate",
+        "abstract_decision_problem",
+        "mnip",
+        "merlin_arthur",
+        "multi_channel_test",
     ],
 )
 def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType):
@@ -145,8 +145,8 @@ def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType
     """
 
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="test",
         interaction_protocol=base_protocol,
         protocol_common=CommonProtocolParameters(zero_knowledge=True),
@@ -231,10 +231,10 @@ def test_zero_knowledge_pvg_step_method():
     aux_prover_reward_coefficient = 0.123
 
     hyper_params = HyperParameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="test",
-        interaction_protocol=InteractionProtocolType.PVG,
+        interaction_protocol="pvg",
         protocol_common=CommonProtocolParameters(
             zero_knowledge=True, verifier_first=True
         ),

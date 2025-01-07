@@ -15,7 +15,7 @@ from pvg.parameters import TrainerType
 from pvg.rl_objectives import ReinforceLossImproved
 
 
-@register_trainer(TrainerType.REINFORCE)
+@register_trainer("reinforce")
 class ReinforceTrainer(ReinforcementLearningTrainer):
     """Policy gradient trainer using the REINFORCE algorithm.
 
