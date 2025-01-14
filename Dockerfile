@@ -44,6 +44,9 @@ ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/b
 # Copy the scripts to the /usr/local/bin directory
 COPY docker/bin/* /usr/local/bin/
 
+# Copy .env file to the project directory
+COPY .env /root/pvg-experiments
+
 # Move to the repo directory
 WORKDIR /root/pvg-experiments
 
