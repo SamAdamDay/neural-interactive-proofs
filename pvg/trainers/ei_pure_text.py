@@ -4,8 +4,7 @@ import numpy as np
 
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
 from pvg.trainers.registry import register_trainer
-from pvg.parameters import TrainerType
-from pvg.utils.nested_array_dict import NestedArrayDict, stack_nested_array_dicts
+from pvg.utils.nested_array_dict import NestedArrayDict
 
 
 @register_trainer("pure_text_ei")
@@ -84,7 +83,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 f"Creating fine-tune job for group {group_name!r}"
             )
 
-            shared_model_group.create_fine_tune_job(
+            shared_model_group.create_supervised_fine_tune_job(
                 selected_rollouts_per_agent,
                 guess_replaced_rollouts,
             )

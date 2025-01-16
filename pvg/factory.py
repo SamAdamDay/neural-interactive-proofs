@@ -365,6 +365,7 @@ def build_scenario_instance(
         or hyper_params.trainer == "spg"
         or hyper_params.trainer == "reinforce"
         or hyper_params.trainer == "pure_text_ei"
+        or hyper_params.trainer == "pure_text_malt"
     ):
         additional_rl_components = _build_components_for_rl_trainer(
             hyper_params=hyper_params,

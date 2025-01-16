@@ -20,6 +20,7 @@ from .spg import SpgTrainer
 from .reinforce import ReinforceTrainer
 from .rl_pure_text_base import PureTextRlTrainer
 from .ei_pure_text import PureTextEiTrainer
+from .malt_pure_text import PureTextMaltTrainer
 from .registry import register_trainer, TRAINER_REGISTRY
 
 

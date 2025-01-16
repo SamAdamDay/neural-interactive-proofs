@@ -81,6 +81,11 @@ class Trainer(ABC):
         """The names of the agents in the scenario."""
         return self.scenario_instance.protocol_handler.agent_names
 
+    @property
+    def num_agents(self) -> int:
+        """The number of agents in the scenario."""
+        return len(self.agent_names)
+
     def __init__(
         self,
         hyper_params: HyperParameters,

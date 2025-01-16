@@ -96,6 +96,7 @@ from .trainers import (
     SoloAgentParameters,
     PureTextEiParameters,
     TextRlParameters,
+    PureTextMaltParameters,
 )
 from .protocol import (
     CommonProtocolParameters,
@@ -216,7 +217,10 @@ class HyperParameters(BaseHyperParameters):
         "solo_agent" or when `pretrain_agents` is `True`.
     pure_text_ei : PureTextEiParameters, optional
         Parameters for the expert iteration trainer which works with agents that call a
-        text-based APIs.
+        text-based API.
+    pure_text_malt : PureTextMaltParameters, optional
+        Parameters for the multi-agent LLM training trainer which works with agents that
+        call a text-based API.
     image_classification : ImageClassificationParameters, optional
         Parameters for the image classification task.
     code_validation : CodeValidationParameters, optional
@@ -269,6 +273,7 @@ class HyperParameters(BaseHyperParameters):
     solo_agent: Optional[SoloAgentParameters | dict] = None
     text_rl: Optional[TextRlParameters | dict] = None
     pure_text_ei: Optional[PureTextEiParameters | dict] = None
+    pure_text_malt: Optional[PureTextMaltParameters | dict] = None
 
     image_classification: Optional[ImageClassificationParameters | dict] = None
     code_validation: Optional[CodeValidationParameters | dict] = None

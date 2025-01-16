@@ -888,12 +888,12 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         self._openai_client: Optional[OpenAI] = None
 
-    def create_fine_tune_job(
+    def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
     ):
-        """Create a fine-tune job for the agent.
+        """Create a supervised fine-tune job for the agent.
 
         This method generates a dataset of examples ready to pass to the fine-tune API.
 

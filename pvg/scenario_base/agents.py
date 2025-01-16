@@ -532,12 +532,12 @@ class PureTextSharedModelGroup(ABC):
         self.fine_tuned_model_name: Optional[str] = None
 
     @abstractmethod
-    def create_fine_tune_job(
+    def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
     ):
-        """Create a fine-tune job for the agent group given sampled rollouts.
+        """Create a supervised fine-tune job for the agent group given sampled rollouts.
 
         Parameters
         ----------
