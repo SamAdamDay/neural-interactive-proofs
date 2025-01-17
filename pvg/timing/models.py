@@ -58,7 +58,7 @@ class ModelTimeable(Timeable, ABC):
         param_scale: float = 1.0,
         force_cpu: bool = False,
         batch_size: int = 64,
-        num_batches: int = 100
+        num_batches: int = 100,
     ):
         super().__init__(param_scale=param_scale)
         self.force_cpu = force_cpu

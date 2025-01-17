@@ -5,9 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pvg"
 version = "0.0.1"
-
-[tool.black]
-extend-exclude = "pvg/utils/future/typing.py"
+requires-python = ">= 3.11"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -38,7 +36,6 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
-    "pvg/utils/future/typing.py",
     "playground",
 ]
 
@@ -59,7 +56,6 @@ fixable = ["ALL"]
 unfixable = []
 
 exclude = [
-    "pvg/utils/future/*",
     "docker/*",
 ]
 
