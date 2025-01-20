@@ -490,3 +490,45 @@ def minstd_generate_pseudo_random_sequence(
         pseudo_random_sequence[..., i] = seed
 
     return pseudo_random_sequence
+
+
+def mean_for_unique_keys(
+    data: np.ndarray, key: np.ndarray, axis: int = 0
+) -> np.ndarray:
+    """Compute the mean of values grouped by unique keys.
+
+    The two input arrays `data` and `key` should have the same shape. It is assumed that
+    when two elements of `key` are equal, the corresponding elements of `data` should be
+    equal. The function selects the unique keys from `key` and computes the mean of the
+    corresponding values in `data`.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The values to aggregate.
+    key : np.ndarray
+        The keys for each value. Should have the same shape as `data`.
+    axis : int, default=0
+        The axis along which to compute the mean.
+
+    Returns
+    -------
+    mean_values : np.ndarray
+        The mean of the values for each unique key.
+    """
+
+    if data.shape != key.shape:
+        raise ValueError(
+            f"`data` and `key` must have the same shape, but got {data.shape} "
+            f"and {key.shape}"
+        )
+
+    def get_unique_mask(array: np.ndarray) -> np.ndarray:
+        """Create a mask for unique elements in a 1D array."""
+        mask = np.zeros_like(array, dtype=bool)
+        mask[np.unique(array, return_index=True)[1]] = True
+        return mask
+
+    keys_unique_mask = np.apply_along_axis(get_unique_mask, axis, key)
+
+    return np.mean(data, axis=axis, where=keys_unique_mask)

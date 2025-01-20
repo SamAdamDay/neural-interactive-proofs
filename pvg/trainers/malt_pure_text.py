@@ -19,8 +19,6 @@ import pandas as pd
 
 from jaxtyping import Int, Float, Bool
 
-import einops
-
 from pvg.parameters import HyperParameters
 from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.trainers.rl_pure_text_base import PureTextRlTrainer
@@ -28,6 +26,7 @@ from pvg.trainers.registry import register_trainer
 from pvg.scenario_base.environment import PureTextEnvironment
 from pvg.scenario_base.agents import PureTextCombinedWhole
 from pvg.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
+from pvg.utils.maths import mean_for_unique_keys
 
 
 @register_trainer("pure_text_malt")
@@ -186,7 +185,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
                     text += f", D{agent_id}: {decision}"
                     if message is not None:
                         text += f", M{agent_id}: {message[0]!r}"
-            print(indent(text, "  " * level)) # noqa: T201
+            print(indent(text, "  " * level))  # noqa: T201
             for child_partial_rollout in partial_rollout.child_partial_rollouts:
                 print_partial_rollout(child_partial_rollout, level + 1)
 
@@ -292,49 +291,35 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             is_positive_example_by_datapoint,
             has_positive_and_negative_by_datapoint,
         ):
-            mean_expected_reward[i] = einops.reduce(
-                expected_reward_datapoint, "rollout round agent -> round agent", "mean"
+            mean_expected_reward[i] = mean_for_unique_keys(
+                expected_reward_datapoint, node_id_datapoint, axis=0
             )
-            mean_is_positive_example[i] = einops.reduce(
-                is_positive_example_datapoint.astype(float),
-                "rollout round agent -> round agent",
-                "mean",
+            mean_is_positive_example[i] = mean_for_unique_keys(
+                is_positive_example_datapoint, node_id_datapoint, axis=0
             )
-            mean_has_positive_and_negative[i] = einops.reduce(
-                has_positive_and_negative_datapoint.astype(float),
-                "rollout round agent -> round agent",
-                "mean",
+            mean_has_positive_and_negative[i] = mean_for_unique_keys(
+                has_positive_and_negative_datapoint, node_id_datapoint, axis=0
             )
 
+        log_stats[f"mean_expected_reward_by_round"] = pd.DataFrame(
+            np.mean(mean_expected_reward, axis=0), columns=self.agent_names
+        )
+        log_stats[f"std_expected_reward_by_round"] = pd.DataFrame(
+            np.std(mean_expected_reward, axis=0), columns=self.agent_names
+        )
+        log_stats[f"mean_is_positive_example_by_round"] = pd.DataFrame(
+            np.mean(mean_is_positive_example, axis=0), columns=self.agent_names
+        )
+        log_stats[f"std_is_positive_example_by_round"] = pd.DataFrame(
+            np.std(mean_is_positive_example, axis=0), columns=self.agent_names
+        )
+        log_stats[f"mean_has_positive_and_negative_by_round"] = pd.DataFrame(
+            np.mean(mean_has_positive_and_negative, axis=0), columns=self.agent_names
+        )
+        log_stats[f"std_has_positive_and_negative_by_round"] = pd.DataFrame(
+            np.std(mean_has_positive_and_negative, axis=0), columns=self.agent_names
+        )
         for agent_id, agent_name in enumerate(self.agent_names):
-            log_stats[f"{agent_name}.mean_expected_reward_by_round"] = pd.DataFrame(
-                np.mean(mean_expected_reward[..., agent_id], axis=0),
-                columns=[f"{agent_name}.mean_expected_reward"],
-            )
-            log_stats[f"{agent_name}.std_expected_reward_by_round"] = pd.DataFrame(
-                np.std(mean_expected_reward[..., agent_id], axis=0),
-                columns=[f"{agent_name}.std_expected_reward"],
-            )
-            log_stats[f"{agent_name}.mean_is_positive_example_by_round"] = pd.DataFrame(
-                np.mean(mean_is_positive_example[..., agent_id], axis=0),
-                columns=[f"{agent_name}.mean_is_positive_example"],
-            )
-            log_stats[f"{agent_name}.std_is_positive_example_by_round"] = pd.DataFrame(
-                np.std(mean_is_positive_example[..., agent_id], axis=0),
-                columns=[f"{agent_name}.std_is_positive_example"],
-            )
-            log_stats[f"{agent_name}.mean_has_positive_and_negative_by_round"] = (
-                pd.DataFrame(
-                    np.mean(mean_has_positive_and_negative[..., agent_id], axis=0),
-                    columns=[f"{agent_name}.mean_has_positive_and_negative"],
-                )
-            )
-            log_stats[f"{agent_name}.std_has_positive_and_negative_by_round"] = (
-                pd.DataFrame(
-                    np.std(mean_has_positive_and_negative[..., agent_id], axis=0),
-                    columns=[f"{agent_name}.std_has_positive_and_negative"],
-                )
-            )
             log_stats[f"{agent_name}.mean_expected_reward"] = np.mean(
                 mean_expected_reward[..., agent_id]
             )
