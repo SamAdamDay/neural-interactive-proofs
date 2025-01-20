@@ -1,5 +1,10 @@
 # PVG Experiments
 
+## Requirements
+
+- Python version at least `3.11` is required.
+
+
 ## Installation (development)
 
 1. Clone the repo
