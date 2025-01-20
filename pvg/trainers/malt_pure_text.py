@@ -52,6 +52,22 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             The rollouts sampled in this iteration.
         """
 
+        for group_name, shared_model_group in self.shared_model_groups.items():
+
+            rollouts_per_agent: dict[str, list[NestedArrayDict]] = {}
+            for agent_id, agent_name in enumerate(shared_model_group.agent_names):
+                rollouts_per_agent[agent_name] = []
+
+                # has_positive_and_negative = rollouts[
+                #     "agents", "has_positive_and_negative"
+                # ]
+
+            self.settings.logger.info(
+                f"Creating fine-tune job for group {group_name!r}"
+            )
+
+            shared_model_group.create_dpo_fine_tune_job(rollouts_per_agent)
+
     @staticmethod
     def _sample_rollouts_for_single_environment(
         args: tuple[
@@ -292,13 +308,15 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             has_positive_and_negative_by_datapoint,
         ):
             mean_expected_reward[i] = mean_for_unique_keys(
-                expected_reward_datapoint, node_id_datapoint, axis=0
+                expected_reward_datapoint, node_id_datapoint[..., None], axis=0
             )
             mean_is_positive_example[i] = mean_for_unique_keys(
-                is_positive_example_datapoint, node_id_datapoint, axis=0
+                is_positive_example_datapoint, node_id_datapoint[..., None], axis=0
             )
             mean_has_positive_and_negative[i] = mean_for_unique_keys(
-                has_positive_and_negative_datapoint, node_id_datapoint, axis=0
+                has_positive_and_negative_datapoint,
+                node_id_datapoint[..., None],
+                axis=0,
             )
 
         log_stats[f"mean_expected_reward_by_round"] = pd.DataFrame(

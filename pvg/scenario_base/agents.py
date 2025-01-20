@@ -539,6 +539,9 @@ class PureTextSharedModelGroup(ABC):
     ):
         """Create a supervised fine-tune job for the agent group given sampled rollouts.
 
+        This method is used to do supervised fine-tuning (as opposed to other methods of
+        fine-tuning, like reinforcement learning).
+
         Parameters
         ----------
         rollouts_per_agent : dict[str, NestedArrayDict]
@@ -546,6 +549,20 @@ class PureTextSharedModelGroup(ABC):
         guess_replaced_rollouts : dict[str, NestedArrayDict], default={}
             Additional rollouts for the verifier agents where the verifier's guess is to
             be replaced with the true label.
+        """
+
+    @abstractmethod
+    def create_dpo_fine_tune_job(
+        self,
+        rollouts_per_agent: dict[str, list[NestedArrayDict]],
+    ):
+        """Create a DPO fine-tune job for the agent group given sampled rollouts.
+
+        Parameters
+        ----------
+        rollouts_per_agent : dict[str, list[NestedArrayDict]]
+            The data for each agent in the group. Each agent's data is a list of
+            individual rollouts, which may vary in length.
         """
 
     @abstractmethod

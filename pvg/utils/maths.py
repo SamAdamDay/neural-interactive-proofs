@@ -492,6 +492,32 @@ def minstd_generate_pseudo_random_sequence(
     return pseudo_random_sequence
 
 
+def is_broadcastable(shape_1: tuple, shape_2: tuple) -> bool:
+    """Check if two shapes are broadcastable.
+
+    Two shapes are broadcastable if when they are aligned from the right, corresponding
+    dimensions are either equal or one of them is 1.
+
+    Parameters
+    ----------
+    shape_1 : tuple
+        The shape of the first array.
+    shape_2 : tuple
+        The shape of the second array.
+
+    Returns
+    -------
+    is_broadcastable : bool
+        True if the shapes are broadcastable, False otherwise.
+    """
+
+    # Adapted from https://stackoverflow.com/a/24769712
+    for a, b in zip(shape_1[::-1], shape_2[::-1]):
+        if a != 1 and b != 1 and a != b:
+            return False
+    return True
+
+
 def mean_for_unique_keys(
     data: np.ndarray, key: np.ndarray, axis: int = 0
 ) -> np.ndarray:
@@ -507,7 +533,7 @@ def mean_for_unique_keys(
     data : np.ndarray
         The values to aggregate.
     key : np.ndarray
-        The keys for each value. Should have the same shape as `data`.
+        The keys for each value. Must be broadcastable with `data`.
     axis : int, default=0
         The axis along which to compute the mean.
 
@@ -517,9 +543,9 @@ def mean_for_unique_keys(
         The mean of the values for each unique key.
     """
 
-    if data.shape != key.shape:
+    if not is_broadcastable(data.shape, key.shape):
         raise ValueError(
-            f"`data` and `key` must have the same shape, but got {data.shape} "
+            f"`data` and `key` must be broadcastable, but got shapes {data.shape} "
             f"and {key.shape}"
         )
 
