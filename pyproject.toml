@@ -7,7 +7,7 @@ name = "pvg"
 version = "0.0.1"
 
 [tool.black]
-extend-exclude = "pvg/utils/future/typing.py"
+extend-exclude = ["pvg/utils/future/typing.py", "pvg/utils/runtime_module.py"]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -40,6 +40,7 @@ exclude = [
     "venv",
     "pvg/utils/future/typing.py",
     "playground",
+    "pvg/utils/runtime_module.py"
 ]
 
 # Same as Black.

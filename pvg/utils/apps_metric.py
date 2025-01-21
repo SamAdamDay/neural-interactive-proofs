@@ -13,9 +13,7 @@ from datetime import datetime
 import json
 import multiprocessing
 
-# import warnings
-# warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
-from pvg.utils.bugfix import RuntimeModule
+from pvg.utils.runtime_module import RuntimeModule
 
 
 class CODE_TYPE(Enum):
@@ -45,7 +43,7 @@ def wrapper(result, problem, solution, evaluate, debug):
             problem, test=solution, evaluate=evaluate, debug=debug
         )
         result.append((results, outputs))
-    except Exception as e:
+    except Exception:
         result.append((None, None))
 
 
@@ -94,7 +92,7 @@ def check_correctness(
         # print(f"Correctness check took {elapsed_time}.")
         signal.alarm(0)
     except TimeoutException:
-        print(f"The function run_test timed out after {timeout} seconds.")
+        print(f"The function run_test timed out after {timeout} seconds.")  # noqa: T201
         results, outputs = None, None
 
     # if results is None and evaluate is None:
@@ -121,7 +119,7 @@ def run_test(
     reliability_guard()
 
     if debug:
-        print(f"start = {datetime.now().time()}")
+        print(f"start = {datetime.now().time()}")  # noqa: T201
 
     if evaluate is not None:
         in_outs = {"inputs": evaluate, "outputs": [None for _ in evaluate]}
@@ -141,7 +139,7 @@ def run_test(
             method_name = original_in_outs["fn_name"]
 
     if debug:
-        print(f"loaded input_output = {datetime.now().time()}")
+        print(f"loaded input_output = {datetime.now().time()}")  # noqa: T201
 
     if test is None:
         return in_outs, None
@@ -150,12 +148,12 @@ def run_test(
         outputs = []
         sol = "import sys\nimport time\nimport itertools\nfrom itertools import accumulate, product, permutations, combinations\nimport collections\nfrom collections import Counter, OrderedDict, deque, defaultdict, ChainMap\nfrom functools import lru_cache\nimport math\nfrom math import sqrt, sin, cos, tan, ceil, fabs, floor, gcd, exp, log, log2\nimport fractions\nfrom typing import List, Tuple\nimport numpy as np\nimport random\nimport heapq\nfrom heapq import *\n"
         if debug:
-            print(f"loading test code = {datetime.now().time()}")
+            print(f"loading test code = {datetime.now().time()}")  # noqa: T201
 
         if which_type == CODE_TYPE.call_based:
             sol += test
             if debug:
-                print(f"sol = {sol}")
+                print(f"sol = {sol}")  # noqa: T201
             signal.alarm(timeout)
             try:
                 tmp_sol = RuntimeModule.from_string("tmp_sol", "", sol)
@@ -167,7 +165,7 @@ def run_test(
             except Exception as e:
                 signal.alarm(0)
                 if debug:
-                    print(f"type 0 compilation error = {e}")
+                    print(f"type 0 compilation error = {e}")  # noqa: T201
                 results.append(-2)
                 return None, None
             signal.alarm(0)
@@ -200,7 +198,7 @@ def run_test(
 
             sol += tmp_test
             if debug:
-                print(f"sol = {sol}")
+                print(f"sol = {sol}")  # noqa: T201
             method_name = "code"
             signal.alarm(timeout)
             try:
@@ -210,20 +208,20 @@ def run_test(
             except Exception as e:
                 signal.alarm(0)
                 if debug:
-                    print(f"type 1 compilation error = {e}")
+                    print(f"type 1 compilation error = {e}")  # noqa: T201
                 results.append(-2)
                 outputs.append(None)
                 return None, None
             signal.alarm(0)
         if debug:
-            print(f"get method = {datetime.now().time()}")
+            print(f"get method = {datetime.now().time()}")  # noqa: T201
 
         try:
             method = getattr(tmp, method_name)  # get_attr second arg must be str
-        except:
+        except Exception:
             signal.alarm(0)
             e = sys.exc_info()
-            print(f"unable to get function error = {e}")
+            print(f"unable to get function error = {e}")  # noqa: T201
             results.append(-2)
             return None, None
 
@@ -232,25 +230,25 @@ def run_test(
             try:
                 if isinstance(inputs[0], dict):
                     inputs = [{int(k): v for k, v in inputs[0].items()}]
-            except:
-                True
+            except Exception:
+                pass
             try:
                 if isinstance(in_outs["outputs"][index], dict):
                     in_outs["outputs"][index] = [
                         {int(k): v for k, v in in_outs["outputs"][index].items()}
                     ]
-            except:
-                True
+            except Exception:
+                pass
             try:
                 if isinstance(in_outs["outputs"][index][0], dict):
                     in_outs["outputs"][index] = [
                         {int(k): v for k, v in in_outs["outputs"][index][0].items()}
                     ]
-            except:
-                True
+            except Exception:
+                pass
 
             if debug:
-                print(
+                print(  # noqa: T201
                     f"time: {datetime.now().time()} testing index = {index}  inputs = {inputs}, {type(inputs)}. type = {which_type}"
                 )
             if which_type == CODE_TYPE.call_based:  # Call-based
@@ -284,8 +282,8 @@ def run_test(
                                 [list(x) for x in output]
                                 == in_outs["outputs"][index][0]
                             )
-                    except:
-                        True
+                    except Exception:
+                        pass
 
                     results.append(tmp_result)
 
@@ -295,7 +293,7 @@ def run_test(
                     signal.alarm(0)
                     faulthandler.disable()
                     if debug:
-                        print(
+                        print(  # noqa: T201
                             f"Standard input runtime error or time limit exceeded error = {e}"
                         )
                     outputs.append(None)
@@ -305,7 +303,7 @@ def run_test(
                 faulthandler.disable()
                 signal.alarm(0)
                 if debug:
-                    print(
+                    print(  # noqa: T201
                         f"outputs = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                     )
 
@@ -328,7 +326,7 @@ def run_test(
                     except Exception as e:
                         # runtime error or took too long
                         signal.alarm(0)
-                        print(
+                        print(  # noqa: T201
                             f"Call-based runtime error or time limit exceeded error = {repr(e)}{e}"
                         )
                         outputs.append(None)
@@ -339,11 +337,11 @@ def run_test(
                     if debug:
                         nl = "\n"
                         if not isinstance(inputs, list):
-                            print(
+                            print(  # noqa: T201
                                 f"not passed output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs.replace(nl,' new-line ')}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                             )
                         else:
-                            print(
+                            print(  # noqa: T201
                                 f"not passed output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                             )
 
@@ -359,7 +357,7 @@ def run_test(
                     continue
 
                 if passed and debug:
-                    print(
+                    print(  # noqa: T201
                         f"==> output = {output}, test outputs = {in_outs['outputs'][index]}"
                     )
 
@@ -379,7 +377,7 @@ def run_test(
                             )
                 except Exception as e:
                     if debug:
-                        print(f"Failed check1 exception = {e}")
+                        print(f"Failed check1 exception = {e}")  # noqa: T201
                     pass
 
                 if tmp_result == True:
@@ -408,7 +406,7 @@ def run_test(
                         tmp_result = tmp_result or (output == in_outs["outputs"][index])
                 except Exception as e:
                     if debug:
-                        print(f"Failed check2 exception = {e}")
+                        print(f"Failed check2 exception = {e}")  # noqa: T201
                     pass
 
                 if tmp_result == True:
@@ -422,11 +420,11 @@ def run_test(
                 if debug:
                     nl = "\n"
                     if not isinstance(inputs, list):
-                        print(
+                        print(  # noqa: T201
                             f"output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs.replace(nl,' new-line ')}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                         )
                     else:
-                        print(
+                        print(  # noqa: T201
                             f"output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                         )
 
@@ -440,7 +438,7 @@ def run_test(
                         tmp_result = tmp_result or (output == in_outs["outputs"][index])
                 except Exception as e:
                     if debug:
-                        print(f"Failed check3 exception = {e}")
+                        print(f"Failed check3 exception = {e}")  # noqa: T201
                     pass
 
                 try:
@@ -450,7 +448,7 @@ def run_test(
                         (len(output_float) == len(gt_float))
                         and np.allclose(output_float, gt_float)
                     )
-                except Exception as e:
+                except Exception:
                     pass
                 try:
                     if isinstance(output[0], list):
@@ -460,7 +458,7 @@ def run_test(
                             (len(output_float) == len(gt_float))
                             and np.allclose(output_float, gt_float)
                         )
-                except Exception as e:
+                except Exception:
                     pass
 
                 if tmp_result == True:
@@ -478,7 +476,7 @@ def run_test(
                     tmp_result = output == in_outs["outputs"][index]
                 except Exception as e:
                     if debug:
-                        print(f"Failed check4 exception = {e}")
+                        print(f"Failed check4 exception = {e}")  # noqa: T201
                     continue
 
                 if tmp_result == True:
@@ -503,7 +501,7 @@ def run_test(
                     )
                 except Exception as e:
                     if debug:
-                        print(f"Failed check5 exception = {e}")
+                        print(f"Failed check5 exception = {e}")  # noqa: T201
 
                 # if they are all numbers, round so that similar numbers are treated as identical
                 try:
@@ -516,21 +514,21 @@ def run_test(
                     )
                 except Exception as e:
                     if debug:
-                        print(f"Failed check6 exception = {e}")
+                        print(f"Failed check6 exception = {e}")  # noqa: T201
 
                 if tmp_result == True and debug:
-                    print("PASSED")
+                    print("PASSED")  # noqa: T201
 
                 results.append(tmp_result)
 
                 if debug:
                     nl = "\n"
                     if not isinstance(inputs, list):
-                        print(
+                        print(  # noqa: T201
                             f"output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs.replace(nl,' new-line ')}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                         )
                     else:
-                        print(
+                        print(  # noqa: T201
                             f"output = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                         )
 
@@ -585,7 +583,7 @@ def call_method(method, inputs):
     def _inner_call_method(_method):
         try:
             return _method()
-        except SystemExit as e:
+        except SystemExit:
             pass
         finally:
             pass
