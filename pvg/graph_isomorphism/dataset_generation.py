@@ -400,7 +400,7 @@ def _generate_isomorphic_graphs(
     non_iso_adjacencies: Int32[Tensor, "pair batch node1 node2"],
     non_iso_sizes: Int32[Tensor, "batch"],
 ) -> tuple[Int32[Tensor, "pair batch node1 node2"], Int32[Tensor, "batch"]]:
-    """Generate isomorphic graphs
+    """Generate isomorphic graphs.
 
     Parameters
     ----------
@@ -429,7 +429,9 @@ def _generate_isomorphic_graphs(
     max_graph_size = max(config.graph_sizes)
 
     # Select pairs of graphs from the non-isomorphic graphs
-    print(f"[{num_configs+1}/{num_configs+2}] Isomorphic from non-isomorphic")
+    print(  # noqa: T201
+        f"[{num_configs+1}/{num_configs+2}] Isomorphic from non-isomorphic"
+    )
     batch_index = torch.randint(0, non_iso_adjacencies.shape[1], (num_from_non_iso,))
     pair_index = torch.randint(0, 2, (num_from_non_iso,))
     adjacencies_from_non_iso = einops.repeat(
@@ -450,7 +452,7 @@ def _generate_isomorphic_graphs(
     )
 
     # Generate new graphs
-    print(f"[{num_configs+2}/{num_configs+2}] Isomorphic new")
+    print(f"[{num_configs+2}/{num_configs+2}] Isomorphic new")  # noqa: T201
     adjacencies_new_list = []
     sizes_new_list = []
     for i, (graph_size, edge_probability) in enumerate(
@@ -568,4 +570,4 @@ def generate_gi_dataset(
     elapsed_time = datetime.now() - start_time
     elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
 
-    print(f"Done in {elapsed_time}")
+    print(f"Done in {elapsed_time}")  # noqa: T201

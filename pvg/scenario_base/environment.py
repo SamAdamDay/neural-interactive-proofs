@@ -1,10 +1,11 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, ClassVar
+from typing import Optional, Any, Literal
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
+from math import prod
 
 import torch
 from torch import Tensor
@@ -37,9 +38,10 @@ from pvg.scenario_base import (
     NestedArrayDictDataset,
 )
 from pvg.protocols import ProtocolHandler
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.data import VariableDataCycler
+from pvg.utils.types import NumpyStringDtype, String
 from pvg.utils.nested_array_dict import (
     NestedArrayDict,
     NumpySpec,
@@ -49,6 +51,7 @@ from pvg.utils.nested_array_dict import (
     FloatArraySpec,
     BoolArraySpec,
 )
+from pvg.utils.future import TypedDict, NotRequired
 
 
 class Environment(ABC):
@@ -56,7 +59,7 @@ class Environment(ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -72,38 +75,53 @@ class Environment(ABC):
     def steps_per_env_per_iteration(self) -> int:
         """The number of steps per batched environment in each iteration."""
         # The number of environments is the number of episodes we can fit in a batch
-        if self.params.rl.steps_per_env_per_iteration is not None:
-            steps_per_env_per_iteration = self.params.rl.steps_per_env_per_iteration
+        if self.hyper_params.rl.steps_per_env_per_iteration is not None:
+            steps_per_env_per_iteration = (
+                self.hyper_params.rl.steps_per_env_per_iteration
+            )
             if (
-                self.params.rl.frames_per_batch is not None
-                and self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0
+                self.hyper_params.rl.frames_per_batch is not None
+                and self.hyper_params.rl.frames_per_batch % steps_per_env_per_iteration
+                != 0
             ):
                 raise ValueError(
                     f"The parameter `rl.steps_per_env_per_iteration` must divide "
                     f"`rl.frames_per_batch` without remainder, but got "
                     f"{steps_per_env_per_iteration} and "
-                    f"{self.params.rl.frames_per_batch}."
+                    f"{self.hyper_params.rl.frames_per_batch}."
                 )
         else:
             steps_per_env_per_iteration = self.protocol_handler.max_message_rounds
             if (
-                self.params.rl.frames_per_batch is not None
-                and self.params.rl.frames_per_batch % steps_per_env_per_iteration != 0
+                self.hyper_params.rl.frames_per_batch is not None
+                and self.hyper_params.rl.frames_per_batch % steps_per_env_per_iteration
+                != 0
             ):
                 raise ValueError(
                     f"The maximum number of message rounds must divide "
                     f"`rl.frames_per_batch` without remainder, but got "
                     f"{steps_per_env_per_iteration} and "
-                    f"{self.params.rl.frames_per_batch}."
+                    f"{self.hyper_params.rl.frames_per_batch}."
                 )
         return steps_per_env_per_iteration
 
     @property
     def frames_per_batch(self) -> int:
-        if self.params.rl.frames_per_batch is not None:
-            return self.params.rl.frames_per_batch
+        """The number of frames to sample per training iteration.
+
+        This can be set directly with `rl.frames_per_batch`, or it can be determined by
+        `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
+        """
+        if self.hyper_params.rl.frames_per_batch is not None:
+            return self.hyper_params.rl.frames_per_batch
         else:
-            return len(self.dataset) * self.steps_per_env_per_iteration
+            if self.hyper_params.rl.rollouts_per_iteration is not None:
+                return (
+                    self.hyper_params.rl.rollouts_per_iteration
+                    * self.steps_per_env_per_iteration
+                )
+            else:
+                return len(self.dataset) * self.steps_per_env_per_iteration
 
     @property
     def num_envs(self) -> int:
@@ -142,19 +160,18 @@ class Environment(ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: Dataset,
         protocol_handler: ProtocolHandler,
         *,
         train: bool = True,
     ):
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
         self.train = train
         self.dataset = dataset
-        self.data_cycler: Optional[VariableDataCycler] = None
 
         self.num_agents = len(self.protocol_handler.agent_names)
 
@@ -209,7 +226,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -221,11 +238,13 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         Whether the environment is used for training or evaluation.
     """
 
+    dataset: TensorDictDataset
+
     _int_dtype: torch.dtype = torch.int
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: TensorDictDataset,
         protocol_handler: ProtocolHandler,
@@ -236,7 +255,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         # Call the `EnvBase` constructor
         super(nn.Module, self).__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
             dataset=dataset,
@@ -259,7 +278,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     @property
     @abstractmethod
     def main_message_space_shape(self) -> tuple:
-        """The shape of the main message space used by the agents to communicate
+        """The shape of the main message space used by the agents to communicate.
 
         This is typically informed by the type of data in the environment. E.g. for
         images this might have shape "height width"
@@ -268,7 +287,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     @property
     @abstractmethod
     def main_message_out_key(self) -> str:
-        """The tensordict key which contains the main message sent by each agent
+        """The tensordict key which contains the main message sent by each agent.
 
         This key is the main output of an agent. Typically, the agent's forward pass
         will output logits for this key, which will then be selected from.
@@ -276,7 +295,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     @property
     def message_history_shape(self) -> tuple:
-        """The shape of the message history and 'x' tensors
+        """The shape of the message history and 'x' tensors.
 
         This is used to make the specification for these.
 
@@ -289,7 +308,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             self.num_envs,
             self.protocol_handler.max_message_rounds,
             self.protocol_handler.num_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             *self.main_message_space_shape,
         )
 
@@ -305,6 +324,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             * 1: The verifier can only decide to continue interacting.
             * 2: The verifier can only make a guess.
         - `x`: The message history.
+        - `seed`: A shared seed for the environment.
         - `message`: The next message.
         - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
@@ -334,6 +354,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 dtype=torch.float,
                 device=self.device,
             ),
+            seed=DiscreteTensorSpec(
+                2**16,
+                shape=(self.num_envs,),
+                dtype=torch.long,
+                device=self.device,
+            ),
             message_history=BinaryDiscreteTensorSpec(
                 self.message_history_shape[-1],
                 shape=self.message_history_shape,
@@ -361,15 +387,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             )
 
         # Add the linear message history, if it is included
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
-                self.params.d_linear_message_space,
+                self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
                     self.protocol_handler.max_message_rounds,
                     self.protocol_handler.num_message_channels,
-                    self.params.message_size,
-                    self.params.d_linear_message_space,
+                    self.hyper_params.message_size,
+                    self.hyper_params.d_linear_message_space,
                 ),
                 dtype=torch.float,
                 device=self.device,
@@ -397,6 +423,24 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
+                main_message_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        self.protocol_handler.num_message_channels,
+                        self.hyper_params.message_size,
+                        prod(self.main_message_space_shape),
+                    ),
+                    device=self.device,
+                ),
+                decision_logits=UnboundedContinuousTensorSpec(
+                    shape=(
+                        self.num_envs,
+                        self.num_agents,
+                        3,
+                    ),
+                    device=self.device,
+                ),
                 shape=(self.num_envs, self.num_agents),
                 device=self.device,
             ),
@@ -404,14 +448,14 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             device=self.device,
         )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
-                self.params.d_linear_message_space,
+                self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
                     self.num_agents,
                     self.protocol_handler.num_message_channels,
-                    self.params.message_size,
+                    self.hyper_params.message_size,
                 ),
                 dtype=torch.long,
                 device=self.device,
@@ -433,6 +477,12 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             y=BinaryDiscreteTensorSpec(
                 1,
                 shape=(self.num_envs, 1),
+                dtype=torch.long,
+                device=self.device,
+            ),
+            datapoint_id=DiscreteTensorSpec(
+                len(self.dataset),
+                shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
             ),
@@ -464,12 +514,27 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     def _get_done_spec(self) -> TensorSpec:
         """Get the specification of the agent done signals.
 
+        We have both shared and agent-specific done signals. This is for convenience,
+        where the shared done signal indicates that all relevant agents are done and so
+        the environment should be reset.
+
         Returns
         -------
         done_spec : TensorSpec
             The done specification.
         """
         return CompositeSpec(
+            # TODO: This leads to issues because TorchRL calls `any` on the done signal
+            agents=CompositeSpec(
+                done=BinaryDiscreteTensorSpec(
+                    self.num_agents,
+                    shape=(self.num_envs, self.num_agents),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                shape=(self.num_envs, self.num_agents),
+                device=self.device,
+            ),
             done=BinaryDiscreteTensorSpec(
                 self.num_envs,
                 shape=(self.num_envs,),
@@ -538,13 +603,13 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         # Do the same for the linear message space, if it is included
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             next_td = self._compute_message_history_and_next_message(
                 env_td,
                 next_td,
                 message_out_key="linear_message_selected",
                 message_in_key="linear_message",
-                message_shape=(self.params.d_linear_message_space,),
+                message_shape=(self.hyper_params.d_linear_message_space,),
                 message_history_key="linear_message_history",
             )
 
@@ -552,15 +617,16 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         next_td["x"] = next_td["message_history"].clone()
 
         # Compute the done signal and reward
-        done, terminated, reward = self.protocol_handler.step_interaction_protocol(
-            env_td
+        shared_done, agent_done, terminated, reward = (
+            self.protocol_handler.step_interaction_protocol(env_td)
         )
-        done = done | terminated  # TODO: Improve handling of terminated
-        next_td.set("done", done)
+        shared_done = shared_done | terminated  # TODO: Improve handling of terminated
+        next_td.set("done", shared_done)
+        next_td.set(("agents", "done"), agent_done)
         next_td.set("terminated", terminated)
         next_td.set(("agents", "reward"), reward)
         next_td.set(
-            "decision_restriction", torch.zeros_like(done, dtype=self._int_dtype)
+            "decision_restriction", torch.zeros_like(shared_done, dtype=self._int_dtype)
         )
 
         return next_td
@@ -575,7 +641,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         message_history_key: str,
         message_shape: tuple[int, ...],
     ) -> TensorDictBase:
-        """Compute the new message history and next message for given keys
+        """Compute the new message history and next message for given keys.
 
         This is a generic method for updating one-hot encoded next message and message
         history tensors given a choice of message for each agent.
@@ -613,15 +679,18 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         # ... round channel position {message_shape_str}
         message_history = env_td.get(message_history_key)
-        round: Int[Tensor, "..."] = env_td.get("round")
+        round_id: Int[Tensor, "..."] = env_td.get("round")
+        seed: Int[Tensor, "..."] = env_td.get("seed")
         message_selected: Int[Tensor, "... agent channel position"] = env_td.get(
             ("agents", message_out_key)
         )
 
         # Get the mask for the active agents per channel in the current round
         # (... agent channel)
-        active_agents_mask = self.protocol_handler.get_active_agents_mask_from_rounds(
-            round
+        active_agents_mask = (
+            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+                round_id, seed
+            )
         )
 
         # Sum up the messages from the agents whose turn it is. If two agents select the
@@ -638,7 +707,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         # Get a mask for which round it is
-        round_mask = F.one_hot(round, self.protocol_handler.max_message_rounds).bool()
+        round_mask = F.one_hot(
+            round_id, self.protocol_handler.max_message_rounds
+        ).bool()
 
         # Reshape it so that it looks like the message history with 1's for the message
         # space dims and channel and position dim
@@ -656,7 +727,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         return next_td
 
     def _reset(self, env_td: Optional[TensorDictBase] = None) -> TensorDictBase:
-        """(Partially) reset the environment.
+        """Reset the environment (partially).
 
         For each episode which is done, takes a new sample from the dataset and resets
         the episode.
@@ -673,7 +744,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         """
 
         # If no tensordict is given, we're starting afresh
-        if env_td is None or not "done" in env_td.keys():
+        if env_td is None or "done" not in env_td.keys():
             observation_zeros = self.observation_spec.zero()
             state_zeros = self.state_spec.zero()
             done_zeros = self.done_spec.zero()
@@ -736,7 +807,11 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The reset environment tensordict.
         """
 
+        env_td["seed"][mask] = torch.randint(
+            0, self.observation_spec["seed"].n, (mask.sum().item(),), device=self.device
+        )
         env_td["y"][mask] = data_batch["y"].unsqueeze(-1)
+        env_td["datapoint_id"][mask] = data_batch["id"]
         env_td["message_history"][mask] = torch.zeros_like(
             env_td["message_history"][mask]
         )
@@ -744,6 +819,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         env_td["message"][mask] = 0
         env_td["round"][mask] = 0
         env_td["done"][mask] = False
+        env_td["agents", "done"][mask] = False
         env_td["terminated"][mask] = False
         env_td["decision_restriction"][mask] = 0
 
@@ -759,10 +835,49 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         self.rng = torch.manual_seed(seed)
 
 
+class PromptMessage(TypedDict):
+    """A message in the prompt for a language model API.
+
+    The prompt is a list of messages, where each message is a dictionary with keys as
+    follows.
+
+    Attributes
+    ----------
+    role : Literal["system", "assistant", "user"]
+        The role of the message sender.
+    content : str
+        The content of the message.
+    name : str, optional
+        The name of the message sender.
+    """
+
+    role: Literal["system", "assistant", "user"]
+    content: str
+    name: NotRequired[str]
+
+
 class PureTextEnvironment(Environment, ABC):
     """Base for environments which handle non-tokenised text with nested array dicts."""
 
     dataset: NestedArrayDictDataset
+
+    @property
+    def max_prompt_messages(self) -> int:
+        """The maximum number messages which can be sent in a prompt to an agent.
+
+        The prompt for the agent is constructed from the message history, but may be longer
+        than the number of rounds because messages can be split by channel, and system
+        messages can be included.
+
+        This gives a rough upper bound on the number of messages which can be sent in a
+        prompt. Hopefully this is enough to cover all cases.
+        """
+
+        return 2 * (
+            self.protocol_handler.max_message_rounds
+            * self.protocol_handler.num_message_channels
+            + 10
+        )
 
     @property
     @abstractmethod
@@ -770,6 +885,7 @@ class PureTextEnvironment(Environment, ABC):
         """The specification for the observation keys."""
         return CompositeArraySpec(
             round=IntArraySpec(*self.batch_size, "batch"),
+            seed=IntArraySpec(*self.batch_size, "batch"),
             message_history=StringArraySpec(
                 (
                     *self.batch_size,
@@ -777,6 +893,22 @@ class PureTextEnvironment(Environment, ABC):
                     self.protocol_handler.num_message_channels,
                 ),
                 "batch round channel",
+            ),
+            message_agent_id=IntArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_message_channels,
+                ),
+                "batch round channel",
+            ),
+            raw_message_history=StringArraySpec(
+                (
+                    *self.batch_size,
+                    self.protocol_handler.max_message_rounds,
+                    self.protocol_handler.num_agents,
+                ),
+                "batch round agent",
             ),
             shape=self.batch_size,
             dim_names="batch",
@@ -797,6 +929,22 @@ class PureTextEnvironment(Environment, ABC):
                         self.protocol_handler.num_message_channels,
                     ),
                     "batch agent channel",
+                ),
+                raw_message=StringArraySpec(
+                    (
+                        *self.batch_size,
+                        self.num_agents,
+                    ),
+                    "batch agent",
+                ),
+                prompt=StringArraySpec(
+                    (
+                        *self.batch_size,
+                        self.protocol_handler.num_agents,
+                        self.max_prompt_messages,
+                        len(PromptMessage.__annotations__),
+                    ),
+                    "batch agent message field",
                 ),
                 retry_count=IntArraySpec(
                     (
@@ -826,6 +974,7 @@ class PureTextEnvironment(Environment, ABC):
         """The specification for the state keys."""
         return CompositeArraySpec(
             y=IntArraySpec(*self.batch_size, "batch"),
+            datapoint_id=IntArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -847,10 +996,21 @@ class PureTextEnvironment(Environment, ABC):
 
     @cached_property
     def done_spec(self) -> CompositeArraySpec:
-        """The specification for the done keys (done and terminated)."""
+        """The specification for the done keys (done and terminated).
+
+        We have both shared and agent-specific done signals. This is for convenience,
+        where the shared done signal indicates that all relevant agents are done and so
+        the environment should be reset.
+        """
         return CompositeArraySpec(
+            agents=CompositeArraySpec(
+                done=BoolArraySpec((*self.batch_size, self.num_agents), "batch agent"),
+                shape=(*self.batch_size, self.num_agents),
+                dim_names="batch agent",
+            ),
             done=BoolArraySpec(*self.batch_size, "batch"),
             terminated=BoolArraySpec(*self.batch_size, "batch"),
+            padding=BoolArraySpec(*self.batch_size, "batch"),
             shape=self.batch_size,
             dim_names="batch",
         )
@@ -880,11 +1040,12 @@ class PureTextEnvironment(Environment, ABC):
             if key not in [("round",), ("message_history",)]:
                 next_state[key] = env_state[key]
 
-        round = env_state["round"]
-        next_state["round"] = round + 1
+        round_id = env_state["round"]
+        next_state["round"] = round_id + 1
 
         # Add the latest messages to the message history
         message_history = env_state["message_history"].copy()
+        message_agent_id = env_state["message_agent_id"].copy()
         for channel_id, channel_name in enumerate(
             self.protocol_handler.message_channel_names
         ):
@@ -895,20 +1056,29 @@ class PureTextEnvironment(Environment, ABC):
                 if message is not None:
                     if who_messaged is not None:
                         raise RuntimeError(
-                            f"Agents {who_messaged} and {agent_name} both messaged on "
-                            f"channel {channel_name}. "
+                            f"Agents {who_messaged!r} and {agent_name!r} both messaged "
+                            f"on channel {channel_name!r}. "
                         )
                     who_messaged = agent_name
-                    message_history[0, round, channel_id] = message
+                    message_history[0, round_id.item(), channel_id] = message
+                    message_agent_id[0, round_id.item(), channel_id] = agent_id
 
         next_state["message_history"] = message_history
+        next_state["message_agent_id"] = message_agent_id
+
+        # Add the raw messages to the raw message history
+        raw_message_history = env_state["raw_message_history"].copy()
+        raw_message_history[0, round_id.item()] = env_state["agents", "raw_message"][0]
+        next_state["raw_message_history"] = raw_message_history
 
         # Step the interaction protocol to obtain the next done and reward signals
-        done, terminated, reward = self.protocol_handler.step_interaction_protocol(
-            env_state
+        shared_done, agent_done, terminated, reward = (
+            self.protocol_handler.step_interaction_protocol(env_state)
         )
-        next_state["done"] = done.numpy()
+        next_state["done"] = shared_done.numpy()
+        next_state["agents", "done"] = agent_done.numpy()
         next_state["terminated"] = terminated.numpy()
+        next_state["padding"] = np.zeros(*self.batch_size, dtype=bool)
         next_state["agents", "reward"] = reward.numpy()
 
         # Add the next state as a sub-dictionary
@@ -921,9 +1091,27 @@ class PureTextEnvironment(Environment, ABC):
         env_state: Optional[NestedArrayDict] = None,
         data_batch: Optional[NestedArrayDict] = None,
     ) -> NestedArrayDict:
+        """Reset the pure text environment.
+
+        This method resets the environment for the episodes which are done. It samples a
+        new batch of data for these episodes and calls `_masked_reset` to reset the
+        episodes.
+
+        Parameters
+        ----------
+        env_state : Optional[NestedArrayDict]
+            The current environment state.
+        data_batch : Optional[NestedArrayDict]
+            The data batch to use for the episodes that are done.
+
+        Returns
+        -------
+        env_state : NestedArrayDict
+            The reset environment state.
+        """
 
         # If no state is provided, create a new one
-        if env_state is None or not "done" in env_state.keys():
+        if env_state is None or "done" not in env_state.keys():
             env_state = self.zero()
             new_mask = np.ones(*self.batch_size, dtype=bool)
 
@@ -990,7 +1178,7 @@ class PureTextEnvironment(Environment, ABC):
             self.state_spec.keys(recurse=True),
             self.done_spec.keys(recurse=True),
         ):
-            next_state[key] = state_env["next", key]
+            next_state[key] = state_env[("next", *key)]
 
         return next_state
 
@@ -1031,6 +1219,115 @@ class PureTextEnvironment(Environment, ABC):
 
         return state_env
 
+    @abstractmethod
+    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+        """Get the datapoint from a single-element environment state as a dictionary.
+
+        This returns a dictionary which specifies the datapoint for the environment
+        state.
+
+        This method should be extended by base classes to include whatever additional
+        fields consistute the datapoint.
+
+        Parameters
+        ----------
+        env_state : NestedArrayDict
+            The environment state.
+
+        Returns
+        -------
+        datapoint : dict
+            The datapoint as a dictionary.
+        """
+
+        return dict(y=int(env_state["y"]))
+
+    def prompt_list_to_array(
+        self, prompt_list: list[PromptMessage]
+    ) -> String[NDArray, "message field"]:
+        """Convert a prompt in the form of a list of dictionaries to a numpy array.
+
+        Each element of the list is a dictionary with keys defined in `PromptMessage`.
+        We convert this to a numpy array with columns corresponding to the keys in
+        `PromptMessage`.
+
+        Parameters
+        ----------
+        prompt_list : list[PromptMessage]
+            The list of prompts to convert.
+        """
+
+        required_keys = sorted(PromptMessage.__required_keys__)
+        optional_keys = sorted(PromptMessage.__optional_keys__)
+
+        prompt_array = np.full(
+            (
+                self.max_prompt_messages,
+                len(required_keys) + len(optional_keys),
+            ),
+            None,
+            dtype=NumpyStringDtype,
+        )
+
+        for i, prompt in enumerate(prompt_list):
+            for j, key in enumerate(required_keys):
+                prompt_array[i, j] = prompt[key]
+            for j, key in enumerate(optional_keys):
+                if key in prompt:
+                    prompt_array[i, j + len(required_keys)] = prompt[key]
+
+        return prompt_array
+
+    def prompt_array_to_list(
+        self, prompt_array: String[NDArray, "message field"]
+    ) -> list[PromptMessage]:
+        """Convert a prompt in the form of a numpy array to a list of dictionaries.
+
+        Each row of the numpy array corresponds to a message in the prompt, and each
+        column corresponds to a field of the message.
+
+        The prompt array has a fixed number of rows, but the prompt may be shorter. If
+        any required field is None in a row, we take that to indicate the end of the
+        prompt.
+
+        Parameters
+        ----------
+        prompt_array : String[NDArray, "message field"]
+            The numpy array to convert.
+
+        Returns
+        -------
+        prompt_list : list[PromptMessage]
+            The list of prompts.
+        """
+
+        required_keys = sorted(PromptMessage.__required_keys__)
+        optional_keys = sorted(PromptMessage.__optional_keys__)
+
+        prompt_list = []
+        for row in prompt_array:
+            prompt = {}
+
+            any_none = False
+            for key, value in zip(required_keys, row[: len(required_keys)]):
+                prompt[key] = value
+                if value is None:
+                    any_none = True
+                    break
+
+            # If any of the required keys are None, we have reached the end of the
+            # prompt messages
+            if any_none:
+                break
+
+            for key, value in zip(optional_keys, row[len(required_keys) :]):
+                if value is not None:
+                    prompt[key] = value
+
+            prompt_list.append(prompt)
+
+        return prompt_list
+
     def _masked_reset(
         self,
         env_state: NestedArrayDict,
@@ -1058,9 +1355,15 @@ class PureTextEnvironment(Environment, ABC):
         """
 
         env_state["y"][mask] = data_batch["y"]
+        env_state["datapoint_id"][mask] = data_batch["id"]
+        env_state["seed"][mask] = np.random.randint(0, 2**16, mask.sum())
         env_state["message_history"][mask] = None
+        env_state["message_agent_id"][mask] = -1
+        env_state["raw_message_history"][mask] = None
         env_state["round"][mask] = 0
         env_state["done"][mask] = False
+        env_state["agents", "done"][mask] = False
         env_state["terminated"][mask] = False
+        env_state["padding"][mask] = False
 
         return env_state

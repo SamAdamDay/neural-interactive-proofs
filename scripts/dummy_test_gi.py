@@ -1,4 +1,4 @@
-"""Dummy graph isomorphism test script, for debugging purposes"""
+"""Dummy graph isomorphism test script, for debugging purposes."""
 
 from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
@@ -6,7 +6,7 @@ import os
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     RlTrainerParameters,
@@ -20,18 +20,27 @@ from pvg import (
     SpgParameters,
     MessageRegressionParameters,
     PpoLossType,
-    SpgVariant,
-    Guess,
+    SpgVariantType,
+    GuessType,
     AGENT_NAMES,
     run_experiment,
     prepare_experiment,
 )
 from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
+from pvg.parameters import get_protocol_agent_names
 
 
 def run(cmd_args: Namespace):
+    """Run the dummy graph isomorphism test.
+
+    Parameters
+    ----------
+    cmd_args : Namespace
+        The command-line arguments.
+    """
+
     if cmd_args.use_cpu or not torch.cuda.is_available():
-        print("Using CPU")
+        print("Using CPU")  # noqa: T201
         device = torch.device("cpu")
     else:
         device = torch.device("cuda")
@@ -40,11 +49,16 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = InteractionProtocolType.PVG
-    params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
-        dataset="eru10000",
+    interaction_protocol = "debate"
+    zero_knowledge = False
+    scenario = "graph_isomorphism"
+    trainer = "vanilla_ppo"
+    dataset = "eru10000"
+
+    hyper_params = HyperParameters(
+        scenario=scenario,
+        trainer=trainer,
+        dataset=dataset,
         agents=AgentsParameters(
             **{
                 agent_name: GraphIsomorphismAgentParameters(
@@ -54,7 +68,18 @@ def run(cmd_args: Namespace):
                     agent_lr_factor={"actor": 1.0, "critic": 1.0},
                     use_orthogonal_initialisation=False,
                 )
-                for agent_name in AGENT_NAMES[interaction_protocol]
+                for agent_name in get_protocol_agent_names(
+                    HyperParameters(
+                        interaction_protocol=interaction_protocol,
+                        protocol_common=CommonProtocolParameters(
+                            zero_knowledge=zero_knowledge
+                        ),
+                        scenario=scenario,
+                        trainer=trainer,
+                        dataset=dataset,
+                    ),
+                    zero_knowledge=zero_knowledge,
+                )
             }
         ),
         rl=RlTrainerParameters(
@@ -65,9 +90,14 @@ def run(cmd_args: Namespace):
             minibatch_size=4,
             frames_per_batch=16,
             use_shared_body=False,
+            num_normalization_steps=10,
+            num_test_iterations=10,
+        ),
+        spg=SpgParameters(
+            variant="psos",
         ),
         ppo=CommonPpoParameters(
-            loss_type=PpoLossType.CLIP,
+            loss_type="clip",
             normalize_advantage=True,
         ),
         reinforce=ReinforceParameters(
@@ -77,6 +107,7 @@ def run(cmd_args: Namespace):
         protocol_common=CommonProtocolParameters(
             shared_reward=True,
             force_guess=None,
+            zero_knowledge=zero_knowledge,
         ),
         pvg_protocol=PvgProtocolParameters(
             min_message_rounds=0,
@@ -95,7 +126,7 @@ def run(cmd_args: Namespace):
 
     # Prepare the experiment if necessary
     if cmd_args.prepare_experiment:
-        prepare_experiment(params)
+        prepare_experiment(hyper_params)
 
     # Train and test the agents
     if cmd_args.use_wandb and cmd_args.run_id != "" and cmd_args.run_id is not None:
@@ -103,7 +134,7 @@ def run(cmd_args: Namespace):
     else:
         run_id = None
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,

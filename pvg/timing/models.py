@@ -8,14 +8,18 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictSequential
 
-import numpy as np
-
-from pvg.parameters import Parameters, SoloAgentParameters, ScenarioType, TrainerType
+from pvg.parameters import (
+    HyperParameters,
+    SoloAgentParameters,
+    ScenarioType,
+    TrainerType,
+)
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base import TensorDictDataLoader
 from pvg.factory import build_scenario_instance
-from pvg.utils.data import max_length_iterator
+from pvg.utils.data import truncated_iterator
 from pvg.timing.timeables import Timeable, register_timeable
+from pvg.utils.maths import set_seed
 
 
 class ModelTimeable(Timeable, ABC):
@@ -62,18 +66,19 @@ class ModelTimeable(Timeable, ABC):
         self.num_batches = num_batches
 
         # Set up the components of the experiment
-        self.params = self._get_params()
+        self.hyper_params = self._get_params()
         if torch.cuda.is_available() and not force_cpu:
             self.device = "cuda"
         else:
             self.device = "cpu"
         self.settings = ExperimentSettings(device=self.device)
-        self.scenario_instance = build_scenario_instance(self.params, self.settings)
+        self.scenario_instance = build_scenario_instance(
+            self.hyper_params, self.settings
+        )
 
         # Set the random seeds
-        torch.manual_seed(self.params.seed)
-        np.random.seed(self.params.seed)
-        self.generator = torch.Generator().manual_seed(self.params.seed)
+        set_seed(self.hyper_params.seed)
+        self.generator = torch.Generator().manual_seed(self.hyper_params.seed)
 
         # Set up the full model as the body and head
         self.model = TensorDictSequential(
@@ -83,17 +88,17 @@ class ModelTimeable(Timeable, ABC):
         self.model.to(self.device)
         self.model.eval()
 
-    def _get_params(self) -> Parameters:
+    def _get_params(self) -> HyperParameters:
         """Get the parameters which define the experiment containing the model.
 
         Returns
         -------
-        params : Parameters
+        hyper_params : HyperParameters
             The parameters of the experiment.
         """
-        return Parameters(
+        return HyperParameters(
             scenario=self.scenario,
-            trainer=TrainerType.SOLO_AGENT,
+            trainer="solo_agent",
             dataset=self.dataset,
             solo_agent=SoloAgentParameters(batch_size=self.batch_size),
         )
@@ -113,7 +118,7 @@ class ModelTimeable(Timeable, ABC):
             shuffle=True,
             generator=self.generator,
         )
-        dataloader = max_length_iterator(cycle(dataloader), self.num_batches)
+        dataloader = truncated_iterator(cycle(dataloader), self.num_batches)
 
         with torch.no_grad():
             for data in dataloader:
@@ -126,6 +131,6 @@ class ModelTimeable(Timeable, ABC):
 class GraphIsomorphismVerifierTimeable(ModelTimeable):
     """Timeable to run the graph isomorphism verifier model."""
 
-    scenario = ScenarioType.GRAPH_ISOMORPHISM
+    scenario = "graph_isomorphism"
     dataset = "eru10000"
     agent_name = "verifier"

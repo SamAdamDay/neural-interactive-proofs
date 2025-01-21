@@ -15,7 +15,7 @@ from pvg.parameters import TrainerType
 from pvg.rl_objectives import ReinforceLossImproved
 
 
-@register_trainer(TrainerType.REINFORCE)
+@register_trainer("reinforce")
 class ReinforceTrainer(ReinforcementLearningTrainer):
     """Policy gradient trainer using the REINFORCE algorithm.
 
@@ -24,7 +24,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     scenario_instance : ScenarioInstance
         The components of the experiment.
@@ -33,7 +33,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
     """
 
     def _get_replay_buffer(self, transform: Optional[Transform] = None) -> ReplayBuffer:
-        """Construct the replay buffer, which will store the rollouts
+        """Construct the replay buffer, which will store the rollouts.
 
         When not using the advantage, the reward-to-go transform is added to the list of
         transforms.
@@ -51,14 +51,14 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
         """
 
         # Add the reward-to-go transform if not using the advantage
-        if not self.params.reinforce.use_advantage_and_critic:
+        if not self.hyper_params.reinforce.use_advantage_and_critic:
             if transform is None:
                 transforms = []
             else:
                 transforms = [transform]
             transforms.append(
                 Reward2GoTransform(
-                    gamma=self.params.rl.gamma,
+                    gamma=self.hyper_params.rl.gamma,
                     done_key=("agents", "done"),
                     in_keys=("next", "agents", "reward"),
                     out_keys=("agents", "reward_to_go"),
@@ -69,7 +69,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
         return super()._get_replay_buffer(transform=transform)
 
     def _get_loss_module_and_gae(self) -> tuple[ReinforceLossImproved, GAE | None]:
-        """Construct the loss module and the generalized advantage estimator
+        """Construct the loss module and the generalized advantage estimator.
 
         Returns
         -------
@@ -80,7 +80,7 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             otherwise.
         """
 
-        if self.params.reinforce.use_advantage_and_critic:
+        if self.hyper_params.reinforce.use_advantage_and_critic:
             loss_weighting_type = "advantage"
         else:
             loss_weighting_type = "reward_to_go"
@@ -88,9 +88,9 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
             actor_network=self.policy_operator,
             critic_network=self.value_operator,
             loss_weighting_type=loss_weighting_type,
-            gamma=self.params.rl.gamma,
-            functional=self.params.functionalize_modules,
-            loss_critic_type=self.params.rl.loss_critic_type,
+            gamma=self.hyper_params.rl.gamma,
+            functional=self.hyper_params.functionalize_modules,
+            loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
         )
         loss_module.set_keys(
@@ -103,11 +103,11 @@ class ReinforceTrainer(ReinforcementLearningTrainer):
         )
 
         # Make the generalized advantage estimator
-        if self.params.reinforce.use_advantage_and_critic:
+        if self.hyper_params.reinforce.use_advantage_and_critic:
             loss_module.make_value_estimator(
                 ValueEstimators.GAE,
-                gamma=self.params.rl.gamma,
-                lmbda=self.params.rl.lmbda,
+                gamma=self.hyper_params.rl.gamma,
+                lmbda=self.hyper_params.rl.lmbda,
             )
             gae = loss_module.value_estimator
         else:

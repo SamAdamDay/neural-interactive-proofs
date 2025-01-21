@@ -13,7 +13,7 @@ from pvg.parameters import ScenarioType
 from pvg.scenario_base import RolloutSamples, register_rollout_samples_class
 
 
-@register_rollout_samples_class(ScenarioType.GRAPH_ISOMORPHISM)
+@register_rollout_samples_class("graph_isomorphism")
 class GraphIsomorphismRolloutSamples(RolloutSamples):
     """A message exchange in the graph isomorphism task."""
 
@@ -176,9 +176,9 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
             timeline_node_y = []
             timeline_node_text = []
             timeline_node_colour = []
-            for round, message in enumerate(rollout["message"].flat):
-                x = round * 0.125
-                y = -1.3 - 0.3 * (round % 2)
+            for round_id, message in enumerate(rollout["message"].flat):
+                x = round_id * 0.125
+                y = -1.3 - 0.3 * (round_id % 2)
                 timeline_node_x.append(x)
                 timeline_node_y.append(y)
                 if message < max_num_nodes:
@@ -188,7 +188,7 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
                     graph_letter = "B"
                     node_num = message - max_num_nodes
                 timeline_node_text.append(f"{graph_letter}{node_num}")
-                timeline_node_colour.append(get_colour(round))
+                timeline_node_colour.append(get_colour(round_id))
             traces.append(
                 go.Scatter(
                     x=timeline_node_x,

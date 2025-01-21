@@ -23,7 +23,6 @@ The structure of all agent bodies is the same:
 
 Notes
 -----
-
 In all dimension annotations, "channel" refers to the the message channel dimension,
 which is how different groups of agents can communicate with each other. There is a
 terminology overlap with the channel dimension in images and convolutional layers. Such 
@@ -68,7 +67,7 @@ from pvg.scenario_base.pretrained_models import get_pretrained_model_class
 from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.parameters import (
-    Parameters,
+    HyperParameters,
     ImageClassificationAgentParameters,
     RandomAgentParameters,
     ScenarioType,
@@ -95,7 +94,7 @@ from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
 from pvg.image_classification.pretrained_models import PretrainedImageModel
 
 
-IC_SCENARIO = ScenarioType.IMAGE_CLASSIFICATION
+IC_SCENARIO = "image_classification"
 
 
 class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
@@ -103,7 +102,7 @@ class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -120,26 +119,28 @@ class ImageClassificationAgentPart(TensorDictAgentPartMixin, ABC):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
         )
 
         # Get some parameters
-        self.num_block_groups = self.params.image_classification.num_block_groups
+        self.num_block_groups = self.hyper_params.image_classification.num_block_groups
         self.initial_num_channels = (
-            self.params.image_classification.initial_num_channels
+            self.hyper_params.image_classification.initial_num_channels
         )
-        self.dataset_num_channels = DATASET_WRAPPER_CLASSES[params.dataset].num_channels
-        self.image_width = DATASET_WRAPPER_CLASSES[params.dataset].width
-        self.image_height = DATASET_WRAPPER_CLASSES[params.dataset].height
+        self.dataset_num_channels = DATASET_WRAPPER_CLASSES[
+            hyper_params.dataset
+        ].num_channels
+        self.image_width = DATASET_WRAPPER_CLASSES[hyper_params.dataset].width
+        self.image_height = DATASET_WRAPPER_CLASSES[hyper_params.dataset].height
         self.latent_width = self.image_width // 2**self.num_block_groups
         self.latent_height = self.image_height // 2**self.num_block_groups
         self.latent_num_channels = 2**self.num_block_groups * self.initial_num_channels
@@ -184,7 +185,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -197,7 +198,6 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     Notes
     -----
-
     In all dimension annotations, "channel" refers to the the message channel dimension,
     which is how different groups of agents can communicate with each other. There is a
     terminology overlap with the channel dimension in images and convolutional layers.
@@ -208,6 +208,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     @property
     def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys for the agent body."""
 
         env_level_in_keys = ("x", "image", "message")
 
@@ -217,7 +218,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                 ("pretrained_embeddings", self.pretrained_model_name),
             )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             env_level_in_keys = (*env_level_in_keys, "linear_message_history")
 
         return env_level_in_keys
@@ -226,6 +227,11 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     @property
     def required_pretrained_models(self) -> list[str]:
+        """The pretrained models required by the agent body.
+
+        If the agent body uses pretrained embeddings, the name of the pretrained model
+        is returned. Otherwise, an empty list is returned.
+        """
         if self.include_pretrained_embeddings:
             return [self.pretrained_model_name]
         else:
@@ -233,13 +239,13 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -406,7 +412,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         in_channels = (
             self.max_message_rounds
             * self.num_visible_message_channels
-            * self.params.message_size
+            * self.hyper_params.message_size
         )
         in_channels += self.dataset_num_channels
 
@@ -484,7 +490,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         """
 
         stride = self.agent_params.stride
-        track_running_stats = self.params.functionalize_modules
+        track_running_stats = self.hyper_params.functionalize_modules
 
         cnn_encoder = []
 
@@ -500,7 +506,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
                 # Create the appropriate building block
                 match self.agent_params.building_block_type:
-                    case ImageBuildingBlockType.CONV2D:
+                    case "conv2d":
                         building_block = Conv2dSimulateBatchDims(
                             in_channels=in_channels,
                             out_channels=out_channels,
@@ -508,7 +514,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
                             stride=stride,
                             padding="same",
                         )
-                    case ImageBuildingBlockType.RESIDUAL_BASIC:
+                    case "residual_basic":
                         if stride != 1 or in_channels != out_channels:
                             downsample = Sequential(
                                 Conv2d(
@@ -622,7 +628,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         image_level_num_channels = latent_pixel_level_num_channels = (
             self.latent_num_channels
-            + self.num_visible_message_channels * self.params.message_size
+            + self.num_visible_message_channels * self.hyper_params.message_size
         )
 
         final_encoder = []
@@ -645,14 +651,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             TensorDictModule(
                 Linear(
                     in_features=latent_pixel_level_num_channels,
-                    out_features=self.params.d_representation,
+                    out_features=self.hyper_params.d_representation,
                 ),
                 in_keys="latent_pixel_level_repr",
                 out_keys="latent_pixel_level_repr",
             )
         )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             # Flatten the linear message history
             final_encoder.append(
                 TensorDictModule(
@@ -675,9 +681,9 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             )
 
             image_level_num_channels += (
-                self.params.d_linear_message_space
+                self.hyper_params.d_linear_message_space
                 * self.num_visible_message_channels
-                * self.params.message_size
+                * self.hyper_params.message_size
                 * self.protocol_handler.max_message_rounds
             )
 
@@ -686,7 +692,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             TensorDictModule(
                 Linear(
                     in_features=image_level_num_channels,
-                    out_features=self.params.d_representation,
+                    out_features=self.hyper_params.d_representation,
                 ),
                 in_keys="image_level_repr",
                 out_keys="image_level_repr",
@@ -696,7 +702,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         return TensorDictSequential(*final_encoder)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        """Run the image classification body
+        """Run the image classification body.
 
         Parameters
         ----------
@@ -749,7 +755,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             message = torch.zeros(
                 (
                     *data.batch_size,
-                    self.num_visible_message_channels * self.params.message_size,
+                    self.num_visible_message_channels * self.hyper_params.message_size,
                     self.latent_height,
                     self.latent_width,
                 ),
@@ -785,7 +791,21 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
 
         return data
 
-    def to(self, device: Optional[TorchDevice] = None):
+    def to(
+        self, device: Optional[TorchDevice] = None
+    ) -> "ImageClassificationAgentBody":
+        """Move the agent body to a new device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent body to. If not given, the CPU is used.
+
+        Returns
+        -------
+        self : ImageClassificationAgentBody
+            The agent body on the new device.
+        """
         super().to(device)
         self.device = device
         self.message_history_upsampler = self.message_history_upsampler.to(device)
@@ -806,7 +826,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         if self.include_pretrained_embeddings:
             if self._pretrained_model_class is None:
                 self._pretrained_model_class = get_pretrained_model_class(
-                    self.agent_params.pretrained_embeddings_model, self.params
+                    self.agent_params.pretrained_embeddings_model, self.hyper_params
                 )
             return self._pretrained_model_class
         else:
@@ -852,7 +872,7 @@ class ImageClassificationDummyAgentBody(
     agent_level_out_keys = ("image_level_repr", "latent_pixel_level_repr")
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        """Returns dummy outputs.
+        """Return dummy outputs.
 
         Parameters
         ----------
@@ -868,7 +888,7 @@ class ImageClassificationDummyAgentBody(
         # The dummy image-level representations
         image_level_repr = torch.zeros(
             *data.batch_size,
-            self.params.d_representation,
+            self.hyper_params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -878,7 +898,7 @@ class ImageClassificationDummyAgentBody(
             *data.batch_size,
             self.latent_width,
             self.latent_height,
-            self.params.d_representation,
+            self.hyper_params.d_representation,
             device=self.device,
             dtype=torch.float32,
         )
@@ -912,7 +932,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         flatten_output: bool = True,
         out_key: str = "latent_pixel_mlp_output",
     ) -> TensorDictModule:
-        """Builds an MLP which acts on the latent-pixel-level representations.
+        """Build an MLP which acts on the latent-pixel-level representations.
 
         Shapes
         ------
@@ -981,7 +1001,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         out_key: str = "image_level_mlp_output",
         squeeze: bool = False,
     ) -> TensorDictSequential:
-        """Builds an MLP which acts on the image-level representations.
+        """Build an MLP which acts on the image-level representations.
 
         Shapes
         ------
@@ -1072,7 +1092,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
     def _build_decider(
         self, d_out: int = 3, include_round: Optional[bool] = None
     ) -> TensorDictModule:
-        """Builds the module which produces a image-level output.
+        """Build the module which produces a image-level output.
 
         By default it is used to decide whether to continue exchanging messages. In this
         case it outputs a single triple of logits for the three options: guess a
@@ -1096,7 +1116,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
             include_round = self.agent_params.include_round_in_decider
 
         return self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_decider,
             d_out=d_out,
             num_layers=self.agent_params.num_decider_layers,
@@ -1136,7 +1156,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1152,6 +1172,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     @property
     def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys."""
         if self.decider is not None and self.agent_params.include_round_in_decider:
             return ("round",)
         else:
@@ -1159,10 +1180,14 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:
+        """The agent-level output keys.
+
+        These are the keys that are returned by the forward method of this class.
+        """
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agent_level_out_keys = (
                 *agent_level_out_keys,
                 "linear_message_selected_logits",
@@ -1172,13 +1197,13 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1194,7 +1219,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             self.decider = None
 
         # Build the linear message selector if necessary
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             self.linear_message_selector = self._build_linear_message_selector()
         else:
             self.linear_message_selector = None
@@ -1202,7 +1227,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         self._init_weights()
 
     def _build_latent_pixel_selector(self) -> TensorDictModule:
-        """Builds the module which selects which latent pixel to send as a message.
+        """Build the module which selects which latent pixel to send as a message.
 
         Returns
         -------
@@ -1211,9 +1236,9 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         """
 
         latent_pixel_mlp = self._build_latent_pixel_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_latent_pixel_selector,
-            d_out=self.num_visible_message_channels * self.params.message_size,
+            d_out=self.num_visible_message_channels * self.hyper_params.message_size,
             flatten_output=True,
             num_layers=self.agent_params.num_latent_pixel_selector_layers,
             out_key="latent_pixel_selected_logits",
@@ -1231,7 +1256,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDictSequential(latent_pixel_mlp, rearranger)
 
     def _build_linear_message_selector(self) -> TensorDictModule:
-        """Builds the module which selects which linear message to send.
+        """Build the module which selects which linear message to send.
 
         Returns
         -------
@@ -1240,11 +1265,11 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         """
 
         image_level_mlp = self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_linear_message_selector,
-            d_out=self.params.d_linear_message_space
+            d_out=self.hyper_params.d_linear_message_space
             * self.num_visible_message_channels
-            * self.params.message_size,
+            * self.hyper_params.message_size,
             num_layers=self.agent_params.num_linear_message_selector_layers,
             include_round=False,
             out_key="linear_message_selected_logits",
@@ -1254,7 +1279,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
             Rearrange(
                 "... (channel position logit) -> ... channel position logit",
                 channel=self.num_visible_message_channels,
-                logit=self.params.d_linear_message_space,
+                logit=self.hyper_params.d_linear_message_space,
             ),
             in_keys="linear_message_selected_logits",
             out_keys="linear_message_selected_logits",
@@ -1263,7 +1288,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDictSequential(image_level_mlp, rearranger)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the policy head on the given body output.
+        """Run the policy head on the given body output.
 
         Runs the latent pixel selector module and the decider module if present.
 
@@ -1309,7 +1334,7 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
                 dtype=torch.float32,
             )
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             out_dict["linear_message_selected_logits"] = self.linear_message_selector(
                 body_output
             )["linear_message_selected_logits"]
@@ -1318,8 +1343,8 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
                 (
                     *body_output.batch_size,
                     self.num_visible_message_channels,
-                    self.params.message_size,
-                    self.params.d_linear_message_space,
+                    self.hyper_params.message_size,
+                    self.hyper_params.d_linear_message_space,
                 ),
                 device=self.device,
                 dtype=torch.float32,
@@ -1328,6 +1353,13 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
         return TensorDict(out_dict, batch_size=body_output.batch_size)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent policy head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent policy head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.latent_pixel_selector.to(device)
@@ -1365,10 +1397,14 @@ class ImageClassificationRandomAgentPolicyHead(
 
     @property
     def agent_level_out_keys(self) -> tuple[str, ...]:
+        """The agent-level output keys.
+
+        These are the outputs of the agent head.
+        """
 
         agent_level_out_keys = ("latent_pixel_selected_logits", "decision_logits")
 
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agent_level_out_keys = (
                 *agent_level_out_keys,
                 "linear_message_selected_logits",
@@ -1377,7 +1413,7 @@ class ImageClassificationRandomAgentPolicyHead(
         return agent_level_out_keys
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Outputs a uniform distribution.
+        """Output a uniform distribution.
 
         Parameters
         ----------
@@ -1393,7 +1429,7 @@ class ImageClassificationRandomAgentPolicyHead(
         latent_pixel_selected_logits = torch.zeros(
             *body_output.batch_size,
             self.num_visible_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             self.latent_width * self.latent_height,
             device=self.device,
             dtype=torch.float32,
@@ -1438,7 +1474,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1453,7 +1489,8 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
     agent_level_in_keys = ("image_level_repr",)
 
     @property
-    def env_level_in_keys(self):
+    def env_level_in_keys(self) -> tuple[str, ...]:
+        """The environment-level input keys."""
         if self.agent_params.include_round_in_value:
             return ("round",)
         else:
@@ -1463,13 +1500,13 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1478,7 +1515,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self.value_mlp = self._build_mlp()
 
     def _build_mlp(self) -> TensorDictModule:
-        """Builds the module which computes the value function.
+        """Build the module which computes the value function.
 
         Returns
         -------
@@ -1486,7 +1523,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
             The value module.
         """
         return self._build_image_level_mlp(
-            d_in=self.params.d_representation,
+            d_in=self.hyper_params.d_representation,
             d_hidden=self.agent_params.d_value,
             d_out=1,
             num_layers=self.agent_params.num_value_layers,
@@ -1498,7 +1535,7 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         self._init_weights()
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the value head on the given body output.
+        """Run the value head on the given body output.
 
         Parameters
         ----------
@@ -1519,6 +1556,13 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
         return self.value_mlp(body_output)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.value_mlp.to(device)
@@ -1546,7 +1590,7 @@ class ImageClassificationConstantAgentValueHead(
     agent_level_out_keys = ("value",)
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Returns a constant value.
+        """Return a constant value.
 
         Parameters
         ----------
@@ -1597,13 +1641,13 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
 
     def __init__(
         self,
-        params: Parameters,
+        hyper_params: HyperParameters,
         settings: ExperimentSettings,
         agent_name: str,
         protocol_handler: ProtocolHandler,
     ):
         super().__init__(
-            params=params,
+            hyper_params=hyper_params,
             settings=settings,
             agent_name=agent_name,
             protocol_handler=protocol_handler,
@@ -1614,7 +1658,7 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         self._init_weights()
 
     def forward(self, body_output: TensorDict) -> TensorDict:
-        """Runs the solo agent head on the given body output.
+        """Run the solo agent head on the given body output.
 
         Parameters
         ----------
@@ -1636,6 +1680,13 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
         return self.decider(body_output)
 
     def to(self, device: Optional[TorchDevice] = None):
+        """Move the agent head to the given device.
+
+        Parameters
+        ----------
+        device : TorchDevice, optional
+            The device to move the agent head to. If not given, the CPU is used.
+        """
         super().to(device)
         self.device = device
         self.decider.to(device)
@@ -1665,7 +1716,7 @@ class ImageClassificationCombinedBody(CombinedBody):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1676,7 +1727,6 @@ class ImageClassificationCombinedBody(CombinedBody):
 
     Notes
     -----
-
     In all dimension annotations, "channel" refers to the the message channel dimension,
     which is how different groups of agents can communicate with each other. There is a
     terminology overlap with the channel dimension in images and convolutional layers.
@@ -1688,7 +1738,20 @@ class ImageClassificationCombinedBody(CombinedBody):
     additional_out_keys = ("round",)
 
     def forward(self, data: TensorDictBase) -> TensorDict:
-        round: Int[Tensor, "batch"] = data["round"]
+        """Run the agent bodies and combines their outputs.
+
+        Parameters
+        ----------
+        data : TensorDictBase
+            The data to run the bodies on.
+
+        Returns
+        -------
+        data : TensorDict
+            The data updated in place with the output of the agent bodies.
+        """
+
+        round_id: Int[Tensor, "batch"] = data["round"]
 
         # Run the agent bodies
         body_outputs: dict[str, TensorDict] = {}
@@ -1697,7 +1760,7 @@ class ImageClassificationCombinedBody(CombinedBody):
             input_dict = {}
             for key in self.bodies[agent_name].in_keys:
                 if key == "ignore_message":
-                    input_dict[key] = round == 0
+                    input_dict[key] = round_id == 0
                 elif key == "message":
                     if "message" not in data.keys():
                         continue
@@ -1774,6 +1837,8 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
           latent_height*latent_width): A logit for each latent pixel, indicating the
           probability that this latent pixel should be sent as a message to the
           verifier.
+        - ("agents", "main_message_logits") (... agents channel position logit): The
+          same as "latent_pixel_selected_logits".
         - ("agents", "decision_logits") (... agents 3): A logit for each of the three
           options: guess a classification one way or the other, or continue exchanging
           messages. Set to zeros when the decider is not present.
@@ -1784,7 +1849,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1860,7 +1925,7 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
             [policy_outputs[name]["decision_logits"] for name in self.agent_names],
             "agent ... logit -> ... agent logit",
         )
-        if self.params.include_linear_message_space:
+        if self.hyper_params.include_linear_message_space:
             agents_update["linear_message_selected_logits"] = rearrange(
                 [
                     policy_outputs[name]["linear_message_selected_logits"]
@@ -1873,6 +1938,11 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
         agents_update["decision_logits"] = self._restrict_decisions(
             body_output["decision_restriction"], agents_update["decision_logits"]
         )
+
+        # Copy the main message logits to the main message logits key
+        agents_update["main_message_logits"] = agents_update[
+            "latent_pixel_selected_logits"
+        ]
 
         return body_output.update(
             dict(
@@ -1902,7 +1972,7 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
     settings : ExperimentSettings
         The settings of the experiment.
@@ -1964,4 +2034,9 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
 @register_scenario_class(IC_SCENARIO, Agent)
 @dataclass
 class ImageClassificationAgent(Agent):
+    """An agent for the image classification task.
+
+    A dataclass which holds all the agent parts.
+    """
+
     message_logits_key: ClassVar[str] = "latent_pixel_selected_logits"

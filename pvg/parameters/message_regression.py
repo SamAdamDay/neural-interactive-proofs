@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 
-from pvg.parameters.base import SubParameters
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
 from pvg.parameters.types import MessageRegressionMethodType, ActivationType
 
 
+@register_parameter_class
 @dataclass
 class MessageRegressionParameters(SubParameters):
     """Additional parameters for doing regression analysis on the messages.
@@ -46,7 +47,7 @@ class MessageRegressionParameters(SubParameters):
     enabled: bool = False
     agents: list[str] | None = None
 
-    regression_method: MessageRegressionMethodType = MessageRegressionMethodType.MLP
+    regression_method: MessageRegressionMethodType = "mlp"
 
     test_size: float = 0.2
 
@@ -54,7 +55,7 @@ class MessageRegressionParameters(SubParameters):
 
     mlp_num_layers: int = 2
     mlp_hidden_size: int = 64
-    mlp_activation: ActivationType = ActivationType.RELU
+    mlp_activation: ActivationType = "relu"
     mlp_num_epochs: int = 10
     mlp_batch_size: int = 512
     mlp_learning_rate: float = 0.001

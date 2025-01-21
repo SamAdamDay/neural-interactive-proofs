@@ -1,3 +1,17 @@
+"""Data classes for the image classification task.
+
+Contains the `ImageClassificationDataset` class, which is a dataset for the image
+classification task. The dataset is a binary classification problem, where the classes
+are selected from a torchvision dataset. The dataset is binarified using one of the
+following methods:
+
+- `"merge"`: The classes are shuffled and merged into two
+  classes.
+- `"select_two"`: Two classes are selected from the original
+    dataset.
+- `"random"`: The classes are selected at random.
+"""
+
 import os
 from typing import Optional, Any, TypeVar
 from abc import ABC
@@ -71,7 +85,7 @@ D = TypeVar("D", bound=TorchVisionDatasetWrapper)
 
 
 def register_dataset_wrapper_class(dataset_name: str) -> callable:
-    """Decorator to register a dataset wrapper class."""
+    """Register a dataset wrapper class."""
 
     def decorator(wrapper_class: type[D]) -> type[D]:
         DATASET_WRAPPER_CLASSES[dataset_name] = wrapper_class
@@ -106,6 +120,8 @@ class TestDataset(FakeData, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("mnist")
 class MnistDatasetWrapper(MNIST, TorchVisionDatasetWrapper):
+    """The MNIST dataset wrapper."""
+
     num_channels = 1
     width = 28
     height = 28
@@ -113,16 +129,22 @@ class MnistDatasetWrapper(MNIST, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("fashion_mnist")
 class FashionMnistDatasetWrapper(FashionMNIST, MnistDatasetWrapper):
+    """The Fashion-MNIST dataset wrapper."""
+
     pass
 
 
 @register_dataset_wrapper_class("kmnist")
 class KmnistDatasetWrapper(KMNIST, MnistDatasetWrapper):
+    """The Kuzushiji-MNIST dataset wrapper."""
+
     pass
 
 
 @register_dataset_wrapper_class("cifar10")
 class Cifar10DatasetWrapper(CIFAR10, TorchVisionDatasetWrapper):
+    """The CIFAR-10 dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -131,6 +153,8 @@ class Cifar10DatasetWrapper(CIFAR10, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("cifar100")
 class Cifar100DatasetWrapper(CIFAR100, TorchVisionDatasetWrapper):
+    """The CIFAR-100 dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -138,6 +162,8 @@ class Cifar100DatasetWrapper(CIFAR100, TorchVisionDatasetWrapper):
 
 @register_dataset_wrapper_class("svhn")
 class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
+    """The Street View House Numbers dataset wrapper."""
+
     num_channels = 3
     width = 32
     height = 32
@@ -161,12 +187,12 @@ class SvhnDatasetWrapper(SVHN, TorchVisionDatasetWrapper):
         )
 
 
-@register_scenario_class(ScenarioType.IMAGE_CLASSIFICATION, Dataset)
+@register_scenario_class("image_classification", Dataset)
 class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
-    by `params.image_classification.selected_classes`).
+    by `hyper_params.image_classification.selected_classes`).
 
     Shapes
     ------
@@ -177,18 +203,40 @@ class ImageClassificationDataset(TensorDictDataset):
         - "y" (dataset_size): The labels of the images.
     """
 
+    instance_keys = ("image", "x")
+
     x_dtype = torch.float32
     y_dtype = torch.int64
 
     def build_torch_dataset(
         self, *, transform: Optional[Any]
     ) -> TorchVisionDatasetWrapper:
-        dataset_class = DATASET_WRAPPER_CLASSES[self.params.dataset]
+        """Build the TorchVision dataset.
+
+        Parameters
+        ----------
+        transform : Optional[Any]
+            The transform to apply to the images.
+
+        Returns
+        -------
+        dataset : TorchVisionDatasetWrapper
+            The TorchVision dataset.
+        """
+        dataset_class = DATASET_WRAPPER_CLASSES[self.hyper_params.dataset]
         return dataset_class(
             root=self.raw_dir, train=self.train, transform=transform, download=True
         )
 
     def build_tensor_dict(self) -> TensorDict:
+        """Build the dataset as a TensorDict from the raw data.
+
+        Returns
+        -------
+        dataset : TensorDict
+            The dataset as a TensorDict, with the keys "image", "x", and "y".
+        """
+
         # Load the dataset
         transform = transforms.Compose(
             [
@@ -212,10 +260,7 @@ class ImageClassificationDataset(TensorDictDataset):
         binurification_generator = torch.Generator()
         binurification_generator.manual_seed(self.binarification_seed)
 
-        if (
-            self.params.dataset_options.binarification_method
-            == BinarificationMethodType.MERGE
-        ):
+        if self.hyper_params.dataset_options.binarification_method == "merge":
             # Shuffle the classes and merge them into two classes
             num_classes = len(torch.unique(labels))
             shuffled_classes = torch.randperm(
@@ -224,10 +269,7 @@ class ImageClassificationDataset(TensorDictDataset):
             shuffled_labels = shuffled_classes[labels]
             labels = torch.where(shuffled_labels < num_classes // 2, 0, 1)
 
-        elif (
-            self.params.dataset_options.binarification_method
-            == BinarificationMethodType.SELECT_TWO
-        ):
+        elif self.hyper_params.dataset_options.binarification_method == "select_two":
             # Select the classes we want for binary classification
             index = (labels == self.selected_classes[0]) | (
                 labels == self.selected_classes[1]
@@ -237,10 +279,7 @@ class ImageClassificationDataset(TensorDictDataset):
             rearrange_index = rearrange_index[index]
             labels = (labels == self.selected_classes[1]).to(self.y_dtype)
 
-        elif (
-            self.params.dataset_options.binarification_method
-            == BinarificationMethodType.RANDOM
-        ):
+        elif self.hyper_params.dataset_options.binarification_method == "random":
             # Select labels at random
             labels = torch.randint(
                 0,
@@ -253,11 +292,11 @@ class ImageClassificationDataset(TensorDictDataset):
         else:
             raise ValueError(
                 f"Unknown binarification method: "
-                f"{self.params.dataset_options.binarification_method}"
+                f"{self.hyper_params.dataset_options.binarification_method}"
             )
 
         # Make the dataset balanced if requested
-        if self.params.dataset_options.make_balanced:
+        if self.hyper_params.dataset_options.make_balanced:
             permuted_indices = torch.randperm(len(labels))
             images = images[permuted_indices]
             labels = labels[permuted_indices]
@@ -280,7 +319,7 @@ class ImageClassificationDataset(TensorDictDataset):
             images.shape[0],
             self.protocol_handler.max_message_rounds,
             self.protocol_handler.num_message_channels,
-            self.params.message_size,
+            self.hyper_params.message_size,
             *images.shape[-2:],
             dtype=self.x_dtype,
         )
@@ -293,7 +332,7 @@ class ImageClassificationDataset(TensorDictDataset):
     @property
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        return os.path.join(IC_DATA_DIR, self.params.dataset, "raw")
+        return os.path.join(IC_DATA_DIR, self.hyper_params.dataset, "raw")
 
     @property
     def processed_dir(self) -> str:
@@ -302,22 +341,25 @@ class ImageClassificationDataset(TensorDictDataset):
         processed_name = f"processed"
         processed_name += f"_{self.protocol_handler.max_message_rounds}"
         processed_name += f"_{self.protocol_handler.num_message_channels}"
-        processed_name += f"_{self.params.message_size}"
+        processed_name += f"_{self.hyper_params.message_size}"
 
         processed_name = str(self.binarification_method).lower()
-        if self.binarification_method == BinarificationMethodType.SELECT_TWO:
+        if self.binarification_method == "select_two":
             processed_name += f"_{self.selected_classes[0]}_{self.selected_classes[1]}"
         elif (
-            self.binarification_method == BinarificationMethodType.MERGE
-            or self.binarification_method == BinarificationMethodType.RANDOM
+            self.binarification_method == "merge"
+            or self.binarification_method == "random"
         ):
             processed_name += f"_{self.binarification_seed}"
+
+        if self.train and self.hyper_params.dataset_options.max_train_size is not None:
+            processed_name += f"_{self.hyper_params.dataset_options.max_train_size}"
 
         sub_dir = "train" if self.train else "test"
 
         return os.path.join(
             IC_DATA_DIR,
-            self.params.dataset,
+            self.hyper_params.dataset,
             processed_name,
             sub_dir,
         )
@@ -327,26 +369,28 @@ class ImageClassificationDataset(TensorDictDataset):
         """The path to the directory containing cached pretrained model embeddings."""
         sub_dir = "train" if self.train else "test"
         return os.path.join(
-            IC_DATA_DIR, self.params.dataset, "pretrained_embeddings", sub_dir
+            IC_DATA_DIR, self.hyper_params.dataset, "pretrained_embeddings", sub_dir
         )
 
     @property
     def binarification_method(self) -> BinarificationMethodType:
         """The method used to binarify the dataset."""
-        return self.params.dataset_options.binarification_method
+        return self.hyper_params.dataset_options.binarification_method
 
     @property
     def binarification_seed(self) -> int:
         """The seed to use for shuffling the dataset before merging."""
-        if self.params.dataset_options.binarification_seed is not None:
-            return self.params.dataset_options.binarification_seed
+        if self.hyper_params.dataset_options.binarification_seed is not None:
+            return self.hyper_params.dataset_options.binarification_seed
         else:
-            return DATASET_WRAPPER_CLASSES[self.params.dataset].binarification_seed
+            return DATASET_WRAPPER_CLASSES[
+                self.hyper_params.dataset
+            ].binarification_seed
 
     @property
     def selected_classes(self) -> tuple[int, int]:
         """The two classes selected for binary classification."""
-        if self.params.dataset_options.selected_classes is not None:
-            return self.params.dataset_options.selected_classes
+        if self.hyper_params.dataset_options.selected_classes is not None:
+            return self.hyper_params.dataset_options.selected_classes
         else:
-            return DATASET_WRAPPER_CLASSES[self.params.dataset].selected_classes
+            return DATASET_WRAPPER_CLASSES[self.hyper_params.dataset].selected_classes

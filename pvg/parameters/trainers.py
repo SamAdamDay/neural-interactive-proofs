@@ -1,13 +1,19 @@
 """Parameters for the various ML trainers."""
 
-from typing import NamedTuple, Optional
+from typing import Optional, Literal, Annotated
 from dataclasses import dataclass
 
-from pvg.parameters.base import SubParameters
-from pvg.parameters.types import PpoLossType, SpgVariant, IhvpVariant
+from pvg.parameters.parameters_base import SubParameters, register_parameter_class
+from pvg.parameters.types import PpoLossType, SpgVariantType, IhvpVariantType
+from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
 
 
+TestSchemeType = Literal["none", "all", "last", "first_and_last"]
+"""Enum specifying on which iterations to test the model during training."""
+
+
+@register_parameter_class
 @dataclass
 class RlTrainerParameters(SubParameters):
     """Additional parameters common to all RL trainers.
@@ -15,8 +21,15 @@ class RlTrainerParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int | None
-        The number of frames to sample per training iteration. If `None` we sample the
-        amount of frames needed so that every training datapoint appears exactly once.
+        The number of frames to sample per training iteration. If `None` we set the
+        number of frames so that `rollouts_per_iteration` rollouts are sampled per
+        iteration.
+    rollouts_per_iteration : int | None
+        If `frames_per_batch` is `None`, we use this parameter to determine the number
+        of rollouts to sample per iteration. `frames_per_batch` is then set to
+        `rollouts_per_iteration * steps_per_env_per_iteration`. If `None`, this defaults
+        to the dataset size, so that every training datapoint appears exactly once in
+        each iteration.
     steps_per_env_per_iteration : int | None
         Each batch is divided into a number of environments which run trajectories for
         this many steps. Note that when a trajectory ends, a new one is started
@@ -36,6 +49,17 @@ class RlTrainerParameters(SubParameters):
         Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
+    loss_critic_type : str
+        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+    clip_value : float or bool, optional
+        If a ``float`` is provided, it will be used to compute a clipped version of the
+        value prediction with respect to the input tensordict value estimate and use it
+        to calculate the value loss. The purpose of clipping is to limit the impact of
+        extreme value predictions, helping stabilize training and preventing large
+        updates. However, it will have no impact if the value estimate was done by the
+        current version of the value estimator. If instead ``True`` is provided, the
+        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
+        provided or ``False``, no clipping will be performed. Defaults to ``False``.
     normalize_observations : bool
         Whether to normalise the observations in the environment.
     num_normalization_steps : int
@@ -49,22 +73,13 @@ class RlTrainerParameters(SubParameters):
     use_shared_body : bool
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
-        The number of iterations to run the test for.
-    loss_critic_type : str
-        Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-    clip_value : float or bool, optional
-        If a ``float`` is provided, it will be used to compute a clipped version of the
-        value prediction with respect to the input tensordict value estimate and use it
-        to calculate the value loss. The purpose of clipping is to limit the impact of
-        extreme value predictions, helping stabilize training and preventing large
-        updates. However, it will have no impact if the value estimate was done by the
-        current version of the value estimator. If instead ``True`` is provided, the
-        ``clip_epsilon`` parameter will be used as the clipping threshold. If not
-        provided or ``False``, no clipping will be performed. Defaults to ``False``.
+        The number of iterations to run the test for. In each iteration we sample
+        `frames_per_batch` frames, as in training.
     """
 
     # Sampling
     frames_per_batch: int | None = 1000
+    rollouts_per_iteration: int | None = None
     steps_per_env_per_iteration: int | None = None
     num_iterations: int = 1000
 
@@ -88,9 +103,10 @@ class RlTrainerParameters(SubParameters):
     use_shared_body: bool = True
 
     # Testing
-    num_test_iterations: int = 10
+    num_test_iterations: Annotated[int, BaseRunPreserve("rerun_tests")] = 10
 
 
+@register_parameter_class
 @dataclass
 class CommonPpoParameters(SubParameters):
     """Common parameters for PPO trainers.
@@ -118,7 +134,7 @@ class CommonPpoParameters(SubParameters):
     """
 
     # Loss function
-    loss_type: PpoLossType = PpoLossType.CLIP
+    loss_type: PpoLossType = "clip"
     clip_epsilon: float = 0.2
     kl_target: float = 0.01
     kl_beta: float = 1.0
@@ -129,30 +145,31 @@ class CommonPpoParameters(SubParameters):
     normalize_advantage: bool = True
 
 
+@register_parameter_class
 @dataclass
 class VanillaPpoParameters(SubParameters):
     """Additional parameters for the vanilla PPO trainer."""
 
 
-SosParams = NamedTuple("SosParams", [("a", float), ("b", float)])
-
-
+@register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
     """Additional parameters for SPG and its variants.
 
     Parameters
     ----------
-    variant : SpgVariant
+    variant : SpgVariantType
         The variant of SPG to use.
     stackelberg_sequence : tuple[tuple[str]]
         The sequence of agents to use in the Stackelberg game. The leaders first then
         their respective followers, and so forth.
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
-    sos_params : NamedTuple
-        The parameters for the SOS loss.
-    ihvp_variant : IhvpVariant
+    sos_a_param: float
+        The `a` parameter for the SOS loss.
+    sos_b_param: float
+        The `b` parameter for the SOS loss.
+    ihvp_variant : IhvpVariantType
         The variant of IHVP to use.
     ihvp_num_iterations : int
         The number of iterations to use in the IHVP approximation.
@@ -162,20 +179,20 @@ class SpgParameters(SubParameters):
         The damping factor to use in the IHVP approximation.
     """
 
-    variant: SpgVariant = SpgVariant.PSOS
+    variant: SpgVariantType = "psos"
     stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
     additional_lola_term: bool = True
-    sos_params: NamedTuple = SosParams(
-        a=0.5, b=0.1
-    )  # Default values taken from the original paper
+    sos_a_param: float = 0.5
+    sos_b_param: float = 0.1
 
     # IHVP
-    ihvp_variant: IhvpVariant = IhvpVariant.NYSTROM
+    ihvp_variant: IhvpVariantType = "nystrom"
     ihvp_num_iterations: int = 5  # Default value taken from hypergrad package example
     ihvp_rank: int = 5  # Default value taken from hypergrad package example
     ihvp_rho: float = 0.1  # Default value taken from hypergrad package example
 
 
+@register_parameter_class
 @dataclass
 class ReinforceParameters(SubParameters):
     """Additional parameters for the REINFORCE trainer.
@@ -190,6 +207,7 @@ class ReinforceParameters(SubParameters):
     use_advantage_and_critic: bool = False
 
 
+@register_parameter_class
 @dataclass
 class SoloAgentParameters(SubParameters):
     """Additional parameters for running agents in isolation.
@@ -212,3 +230,102 @@ class SoloAgentParameters(SubParameters):
 
     # Agents
     body_lr_factor_override: bool = False
+
+
+@register_parameter_class
+@dataclass
+class TextRlParameters(SubParameters):
+    """Additional parameters for the text-based RL trainers.
+
+    Parameters
+    ----------
+    fine_tune_on_all_previous_rollouts : bool
+        Whether to fine-tune the agents on the rollouts from all iterations so far. If
+        `False`, only the rollouts from the current iteration are used.
+    verifier_guess_replacement_proportion : float
+        When fine-tuning on the rollouts, replace the verifier's guess with the true
+        label for this proportion of the rollouts. This only changes the last message of
+        the verifier, and leaves the rest of the transcript unchanged.
+    verifier_guess_replacement_annealing : Literal["none", "linear", "exponential"]
+        The annealing schedule for the proportion of rollouts where the verifier's guess
+        is replaced. Possible values are:
+
+        - "none": No annealing.
+        - "linear": Linear annealing with rate
+          `verifier_guess_replacement_annealing_rate`.
+        - "exponential": Exponential annealing with base
+          `1-verifier_guess_replacement_annealing_rate`.
+
+    verifier_guess_replacement_annealing_rate : float
+        The rate of annealing for the proportion of rollouts where the verifier's guess
+        is replaced.
+    save_transcripts : bool
+        Whether to save the transcripts of the rollouts. Note that the raw rollouts are
+        always saved, and the transcripts can be extracted from them. So this is mostly
+        for convenience (and comes with a small processing overhead).
+    transcript_format : Literal["json", "yaml"]
+        The format to save the transcripts in.
+    test_scheme : TestSchemeType
+        When to run the test loop during training. See `TestSchemeType` for options.
+    test_on_whole_dataset : bool
+        Whether to run the test loop on the whole dataset or only on a single
+        iteration-worth of rollouts.
+    test_every_iteration : bool
+        Whether to run the test loop after every iteration. If `False`, the test loop is
+        only run after training is complete.
+    """
+
+    fine_tune_on_all_previous_rollouts: bool = False
+
+    verifier_guess_replacement_proportion: float = 0.0
+    verifier_guess_replacement_annealing: Literal["none", "linear", "exponential"] = (
+        "none"
+    )
+    verifier_guess_replacement_annealing_rate: float = 0.1
+
+    save_transcripts: bool = True
+    transcript_format: Literal["json", "yaml"] = "yaml"
+
+    test_scheme: Annotated[TestSchemeType, BaseRunPreserve("rerun_tests")] = "none"
+    test_on_whole_dataset: Annotated[bool, BaseRunPreserve("rerun_tests")] = True
+
+
+@register_parameter_class
+@dataclass
+class PureTextEiParameters(SubParameters):
+    """Additional parameters for the Expert Iteration (EI) trainer.
+
+    Parameters
+    ----------
+    rollout_selection_method : Literal["threshold", "weighted_sampling"]
+        The method to use for selecting rollouts for fine-tuning. Possible values are:
+
+        - "threshold": Rollouts are selected if their reward is above a certain
+          threshold.
+        - "weighted_sampling": Rollouts are selected with a probability proportional to
+          their reward.
+
+    reward_threshold : float
+        When using the threshold method, the threshold on the reward for a rollout to be
+        added to the fine-tuning dataset.
+    weighting_sample_size_factor : float
+        When using the weighted sampling method, the number of rollouts to sample is
+        computed as this factor times the number of rollouts.
+    weighting_minimum : float | None
+        When using the weighted sampling method, all rewards below this value are
+        assigned this value before being used as weights. If `None`, no minimum is
+        applied.
+    weighting_use_replacement : bool
+        Whether to sample with replacement when using the weighted sampling method.
+    weighting_epsilon : float
+        When using the weighted sampling method, this value, divided by the number of
+        rollouts, is added to the normalised weights, which are then normalised again.
+        This can be used to prevent the probabilities from becoming zero.
+    """
+
+    rollout_selection_method: Literal["threshold", "weighted_sampling"] = "threshold"
+    reward_threshold: float = 0.9
+    weighting_sample_size_factor: float = 0.5
+    weighting_minimum: Optional[float] = None
+    weighting_use_replacement: bool = True
+    weighting_epsilon: float = 0.01

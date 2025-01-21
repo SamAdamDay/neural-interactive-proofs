@@ -1,5 +1,7 @@
+"""The PVG experiments package."""
+
 from .parameters import (
-    Parameters,
+    HyperParameters,
     LrFactors,
     AgentsParameters,
     RandomAgentParameters,
@@ -12,21 +14,25 @@ from .parameters import (
     VanillaPpoParameters,
     SpgParameters,
     ReinforceParameters,
+    TextRlParameters,
+    PureTextEiParameters,
     ImageClassificationParameters,
+    CodeValidationParameters,
     DatasetParameters,
     CommonProtocolParameters,
     PvgProtocolParameters,
     DebateProtocolParameters,
     MessageRegressionParameters,
+    BaseRunParameters,
     ScenarioType,
     TrainerType,
     PpoLossType,
     ActivationType,
     BinarificationMethodType,
     ImageBuildingBlockType,
-    SpgVariant,
-    IhvpVariant,
-    Guess,
+    SpgVariantType,
+    IhvpVariantType,
+    GuessType,
     InteractionProtocolType,
     MinMessageRoundsSchedulerType,
     MessageRegressionMethodType,
@@ -35,6 +41,7 @@ from .parameters import (
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     AGENT_NAMES,
+    TestSchemeType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment, PreparedExperimentInfo

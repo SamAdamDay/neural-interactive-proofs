@@ -10,11 +10,12 @@ Has classes for:
 """
 
 from .agents import (
-    CodeValidationWholeAgent,
     CodeValidationRandomAgentPolicyHead,
     CodeValidationAgentParameters,
     CodeValidationCombinedWholeAgent,
     OpenAiWholeAgent,
+    CodeValidationAgent,
 )
 from .data import CodeValidationDataset
 from .environment import CodeValidationEnvironment
+from .protocols import CodeValidationProtocolHandler

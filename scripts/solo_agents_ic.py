@@ -12,7 +12,7 @@ import logging
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
     ImageClassificationParameters,
@@ -44,25 +44,25 @@ param_grid = dict(
     no_body_lr_factor=[True],
     prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
-    prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_block_type=["conv2d"],
     prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
-    verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_block_type=["conv2d"],
     verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
-    binarification_method=[BinarificationMethodType.SELECT_TWO],
+    binarification_method=["select_two"],
     binarification_seed=[None],
     selected_classes=[None],
     seed=[8144, 820, 4173, 3992],
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
-    return Parameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.SOLO_AGENT,
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
+    return HyperParameters(
+        scenario="image_classification",
+        trainer="solo_agent",
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
             verifier=ImageClassificationAgentParameters(
@@ -100,6 +100,14 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
 
 
 def experiment_fn(arguments: ExperimentFunctionArguments):
+    """Run a single experiment.
+
+    Parameters
+    ----------
+    arguments : ExperimentFunctionArguments
+        The arguments for the experiment.
+    """
+
     combo = arguments.combo
     cmd_args = arguments.cmd_args
     logger = arguments.child_logger_adapter
@@ -118,11 +126,11 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     else:
         wandb_tags = []
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         logger=logger,
         dataset_on_device=cmd_args.dataset_on_device,
@@ -139,14 +147,45 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
 
 def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+    """Generate the run ID for a given hyperparameter combination.
+
+    Parameters
+    ----------
+    combo_index : int | None
+        The index of the hyperparameter combination. If None, the run ID is for the
+        entire experiment.
+    cmd_args : Namespace
+        The command line arguments.
+
+    Returns
+    -------
+    run_id : str
+        The run ID.
+    """
     if combo_index is None:
         return f"test_solo_ic_agents_{cmd_args.run_infix}"
     return f"test_solo_ic_agents_{cmd_args.run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    """Prepare the experiment for a single run.
+
+    Parameters
+    ----------
+    combo : dict
+        The hyperparameter combination to use.
+    cmd_args : Namespace
+        The command line arguments.
+
+    Returns
+    -------
+    prepared_experiment_info : PreparedExperimentInfo
+        The prepared experiment data.
+    """
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

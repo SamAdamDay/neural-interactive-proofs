@@ -1,16 +1,16 @@
 """Functions for handling parameters and deriving properties from them."""
 
-from pvg.parameters import Parameters, TrainerType
+from pvg.parameters import HyperParameters, TrainerType
 
 
 def get_agent_part_flags(
-    params: Parameters,
+    hyper_params: HyperParameters,
 ) -> tuple[bool, bool]:
     """Get flags indicating which agent parts are used.
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters of the experiment.
 
     Returns
@@ -25,17 +25,18 @@ def get_agent_part_flags(
         Whether agents are composed of a single part, and are not split body and heads.
     """
 
-    if params.trainer == TrainerType.SOLO_AGENT:
+    if hyper_params.trainer == "solo_agent":
         return False, True, False
-    elif params.trainer == TrainerType.VANILLA_PPO or params.trainer == TrainerType.SPG:
-        return True, params.rl.use_shared_body, False
-    elif params.trainer == TrainerType.REINFORCE:
+    elif hyper_params.trainer == "vanilla_ppo" or hyper_params.trainer == "spg":
+        return True, hyper_params.rl.use_shared_body, False
+    elif hyper_params.trainer == "reinforce":
         return (
-            params.reinforce.use_advantage_and_critic,
-            params.rl.use_shared_body or not params.reinforce.use_advantage_and_critic,
+            hyper_params.reinforce.use_advantage_and_critic,
+            hyper_params.rl.use_shared_body
+            or not hyper_params.reinforce.use_advantage_and_critic,
             False,
         )
-    elif params.trainer == TrainerType.PURE_TEXT_EI:
+    elif hyper_params.trainer == "pure_text_ei":
         return False, False, True
     else:
-        raise ValueError(f"Unknown trainer type: {params.trainer}")
+        raise ValueError(f"Unknown trainer type: {hyper_params.trainer}")

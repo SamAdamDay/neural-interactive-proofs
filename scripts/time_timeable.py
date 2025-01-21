@@ -1,4 +1,4 @@
-"""Script to time the timeable action"""
+"""Script to time the timeable action."""
 
 from argparse import ArgumentParser
 from textwrap import indent
@@ -49,10 +49,10 @@ parser.add_argument(
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.list:
-        print("Available timeables:")
+        print("Available timeables:")  # noqa: T201
         for name, timeable in list_timeables():
-            print(f"  {name}:")
-            print(indent(timeable.__doc__.strip(), "    "))
+            print(f"  {name}:")  # noqa: T201
+            print(indent(timeable.__doc__.strip(), "    "))  # noqa: T201
     elif args.all:
         time_all_timeables(print_results=True)
     elif not args.names:

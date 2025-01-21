@@ -3,14 +3,13 @@
 Changing these settings should not effect the reproducibility of the experiment.
 """
 
-from typing import Optional, ClassVar, Any
+from typing import Optional, Any, Annotated, get_origin
 from dataclasses import dataclass, field, fields
 
 import torch
 
-from openai import OpenAI
-
 import wandb
+import wandb.apis.public
 
 from tqdm import tqdm
 
@@ -18,8 +17,19 @@ from pvg.stat_logger import StatLogger, DummyStatLogger
 from pvg.utils.types import TorchDevice, LoggingType
 
 
-def default_global_tqdm_step_fn():
+def _default_global_tqdm_step_fn():
     pass
+
+
+class _MarkUnpicklable:
+    """A class to mark a field as unpicklable.
+
+    This is used to mark fields that should not be pickled when pickling the object.
+    """
+
+
+MarkUnpicklable = _MarkUnpicklable()
+"""A marker to indicate that a field should not be pickled."""
 
 
 @dataclass
@@ -30,10 +40,16 @@ class ExperimentSettings:
     ----------
     device : TorchDevice, default="cpu"
         The device to use for training.
+    run_id : str, optional
+        The ID of the current run. This can be used to save and restore the state of the
+        experiment.
     wandb_run : wandb.wandb_sdk.wandb_run.Run, optional
         The W&B run to log to, if any.
     silence_wandb : bool, default=True
         Whether to suppress W&B output.
+    base_wandb_run : wandb.apis.public.Run, optional
+        The base W&B run, if using. This is an already complete run loaded using the W&B
+        API.
     stat_logger : StatLogger, optional
         The logger to use for logging statistics. If not provided, a dummy logger is
         used, which does nothing.
@@ -58,7 +74,7 @@ class ExperimentSettings:
         The number of threads to use for saving the memory-mapped tensordict.
     num_rollout_workers : int, default=4
         The number of workers to use for collecting rollout samples, when this is done
-        in parallel.
+        in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with `non_blocking=True`. This can speed up training. When the device if the
@@ -77,6 +93,17 @@ class ExperimentSettings:
         global progress bar.
     pretrained_embeddings_batch_size : int, default=256
         The batch size to use when generating embeddings for the pretrained models.
+    num_api_generation_timeouts : int, default=100
+        The number of timeouts to allow when generating API outputs. If the number of
+        timeouts exceeds this value, the experiment will be stopped.
+    num_api_connection_errors : int, default=100
+        The number of connection errors to allow when generating API outputs. The
+        generation request is retried with exponential back-off with the formual `0.01 *
+        2 ** num_attempts`, so this value should not be higher than around 12. This
+        error type is more general that timeouts, which have their own counter. If the
+        number of connection errors exceeds this value, the experiment will be stopped.
+    do_not_load_checkpoint : bool, default=False
+        If True, the experiment will not load a checkpoint if one exists.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -85,8 +112,10 @@ class ExperimentSettings:
     """
 
     device: TorchDevice = torch.device("cpu")
+    run_id: Optional[str] = None
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
+    base_wandb_run: Annotated[Optional[wandb.apis.public.Run], MarkUnpicklable] = None
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
     logger: Optional[LoggingType] = None
@@ -100,11 +129,14 @@ class ExperimentSettings:
     pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
-    global_tqdm_step_fn: callable = default_global_tqdm_step_fn
+    global_tqdm_step_fn: Annotated[callable, MarkUnpicklable] = (
+        _default_global_tqdm_step_fn
+    )
     pretrained_embeddings_batch_size: int = 256
+    num_api_generation_timeouts: int = 100
+    num_api_connection_errors: int = 10
+    do_not_load_checkpoint: bool = False
     test_run: bool = False
-
-    unpicklable_fields: ClassVar[tuple[str, ...]] = ("global_tqdm_step_fn",)
 
     def __post_init__(self):
         if isinstance(self.device, str):
@@ -131,9 +163,16 @@ class ExperimentSettings:
         state = {}
         for setting_field in fields(self):
             field_name = setting_field.name
-            if field_name in self.unpicklable_fields:
+            if (
+                get_origin(setting_field.type) is Annotated
+                and MarkUnpicklable in setting_field.type.__metadata__
+            ):
                 state[field_name] = setting_field.default
             else:
                 state[field_name] = getattr(self, field_name)
 
         return state
+
+    def __deepcopy__(self, memo) -> "ExperimentSettings":
+        """We do not deepcopy this object, as it is a singleton and contains locks."""
+        return self

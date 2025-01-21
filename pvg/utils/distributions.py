@@ -1,4 +1,4 @@
-"""PyTorch distributions"""
+"""PyTorch distributions."""
 
 from typing import Callable
 
@@ -56,16 +56,25 @@ class CompositeCategoricalDistribution(CompositeDistribution):
     def __init__(self, **kwargs):
         # Get the key transform
         try:
+
             key_transform: Callable[[str], NestedKey] | dict[str, NestedKey] = (
                 kwargs.pop("key_transform")
             )
+
             if isinstance(key_transform, dict):
+
                 key_transform_dict = key_transform
-                key_transform = lambda x: key_transform_dict[x]
+
+                def key_transform(x):
+                    return key_transform_dict[x]
+
             elif not callable(key_transform):
                 raise ValueError("key_transform must be a callable or a dict.")
+
         except KeyError:
-            key_transform = lambda x: x
+
+            def key_transform(x):
+                return x
 
         # Get the log-probability key
         self.log_prob_key = kwargs.pop("log_prob_key", "sample_log_prob")
@@ -90,7 +99,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         )
 
     def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
-        """Computes the log probability of a sample for the composite distribution
+        """Compute the log probability of a sample for the composite distribution.
 
         Adapted from `tensordict.nn.distributions.CompositeDistribution.log_prob`.
 
@@ -122,7 +131,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         return sample
 
     def entropy(self, batch_size: int | tuple[int, ...]) -> Tensor:
-        """Computes the entropy of the composite distribution
+        """Compute the entropy of the composite distribution.
 
         Parameters
         ----------

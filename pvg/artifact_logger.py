@@ -25,8 +25,8 @@ from pvg.constants import (
     ROLLOUT_SAMPLE_ARTIFACT_PREFIX,
     ROLLOUT_SAMPLE_ARTIFACT_TYPE,
     ROLLOUT_SAMPLE_FILENAME,
-    CHECKPOINT_ARTIFACT_PREFIX,
-    CHECKPOINT_ARTIFACT_TYPE,
+    MODEL_CHECKPOINT_ARTIFACT_PREFIX,
+    MODEL_CHECKPOINT_ARTIFACT_TYPE,
 )
 
 
@@ -130,8 +130,8 @@ class ArtifactLogger:
 
         # Create an artifact to hold the checkpoint
         artifact = wandb.Artifact(
-            name=f"{CHECKPOINT_ARTIFACT_PREFIX}{self._wandb_run.id}",
-            type=CHECKPOINT_ARTIFACT_TYPE,
+            name=f"{MODEL_CHECKPOINT_ARTIFACT_PREFIX}{self._wandb_run.id}",
+            type=MODEL_CHECKPOINT_ARTIFACT_TYPE,
         )
 
         # Save all the parts of all the agents to the artifact

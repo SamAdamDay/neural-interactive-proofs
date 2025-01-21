@@ -1,4 +1,4 @@
-"""Dummy image classification test script, for debugging purposes"""
+"""Dummy image classification test script, for debugging purposes."""
 
 from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
@@ -6,7 +6,7 @@ import os
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
     ImageBuildingBlockType,
@@ -20,8 +20,8 @@ from pvg import (
     PvgProtocolParameters,
     SpgParameters,
     PpoLossType,
-    SpgVariant,
-    Guess,
+    SpgVariantType,
+    GuessType,
     AGENT_NAMES,
     ImageClassificationParameters,
     run_experiment,
@@ -30,8 +30,16 @@ from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
 
 
 def run(cmd_args: Namespace):
+    """Run the dummy image classification test.
+
+    Parameters
+    ----------
+    cmd_args : Namespace
+        The command-line arguments.
+    """
+
     if cmd_args.use_cpu or not torch.cuda.is_available():
-        print("Using CPU")
+        print("Using CPU")  # noqa: T201
         device = torch.device("cpu")
     else:
         device = torch.device("cuda")
@@ -40,15 +48,15 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = InteractionProtocolType.PVG
-    params = Parameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
-        trainer=TrainerType.VANILLA_PPO,
+    interaction_protocol = "pvg"
+    hyper_params = HyperParameters(
+        scenario="image_classification",
+        trainer="vanilla_ppo",
         dataset="cifar10",
         agents=AgentsParameters(
             **{
                 agent_name: ImageClassificationAgentParameters(
-                    building_block_type=ImageBuildingBlockType.CONV2D,
+                    building_block_type="conv2d",
                     d_latent_pixel_selector=1,
                     d_decider=1,
                     num_decider_layers=1,
@@ -77,10 +85,10 @@ def run(cmd_args: Namespace):
             num_normalization_steps=10,
         ),
         spg=SpgParameters(
-            variant=SpgVariant.PSOS,
+            variant="psos",
         ),
         ppo=CommonPpoParameters(
-            loss_type=PpoLossType.CLIP,
+            loss_type="clip",
             normalize_advantage=True,
         ),
         reinforce=ReinforceParameters(
@@ -104,7 +112,7 @@ def run(cmd_args: Namespace):
     else:
         run_id = None
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
@@ -122,7 +130,7 @@ if __name__ == "__main__":
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--use_cpu", action="store_true")
-    parser.add_argument("--ignore_cache", action="store_true")
+    parser.add_argument("--ignore-cache", action="store_true")
     parser.add_argument(
         "--use-wandb",
         action="store_true",

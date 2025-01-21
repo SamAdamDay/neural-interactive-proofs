@@ -1,3 +1,5 @@
+"""Tests for the implementation of the agents."""
+
 import pytest
 
 import torch
@@ -8,7 +10,7 @@ from tensordict.nn import TensorDictSequential
 from einops import repeat
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     ScenarioType,
     TrainerType,
     InteractionProtocolType,
@@ -25,10 +27,11 @@ from pvg.scenario_base import (
     TensorDictEnvironment,
     TensorDictAgentPartMixin,
 )
+from pvg.utils.maths import set_seed
 
 
 def test_graph_isomorphism_combined_agents():
-    """Test the combined agents for the graph isomorphism scenario with three agents
+    """Test the combined agents for the graph isomorphism scenario with three agents.
 
     The idea is to catch dimension bugs caused by the fact that we normally have two
     agents and two graphs. If these dimension are mixed up this should be caught here.
@@ -51,11 +54,11 @@ def test_graph_isomorphism_combined_agents():
         num_value_layers=1,
         normalize_message_history=False,
     )
-    params = Parameters(
-        scenario=ScenarioType.GRAPH_ISOMORPHISM,
-        trainer=TrainerType.VANILLA_PPO,
+    hyper_params = HyperParameters(
+        scenario="graph_isomorphism",
+        trainer="vanilla_ppo",
         dataset="eru10000",
-        interaction_protocol=InteractionProtocolType.MERLIN_ARTHUR,
+        interaction_protocol="merlin_arthur",
         agents=AgentsParameters(
             prover0=agent_params,
             prover1=agent_params,
@@ -71,7 +74,7 @@ def test_graph_isomorphism_combined_agents():
 
     # Build the scenario instance
     scenario_instance = build_scenario_instance(
-        params=params,
+        hyper_params=hyper_params,
         settings=settings,
     )
 
@@ -97,8 +100,8 @@ def test_graph_isomorphism_combined_agents():
 @pytest.mark.parametrize(
     "scenario_type, agent_params_class",
     [
-        (ScenarioType.GRAPH_ISOMORPHISM, GraphIsomorphismAgentParameters),
-        (ScenarioType.IMAGE_CLASSIFICATION, ImageClassificationAgentParameters),
+        ("graph_isomorphism", GraphIsomorphismAgentParameters),
+        ("image_classification", ImageClassificationAgentParameters),
     ],
     ids=["graph_isomorphism", "image_classification"],
 )
@@ -115,7 +118,7 @@ def test_channel_visibility(
     and that all the expected channels are present in the data.
     """
 
-    torch.manual_seed(0)
+    set_seed(0)
 
     num_message_channels = 3
     max_message_rounds = 8
@@ -123,25 +126,23 @@ def test_channel_visibility(
 
     # Build the experiment components
     basic_agent_params = agent_params_class.construct_test_params()
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario_type,
-        TrainerType.VANILLA_PPO,
+        "vanilla_ppo",
         "test",
         agents=AgentsParameters(
             **{
                 agent_name: basic_agent_params
-                for agent_name in AGENT_NAMES[
-                    InteractionProtocolType.MULTI_CHANNEL_TEST
-                ]
+                for agent_name in AGENT_NAMES["multi_channel_test"]
             }
         ),
         rl=RlTrainerParameters(frames_per_batch=max_message_rounds * batch_size),
-        interaction_protocol=InteractionProtocolType.MULTI_CHANNEL_TEST,
+        interaction_protocol="multi_channel_test",
     )
     settings = ExperimentSettings(
         device="cpu", test_run=True, pin_memory=False, ignore_cache=True
     )
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     protocol_handler = scenario_instance.protocol_handler
     channel_names = protocol_handler.message_channel_names
@@ -150,7 +151,7 @@ def test_channel_visibility(
     old_bodies = combined_body.bodies.copy()
 
     class TestBody(TensorDictAgentPartMixin):
-        """A body that checks the data received by the agent"""
+        """A body that checks the data received by the agent."""
 
         def forward(self, data: TensorDict, *args, **kwargs) -> TensorDict:
 
@@ -197,7 +198,7 @@ def test_channel_visibility(
     # Replace the bodies with the test bodies
     for agent_name in combined_body.bodies.keys():
         combined_body.bodies[agent_name] = TestBody(
-            params, settings, agent_name, protocol_handler
+            hyper_params, settings, agent_name, protocol_handler
         )
 
     # The protocol should have 3 channels and 8 rounds for the test to work. If this

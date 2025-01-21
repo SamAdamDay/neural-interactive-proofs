@@ -13,7 +13,12 @@ from dataclasses import dataclass
 import dataclasses
 
 from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
-from pvg.parameters.base import BaseParameters, SubParameters, ParameterValue
+from pvg.parameters.parameters_base import (
+    SubParameters,
+    ParameterValue,
+    register_parameter_class,
+    register_parameter_value_class,
+)
 from pvg.parameters.types import ActivationType, ImageBuildingBlockType
 from pvg.parameters.update_schedule import (
     AgentUpdateSchedule,
@@ -22,12 +27,14 @@ from pvg.parameters.update_schedule import (
 )
 
 
+@register_parameter_class
 @dataclass
 class LrFactors(SubParameters, ABC):
     """
     Class representing learning rate factors for the actor and critic models.
 
-    Attributes:
+    Attributes
+    ----------
         actor (float): The learning rate factor for the actor model.
         critic (float): The learning rate factor for the critic model.
     """
@@ -36,9 +43,10 @@ class LrFactors(SubParameters, ABC):
     critic: float = 1.0
 
 
+@register_parameter_class
 @dataclass
 class AgentParameters(SubParameters, ABC):
-    """Base class for sub-parameters objects which define agents
+    """Base class for sub-parameters objects which define agents.
 
     Parameters
     ----------
@@ -120,6 +128,16 @@ class AgentParameters(SubParameters, ABC):
     is_random: ClassVar[bool] = False
 
     def to_dict(self) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Adds the `is_random` parameter to the dictionary. This is not a field of the
+        parameters object, but we want to include it in the dictionary for logging.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
         params_dict = super().to_dict()
 
         # Add the is_random parameter. This is not a field of the parameters object, but
@@ -127,6 +145,32 @@ class AgentParameters(SubParameters, ABC):
         params_dict["is_random"] = self.is_random
 
         return params_dict
+
+    @classmethod
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "AgentsParameters":
+        """Create a parameters object from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the parameters.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
+
+        Returns
+        -------
+        hyper_params : AgentsParameters
+            The parameters object.
+        """
+
+        # Remove the is_random parameter from the dictionary
+        if "is_random" in params_dict:
+            params_dict.pop("is_random")
+
+        return super().from_dict(params_dict, ignore_extra_keys=ignore_extra_keys)
 
     def load_from_wandb_config(self, wandb_config: dict):
         """Load the parameters from a W&B config dictionary.
@@ -145,13 +189,15 @@ class AgentParameters(SubParameters, ABC):
         setattr(self, "is_random", wandb_config["is_random"])
 
 
+@register_parameter_class
 @dataclass
 class RandomAgentParameters(AgentParameters):
-    """Parameters which specify a random agent"""
+    """Parameters which specify a random agent."""
 
     is_random: ClassVar[bool] = True
 
 
+@register_parameter_class
 @dataclass
 class GraphIsomorphismAgentParameters(AgentParameters):
     """Additional parameters for agents in the graph isomorphism experiment.
@@ -225,7 +271,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         The learning rate factor for the GNN part of the model (split across the actor and the critic). The final LR for the GNN is obtained by multiplying this factor by the body LR. This allows updating the GNN at a different rate to the rest of the model.
     """
 
-    activation_function: ActivationType = ActivationType.TANH
+    activation_function: ActivationType = "tanh"
 
     num_gnn_layers: int = 5
     d_gnn: int = 16
@@ -262,6 +308,15 @@ class GraphIsomorphismAgentParameters(AgentParameters):
 
     @classmethod
     def construct_test_params(cls) -> "GraphIsomorphismAgentParameters":
+        """Construct test parameters for the agent.
+
+        We use a simple architecture with one GNN layer and one transformer layer.
+
+        Returns
+        -------
+        test_params : GraphIsomorphismAgentParameters
+            The test parameters.
+        """
         return cls(
             num_gnn_layers=1,
             d_gnn=1,
@@ -281,6 +336,7 @@ class GraphIsomorphismAgentParameters(AgentParameters):
         )
 
 
+@register_parameter_class
 @dataclass
 class ImageClassificationAgentParameters(AgentParameters):
     """Additional parameters for agents in the image classification experiment.
@@ -305,7 +361,7 @@ class ImageClassificationAgentParameters(AgentParameters):
         If not None, specifies a pretrained model to load. This is usually either of the
         form "{hf_user}/{model_name}_{dataset}", where `hf_user` is a HuggingFace Hub
         username, or "{model_name}", which resolves to
-        "{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}", where
+        "{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}", where
         `HF_PRETRAINED_MODELS_USER` is defined in the `constants` module. The last-layer
         embeddings will be included in the model architecture.
     pretrained_embedding_channels : int
@@ -338,9 +394,9 @@ class ImageClassificationAgentParameters(AgentParameters):
         Whether to include the round number in the agents's value MLP.
     """
 
-    activation_function: ActivationType = ActivationType.TANH
+    activation_function: ActivationType = "tanh"
 
-    building_block_type: ImageBuildingBlockType = ImageBuildingBlockType.CONV2D
+    building_block_type: ImageBuildingBlockType = "conv2d"
     num_blocks_per_group: int = 2
     kernel_size: int = 3
     stride: int = 1
@@ -364,8 +420,17 @@ class ImageClassificationAgentParameters(AgentParameters):
 
     @classmethod
     def construct_test_params(cls) -> "ImageClassificationAgentParameters":
+        """Construct test parameters for the agent.
+
+        We use a simple architecture with one convolutional layer.
+
+        Returns
+        -------
+        test_params : ImageClassificationAgentParameters
+            The test parameters.
+        """
         return cls(
-            building_block_type=ImageBuildingBlockType.CONV2D,
+            building_block_type="conv2d",
             num_blocks_per_group=1,
             d_latent_pixel_selector=1,
             num_latent_pixel_selector_layers=1,
@@ -379,7 +444,81 @@ class ImageClassificationAgentParameters(AgentParameters):
 
 
 @dataclass
-class CodeValidationAgentParameters(AgentParameters):
+class PureTextAgentParameters(AgentParameters):
+    """Additional parameters for text-based agents who use APIs to generate responses.
+
+    Parameters
+    ----------
+    model_provider : Literal["OpenAI"]
+        The provider of the model and API to use.
+    model_name : str
+        The name of the model to use.
+    use_dummy_api : bool
+        Whether to use a dummy API instead of the real API. This is useful for testing
+        the agent without making real API requests.
+    shared_model_group : str | None
+        The group of agents which share the same model. When two agents share this
+        value, they will use the same model inference. For fine-tuning, this model is
+        trained on a copy of the rollouts and rewards for each agent in the group. When
+        this is `None`, the agent is in a group whose name is the same as the agent's
+        name.
+    temperature : float | None
+        The temperature to use when sampling from the model. If `None`, the model uses
+        the default temperature. Only one of `temperature` and `top_p` should be set.
+    top_p : float | None
+        The top-p value to use when sampling from the model. A value 0.1 means only the
+        top 10% of tokens are considered when sampling. If `None`, the model uses the
+        default top-p value. Only one of `temperature` and `top_p` should be set.
+    fine_tune_from_scratch : bool
+        Whether to fine-tune the model from scratch each iteration, or continue
+        fine-tuning from the previous iteration.
+    freeze_agent : bool
+        Whether to freeze the agent (i.e. not fine-tune it).
+    max_response_words : int
+        In the system prompt, we say that the agent should respond with a message of at
+        most this many words.
+    max_tokens_per_message : int | None
+        The maximum number of tokens which the model is allowed to generate in a single
+        message. If `None`, this is calculated based on the `max_response_words`.
+    num_invalid_generation_retries : int
+        The number of times to retry generating a message if the model returns an
+        invalid response.
+    """
+
+    model_provider: Literal["OpenAI"] = "OpenAI"
+    model_name: str = "gpt-4o-mini-2024-07-18"
+    use_dummy_api: bool = False
+    shared_model_group: Optional[str] = None
+
+    temperature: float | None = None
+    top_p: float | None = None
+
+    fine_tune_from_scratch: bool = True
+    freeze_agent: bool = False
+
+    max_response_words: int = 150
+
+    max_tokens_per_message: int | None = None
+    num_invalid_generation_retries: int = 20
+
+    @classmethod
+    def construct_test_params(cls) -> "PureTextAgentParameters":
+        """Construct test parameters for the agent.
+
+        For this agent, we use the dummy API, so that we don't need to make real API
+        requests.
+
+        Returns
+        -------
+        test_params : PureTextAgentParameters
+            The test parameters.
+        """
+        return cls(use_dummy_api=True)
+
+
+@register_parameter_class
+@dataclass
+class CodeValidationAgentParameters(PureTextAgentParameters):
     """Additional parameters for agents in the code validation experiment.
 
     Parameters
@@ -391,26 +530,36 @@ class CodeValidationAgentParameters(AgentParameters):
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
-    max_tokens_per_message : int
+    shared_model_group : str | None
+        The group of agents which share the same model. When two agents share this
+        value, they will use the same model inference. For fine-tuning, this model is
+        trained on a copy of the rollouts and rewards for each agent in the group. When
+        this is `None`, the agent is in a group on its own.
+    temperature : float | None
+        The temperature to use when sampling from the model. If `None`, the model uses
+        the default temperature. Only one of `temperature` and `top_p` should be set.
+    top_p : float | None
+        The top-p value to use when sampling from the model. A value 0.1 means only the
+        top 10% of tokens are considered when sampling. If `None`, the model uses the
+        default top-p value. Only one of `temperature` and `top_p` should be set.
+    fine_tune_from_scratch : bool
+        Whether to fine-tune the model from scratch each iteration, or continue
+        fine-tuning from the previous iteration.
+    freeze_agent : bool
+        Whether to freeze the agent (i.e. not fine-tune it).
+    max_response_words : int
+        In the system prompt, we say that the agent should respond with a message of at
+        most this many words.
+    max_tokens_per_message : int | None
         The maximum number of tokens which the model is allowed to generate in a single
-        message.
+        message. If `None`, this is calculated based on the `max_response_words`.
     num_invalid_generation_retries : int
         The number of times to retry generating a message if the model returns an
         invalid response.
     """
 
-    model_provider: Literal["OpenAI"] = "OpenAI"
-    model_name: str = "gpt-4o-mini"
-    use_dummy_api: bool = False
 
-    max_tokens_per_message: int = 512
-    num_invalid_generation_retries: int = 5
-
-    @classmethod
-    def construct_test_params(cls) -> "CodeValidationAgentParameters":
-        return cls(use_dummy_api=True)
-
-
+@register_parameter_value_class
 class AgentsParameters(dict[str, AgentParameters], ParameterValue):
     """Parameters which specify the agents in the experiment.
 
@@ -442,6 +591,45 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
         params_dict["agents_update_repr"] = self._agents_update_repr()
 
         return params_dict
+
+    @classmethod
+    def from_dict(
+        cls, params_dict: dict, ignore_extra_keys: bool = False
+    ) -> "AgentsParameters":
+        """Create a parameters object from a dictionary.
+
+        Parameters
+        ----------
+        params_dict : dict
+            A dictionary of the parameters.
+        ignore_extra_keys : bool, default=False
+            If True, ignore keys in the dictionary that do not correspond to fields in
+            the parameters object.
+
+
+        Returns
+        -------
+        hyper_params : AgentsParameters
+            The parameters object.
+        """
+
+        # Build each agent parameters object from the dictionary, excluding the combined
+        # agents update schedule representation
+        agents_params = {}
+        for agent_name, agent_params_dict in params_dict.items():
+            if agent_name == "agents_update_repr":
+                continue
+            class_name: AgentParameters = cls._get_param_class_from_dict(
+                agent_params_dict
+            )
+            agent_params = class_name.from_dict(
+                agent_params_dict, ignore_extra_keys=ignore_extra_keys
+            )
+            agents_params[agent_name] = agent_params
+
+        agents_params_obj = cls(**agents_params)
+
+        return agents_params_obj
 
     def _agents_update_repr(self) -> str:
         """Return a string representation of the combined agents update schedule.

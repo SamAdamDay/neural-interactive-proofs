@@ -1,4 +1,4 @@
-"""Classes for loading pretrained image models, to use their embeddings
+"""Classes for loading pretrained image models, to use their embeddings.
 
 Models are loaded from a 'hub' somewhere (e.g. PyTorch Image Models (timm) or Hugging
 Face Transformers).
@@ -35,14 +35,14 @@ from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedImageModel(PretrainedModel, ABC):
-    """Base class for pretrained image models"""
+    """Base class for pretrained image models."""
 
     embedding_width: int
     embedding_height: int
 
 
 class Resnet18PretrainedModel(PretrainedImageModel, ABC):
-    """Base class for pretrained ResNet models using PyTorch Image Models (timm)
+    """Base class for pretrained ResNet models using PyTorch Image Models (timm).
 
     These models are hosted on Hugging Face and are loaded using the PyTorch Image
     Models (timm) library.
@@ -51,7 +51,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment
     settings : ExperimentSettings
         The settings for the experiment
@@ -73,17 +73,19 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
     @classproperty
     def name(cls):
+        """The name of the model."""  # noqa: D401
         return f"{HF_PRETRAINED_MODELS_USER}/{cls.base_model_name}_{cls.dataset}"
 
     @classproperty
     def timm_uri(cls):
+        """The URI of the model in the timm library."""  # noqa: D401
         return f"hf_hub:{cls.name}"
 
     @torch.no_grad()
     def generate_dataset_embeddings(
         self, datasets: dict[str, ImageClassificationDataset], delete_model: bool = True
     ) -> dict[str, Tensor]:
-        """Load the model and generate embeddings for the datasets
+        """Load the model and generate embeddings for the datasets.
 
         Parameters
         ----------
@@ -151,26 +153,26 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
     @classproperty
     def embedding_width(cls) -> int:
-        """The width of the embeddings produced by the model
+        """The width of the embeddings produced by the model.
 
         Must be a factor of the dataset's image width.
-        """
+        """  # noqa: D401
         return ceil(
             DATASET_WRAPPER_CLASSES[cls.dataset].width / cls.embedding_downscale_factor
         )
 
     @classproperty
     def embedding_height(cls) -> int:
-        """The height of the embeddings produced by the model
+        """The height of the embeddings produced by the model.
 
         Must be a factor of the dataset's image height.
-        """
+        """  # noqa: D401
         return ceil(
             DATASET_WRAPPER_CLASSES[cls.dataset].height / cls.embedding_downscale_factor
         )
 
     def _get_transform(self, model: ResNet) -> Any | None:
-        """Get the transform to apply to images before passing them to the model
+        """Get the transform to apply to images before passing them to the model.
 
         Returns
         -------
@@ -195,6 +197,6 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
 
 @register_pretrained_model_class
 class Resnet18Cifar10PretrainedModel(Resnet18PretrainedModel):
-    """Resnet18 model trained on CIFAR-10"""
+    """Resnet18 model trained on CIFAR-10."""
 
     dataset = "cifar10"

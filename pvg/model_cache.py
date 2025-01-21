@@ -14,7 +14,7 @@ import json
 
 import torch
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.constants import (
     CACHED_MODELS_DIR,
     CACHED_MODELS_METADATA_FILENAME,
@@ -22,7 +22,7 @@ from pvg.constants import (
 
 
 class ModelNotFoundError(RuntimeError):
-    """Raised when a model is not found"""
+    """Raised when a model is not found."""
 
     def __init__(self, message: str):
         self.message = message
@@ -32,12 +32,12 @@ class ModelNotFoundError(RuntimeError):
         return f"ModelNotFoundError({self.message})"
 
 
-def get_cached_models_path(params: Parameters | dict, subdir: str) -> Path:
-    """Get the path to the directory containing the models with the given parameters
+def get_cached_models_path(hyper_params: HyperParameters | dict, subdir: str) -> Path:
+    """Get the path to the directory containing the models with the given parameters.
 
     Parameters
     ----------
-    params : Parameters | dict
+    hyper_params : HyperParameters | dict
         The parameters which specify the models.
     subdir : str
         The subdirectory in which to look for the saved models.
@@ -53,8 +53,8 @@ def get_cached_models_path(params: Parameters | dict, subdir: str) -> Path:
         If the directory is not found.
     """
 
-    if isinstance(params, Parameters):
-        params = params.to_dict()
+    if isinstance(hyper_params, HyperParameters):
+        hyper_params = hyper_params.to_dict()
 
     models_subdir = Path(CACHED_MODELS_DIR).joinpath(subdir)
     if not models_subdir.is_dir():
@@ -68,7 +68,7 @@ def get_cached_models_path(params: Parameters | dict, subdir: str) -> Path:
             continue
         with open(metadata_path) as f:
             metadata = json.load(f)
-        if metadata["params"] != params:
+        if metadata["hyper_params"] != hyper_params:
             continue
         return path
 
@@ -77,12 +77,12 @@ def get_cached_models_path(params: Parameters | dict, subdir: str) -> Path:
     )
 
 
-def cached_models_exist(params: Parameters | dict, subdir: str) -> bool:
-    """Check whether cached models exist with the given parameters
+def cached_models_exist(hyper_params: HyperParameters | dict, subdir: str) -> bool:
+    """Check whether cached models exist with the given parameters.
 
     Parameters
     ----------
-    params : Parameters | dict
+    hyper_params : HyperParameters | dict
         The parameters which specify the models.
     subdir : str
         The subdirectory in which to look for the saved models.
@@ -93,7 +93,7 @@ def cached_models_exist(params: Parameters | dict, subdir: str) -> bool:
         Whether a cached model exists with the given parameters.
     """
     try:
-        get_cached_models_path(params, subdir)
+        get_cached_models_path(hyper_params, subdir)
         return True
     except ModelNotFoundError:
         return False
@@ -101,11 +101,11 @@ def cached_models_exist(params: Parameters | dict, subdir: str) -> bool:
 
 def save_model_state_dicts(
     models: dict[str, torch.nn.Module],
-    params: Parameters | dict,
+    hyper_params: HyperParameters | dict,
     subdir: str,
     overwrite=True,
 ):
-    """Save a model and its parameters
+    """Save a model and its parameters.
 
     The model will be saved in a directory named with a hash of the current time.
 
@@ -117,7 +117,7 @@ def save_model_state_dicts(
     models : dict[str, torch.nn.Module]
         The models to save. The keys are the names of the models, and the values are
         the models themselves.
-    params : Parameters | dict
+    hyper_params : HyperParameters | dict
         The parameters which specify the models.
     subdir : str
         The subdirectory in which to save the models.
@@ -126,12 +126,12 @@ def save_model_state_dicts(
         already exists, it will do nothing.
     """
 
-    if isinstance(params, Parameters):
-        params = params.to_dict()
+    if isinstance(hyper_params, HyperParameters):
+        hyper_params = hyper_params.to_dict()
 
     # Remove the model directory if it already exists, and we're overwriting
     try:
-        model_dir = get_cached_models_path(params, subdir)
+        model_dir = get_cached_models_path(hyper_params, subdir)
         if overwrite:
             rmtree(model_dir)
         else:
@@ -164,7 +164,7 @@ def save_model_state_dicts(
         cuda_devices=cuda_devices,
         current_cuda_device=current_device,
         model_devices={name: str(model.device) for name, model in models.items()},
-        params=params,
+        hyper_params=hyper_params,
     )
     metadata_path = model_dir.joinpath(CACHED_MODELS_METADATA_FILENAME)
     with open(metadata_path, "w") as f:
@@ -177,16 +177,18 @@ def save_model_state_dicts(
 
 
 def load_cached_model_state_dicts(
-    models: dict[str, torch.nn.Module], params: Parameters | dict, subdir: str
+    models: dict[str, torch.nn.Module],
+    hyper_params: HyperParameters | dict,
+    subdir: str,
 ):
-    """Load the state dict of cached models into models
+    """Load the state dict of cached models into models.
 
     Parameters
     ----------
     models : dict[str, torch.nn.Module]
         The models to load the state dicts into. The keys are the names of the models,
         and the values are the models themselves.
-    params : Parameters | dict
+    hyper_params : HyperParameters | dict
         The parameters which specify the cached models to load.
     subdir : str
         The subdirectory in which to look for the saved models.
@@ -197,7 +199,7 @@ def load_cached_model_state_dicts(
         If a model file is not found.
     """
 
-    model_dir = get_cached_models_path(params, subdir)
+    model_dir = get_cached_models_path(hyper_params, subdir)
     for name, model in models.items():
         model_path = model_dir.joinpath(f"{name}.pt")
         if not model_path.is_file():

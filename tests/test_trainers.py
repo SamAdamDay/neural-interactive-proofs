@@ -1,3 +1,10 @@
+"""Test the trainer modules.
+
+A trainer is in charge of training the agents in a scenario. Currently these tests check
+that the optimizer is correctly set up with the correct learning rates for the different
+parts of the network.
+"""
+
 import dataclasses
 
 import pytest
@@ -7,7 +14,7 @@ import torch
 from sklearn.model_selection import ParameterGrid
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     ScenarioType,
     TrainerType,
     AgentsParameters,
@@ -253,9 +260,9 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
 
     # Construct the parameters
     basic_agent_params = GraphIsomorphismAgentParameters.construct_test_params()
-    params = Parameters(
-        ScenarioType.GRAPH_ISOMORPHISM,
-        TrainerType.VANILLA_PPO,
+    hyper_params = HyperParameters(
+        "graph_isomorphism",
+        "vanilla_ppo",
         "test",
         rl=RlTrainerParameters(lr=lr, use_shared_body=use_shared_body),
         agents=AgentsParameters(
@@ -287,17 +294,17 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
 
     # Create the experiment settings and scenario instance to pass to the trainer
     settings = ExperimentSettings(device="cpu", test_run=True, ignore_cache=True)
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
 
     # Create the trainer and get the loss module and optimizer
-    trainer = VanillaPpoTrainer(params, scenario_instance, settings)
+    trainer = VanillaPpoTrainer(hyper_params, scenario_instance, settings)
     trainer._build_operators()
     loss_module, _ = trainer._get_loss_module_and_gae()
     optimizer, _ = trainer._get_optimizer_and_param_freezer(loss_module)
 
     def get_network_part(param_name: str) -> str:
         """Determine which part of the network the parameter is in."""
-        if params.rl.use_shared_body:
+        if hyper_params.rl.use_shared_body:
             if param_name.startswith("actor_network.module.0.prover.gnn"):
                 return "prover_gnn"
             if param_name.startswith("actor_network.module.0.verifier.gnn"):
@@ -350,10 +357,10 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
     ParameterGrid(
         {
             "scenario": [
-                ScenarioType.GRAPH_ISOMORPHISM,
-                ScenarioType.IMAGE_CLASSIFICATION,
+                "graph_isomorphism",
+                "image_classification",
             ],
-            "trainer": [TrainerType.VANILLA_PPO, TrainerType.REINFORCE],
+            "trainer": ["vanilla_ppo", "reinforce"],
             "use_shared_body": [True, False],
             "functionalize_modules": [True, False],
         }
@@ -368,10 +375,10 @@ def test_loss_parameters_in_optimizer(param_spec):
 
     # Construct basic agent parameters for each scenario
     basic_agent_params = {}
-    basic_agent_params[ScenarioType.GRAPH_ISOMORPHISM] = (
+    basic_agent_params["graph_isomorphism"] = (
         GraphIsomorphismAgentParameters.construct_test_params()
     )
-    basic_agent_params[ScenarioType.IMAGE_CLASSIFICATION] = (
+    basic_agent_params["image_classification"] = (
         ImageClassificationAgentParameters.construct_test_params()
     )
 
@@ -379,7 +386,7 @@ def test_loss_parameters_in_optimizer(param_spec):
     settings = ExperimentSettings(device="cpu", test_run=True)
 
     # Construct the parameters
-    params = Parameters(
+    hyper_params = HyperParameters(
         scenario=param_spec["scenario"],
         trainer=param_spec["trainer"],
         dataset="test",
@@ -394,9 +401,9 @@ def test_loss_parameters_in_optimizer(param_spec):
     )
 
     # Create the trainer and get the loss module and optimizer
-    scenario_instance = build_scenario_instance(params, settings)
+    scenario_instance = build_scenario_instance(hyper_params, settings)
     trainer: ReinforcementLearningTrainer = build_trainer(
-        params, scenario_instance, settings
+        hyper_params, scenario_instance, settings
     )
     trainer._build_operators()
     loss_module, _ = trainer._get_loss_module_and_gae()

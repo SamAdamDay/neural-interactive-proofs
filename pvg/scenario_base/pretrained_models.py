@@ -1,21 +1,35 @@
+"""Base classes for dealing with pretrained models for transfer learning.
+
+Pretrained models can by used to generate embeddings for datasets, which can then be
+used by agents instead of raw data. This means the agent starts with a good level of
+knowledge about the data.
+
+This module contains the base class for pretrained models, as well as a registry for
+them.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Iterable, TypeVar
 
 import torch
 from torch import nn
 
-from pvg.parameters import Parameters
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.scenario_base.data import TensorDictDataset
 from pvg.constants import HF_PRETRAINED_MODELS_USER
 
 
 class PretrainedModel(ABC):
-    """Base class for pretrained models
+    """Base class for pretrained models, used to generate embeddings for datasets.
+
+    Pretrained models can by used to generate embeddings for datasets, which can then be
+    used by agents instead of raw data. This means the agent starts with a good level of
+    knowledge about the data.
 
     Parameters
     ----------
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment
     settings : ExperimentSettings
         The settings for the experiment
@@ -34,9 +48,9 @@ class PretrainedModel(ABC):
     dataset: str
     allow_other_datasets: bool = False
 
-    def __init__(self, params: Parameters, settings: ExperimentSettings):
+    def __init__(self, hyper_params: HyperParameters, settings: ExperimentSettings):
         super().__init__()
-        self.params = params
+        self.hyper_params = hyper_params
         self.settings = settings
         self._model: Optional[nn.Module] = None
 
@@ -44,7 +58,7 @@ class PretrainedModel(ABC):
     def generate_dataset_embeddings(
         self, datasets: Iterable[TensorDictDataset], delete_model: bool = True
     ) -> torch.Tensor:
-        """Load the model and generate embeddings for the datasets
+        """Load the model and generate embeddings for the datasets.
 
         Parameters
         ----------
@@ -66,7 +80,7 @@ P = TypeVar("P", bound=PretrainedModel)
 
 
 def register_pretrained_model_class(pretrained_model_cls: type[P]) -> type[P]:
-    """Decorator to register a pretrained model class, so it can be built by name
+    """Register a pretrained model class, so it can be built by name.
 
     Parameters
     ----------
@@ -91,18 +105,18 @@ def register_pretrained_model_class(pretrained_model_cls: type[P]) -> type[P]:
 
 
 def get_pretrained_model_class(
-    model_name: str, params: Parameters
+    model_name: str, hyper_params: HyperParameters
 ) -> type[PretrainedModel]:
-    """Get the class for a pretrained model by name
+    """Get the class for a pretrained model by name.
 
     If the full model name is not found, it tries to find a model with the name:
-        f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
+        f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}"
 
     Parameters
     ----------
     model_name : str
         The name of the pretrained model to build
-    params : Parameters
+    hyper_params : HyperParameters
         The parameters for the experiment
     """
 
@@ -110,20 +124,23 @@ def get_pretrained_model_class(
         model_class = PRETRAINED_MODEL_CLASSES[model_name]
     else:
         augmented_model_name = (
-            f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{params.dataset}"
+            f"{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}"
         )
         if augmented_model_name in PRETRAINED_MODEL_CLASSES:
             model_class = PRETRAINED_MODEL_CLASSES[augmented_model_name]
         else:
             raise ValueError(
                 f"Unknown pretrained model {model_name!r} for dataset "
-                f"{params.dataset!r}"
+                f"{hyper_params.dataset!r}"
             )
 
-    if model_class.dataset != params.dataset and not model_class.allow_other_datasets:
+    if (
+        model_class.dataset != hyper_params.dataset
+        and not model_class.allow_other_datasets
+    ):
         raise ValueError(
             f"Model {model_name!r} was trained on {model_class.dataset!r}, but the "
-            f"experiment is using dataset {params.dataset!r}"
+            f"experiment is using dataset {hyper_params.dataset!r}"
         )
 
     return model_class

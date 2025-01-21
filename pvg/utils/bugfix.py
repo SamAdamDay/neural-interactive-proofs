@@ -2,16 +2,9 @@
 
 # Monkey patch inspect.getargspec to inspect.getfullargspec (RuntimeModule is imported from bugfix for the code validation dataset generation)
 import warnings
-
-warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
 import inspect
-
-if not hasattr(inspect, "getargspec"):
-    inspect.getargspec = inspect.getfullargspec
 from pyext import RuntimeModule
-
 import torch
-
 from torchrl.objectives.value.functional import (
     _geom_series_like,
     _custom_conv1d,
@@ -21,6 +14,12 @@ from torchrl.objectives.value.functional import (
     _inv_pad_sequence,
 )
 from torchrl.envs.transforms import Reward2GoTransform as Reward2GoTransformBuggy
+
+
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
+
+if not hasattr(inspect, "getargspec"):
+    inspect.getargspec = inspect.getfullargspec
 
 
 @_transpose_time
@@ -44,11 +43,13 @@ def reward2go(
             discounted cumulative sum of rewards. Defaults to 1.0.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
-    Returns:
+    Returns
+    -------
         torch.Tensor: A tensor of shape [B, T] containing the discounted cumulative
             sum of rewards (reward-to-go) at each time step.
 
-    Examples:
+    Examples
+    --------
         >>> reward = torch.ones(1, 10)
         >>> done = torch.zeros(1, 10, dtype=torch.bool)
         >>> done[:, [3, 7]] = True
@@ -93,6 +94,14 @@ def reward2go(
 
 
 class Reward2GoTransform(Reward2GoTransformBuggy):
+    """Calculates the reward to go based on the episode reward and a discount factor.
+
+    This is a fixed version of the `Reward2GoTransform` class from torchrl. The original
+    version had a bug where the reward-to-go was reshaped rather than transposed.
+
+    See `torchrl.envs.transforms.Reward2GoTransform` for more information.
+    """
+
     def _inv_apply_transform(
         self, reward: torch.Tensor, done: torch.Tensor
     ) -> torch.Tensor:

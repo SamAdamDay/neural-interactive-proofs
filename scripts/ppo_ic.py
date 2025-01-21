@@ -7,7 +7,7 @@ import logging
 import torch
 
 from pvg import (
-    Parameters,
+    HyperParameters,
     AgentsParameters,
     RandomAgentParameters,
     ImageClassificationAgentParameters,
@@ -26,9 +26,9 @@ from pvg import (
     PvgProtocolParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
-    SpgVariant,
-    IhvpVariant,
-    Guess,
+    SpgVariantType,
+    IhvpVariantType,
+    GuessType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
@@ -42,7 +42,7 @@ from pvg.utils.experiments import (
 MULTIPROCESS = True
 
 param_grid = dict(
-    trainer=[TrainerType.VANILLA_PPO],
+    trainer=["vanilla_ppo"],
     dataset_name=["cifar10"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -50,7 +50,7 @@ param_grid = dict(
     frames_per_batch=[256],
     gamma=[0.95],
     lmbda=[0.95],
-    ppo_loss_type=[PpoLossType.CLIP],
+    ppo_loss_type=["clip"],
     clip_epsilon=[0.2],
     kl_target=[0.01],
     kl_beta=[1.0],
@@ -66,28 +66,28 @@ param_grid = dict(
     prover_blocks_per_group=[4],
     prover_num_decider_layers=[3],
     prover_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    prover_block_type=[ImageBuildingBlockType.CONV2D],
+    prover_block_type=["conv2d"],
     prover_pretrained_embeddings_model=["resnet18"],
     verifier_blocks_per_group=[1],
     verifier_num_decider_layers=[2],
     verifier_lr_factor=[{"actor": 1.0, "critic": 1.0}],
-    verifier_block_type=[ImageBuildingBlockType.CONV2D],
+    verifier_block_type=["conv2d"],
     verifier_pretrained_embeddings_model=[None],
     num_block_groups=[1],
     initial_num_channels=[16],
     random_prover=[False],
     pretrain_agents=[False],
-    binarification_method=[BinarificationMethodType.SELECT_TWO],
+    binarification_method=["select_two"],
     binarification_seed=[None],
     selected_classes=[None],
-    activation_function=[ActivationType.TANH],
+    activation_function=["tanh"],
     pretrain_num_epochs=[50],
     pretrain_batch_size=[256],
     pretrain_learning_rate=[0.001],
     pretrain_no_body_lr_factor=[True],
-    spg_variant=[SpgVariant.SPG],
+    spg_variant=["spg"],
     stackelberg_sequence=[(("verifier",), ("prover",))],
-    ihvp_variant=[IhvpVariant.NYSTROM],
+    ihvp_variant=["nystrom"],
     ihvp_num_iterations=[5],
     ihvp_rank=[5],
     ihvp_rho=[0.1],
@@ -104,7 +104,21 @@ param_grid = dict(
 )
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
+def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
+    """Construct the hyperparameters object for the experiment.
+
+    Parameters
+    ----------
+    combo : dict
+        The hyperparameter combination to use (from the `param_grid` grid).
+    cmd_args : Namespace
+        The command line arguments.
+
+    Returns
+    -------
+    hyper_params : HyperParameters
+        The hyperparameters object.
+    """
 
     # Set the pretrain_agents flag. This can be forced to False with the --no-pretrain
     # flag.
@@ -138,8 +152,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
             building_block_type=combo["prover_block_type"],
             pretrained_embeddings_model=combo["prover_pretrained_embeddings_model"],
         )
-    params = Parameters(
-        scenario=ScenarioType.IMAGE_CLASSIFICATION,
+    hyper_params = HyperParameters(
+        scenario="image_classification",
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         agents=AgentsParameters(
@@ -211,10 +225,18 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> Parameters:
         seed=combo["seed"],
     )
 
-    return params
+    return hyper_params
 
 
 def experiment_fn(arguments: ExperimentFunctionArguments):
+    """Run a single experiment.
+
+    Parameters
+    ----------
+    arguments : ExperimentFunctionArguments
+        The arguments for the experiment.
+    """
+
     combo = arguments.combo
     cmd_args = arguments.cmd_args
     logger = arguments.child_logger_adapter
@@ -233,11 +255,11 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     else:
         wandb_tags = []
 
-    params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(combo, cmd_args)
 
     # Train and test the agents
     run_experiment(
-        params,
+        hyper_params,
         device=device,
         logger=logger,
         dataset_on_device=cmd_args.dataset_on_device,
@@ -255,14 +277,45 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
 
 def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+    """Generate the run ID for a given hyperparameter combination.
+
+    Parameters
+    ----------
+    combo_index : int | None
+        The index of the hyperparameter combination. If None, the run ID is for the
+        entire experiment.
+    cmd_args : Namespace
+        The command line arguments.
+
+    Returns
+    -------
+    run_id : str
+        The run ID.
+    """
     if combo_index is None:
         return f"ppo_ic_{cmd_args.run_infix}"
     return f"ppo_ic_{cmd_args.run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
-    params = _construct_params(combo, cmd_args)
-    return prepare_experiment(params=params, ignore_cache=cmd_args.ignore_cache)
+    """Prepare the experiment for a single run.
+
+    Parameters
+    ----------
+    combo : dict
+        The hyperparameter combination to use (from the `param_grid` grid).
+    cmd_args : Namespace
+        The command line arguments.
+
+    Returns
+    -------
+    prepared_experiment_info : PreparedExperimentInfo
+        The prepared experiment data.
+    """
+    hyper_params = _construct_params(combo, cmd_args)
+    return prepare_experiment(
+        hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
+    )
 
 
 if __name__ == "__main__":

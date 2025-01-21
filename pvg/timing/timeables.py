@@ -199,13 +199,13 @@ class TrainingTimeable(Timeable, ABC):
 
 TIMEABLES: dict[str, Timeable] = {}
 
-T = TypeVar[Timeable]
+T = TypeVar("T", bound=Timeable)
 
 
 def register_timeable(
     _timeable: Optional[type[Timeable] | Callable] = None, *, name: Optional[str] = None
 ) -> Callable | type[Timeable]:
-    """Decorator to register a timeable.
+    """Register a timeable.
 
     If a callable is given, a subclass of Timeable is created with the callable as the
     run method.
@@ -318,7 +318,9 @@ def time_timeable(
     )
 
     if print_results:
-        print(profiler.key_averages().table(sort_by="self_cpu_time_total"))
+        print(  # noqa: T201
+            profiler.key_averages().table(sort_by="self_cpu_time_total")
+        )
 
     return profiler
 
@@ -348,17 +350,17 @@ def time_all_timeables(
     results = {}
     for name in TIMEABLES:
         if print_results:
-            print(f"Timing '{name}'...")
+            print(f"Timing '{name}'...")  # noqa: T201
         kwargs = common_kwargs.copy()
         kwargs.update(per_timeable_kwargs.get(name, {}))
         results[name] = time_timeable(name, print_results=False, **kwargs)
     if print_results:
         for name, result in results.items():
-            print("-" * len(name))
-            print(name)
-            print("-" * len(name))
-            print(result.table(sort_by="self_cpu_time_total"))
-            print()
+            print("-" * len(name))  # noqa: T201
+            print(name)  # noqa: T201
+            print("-" * len(name))  # noqa: T201
+            print(result.table(sort_by="self_cpu_time_total"))  # noqa: T201
+            print()  # noqa: T201
     return results
 
 

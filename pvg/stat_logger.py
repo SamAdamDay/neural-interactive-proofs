@@ -29,7 +29,7 @@ class StatLogger(ABC):
 class DummyStatLogger(StatLogger):
     """A dummy logger that does nothing."""
 
-    def log(self, to_log: dict, step: Optional[int] = None):
+    def log(self, to_log: dict, step: Optional[int] = None):  # noqa: D102
         pass
 
 
@@ -40,4 +40,13 @@ class WandbStatLogger(StatLogger):
         self.wandb_run = wandb_run
 
     def log(self, to_log: dict, step: Optional[int] = None):
+        """Log some statistics with Weights & Biases.
+
+        Parameters
+        ----------
+        to_log : dict
+            The statistics to log.
+        step : int, optional
+            The step at which the statistics are to be logged.
+        """
         self.wandb_run.log(to_log, step=step)

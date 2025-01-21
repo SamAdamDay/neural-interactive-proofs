@@ -44,6 +44,7 @@ class NestedArrayDict:
 
     @property
     def batch_size(self) -> tuple[int, ...] | None:
+        """The batch size of the NestedDict."""
         return self._batch_size
 
     @batch_size.setter
@@ -63,7 +64,7 @@ class NestedArrayDict:
     def keys(
         self, include_prefixes: bool = True, return_all_tuples: bool = False
     ) -> Iterator[tuple[str, ...] | str]:
-        """An iterator over the all keys, optionally including prefixes.
+        """Return an iterator over the all keys, optionally including prefixes.
 
         By default top-level keys are returned as strings, while nested keys are
         returned as tuples.
@@ -690,6 +691,13 @@ class NumpyArraySpec(NumpySpec):
     dtype: DTypeLike
 
     def zero(self) -> NDArray:
+        """Return a zero array with the specified shape.
+
+        Returns
+        -------
+        zero_array : NDArray
+            The array of zeros with the specified shape.
+        """
         return np.zeros(self.shape, dtype=self.dtype)
 
 
@@ -721,6 +729,13 @@ class StringArraySpec(NumpyArraySpec):
     dtype: ClassVar[DTypeLike] = NumpyStringDtype
 
     def zero(self) -> NDArray:
+        """Return a array of null strings with the specified shape.
+
+        Returns
+        -------
+        zero_array : NDArray
+            The array of null strings with the specified shape.
+        """
         return np.full(self.shape, None, dtype=self.dtype)
 
 
@@ -758,13 +773,20 @@ class CompositeSpec(NumpySpec):
         self.specs[key] = value
 
     def zero(self) -> NestedArrayDict:
+        """Return a dictionary of zero arrays with the specified shape.
+
+        Returns
+        -------
+        zero_dict : NestedArrayDict
+            The dictionary of zero arrays with the specified shape.
+        """
         return NestedArrayDict(
             {key: spec.zero() for key, spec in self.specs.items()},
             batch_size=self.shape,
         )
 
     def keys(self, recurse=False):
-        """Iterate over the keys of the CompositeSpec, optionally recursing to sub-specs
+        """Iterate over the keys of CompositeSpec, optionally recursing to sub-specs.
 
         Parameters
         ----------
@@ -790,4 +812,4 @@ class CompositeSpec(NumpySpec):
                     for sub_key in spec.keys(recurse=True):
                         yield (key,) + sub_key
                 else:
-                    yield key
+                    yield (key,)
