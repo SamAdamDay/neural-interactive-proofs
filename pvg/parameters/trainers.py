@@ -341,11 +341,6 @@ class PureTextMaltParameters(SubParameters):
     num_responses_per_timestep : int
         The number of responses to sample from the agents at each timestep. This yields
         a tree of size at most `num_responses_per_timestep ** max_message_rounds`.
-    max_tree_branches : int | None
-        If not `None`, this is the maximum number of branches in the tree of responses.
-        While generating the tree, if the number of ongoing trajectories exceeds this
-        number, we randomly select `max_tree_branches` of them to continue.
     """
 
     num_responses_per_timestep: int = 2
-    max_tree_branches: Optional[int] = None

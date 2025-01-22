@@ -9,13 +9,14 @@ Preference Optimization :cite:`Rafailov23`.
 """
 
 from typing import Optional, ClassVar, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, InitVar
 import dataclasses
-from textwrap import indent
 
 import numpy as np
 
 import pandas as pd
+
+import einops
 
 from jaxtyping import Int, Float, Bool
 
@@ -52,21 +53,98 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             The rollouts sampled in this iteration.
         """
 
+        node_id: Int[np.ndarray, "batch round"] = rollouts["_node_id"]
+
+        # Break the rollouts into timesteps, and remove duplicate nodes
+        _, unique_index = np.unique(
+            einops.rearrange(node_id, "batch round -> (batch round)"), return_index=True
+        )
+        unique_mask = np.zeros((node_id.shape[0] * node_id.shape[1]), dtype=bool)
+        unique_mask[unique_index] = True
+        unique_mask = einops.rearrange(
+            unique_mask, "(batch round) -> batch round", batch=node_id.shape[0]
+        )
+        timesteps = rollouts[unique_mask]
+
+        node_id: Int[np.ndarray, "timestep"] = timesteps["_node_id"]
+        has_positive_and_negative: Bool[np.ndarray, "timestep agent"] = timesteps[
+            "agents", "has_positive_and_negative"
+        ]
+
+        # A mask indicating which agents are active in any channel in the next round at
+        # each timestep. Note that for the last round we say that no agents are active
+        # in the next round, because there is no next round.
+        last_round_id = self.protocol_handler.max_message_rounds - 1
+        clipped_next_round = np.minimum(timesteps["round"] + 1, last_round_id)
+        agent_active_mask: Bool[np.ndarray, "timestep agent channel"] = (
+            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+                clipped_next_round,
+                timesteps["seed"],
+            )
+            .cpu()
+            .numpy()
+        )
+        agent_active_mask_any: Bool[np.ndarray, "timestep agent"] = einops.reduce(
+            agent_active_mask, "timestep agent channel -> timestep agent", "max"
+        )
+        agent_active_mask_any[timesteps["round"] == last_round_id] = False
+
         for group_name, shared_model_group in self.shared_model_groups.items():
 
-            rollouts_per_agent: dict[str, list[NestedArrayDict]] = {}
-            for agent_id, agent_name in enumerate(shared_model_group.agent_names):
-                rollouts_per_agent[agent_name] = []
+            timesteps_per_agent: dict[str, NestedArrayDict] = {}
+            positive_examples_per_agent: dict[str, NestedArrayDict] = {}
+            negative_examples_per_agent: dict[str, NestedArrayDict] = {}
+            for agent_id, agent_name in shared_model_group.agent_ids_and_names():
 
-                # has_positive_and_negative = rollouts[
-                #     "agents", "has_positive_and_negative"
-                # ]
+                # Select the timesteps which have positive and negative examples for the
+                # agent
+                timesteps_per_agent[agent_name] = timesteps[
+                    has_positive_and_negative[:, agent_id]
+                    & agent_active_mask_any[:, agent_id]
+                ]
+
+                # Get the node IDs of the positive and negative examples
+                sampled_positive_example: Int[np.ndarray, "timestep"] = (
+                    timesteps_per_agent[agent_name][
+                        "agents", "sampled_positive_example"
+                    ][:, agent_id]
+                )
+                sampled_negative_example: Int[np.ndarray, "timestep"] = (
+                    timesteps_per_agent[agent_name][
+                        "agents", "sampled_negative_example"
+                    ][:, agent_id]
+                )
+
+                # Get the indices of the positive and negative examples
+                node_id_sorter = np.argsort(node_id)
+                positive_example_index = node_id_sorter[
+                    np.searchsorted(
+                        node_id, sampled_positive_example, sorter=node_id_sorter
+                    )
+                ]
+                negative_example_index = node_id_sorter[
+                    np.searchsorted(
+                        node_id, sampled_negative_example, sorter=node_id_sorter
+                    )
+                ]
+
+                # Get the positive and negative examples
+                positive_examples_per_agent[agent_name] = timesteps[
+                    positive_example_index
+                ]
+                negative_examples_per_agent[agent_name] = timesteps[
+                    negative_example_index
+                ]
 
             self.settings.logger.info(
                 f"Creating fine-tune job for group {group_name!r}"
             )
 
-            shared_model_group.create_dpo_fine_tune_job(rollouts_per_agent)
+            shared_model_group.create_dpo_fine_tune_job(
+                timesteps_per_agent,
+                positive_examples_per_agent,
+                negative_examples_per_agent,
+            )
 
     @staticmethod
     def _sample_rollouts_for_single_environment(
@@ -108,8 +186,8 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         and `("agents", "sampled_negative_example")` fields to the corresponding node
         IDs. Otherwise these fields are set to -1.
 
-        4. Each node in the response tree gets an ID unique to the datapoint, stored in
-        `_rollout_node_id` which has shape `(max_message_rounds, )`. This allows
+        4. Each node in the response tree gets a unique ID, stored in
+        `_node_id` which has shape `(max_message_rounds, )`. This allows
         reconstructing the tree of responses later, if required, because if the same
         node ID appears in two different rollouts, then those points in the message
         history are the same.
@@ -123,7 +201,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         - ("agents", "has_positive_and_negative"): "round agent"
         - ("agents", "sampled_positive_example"): "round agent"
         - ("agents", "sampled_negative_example"): "round agent"
-        - "_rollout_node_id": "round"
+        - "_node_id": "round"
 
         Notes
         -----
@@ -172,42 +250,6 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             hyper_params=hyper_params,
         )
 
-        def print_partial_rollout(partial_rollout: _PartialRolloutNode, level=0):
-            text = f"Node ID: {partial_rollout.node_id}, "
-            # if partial_rollout.parent_partial_rollout is not None:
-            #     text += f"Parent ID: {partial_rollout.parent_partial_rollout.node_id}, "
-            # text += f"Num branches: {partial_rollout.num_branches}, "
-            # text += f"Total reward: {partial_rollout.total_reward_per_agent[0]}, "
-            if len(partial_rollout.trajectory_env_states) > 0:
-                text += (
-                    f"Expected reward: "
-                    f"{partial_rollout.trajectory_env_states[-1]['agents', 'expected_reward'][0]}"
-                )
-                text += f", Pos: "
-                text += f"{partial_rollout.trajectory_env_states[-1]['agents', 'is_positive_example'][0]}"
-                text += f", Pos/neg: "
-                text += f"{partial_rollout.trajectory_env_states[-1]['agents', 'has_positive_and_negative'][0]}"
-                for agent_id in range(
-                    partial_rollout.trajectory_env_states[-1][
-                        "agents", "message"
-                    ].shape[1]
-                ):
-                    message = partial_rollout.trajectory_env_states[-1][
-                        "agents", "message"
-                    ][0, agent_id, 0]
-                    decision = partial_rollout.trajectory_env_states[-1][
-                        "agents", "decision"
-                    ][0, agent_id]
-                    text += f", D{agent_id}: {decision}"
-                    if message is not None:
-                        text += f", M{agent_id}: {message[0]!r}"
-            print(indent(text, "  " * level))  # noqa: T201
-            for child_partial_rollout in partial_rollout.child_partial_rollouts:
-                print_partial_rollout(child_partial_rollout, level + 1)
-
-        # print_partial_rollout(partial_rollouts_by_level[0][0])
-        # assert False
-
         # Concatenate the environment states of the nodes in the last level to get the
         # sampled rollouts
         sampled_rollouts = []
@@ -218,13 +260,6 @@ class PureTextMaltTrainer(PureTextRlTrainer):
                 partial_rollout.trajectory_env_states, dim=0
             )
             sampled_rollouts.append(sampled_rollout)
-
-        # for sampled_rollout in sampled_rollouts:
-        #     print(f"Node IDs: {sampled_rollout['_rollout_node_id']}")
-        #     print(sampled_rollout["agents", "message"][:, :, 0])
-        #     print(sampled_rollout["agents", "decision"])
-
-        # assert False
 
         return sampled_rollouts
 
@@ -255,7 +290,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         log_stats = super()._get_log_stats(rollouts, train=train)
 
         datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
-        node_id: Int[np.ndarray, "rollout round"] = rollouts["_rollout_node_id"]
+        node_id: Int[np.ndarray, "rollout round"] = rollouts["_node_id"]
 
         expected_reward: Float[np.ndarray, "rollout round agent"] = rollouts[
             "agents", "expected_reward"
@@ -377,9 +412,13 @@ class _PartialRolloutNode:
     num_branches: int = 0
     total_reward_per_agent: np.ndarray | float = 0.0
 
+    node_id_base: InitVar[Optional[int]] = None
+
     _shared_data: ClassVar[dict[str, Any]] = {"next_node_id": 0}
 
-    def __post_init__(self):
+    def __post_init__(self, node_id_base: Optional[int]):
+        if node_id_base is not None:
+            self._shared_data["next_node_id"] = node_id_base
         if self.node_id == -1:
             self.node_id = self._shared_data["next_node_id"]
             self._shared_data["next_node_id"] += 1
@@ -486,10 +525,23 @@ def _generate_response_tree(
         The tree of responses, stratified by level.
     """
 
+    # Reset the environment to get the initial state
+    base_env_state = environment.reset(data_batch=data_batch)
+
+    # A shift which is applied to each node ID to make them unique across all
+    # datapoints. This is required because the node IDs are only unique within a
+    # datapoint.
+    datapoint_id = int(base_env_state["datapoint_id"].item())
+    max_num_nodes = (
+        hyper_params.pure_text_malt.num_responses_per_timestep
+        * protocol_handler.num_agents
+    ) ** (protocol_handler.max_message_rounds + 1)
+    node_id_base = datapoint_id * max_num_nodes
+
     # This is the tree structure, stratified by the level in the tree. We start with the
     # root node, which is the initial state of the environment.
     partial_rollouts_by_level = [
-        [_PartialRolloutNode(environment.reset(data_batch=data_batch))]
+        [_PartialRolloutNode(base_env_state, node_id_base=node_id_base)]
     ]
 
     # Generate the tree of responses by iterating down level-by-level
@@ -526,7 +578,7 @@ def _generate_response_tree(
                     # Add the ID of the current partial rollout (i.e. node in tree) to
                     # the environment state. This allows reconstructing the tree of
                     # responses later, if required.
-                    env_state["_rollout_node_id"] = [child_partial_rollout.node_id]
+                    env_state["_node_id"] = [child_partial_rollout.node_id]
 
                     # Append the current state to the environment states
                     child_partial_rollout.trajectory_env_states.append(env_state)
@@ -543,7 +595,7 @@ def _generate_response_tree(
                 child_partial_rollout = base_partial_rollout.clone_as_child()
                 env_state = child_partial_rollout.current_env_state
                 env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
-                env_state["_rollout_node_id"] = [child_partial_rollout.node_id]
+                env_state["_node_id"] = [child_partial_rollout.node_id]
                 if "next" not in env_state.keys():
                     env_state = environment.add_dummy_actions_and_next_to_state(
                         env_state
@@ -688,7 +740,7 @@ def _sample_positive_and_negative_examples(
                 last_env_state = child_partial_rollout.trajectory_env_states[-1]
                 if last_env_state["agents", "is_positive_example"][0, agent_id]:
                     positive_examples.append(child_partial_rollout)
-                elif not last_env_state["agents", "is_positive_example"][0, agent_id]:
+                else:
                     negative_examples.append(child_partial_rollout)
 
             # If there are positive and negative examples, set the corresponding fields

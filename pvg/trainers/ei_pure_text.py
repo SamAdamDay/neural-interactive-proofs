@@ -39,7 +39,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             guess_replaced_rollouts: dict[str, NestedArrayDict] = {}
             for agent_name in shared_model_group.agent_names:
 
-                if agent_name in self.scenario_instance.protocol_handler.verifier_names:
+                if agent_name in self.protocol_handler.verifier_names:
 
                     replace_proportion = (
                         self._get_verifier_guess_replacement_proportion(

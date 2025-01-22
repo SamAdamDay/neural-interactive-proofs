@@ -176,6 +176,11 @@ class AgentPart(ABC):
         return self.agent_name in self.protocol_handler.verifier_names
 
     @property
+    def agent_id(self) -> int:
+        """The ID of the agent."""
+        return self.protocol_handler.agent_names.index(self.agent_name)
+
+    @property
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
         return self.protocol_handler.max_message_rounds
@@ -457,6 +462,11 @@ class PureTextSharedModelGroup(ABC):
         else:
             return self.base_model_name
 
+    @property
+    def max_message_rounds(self) -> int:
+        """The maximum number of message rounds in the protocol."""
+        return self.protocol_handler.max_message_rounds
+
     def __init__(
         self,
         hyper_params: HyperParameters,
@@ -554,15 +564,23 @@ class PureTextSharedModelGroup(ABC):
     @abstractmethod
     def create_dpo_fine_tune_job(
         self,
-        rollouts_per_agent: dict[str, list[NestedArrayDict]],
+        timesteps_per_agent: dict[str, NestedArrayDict],
+        positive_examples_per_agent: dict[str, NestedArrayDict],
+        negative_examples_per_agent: dict[str, NestedArrayDict],
     ):
-        """Create a DPO fine-tune job for the agent group given sampled rollouts.
+        """Create a DPO fine-tune job for the agent group given sampled timesteps.
 
         Parameters
         ----------
-        rollouts_per_agent : dict[str, list[NestedArrayDict]]
-            The data for each agent in the group. Each agent's data is a list of
-            individual rollouts, which may vary in length.
+        timesteps_per_agent : dict[str, NestedArrayDict]
+            The data for each agent in the group. Each agent's data is a nested
+            dictionary of arrays, which are timesteps selected from the rollouts.
+        positive_examples_per_agent : dict[str, NestedArrayDict]
+            The next timestep in the preferred response for each of the timesteps in
+            `timesteps_per_agent`.
+        negative_examples_per_agent : dict[str, NestedArrayDict]
+            The next timestep in the non-preferred response for each of the timesteps in
+            `timesteps_per_agent`.
         """
 
     @abstractmethod
@@ -609,6 +627,19 @@ class PureTextSharedModelGroup(ABC):
     def get_state(self) -> PureTextSharedModelGroupState:
         """Get the state of the shared model group."""
         return self.state_class(**self.get_state_dict())
+
+    def agent_ids_and_names(self) -> Iterable[tuple[int, str]]:
+        """Get an iterable of agent IDs and names.
+
+        Yields
+        ------
+        agent_id : int
+            The ID of the agent.
+        agent_name : str
+            The name of the agent.
+        """
+        for agent_name in self.agent_names:
+            yield self.protocol_handler.agent_names.index(agent_name), agent_name
 
 
 class RandomWholeAgent(WholeAgent, ABC):

@@ -288,7 +288,7 @@ class NestedArrayDict:
         # because it requires allocating memory for an array of shape self.batch_size.
         # However, it means we can compute batch sizes for any index which numpy can
         # handle
-        dummy_array = np.empty(self._batch_size, dtype=np.bool_)
+        dummy_array = np.empty(self._batch_size, dtype=[])
         index_array = dummy_array[index]
         indexed_batch_size = index_array.shape
 

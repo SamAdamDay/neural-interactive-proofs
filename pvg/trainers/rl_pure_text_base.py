@@ -413,7 +413,7 @@ class PureTextRlTrainer(Trainer, ABC):
             analyser = analyser_cls(
                 hyper_params=self.hyper_params,
                 settings=self.settings,
-                protocol_handler=self.scenario_instance.protocol_handler,
+                protocol_handler=self.protocol_handler,
                 model_name=model_name,
                 use_dummy_api=dry_run,
             )
@@ -631,7 +631,7 @@ class PureTextRlTrainer(Trainer, ABC):
         arg_iterator = (
             (
                 self.hyper_params,
-                self.scenario_instance.protocol_handler,
+                self.protocol_handler,
                 environment,
                 self.combined_agent,
                 data_batch,
@@ -1185,9 +1185,8 @@ class PureTextRlTrainer(Trainer, ABC):
         )
         num_rollouts = rollouts.batch_size[0]
 
-        protocol_handler = self.scenario_instance.protocol_handler
-        channel_names = protocol_handler.message_channel_names
-        agent_names = protocol_handler.agent_names
+        channel_names = self.protocol_handler.message_channel_names
+        agent_names = self.protocol_handler.agent_names
 
         raw_transcripts = []
         processed_transcripts = []
@@ -1220,7 +1219,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 # We first check the decision made by a verifier, and if it is made, we
                 # set the processed transcript to "Accept" or "Reject" based on the
                 # decision.
-                for verifier_name in protocol_handler.verifier_names:
+                for verifier_name in self.protocol_handler.verifier_names:
                     key = f"{verifier_name}.decision"
                     verifier_index = agent_names.index(verifier_name)
                     if decision[rollout_id, round_id, verifier_index] == 0:
