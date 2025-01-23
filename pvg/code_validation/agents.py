@@ -1060,8 +1060,12 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 fine_tune_datasets[agent_name].append(
                     {
                         "input": message_history,
-                        "preferred_completion": positive_message,
-                        "non_preferred_completion": negative_message,
+                        "preferred_output": [
+                            {"role": "assistant", "content": positive_message}
+                        ],
+                        "non_preferred_output": [
+                            {"role": "assistant", "content": negative_message}
+                        ],
                     }
                 )
 
