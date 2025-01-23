@@ -490,3 +490,71 @@ def minstd_generate_pseudo_random_sequence(
         pseudo_random_sequence[..., i] = seed
 
     return pseudo_random_sequence
+
+
+def is_broadcastable(shape_1: tuple, shape_2: tuple) -> bool:
+    """Check if two shapes are broadcastable.
+
+    Two shapes are broadcastable if when they are aligned from the right, corresponding
+    dimensions are either equal or one of them is 1.
+
+    Parameters
+    ----------
+    shape_1 : tuple
+        The shape of the first array.
+    shape_2 : tuple
+        The shape of the second array.
+
+    Returns
+    -------
+    is_broadcastable : bool
+        True if the shapes are broadcastable, False otherwise.
+    """
+
+    # Adapted from https://stackoverflow.com/a/24769712
+    for a, b in zip(shape_1[::-1], shape_2[::-1]):
+        if a != 1 and b != 1 and a != b:
+            return False
+    return True
+
+
+def mean_for_unique_keys(
+    data: np.ndarray, key: np.ndarray, axis: int = 0
+) -> np.ndarray:
+    """Compute the mean of values grouped by unique keys.
+
+    The two input arrays `data` and `key` should have the same shape. It is assumed that
+    when two elements of `key` are equal, the corresponding elements of `data` should be
+    equal. The function selects the unique keys from `key` and computes the mean of the
+    corresponding values in `data`.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The values to aggregate.
+    key : np.ndarray
+        The keys for each value. Must be broadcastable with `data`.
+    axis : int, default=0
+        The axis along which to compute the mean.
+
+    Returns
+    -------
+    mean_values : np.ndarray
+        The mean of the values for each unique key.
+    """
+
+    if not is_broadcastable(data.shape, key.shape):
+        raise ValueError(
+            f"`data` and `key` must be broadcastable, but got shapes {data.shape} "
+            f"and {key.shape}"
+        )
+
+    def get_unique_mask(array: np.ndarray) -> np.ndarray:
+        """Create a mask for unique elements in a 1D array."""
+        mask = np.zeros_like(array, dtype=bool)
+        mask[np.unique(array, return_index=True)[1]] = True
+        return mask
+
+    keys_unique_mask = np.apply_along_axis(get_unique_mask, axis, key)
+
+    return np.mean(data, axis=axis, where=keys_unique_mask)

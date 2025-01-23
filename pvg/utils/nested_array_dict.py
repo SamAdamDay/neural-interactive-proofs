@@ -29,7 +29,10 @@ class NestedArrayDict:
             if batch_size is None:
                 batch_size = ()
         elif batch_size is None:
-            raise ValueError("batch_size must be provided if data is not None")
+            if isinstance(data, NestedArrayDict):
+                batch_size = data.batch_size
+            else:
+                raise ValueError("batch_size must be provided if data is not None")
 
         if isinstance(batch_size, int):
             batch_size = (batch_size,)
@@ -139,7 +142,7 @@ class NestedArrayDict:
     def key_is_leaf(self, key: tuple[str, ...]) -> bool:
         """Check if a key is a leaf, i.e. it is not a prefix of any other key.
 
-        Leaf keys are keys that correspond to arrays of strings.
+        Leaf keys are keys that correspond to numpy arrays.
 
         Parameters
         ----------
@@ -285,7 +288,7 @@ class NestedArrayDict:
         # because it requires allocating memory for an array of shape self.batch_size.
         # However, it means we can compute batch sizes for any index which numpy can
         # handle
-        dummy_array = np.empty(self._batch_size, dtype=np.bool_)
+        dummy_array = np.empty(self._batch_size, dtype=[])
         index_array = dummy_array[index]
         indexed_batch_size = index_array.shape
 
@@ -319,8 +322,8 @@ class NestedArrayDict:
         if isinstance(value, np.ndarray):
             if not self._is_shape_compatible(value.shape):
                 raise ValueError(
-                    f"PyArrow arrays in {type(self).__name__} data must agree with "
-                    f"batch size {self._batch_size[0]}, but found {len(value)}"
+                    f"Arrays in {type(self).__name__} data must agree with batch size "
+                    f" {self._batch_size[0]}, but got shape {value.shape}"
                 )
 
         elif isinstance(value, dict):
@@ -639,8 +642,14 @@ def concatenate_nested_array_dicts(
     """
 
     # Check that all NestedArrayDicts have the same keys
-    if not all(set(nd.keys()) == set(nds[0].keys()) for nd in nds):
-        raise ValueError("All NestedArrayDicts must have the same keys")
+    for i, nd in enumerate(nds):
+        if i != 0 and not set(nd.keys()) == set(nds[0].keys()):
+            raise ValueError(
+                f"All NestedArrayDicts must have the same keys but the first has keys "
+                f"{set(nds[0].keys()) - set(nd.keys())} which the {i}th does not have, "
+                f"and the {i}th has keys {set(nd.keys()) - set(nds[0].keys())} which "
+                f"the first does not have."
+            )
 
     # Concatenate the arrays
     nd_dict = {}

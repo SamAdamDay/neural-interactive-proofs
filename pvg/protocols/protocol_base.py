@@ -16,7 +16,7 @@ from tensordict.tensordict import TensorDictBase
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.parameters import HyperParameters, GuessType
+from pvg.parameters import HyperParameters
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.nested_array_dict import NestedArrayDict
 
@@ -321,6 +321,26 @@ class ProtocolHandler(ABC):
             The reward for the agents.
         """
 
+    @abstractmethod
+    def reward_mid_point_estimate(self, agent_name: str) -> float:
+        """Get an estimate of the expected reward if all agents play randomly.
+
+        This is used to compute the mid-point of the reward range for the agent.
+
+        For example, if the agent gets reward -1 for a wrong guess and 1 for a correct
+        guess, the mid-point estimate could be 0.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the reward mid-point for.
+
+        Returns
+        -------
+        reward_mid_point : float
+            The expected reward for the agent if all agents play randomly.
+        """
+
     def _get_agent_decision_made_mask(
         self,
         round_id: Int[Tensor, "..."],
@@ -536,6 +556,35 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         agent_done = agent_done | shared_done[..., None]
 
         return shared_done, agent_done, terminated, reward
+
+    def reward_mid_point_estimate(self, agent_name: str) -> float:
+        """Get an estimate of the expected reward if all agents play randomly.
+
+        This is used to compute the mid-point of the reward range for the agent.
+
+        For the verifier, the mid-point is the average of the verifier reward and the
+        verifier incorrect penalty. For the prover, the mid-point is the prover reward
+        divided by 2 (because the prover gets 0 when it is not rewarded).
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the reward mid-point for.
+
+        Returns
+        -------
+        reward_mid_point : float
+            An estimate of the expected reward for `agent_name` if all agents play
+            randomly.
+        """
+
+        if agent_name == self.verifier_name:
+            return (
+                self.hyper_params.protocol_common.verifier_reward
+                + self.hyper_params.protocol_common.verifier_incorrect_penalty
+            ) / 2
+        else:
+            return self.hyper_params.protocol_common.prover_reward / 2
 
     def _get_new_terminated_mask(
         self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]

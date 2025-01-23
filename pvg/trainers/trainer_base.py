@@ -74,12 +74,22 @@ class Trainer(ABC):
     @property
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
-        return self.scenario_instance.protocol_handler.max_message_rounds
+        return self.protocol_handler.max_message_rounds
 
     @property
     def agent_names(self) -> list[str]:
         """The names of the agents in the scenario."""
-        return self.scenario_instance.protocol_handler.agent_names
+        return self.protocol_handler.agent_names
+
+    @property
+    def num_agents(self) -> int:
+        """The number of agents in the scenario."""
+        return len(self.agent_names)
+
+    @property
+    def protocol_handler(self):
+        """The protocol handler for the experiment."""
+        return self.scenario_instance.protocol_handler
 
     def __init__(
         self,

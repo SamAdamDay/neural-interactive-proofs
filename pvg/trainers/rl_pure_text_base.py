@@ -1,7 +1,7 @@
 """Base classes for RL trainers for text-based environments which only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal, Iterable
+from typing import Optional, Literal, Iterable, Iterator
 from multiprocessing import Pool
 from functools import cached_property
 from pathlib import Path
@@ -28,6 +28,7 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
+from pvg.parameters import HyperParameters
 from pvg.scenario_base.data import NestedArrayDictDataLoader
 from pvg.scenario_base.environment import PureTextEnvironment, PromptMessage
 from pvg.scenario_base.agents import (
@@ -40,6 +41,7 @@ from pvg.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
 )
+from pvg.protocols.protocol_base import ProtocolHandler
 from pvg.trainers.trainer_base import Trainer, CheckPointNotFoundError
 from pvg.utils.maths import aggregate_mean_grouped_by_class
 from pvg.utils.data import VariableDataCycler, truncated_iterator
@@ -411,7 +413,7 @@ class PureTextRlTrainer(Trainer, ABC):
             analyser = analyser_cls(
                 hyper_params=self.hyper_params,
                 settings=self.settings,
-                protocol_handler=self.scenario_instance.protocol_handler,
+                protocol_handler=self.protocol_handler,
                 model_name=model_name,
                 use_dummy_api=dry_run,
             )
@@ -627,11 +629,19 @@ class PureTextRlTrainer(Trainer, ABC):
             num_rollouts = environment.num_envs
 
         arg_iterator = (
-            (environment, self.max_message_rounds, self.combined_agent, data_batch)
+            (
+                self.hyper_params,
+                self.protocol_handler,
+                environment,
+                self.combined_agent,
+                data_batch,
+            )
             for data_batch in truncated_iterator(data_cycler, num_rollouts)
         )
 
-        def get_rollouts(rollout_iterator: Iterable) -> list[NestedArrayDict]:
+        def get_rollouts(
+            rollout_iterator: Iterator[list[NestedArrayDict]],
+        ) -> list[NestedArrayDict]:
 
             if use_tqdm:
                 rollout_iterator = tqdm(
@@ -640,23 +650,114 @@ class PureTextRlTrainer(Trainer, ABC):
                     desc=tqdm_desc,
                 )
 
-            return list(rollout_iterator)
+            return sum(rollout_iterator, [])
 
         # When the number of rollout workers is set to 0, we sample the rollouts
         # sequentially, without using a pool
         if self.settings.num_rollout_workers == 0:
-            rollout_iterator = map(_sample_single_rollout, arg_iterator)
+            rollout_iterator = map(
+                self._sample_rollouts_for_single_environment, arg_iterator
+            )
             rollout_list = get_rollouts(rollout_iterator)
 
         # If we have multiple workers, we can use a pool to parallelize the rollouts
         else:
             with Pool(self.settings.num_rollout_workers) as pool:
                 rollout_iterator = pool.imap_unordered(
-                    _sample_single_rollout, arg_iterator
+                    self._sample_rollouts_for_single_environment, arg_iterator
                 )
                 rollout_list = get_rollouts(rollout_iterator)
 
-        return stack_nested_array_dicts(rollout_list, dim=0)
+        rollouts_stacked = stack_nested_array_dicts(rollout_list, dim=0)
+
+        return rollouts_stacked
+
+    @staticmethod
+    def _sample_rollouts_for_single_environment(
+        args: tuple[
+            HyperParameters,
+            ProtocolHandler,
+            PureTextEnvironment,
+            PureTextCombinedWhole,
+            Optional[NestedArrayDict],
+        ]
+    ) -> list[NestedArrayDict]:
+        """Sample rollouts for a single environment.
+
+        A single environment is associated with a single datapoint. This method samples
+        rollouts from it. It is intended that subclasses are able reimplement this if
+        they need to sample rollouts in a different way.
+
+        In this default implementation, we sample a single rollout by stepping the
+        environment until it is done, and then padding the rollout with zero states up
+        to the maximum number of message rounds.
+
+        Notes
+        -----
+        This function is intended to be applied by a pool of workers. As such it must be
+        a static function and take all trainer attributes required as arguments.
+
+        Parameters
+        ----------
+        hyper_params : HyperParameters
+            The parameters of the experiment.
+        protocol_handler : ProtocolHandler
+            The interaction protocol handler for the experiment.
+        environment : PureTextEnvironment
+            The environment to sample a rollout in.
+        combined_agent : PureTextCombinedWhole
+            The combined agent to use for the rollout.
+        data_batch : NestedArrayDict, optional
+            The data batch to use for the rollout. If None, the data batch will be
+            sampled from the dataset.
+
+        Returns
+        -------
+        list[NestedArrayDict]
+            The a single-element list containing the rollout in the environment. Has
+            batch size (max_message_rounds, )
+        """
+
+        _, protocol_handler, environment, combined_agent, data_batch = args
+
+        ended = False
+        env_state = environment.reset(data_batch=data_batch)
+        env_states = []
+
+        for _ in range(protocol_handler.max_message_rounds):
+            if not ended:
+
+                # Run the forward pass on all agents to sample actions
+                env_state = combined_agent.forward(env_state, environment)
+
+                # Step the environment to get the next state. This writes the next state
+                # in the "next" sub-dictionary.
+                env_state = environment.step(env_state)
+
+                # Check if the environment is done or terminated. The state has batch
+                # size 1, so we only need to check the first element.
+                ended = (
+                    env_state["next", "done"][0] or env_state["next", "terminated"][0]
+                )
+
+                # Append the current state to the environment states
+                env_states.append(env_state)
+
+                # Update the current state to the next state
+                env_state = environment.get_next_state_from_state(env_state)
+
+            # If we are done, we need to pad the rollout with zero actions
+            else:
+                env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
+                if "next" not in env_state.keys():
+                    env_state = environment.add_dummy_actions_and_next_to_state(
+                        env_state
+                    )
+                env_states.append(env_state)
+
+        sampled_rollout = concatenate_nested_array_dicts(env_states, dim=0)
+
+        return [sampled_rollout]
 
     def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
         """Get the proportion of rollouts to replace the guess with the true label.
@@ -1084,9 +1185,8 @@ class PureTextRlTrainer(Trainer, ABC):
         )
         num_rollouts = rollouts.batch_size[0]
 
-        protocol_handler = self.scenario_instance.protocol_handler
-        channel_names = protocol_handler.message_channel_names
-        agent_names = protocol_handler.agent_names
+        channel_names = self.protocol_handler.message_channel_names
+        agent_names = self.protocol_handler.agent_names
 
         raw_transcripts = []
         processed_transcripts = []
@@ -1119,7 +1219,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 # We first check the decision made by a verifier, and if it is made, we
                 # set the processed transcript to "Accept" or "Reject" based on the
                 # decision.
-                for verifier_name in protocol_handler.verifier_names:
+                for verifier_name in self.protocol_handler.verifier_names:
                     key = f"{verifier_name}.decision"
                     verifier_index = agent_names.index(verifier_name)
                     if decision[rollout_id, round_id, verifier_index] == 0:
@@ -1184,73 +1284,3 @@ class PureTextRlTrainer(Trainer, ABC):
             prompts.append(prompts_by_round)
 
         return raw_transcripts, processed_transcripts, prompts
-
-
-def _sample_single_rollout(
-    args: tuple[
-        PureTextEnvironment,
-        int,
-        PureTextCombinedWhole,
-        Optional[NestedArrayDict],
-    ]
-) -> NestedArrayDict:
-    """Sample a single rollout in an the environment.
-
-    This function steps the environment until it is done and then pads the rollout
-    with zero states up to the maximum number of message rounds.
-
-    This function is intended to be applied by a pool of workers. As such it lives in
-    the module scope and takes all trainer attributes required as arguments.
-
-    Parameters
-    ----------
-    environment : PureTextEnvironment
-        The environment to sample a rollout in.
-    max_message_rounds : int
-        The maximum number of message rounds in the rollout.
-    combined_agent : PureTextCombinedWhole
-        The combined agent to use for the rollout.
-    data_batch : NestedArrayDict, optional
-        The data batch to use for the rollout. If None, the data batch will be
-        sampled from the dataset.
-
-    Returns
-    -------
-    NestedArrayDict
-        The rollout in the environment. Has batch size (max_message_rounds, )
-    """
-
-    environment, max_message_rounds, combined_agent, data_batch = args
-
-    ended = False
-    env_state = environment.reset(data_batch=data_batch)
-    env_states = []
-
-    for _ in range(max_message_rounds):
-        if not ended:
-
-            # Run the forward pass on all agents to sample actions
-            env_state = combined_agent.forward(env_state, environment)
-
-            # Step the environment to get the next state. This writes the next state
-            # in the "next" sub-dictionary.
-            env_state = environment.step(env_state)
-
-            # Check if the environment is done or terminated. The state has batch size
-            # 1, so we only need to check the first element.
-            ended = env_state["next", "done"][0] or env_state["next", "terminated"][0]
-
-            # Append the current state to the environment states
-            env_states.append(env_state)
-
-            # Update the current state to the next state
-            env_state = environment.get_next_state_from_state(env_state)
-
-        # If we are done, we need to pad the rollout with zero actions
-        else:
-            env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
-            if "next" not in env_state.keys():
-                env_state = environment.add_dummy_actions_and_next_to_state(env_state)
-            env_states.append(env_state)
-
-    return concatenate_nested_array_dicts(env_states, dim=0)

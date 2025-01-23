@@ -30,8 +30,29 @@ GuessType = Literal["zero", "one", "y"]
 """Type for the possible guesses of the verifier in binary cases."""
 
 
-TrainerType = Literal["vanilla_ppo", "solo_agent", "spg", "reinforce", "pure_text_ei"]
-"""Type for the RL trainer to use."""
+TrainerType = Literal[
+    "vanilla_ppo", "solo_agent", "spg", "reinforce", "pure_text_ei", "pure_text_malt"
+]
+"""Type for the RL trainer to use.
+
+Possible Values
+---------------
+vanilla_ppo
+    The Proximal Policy Optimization trainer, with each agent training independently.
+solo_agent
+    A trainer that trains a single agent to solve the task using supervised learning.
+spg
+    Stackelberg Policy Gradient and its variants.
+reinforce
+    The REINFORCE algorithm.
+pure_text_ei
+    Expert Iteration for text-based tasks, where agents are run through text-based APIs
+    (i.e. we don't run them locally, so everything can be represented as text).
+pure_text_malt
+     Multi-Agent LLM Training :cite:`Motwani24` for text-based tasks, where agents are
+     run through text-based APIs (i.e. we don't run them locally, so everything can be
+     represented as text).
+"""
 
 PpoLossType = Literal["clip", "kl_penalty"]
 """Type for the PPO loss function to use."""
