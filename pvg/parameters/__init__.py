@@ -1,7 +1,7 @@
 """The hyper-parameters of the experiment.
 
 An experiment should be completely reproducible from its hyper-parameters (up to
-hardware quirks).
+hardware quirks and model API non-reproducibility).
 
 The parameters are initialised by constructing a `HyperParameters` object. This object
 completely defines the experiment, and is passed around to all experiment components.
@@ -27,10 +27,8 @@ Examples
 ...     trainer="ppo",
 ...     dataset="eru10000",
 ...     agents=AgentsParams(
-...         [
-...             ("prover", GraphIsomorphismAgentParameters(d_gnn=128)),
-...             ("verifier", GraphIsomorphismAgentParameters(num_gnn_layers=2)),
-...         ],
+...         prover=GraphIsomorphismAgentParameters(d_gnn=128),
+...         verifier=GraphIsomorphismAgentParameters(num_gnn_layers=2),
 ...     ),
 ... )
 
