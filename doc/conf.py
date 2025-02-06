@@ -20,6 +20,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
+    "sphinx_tabs.tabs",
     # "sphinx.ext.napoleon",
     # "autoapi.extension",
 ]
@@ -33,6 +34,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
+html_css_files = ["tabs.css"]
 
 
 # -- Options for NumpyDoc ----------------------------------------------
@@ -49,4 +51,6 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "matplotlib": ("https://matplotlib.org/stable", None),
     "torch": ("https://pytorch.org/docs/stable", None),
+    "tensordict": ("https://pytorch.org/tensordict/stable", None),
+    "torchrl": ("https://pytorch.org/rl/stable", None),
 }

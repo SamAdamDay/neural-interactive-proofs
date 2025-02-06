@@ -16,7 +16,7 @@
    pip install -r requirements_dev.txt
    ```
 
-4. Log in to Weights and Biases: `wandb login` (you'll need an [account and API
+4. Log in to Weights & Biases: `wandb login` (you'll need an [account and API
    key](https://wandb.ai/settings#dangerzone))
 5. Install the `pvg` package locally in edit mode: `pip install -e .`
 6. (Optional, recommended) Install pre-commit, to auto-format with black before each
@@ -54,7 +54,7 @@ run_experiment(hyper_params)
 - `additional_parameters` can include nested dictionaries. See the `parameters` module
   for details.
 - `run_experiment` takes additional parameters, like the device and whether to log to
-  Weights and Biases.
+  Weights & Biases.
 - The `pvg.utils.experiment` contains utility classes for running hyperparameter
   experiments in sequence or in parallel.
 
@@ -113,7 +113,7 @@ experiments. To build a new image and use it, follow the proceeding steps.
 1. Create GitHub personal access token. Ideally use a fine-grained one which has access
    only to the contents of this repository.
 
-2. Create a [Weights and Biases](https://wandb.ai) account and generate an [API
+2. Create a [Weights & Biases](https://wandb.ai) account and generate an [API
    key](https://wandb.ai/settings#dangerzone)
 
 3. Create a file named `.env` with the following contents

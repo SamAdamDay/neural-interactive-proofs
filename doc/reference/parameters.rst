@@ -1,5 +1,5 @@
-Experiment Hyper-Parameters
-===========================
+Experiment Hyper-Parameters (``pvg.parameters``)
+================================================
 
 .. currentmodule:: pvg.parameters
 
@@ -85,11 +85,11 @@ Converting to and from nested dicts
 -----------------------------------
 
 A :class:`HyperParameters` object can be converted to a nested dictionary. Example uses
-of this are attaching the hyper-parameters to a Weights and Biases run, and serialising
-the parameters to store them in a JSON file. To convert :class:`HyperParameters` object
-to a dict, use the :func:`to_dict <pvg.parameters.HyperParameters.to_dict>` method
-(which is also available for sub-parameters). This performs the following special
-operations:
+of this are attaching the hyper-parameters to a :term:`Weights & Biases` run, and
+serialising the parameters to store them in a JSON file. To convert
+:class:`HyperParameters` object to a dict, use the :func:`to_dict
+<pvg.parameters.HyperParameters.to_dict>` method (which is also available for
+sub-parameters). This performs the following special operations:
 
 - Some parameter values are not serialisable to JSON (e.g. :class:`AgentUpdateSchedule
   <pvg.parameters.update_schedule.AgentUpdateSchedule>`). These are converted to special
@@ -100,6 +100,30 @@ operations:
 To convert a nested dictionary to a :class:`HyperParameters` object, use the
 :func:`from_dict <pvg.parameters.HyperParameters.from_dict>` class method. This will
 reconstruct the original object, including all sub-parameters.
+
+
+.. _creating-new-parameters:
+
+Creating new parameters
+-----------------------
+
+New parameters can be added by adding elements to the :class:`HyperParameters` class or
+any of the sub-parameters classes. To a new sub-parameters class, just subclass
+:class:`SubParameters <pvg.parameters.parameters_base.SubParameters>` and decorate it
+with :func:`register_parameter_class
+<pvg.parameters.parameters_base.register_parameter_class>` to register it, and
+:func:`dataclass <dataclasses.dataclass>` to make it a dataclass, as shown in the
+following example:
+
+.. code-block:: python
+
+   from pvg.parameters import SubParameters, register_parameter_class
+   from dataclasses import dataclass
+
+   @register_parameter_class
+   @dataclass
+   class MyNewParameters(SubParameters):
+       my_param: int = 10
 
 
 Main hyper-parameters class
@@ -121,11 +145,11 @@ Main hyper-parameters class
 Modules for sub-parameters
 --------------------------
 
-Sub-parameter classes are grouped into modules. Each module contains classes for a
+Sub-parameter classes are grouped into sub-modules of. Each module contains classes for a
 specific part of the hyper-parameters.
 
 .. autosummary::
-   :toctree: _generated
+   :toctree: generated
    :recursive:
 
    protocol
@@ -142,7 +166,7 @@ Bases classes and enum types
 ----------------------------
 
 .. autosummary::
-   :toctree: _generated
+   :toctree: generated
    :recursive:
 
    parameters_base

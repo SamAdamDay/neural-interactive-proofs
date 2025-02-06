@@ -10,9 +10,19 @@ Public API
 .. toctree::
    :maxdepth: 2
    
-   running-experiments
+   running_experiments
    parameters
 
 
 Developer API
 -------------
+
+.. toctree::
+   :maxdepth: 2
+
+   protocols
+   scenarios
+   trainers
+   experiment_settings
+   constants
+   auxiliary_modules

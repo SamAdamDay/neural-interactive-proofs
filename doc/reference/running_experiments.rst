@@ -1,5 +1,7 @@
-Running Experiments
-===================
+Running Experiments (``pvg.run``)
+=================================
+
+.. currentmodule:: pvg.run
 
 Basic Workflow
 --------------
@@ -15,8 +17,8 @@ basic workflow is as follows:
    quirks prevent this).
 2. Call :func:`run_experiment() <pvg.run.run_experiment>` with the hyper-parameters
    object and other configuration options. These options specify things like the device
-   to run on, and whether to save the results to Weights & Biases. These additional
-   options should not affect the experiment's outcome (in theory).
+   to run on, and whether to save the results to :term:`Weights & Biases`. These
+   additional options should not affect the experiment's outcome (in theory).
 
 The :func:`run_experiment() <pvg.run.run_experiment>` function takes care of setting up
 all the experiment components, running the experiment, and saving the results. It is
@@ -62,9 +64,9 @@ experiment. It also returns some information about the experiment, such as the t
 number of steps taken by the trainer (useful for progress bars).
 
 
-``run`` Module Contents
------------------------
+Module Contents
+---------------
 
-.. autofunction:: pvg.run.run_experiment
-.. autofunction:: pvg.run.prepare_experiment
-.. autoclass:: pvg.run.PreparedExperimentInfo
+.. autofunction:: run_experiment
+.. autofunction:: prepare_experiment
+.. autoclass:: PreparedExperimentInfo
