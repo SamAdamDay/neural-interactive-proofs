@@ -1207,7 +1207,7 @@ def _change_to_new_cv_dataset(max_solutions: int = 1) -> datasets.Dataset:
 
 
 def _suppress_output(func: callable) -> callable:
-    """Wrapper function to suppress stdout and stderr during function execution."""
+    """Suppress stdout and stderr during function execution."""
 
     def wrapper(*args, **kwargs):
         with open(os.devnull, "w") as fnull:

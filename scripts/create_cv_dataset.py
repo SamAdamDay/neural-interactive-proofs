@@ -1,4 +1,4 @@
-"""Generate the validation dataset"""
+"""Generate the validation dataset."""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pvg.constants import OPENROUTER_API_KEY

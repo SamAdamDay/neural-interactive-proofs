@@ -40,7 +40,8 @@ exclude = [
     "site-packages",
     "venv",
     "playground",
-    "pvg/utils/runtime_module.py"
+    "pvg/utils/runtime_module.py",
+    "pvg/utils/apps_metric.py"
 ]
 
 # Same as Black.
