@@ -4,7 +4,6 @@
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
 _file_dir = os.path.realpath(__file__)
 _root_dir = Path(_file_dir).parent.parent.absolute()
