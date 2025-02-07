@@ -204,7 +204,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         # Make sure the environment variables are loaded, so that we can access the
         # OpenAI API key, and check that it is set
         load_env_once()
-        get_env_var("OPENAI_API_KEY")
+        if not self.agent_params.use_dummy_api:
+            get_env_var("OPENAI_API_KEY")
 
         self._openai_client: Optional[OpenAI] = None
 
