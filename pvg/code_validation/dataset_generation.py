@@ -539,13 +539,13 @@ def _try_generate_buggy_solutions(
             logger.debug(f"Attempt: [{attempts+1}/{max_attempts}]")
 
             if multiple_completions:
-                model_outputs = _get_openrouter_response(
+                model_outputs = get_openrouter_response(
                     model, messages, openrouter_api_key, num_responses=max_attempts
                 )
                 model_outputs = [output["message"] for output in model_outputs]
             else:
                 model_outputs = [
-                    _get_openrouter_response(model, messages, openrouter_api_key)[0][
+                    get_openrouter_response(model, messages, openrouter_api_key)[0][
                         "message"
                     ]
                 ]
@@ -617,7 +617,7 @@ def _try_generate_buggy_solutions(
     return buggy_solutions
 
 
-def _get_openrouter_response(
+def get_openrouter_response(
     model: str,
     messages: list[dict[Literal["role", "content"], str]],
     temperature: float = 1.0,
