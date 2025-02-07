@@ -22,8 +22,7 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
-from pvg.utils.env import load_env_once
-from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
+from pvg.utils.env import get_required_env_var
 from pvg.protocols import build_protocol_handler
 from pvg.stat_logger import WandbStatLogger, DummyStatLogger
 from pvg.base_run import get_base_wandb_run_and_new_hyper_params
@@ -40,8 +39,8 @@ def run_experiment(
     tqdm_func: callable = tqdm,
     ignore_cache: bool = False,
     use_wandb: bool = False,
-    wandb_project: str = WANDB_PROJECT,
-    wandb_entity: str = WANDB_ENTITY,
+    wandb_project: Optional[str] = None,
+    wandb_entity: Optional[str] = None,
     run_id: Optional[str] = None,
     allow_auto_generated_run_id: bool = False,
     allow_resuming_wandb_run: bool = False,
@@ -78,10 +77,10 @@ def run_experiment(
         If True, the dataset and model cache are ignored and rebuilt.
     use_wandb : bool, default=False
         If True, log the experiment to Weights & Biases.
-    wandb_project : str, default=WANDB_PROJECT
-        The name of the W&B project to log to.
-    wandb_entity : str, default=WANDB_ENTITY
-        The name of the W&B entity to log to.
+    wandb_project : str, optional
+        The name of the W&B project to log to. If None, the default project is used.
+    wandb_entity : str, optional
+        The name of the W&B entity to log to. If None, the default entity is used.
     run_id : str, optional
         The ID of the run. Required if use_wandb is True and allow_auto_generated_run_id
         is False.
@@ -124,8 +123,10 @@ def run_experiment(
         experiment runs without errors.
     """
 
-    # Load the environment variables.
-    load_env_once()
+    if wandb_project is None:
+        wandb_project = get_required_env_var("WANDB_PROJECT")
+    if wandb_entity is None:
+        wandb_entity = get_required_env_var("WANDB_ENTITY")
 
     # Get the base run and new hyper-parameters, if using a base run
     base_run, hyper_params = get_base_wandb_run_and_new_hyper_params(hyper_params)
@@ -262,9 +263,6 @@ def prepare_experiment(
     prepared_experiment_info : PreparedExperimentInfo
         Information about the prepared experiment.
     """
-
-    # Load the environment variables.
-    load_env_once()
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"

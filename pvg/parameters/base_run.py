@@ -5,10 +5,11 @@ the current experiment.
 """
 
 from dataclasses import dataclass
+import dataclasses
 from typing import Optional, Literal
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
+from pvg.utils.env import env_var_default_factory
 
 
 BaseRunType = Literal["none", "parameters", "rerun_tests"]
@@ -55,8 +56,12 @@ class BaseRunParameters(SubParameters):
     base_run_type: BaseRunType = "none"
 
     run_id: Optional[str] = None
-    wandb_project: str = WANDB_PROJECT
-    wandb_entity: str = WANDB_ENTITY
+    wandb_project: str = dataclasses.field(
+        default_factory=env_var_default_factory("WANDB_PROJECT")
+    )
+    wandb_entity: str = dataclasses.field(
+        default_factory=env_var_default_factory("WANDB_ENTITY")
+    )
 
     rerun_tests_force_test_during_training_state: bool = True
 

@@ -29,7 +29,7 @@ from pvg.utils.experiments import (
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
 )
-from pvg.constants import WANDB_CV_PROJECT
+from pvg.utils.env import get_required_env_var
 
 param_grid = dict(
     interaction_protocol=["pvg"],
@@ -135,7 +135,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         base_run_params = BaseRunParameters(
             base_run_type="rerun_tests",
             run_id=combo["rerun_tests"],
-            wandb_project=WANDB_CV_PROJECT,
+            wandb_project=get_required_env_var("WANDB_CV_PROJECT"),
         )
     else:
         base_run_params = BaseRunParameters(base_run_type="none")
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         experiment_name="EI_VC",
         arg_parser_description="Run Code Validation experiments with Expert Iteration, "
         "running from a hyperparameter grid in sequence.",
-        default_wandb_project=WANDB_CV_PROJECT,
+        default_wandb_project=get_required_env_var("WANDB_CV_PROJECT"),
         allow_resuming_wandb_run=True,
         add_run_infix_argument=False,
     )

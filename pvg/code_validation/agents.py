@@ -58,7 +58,7 @@ from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype, String
-from pvg.utils.env import load_env_once
+from pvg.utils.env import load_env_once, get_required_env_var
 from pvg.utils.string import random_string
 from pvg.utils.api import (
     GenerationError,
@@ -66,7 +66,6 @@ from pvg.utils.api import (
     ContentFilterError,
     UnknownFinishReasonError,
 )
-from pvg.constants import WANDB_OPENAI_FINETUNE_PROJECT
 from pvg.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
@@ -203,8 +202,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         )
 
         # Make sure the environment variables are loaded, so that we can access the
-        # OpenAI API key
+        # OpenAI API key, and check that it is set
         load_env_once()
+        get_required_env_var("OPENAI_API_KEY")
 
         self._openai_client: Optional[OpenAI] = None
 
@@ -1229,7 +1229,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                     integrations=[
                         {
                             "type": "wandb",
-                            "wandb": {"project": WANDB_OPENAI_FINETUNE_PROJECT},
+                            "wandb": {
+                                "project": get_required_env_var(
+                                    "WANDB_OPENAI_FINETUNE_PROJECT"
+                                )
+                            },
                         }
                     ],
                     method={"type": method},
