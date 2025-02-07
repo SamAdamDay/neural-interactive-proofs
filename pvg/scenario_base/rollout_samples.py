@@ -9,16 +9,13 @@ import os
 import pickle
 from textwrap import indent
 import re
-from typing import TypeVar
+from typing import TypeVar, Optional
 
 import wandb
 
 from pvg.parameters import HyperParameters, ScenarioType
-from pvg.constants import (
-    ROLLOUT_SAMPLE_ARTIFACT_PREFIX,
-    WANDB_ENTITY,
-    WANDB_PROJECT,
-)
+from pvg.constants import ROLLOUT_SAMPLE_ARTIFACT_PREFIX
+from pvg.utils.env import get_env_var
 
 
 class IterationNotFoundError(Exception):
@@ -46,35 +43,41 @@ class RolloutSamples(ABC):
         The ID of the W&B run.
     iteration : int
         The iteration of the rollout samples to load.
-    wandb_entity : str, default=WANDB_ENTITY
-        The W&B entity to load the rollout samples from.
-    wandb_project : str, default=WANDB_PROJECT
-        The W&B project to load the rollout samples from.
+    wandb_entity : str, optional
+        The W&B entity to load the rollout samples from. Defaults to the default entity.
+    wandb_project : str, optional
+        The W&B project to load the rollout samples from. Defaults to the default
+        project.
     silence_wandb : bool, default=True
         Whether to suppress W&B output.
 
     Examples
     --------
-    Using the `RolloutSamples` class as a context manager:
-    >>> with RolloutSamples(run_id, iteration) as rollout_samples:
-    ...     rollout_samples.visualise()
+    Using the `RolloutSamples` class as a context manager: >>> with
+    RolloutSamples(run_id, iteration) as rollout_samples: ...
+    rollout_samples.visualise()
 
-    Or manually calling the `finish` method:
-    >>> rollout_samples = RolloutSamples(run_id, iteration)
-    >>> rollout_samples.visualise()
-    >>> rollout_samples.finish()
+    Or manually calling the `finish` method: >>> rollout_samples =
+    RolloutSamples(run_id, iteration) >>> rollout_samples.visualise() >>>
+    rollout_samples.finish()
     """
 
     def __init__(
         self,
         run_id: str,
         iteration: int,
-        wandb_entity: str = WANDB_ENTITY,
-        wandb_project: str = WANDB_PROJECT,
+        wandb_entity: Optional[str] = None,
+        wandb_project: Optional[str] = None,
         silence_wandb: bool = True,
     ):
         self.run_id = run_id
         self.iteration = iteration
+
+        if wandb_entity is None:
+            wandb_entity = get_env_var("WANDB_ENTITY")
+        if wandb_project is None:
+            wandb_project = get_env_var("WANDB_PROJECT")
+
         self.wandb_entity = wandb_entity
         self.wandb_project = wandb_project
 

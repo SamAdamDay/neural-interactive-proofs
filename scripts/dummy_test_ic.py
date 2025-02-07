@@ -26,7 +26,7 @@ from pvg import (
     ImageClassificationParameters,
     run_experiment,
 )
-from pvg.constants import WANDB_PROJECT, WANDB_ENTITY
+from pvg.utils.env import get_env_var
 
 
 def run(cmd_args: Namespace):
@@ -145,13 +145,13 @@ if __name__ == "__main__":
         "--wandb-project",
         type=str,
         help="The name of the W&B project to use",
-        default=WANDB_PROJECT,
+        default=get_env_var("WANDB_PROJECT", ""),
     )
     parser.add_argument(
         "--wandb-entity",
         type=str,
         help="The name of the W&B entity to use",
-        default=WANDB_ENTITY,
+        default=get_env_var("WANDB_ENTITY", ""),
     )
     args = parser.parse_args()
 
