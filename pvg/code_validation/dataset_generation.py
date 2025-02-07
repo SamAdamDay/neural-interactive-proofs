@@ -33,7 +33,7 @@ import datasets
 from openai import OpenAI
 from openai.types.chat.chat_completion import Choice as OpenAIChoice
 
-from pvg.constants import CV_DATA_DIR
+from pvg.constants import CV_DATA_DIR, HF_BUGGY_APPS_REPO
 from pvg.utils.apps_metric import check_correctness
 from pvg.utils.env import load_env_once
 
@@ -79,10 +79,12 @@ class CodeValidationDatasetConfig:
         Maximum number of attempts to generate a valid buggy solution, default is 10.
     local_dir : str
         Local directory for data storage.
-    pull_repo : str, optional
-        Repository to pull data from, default is 'lrhammond/buggy-apps'.
-    push_repo : str, optional
-        Repository to push data to, default is 'lrhammond/buggy-apps'.
+    pull_repo : str | None
+        Repository to pull data from, default is the value of
+        `constants.HF_BUGGY_APPS_REPO`.
+    push_repo : str | None
+        Repository to push data to, default is the value of
+        `constants.HF_BUGGY_APPS_REPO`.
     save_after : int, optional
         Number of operations after which to save data, default is 10.
 
@@ -104,8 +106,8 @@ class CodeValidationDatasetConfig:
     system_prompt: Optional[str] = None
     max_attempts: int = 10
     local_dir: str = CV_DATA_DIR
-    pull_repo: Optional[str] = "lrhammond/buggy-apps"
-    push_repo: Optional[str] = "lrhammond/buggy-apps"
+    pull_repo: Optional[str] = HF_BUGGY_APPS_REPO
+    push_repo: Optional[str] = HF_BUGGY_APPS_REPO
     save_after: Optional[int] = 10
 
     def __post_init__(self):
