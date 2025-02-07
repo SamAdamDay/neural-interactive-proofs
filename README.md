@@ -2,37 +2,47 @@
 
 ## Requirements
 
-- Python version at least `3.11` is required.
+- The library requires Python 3.11 or later. 
+- You need [git](https://git-scm.com) to clone the repository.
+- To log experiment data, you will need a [Weights & Biases](https://wandb.ai/site)
+  account.
+- To run experiments with OpenAI models, you need an OpenAI API key. You can get one by
+  signing up at [OpenAI](https://platform.openai.com). Note that in general the use of
+  the OpenAI API is not free.
 
 
-## Installation (development)
+## Installation
 
-1. Clone the repo
-2. Create a virtual environment
-3. Install the requirements:
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/SamAdamDay/pvg-experiments.git
+   ```
+
+2. Change to the repository directory: `cd pvg-experiments`
+
+3. Install the requirements. If you just want to run experiments do:
+
+   ```bash
+   pip install wheel
+   pip install -r requirements.txt
+   ```
+
+   If you also want to make changes to the codebase, do:
 
    ```bash
    pip install wheel
    pip install -r requirements_dev.txt
    ```
 
-4. Log in to Weights & Biases: `wandb login` (you'll need an [account and API
-   key](https://wandb.ai/settings#dangerzone))
-5. Install the `pvg` package locally in edit mode: `pip install -e .`
-6. (Optional, recommended) Install pre-commit, to auto-format with black before each
-   commit (see [below](#style-guide)): `pre-commit install`
-7. (Optional, only needed for dataset generation.) Install
-   [`primesieve`](https://pypi.org/project/primesieve/)
-    - Install the prerequisites. On Ubuntu/Debian this looks like:
+4. Install the library locally in edit mod: `pip install -e .`
 
-    ```bash
-    sudo apt install g++ python-dev-is-python3 libprimesieve-dev
-    ```
+5. Log in to Weights & Biases: `wandb login`
 
-    - Install primesieve:
-   ```bash
-   pip install primesieve==2.3.2
-   ```
+6. Copy the template secrets file: `cp .env.template .env`.
+
+   Edit the ``.env`` file and fill in the necessary information for your use case. The
+   comments in the file should guide you on what to fill in.
 
 
 ## Running an experiment
@@ -116,24 +126,7 @@ experiments. To build a new image and use it, follow the proceeding steps.
 2. Create a [Weights & Biases](https://wandb.ai) account and generate an [API
    key](https://wandb.ai/settings#dangerzone)
 
-3. Create a file named `.env` with the following contents
-
-```bash
-GITHUB_USER=""
-GITHUB_PAT=""
-GIT_NAME=""
-GIT_EMAIL=""
-SSH_PUBKEY=""
-WANDB_KEY=""
-OPENAI_API_KEY=""
-```
-
-4. Fill in the details with your GitHub username, your GitHub PAT, your name as you'd
-   like it to appear in git commit messages, the email you'd like to use for git
-   commits, the SSH public key you'd like to use to access the container, your
-   Weight's and Biases API key, and your OpenAI API key.
-
-5. Build the image using the following command:
+3. Build the image using the following command:
 
 ```
 docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target default --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
@@ -151,7 +144,7 @@ target as follows:
 docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target datasets --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
 ```
 
-6. Push the image to the Docker Hub, ready for use:
+4. Push the image to the Docker Hub, ready for use:
 
 ```
 docker push DOCKER_USER/DOCKER_REPO:DOCKER_TAG

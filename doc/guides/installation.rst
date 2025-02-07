@@ -2,8 +2,8 @@ Installation
 ============
 
 This guide will help you install the necessary software to run the library. The library
-has been tested on Linux and MacOS, and should work on Windows as well. We also provide
-a Docker file, which can be used to run the library in a container or for development.
+has been tested on Linux and MacOS, and may work on Windows as well. We also provide a
+Docker file, which can be used to run the library in a container or for development.
 
 
 Prerequisites
@@ -62,3 +62,12 @@ Installation Steps
    .. code-block:: bash
 
       wandb login
+
+6. Copy the template secrets file:
+
+   .. code-block:: bash
+
+      cp .env.template .env
+
+   Edit the ``.env`` file and fill in the necessary information for your use case. The
+   comments in the file should guide you on what to fill in.
