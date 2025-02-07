@@ -22,7 +22,7 @@ from pvg.experiment_settings import ExperimentSettings
 from pvg.factory import build_scenario_instance
 from pvg.trainers import build_trainer
 from pvg.utils.types import TorchDevice, LoggingType
-from pvg.utils.env import get_required_env_var
+from pvg.utils.env import get_env_var
 from pvg.protocols import build_protocol_handler
 from pvg.stat_logger import WandbStatLogger, DummyStatLogger
 from pvg.base_run import get_base_wandb_run_and_new_hyper_params
@@ -123,16 +123,15 @@ def run_experiment(
         experiment runs without errors.
     """
 
-    if wandb_project is None:
-        wandb_project = get_required_env_var("WANDB_PROJECT")
-    if wandb_entity is None:
-        wandb_entity = get_required_env_var("WANDB_ENTITY")
-
     # Get the base run and new hyper-parameters, if using a base run
     base_run, hyper_params = get_base_wandb_run_and_new_hyper_params(hyper_params)
 
     # Set up Weights & Biases.
     if use_wandb:
+        if wandb_project is None:
+            wandb_project = get_env_var("WANDB_PROJECT")
+        if wandb_entity is None:
+            wandb_entity = get_env_var("WANDB_ENTITY")
         if run_id is None and not allow_auto_generated_run_id:
             raise ValueError(
                 "run_id must be specified if use_wandb is True and "

@@ -6,6 +6,7 @@ from typing import Callable
 from dotenv import load_dotenv
 
 from pvg.constants import ENV_FILE
+from pvg.utils.types import NOT_GIVEN
 
 env_loaded = False
 
@@ -40,13 +41,16 @@ def reload_env():
     load_dotenv(ENV_FILE)
 
 
-def get_required_env_var(var_name: str) -> str:
+def get_env_var(var_name: str, default=NOT_GIVEN) -> str:
     """Get the value of an environment variable, raising an error if not set.
 
     Parameters
     ----------
     var_name : str
         The name of the environment variable to get.
+    default : str, optional
+        The default value to return if the environment variable is not set. If not
+        provided, an error is raised if the environment variable is not set.
 
     Returns
     -------
@@ -64,12 +68,14 @@ def get_required_env_var(var_name: str) -> str:
     env_value = os.getenv(var_name)
 
     if env_value is None:
+        if default is not NOT_GIVEN:
+            return default
         raise EnvironmentVariableDoesNotExistError(var_name)
 
     return env_value
 
 
-def env_var_default_factory(var_name: str) -> Callable[[], str]:
+def env_var_default_factory(var_name: str, default=NOT_GIVEN) -> Callable[[], str]:
     """Create a factory function for getting an environment variable with a default.
 
     This is useful for setting the value of an environment variable as the default value
@@ -90,6 +96,9 @@ def env_var_default_factory(var_name: str) -> Callable[[], str]:
     ----------
     var_name : str
         The name of the environment variable to get.
+    default : str, optional
+        The default value to return if the environment variable is not set. If not
+        provided, an error is raised if the environment variable is not set.
 
     Returns
     -------
@@ -99,6 +108,6 @@ def env_var_default_factory(var_name: str) -> Callable[[], str]:
     """
 
     def factory() -> str:
-        return get_required_env_var(var_name)
+        return get_env_var(var_name, default=default)
 
     return factory

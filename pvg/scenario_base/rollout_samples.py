@@ -15,7 +15,7 @@ import wandb
 
 from pvg.parameters import HyperParameters, ScenarioType
 from pvg.constants import ROLLOUT_SAMPLE_ARTIFACT_PREFIX
-from pvg.utils.env import get_required_env_var
+from pvg.utils.env import get_env_var
 
 
 class IterationNotFoundError(Exception):
@@ -74,9 +74,9 @@ class RolloutSamples(ABC):
         self.iteration = iteration
 
         if wandb_entity is None:
-            wandb_entity = get_required_env_var("WANDB_ENTITY")
+            wandb_entity = get_env_var("WANDB_ENTITY")
         if wandb_project is None:
-            wandb_project = get_required_env_var("WANDB_PROJECT")
+            wandb_project = get_env_var("WANDB_PROJECT")
 
         self.wandb_entity = wandb_entity
         self.wandb_project = wandb_project

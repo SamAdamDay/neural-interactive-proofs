@@ -109,10 +109,10 @@ class AgentParameters(SubParameters, ABC):
 
     load_checkpoint_and_parameters: bool = False
     checkpoint_entity: str = dataclasses.field(
-        default_factory=env_var_default_factory("WANDB_ENTITY")
+        default_factory=env_var_default_factory("WANDB_ENTITY", "")
     )
     checkpoint_project: str = dataclasses.field(
-        default_factory=env_var_default_factory("WANDB_PROJECT")
+        default_factory=env_var_default_factory("WANDB_PROJECT", "")
     )
     checkpoint_run_id: Optional[str] = None
     checkpoint_version: str = "latest"

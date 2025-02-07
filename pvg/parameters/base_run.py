@@ -57,10 +57,10 @@ class BaseRunParameters(SubParameters):
 
     run_id: Optional[str] = None
     wandb_project: str = dataclasses.field(
-        default_factory=env_var_default_factory("WANDB_PROJECT")
+        default_factory=env_var_default_factory("WANDB_PROJECT", "")
     )
     wandb_entity: str = dataclasses.field(
-        default_factory=env_var_default_factory("WANDB_ENTITY")
+        default_factory=env_var_default_factory("WANDB_ENTITY", "")
     )
 
     rerun_tests_force_test_during_training_state: bool = True

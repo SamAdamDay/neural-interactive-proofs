@@ -27,7 +27,7 @@ from pvg import (
     prepare_experiment,
 )
 from pvg.parameters import get_protocol_agent_names
-from pvg.utils.env import get_required_env_var
+from pvg.utils.env import get_env_var
 
 
 def run(cmd_args: Namespace):
@@ -167,13 +167,13 @@ if __name__ == "__main__":
         "--wandb-project",
         type=str,
         help="The name of the W&B project to use",
-        default=get_required_env_var("WANDB_PROJECT"),
+        default=get_env_var("WANDB_PROJECT", ""),
     )
     parser.add_argument(
         "--wandb-entity",
         type=str,
         help="The name of the W&B entity to use",
-        default=get_required_env_var("WANDB_ENTITY"),
+        default=get_env_var("WANDB_ENTITY", ""),
     )
     parser.add_argument(
         "--prepare-experiment",

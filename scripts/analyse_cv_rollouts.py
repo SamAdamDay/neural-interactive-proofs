@@ -18,10 +18,10 @@ from pvg.constants import (
     ROLLOUTS_ARTIFACT_TYPE,
 )
 import pvg.code_validation.rollout_analysis
-from pvg.utils.env import get_required_env_var
+from pvg.utils.env import get_env_var
 
-wandb_entity = get_required_env_var("WANDB_ENTITY")
-wandb_cv_project = get_required_env_var("WANDB_CV_PROJECT")
+wandb_entity = get_env_var("WANDB_ENTITY")
+wandb_cv_project = get_env_var("WANDB_CV_PROJECT")
 
 available_analysers = []
 for scenario, analyser in ROLLOUT_ANALYSERS.keys():

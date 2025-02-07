@@ -58,7 +58,7 @@ from pvg.factory import register_scenario_class
 from pvg.protocols import ProtocolHandler
 from pvg.utils.nested_array_dict import NestedArrayDict
 from pvg.utils.types import NumpyStringDtype, String
-from pvg.utils.env import load_env_once, get_required_env_var
+from pvg.utils.env import load_env_once, get_env_var
 from pvg.utils.string import random_string
 from pvg.utils.api import (
     GenerationError,
@@ -204,7 +204,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         # Make sure the environment variables are loaded, so that we can access the
         # OpenAI API key, and check that it is set
         load_env_once()
-        get_required_env_var("OPENAI_API_KEY")
+        get_env_var("OPENAI_API_KEY")
 
         self._openai_client: Optional[OpenAI] = None
 
@@ -1230,9 +1230,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                         {
                             "type": "wandb",
                             "wandb": {
-                                "project": get_required_env_var(
-                                    "WANDB_OPENAI_FINETUNE_PROJECT"
-                                )
+                                "project": get_env_var("WANDB_OPENAI_FINETUNE_PROJECT")
                             },
                         }
                     ],

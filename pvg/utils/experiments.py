@@ -38,7 +38,7 @@ from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
 
 from pvg.run import PreparedExperimentInfo
-from pvg.utils.env import get_required_env_var
+from pvg.utils.env import get_env_var
 
 
 def _identity(string: str) -> str:
@@ -187,7 +187,7 @@ class HyperparameterExperiment(ABC):
         self.allow_resuming_wandb_run = allow_resuming_wandb_run
 
         if default_wandb_project is None:
-            default_wandb_project = get_required_env_var("WANDB_PROJECT")
+            default_wandb_project = get_env_var("WANDB_PROJECT", "")
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -235,7 +235,7 @@ class HyperparameterExperiment(ABC):
             "--wandb-entity",
             type=str,
             help="The name of the W&B entity to use",
-            default=get_required_env_var("WANDB_ENTITY"),
+            default=get_env_var("WANDB_ENTITY", ""),
         )
         self.parser.add_argument(
             "--tag",
@@ -357,9 +357,9 @@ class HyperparameterExperiment(ABC):
         if self.cmd_args.use_wandb:
             os.environ["WANDB_SILENT"] = "true"
             dummy_run = wandb.init(
-                id=get_required_env_var("WANDB_DUMMY_RUN_NAME"),
-                project=get_required_env_var("WANDB_DUMMY_RUN_PROJECT"),
-                entity=get_required_env_var("WANDB_DUMMY_RUN_ENTITY"),
+                id=get_env_var("WANDB_DUMMY_RUN_NAME"),
+                project=get_env_var("WANDB_DUMMY_RUN_PROJECT"),
+                entity=get_env_var("WANDB_DUMMY_RUN_ENTITY"),
             )
             wandb.alert(
                 title=f"{self.common_run_name} finished",
