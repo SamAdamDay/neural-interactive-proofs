@@ -33,10 +33,10 @@ RUN echo "$CACHE_BUST"
 RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my_env \
     && git config --global user.name "${GIT_NAME}" \
     && git config --global user.email "${GIT_EMAIL}" \
-    && wandb login ${WANDB_KEY} \
-    && git clone https://$GITHUB_USER:$GITHUB_PAT@github.com/SamAdamDay/pvg-experiments.git pvg-experiments \
+    && wandb login "${WANDB_KEY}" \
+    && git clone "${GIT_REPO_URI}" pvg-experiments \
     && mkdir -p .ssh \
-    && echo ${SSH_PUBKEY} > .ssh/authorized_keys'
+    && echo "${SSH_PUBKEY}" > .ssh/authorized_keys'
 
 # Add /root/.local/bin to the path
 ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

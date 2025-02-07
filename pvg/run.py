@@ -231,7 +231,7 @@ def prepare_experiment(
     num_dataset_threads: int = 8,
     device: Optional[TorchDevice] = None,
     test_run: bool = False,
-):
+) -> PreparedExperimentInfo:
     """Prepare for running an experiment.
 
     This is useful e.g. for downloading data before running an experiment. Without this,
