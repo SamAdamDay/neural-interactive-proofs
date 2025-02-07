@@ -9,7 +9,7 @@ matplotlib==3.9.0
 nbformat==5.10.4
 networkx==3.3
 numpy==2.1.0
-openai==1.44.0
+openai==1.59.8
 pandas==2.2.2
 plotly==5.22.0
 pyyaml==6.0.2

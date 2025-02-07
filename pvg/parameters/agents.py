@@ -12,7 +12,6 @@ from typing import ClassVar, Optional, Literal
 from dataclasses import dataclass
 import dataclasses
 
-from pvg.constants import WANDB_ENTITY, WANDB_PROJECT
 from pvg.parameters.parameters_base import (
     SubParameters,
     ParameterValue,
@@ -25,6 +24,7 @@ from pvg.parameters.update_schedule import (
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
 )
+from pvg.utils.env import env_var_default_factory
 
 
 @register_parameter_class
@@ -80,10 +80,10 @@ class AgentParameters(SubParameters, ABC):
         case, all agent parameters are replaced by the parameters from the checkpoint.
         Otherwise, the model is randomly initialised. If `True`, the `checkpoint_run_id`
         parameter must be set.
-    checkpoint_entity : str
+    checkpoint_entity : str, optional
         The entity of the W&B run to load the checkpoint from. If not provided, the
         default is used.
-    checkpoint_project : str
+    checkpoint_project : str, optional
         The project of the W&B run to load the checkpoint from. If not provided, the
         default is used.
     checkpoint_run_id: str, optional
@@ -108,8 +108,12 @@ class AgentParameters(SubParameters, ABC):
     normalize_message_history: bool = False
 
     load_checkpoint_and_parameters: bool = False
-    checkpoint_entity: str = WANDB_ENTITY
-    checkpoint_project: str = WANDB_PROJECT
+    checkpoint_entity: str = dataclasses.field(
+        default_factory=env_var_default_factory("WANDB_ENTITY", "")
+    )
+    checkpoint_project: str = dataclasses.field(
+        default_factory=env_var_default_factory("WANDB_PROJECT", "")
+    )
     checkpoint_run_id: Optional[str] = None
     checkpoint_version: str = "latest"
 

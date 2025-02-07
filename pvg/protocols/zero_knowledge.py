@@ -505,6 +505,38 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
         return shared_done, agent_done, terminated, reward
 
+    def reward_mid_point_estimate(self, agent_name: str) -> float:
+        """Get an estimate of the expected reward if all agents play randomly.
+
+        This is used to compute the mid-point of the reward range for the agent.
+
+        For example, if the agent gets reward -1 for a wrong guess and 1 for a correct
+        guess, the mid-point estimate could be 0.
+
+        For the zero-knowledge protocol, for the base agents we use the estimate from
+        the base protocol. We set the mid-point estimate for the simulator to 0, because
+        its reward is a cosine similarity. We set the mid-point estimate for the
+        adversarial verifier to 0, because its reward is the negative of the simulator
+        reward.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the reward mid-point for.
+
+        Returns
+        -------
+        reward_mid_point : float
+            The expected reward for the agent if all agents play randomly.
+        """
+
+        if agent_name in self.base_protocol.agent_names:
+            return self.base_protocol.reward_mid_point_estimate(agent_name)
+        elif agent_name in ("adversarial_verifier", "simulator"):
+            return 0.0
+        else:
+            raise ValueError(f"Unknown agent {agent_name}.")
+
     def _get_simulator_reward(
         self,
         round_id: Int[Tensor, "..."],

@@ -110,7 +110,7 @@ ENV/
 env.bak/
 venv.bak/
 
-# Weights and biases
+# Weights & biases
 wandb/
 
 # Spyder project settings
@@ -162,3 +162,8 @@ experiment_checkpoints/*
 
 # Playground cache
 playground/cache/*
+
+
+# Gernerated and built docs
+doc/reference/generated
+doc/_build

@@ -14,6 +14,8 @@ LoggingType = logging.Logger | logging.LoggerAdapter
 
 NumpyStringDtype = StringDType(na_object=None)
 
+NOT_GIVEN = object()
+
 
 def get_union_elements(tp: Any) -> list:
     """Get the elements of a union type.

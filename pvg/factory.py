@@ -66,7 +66,7 @@ from pvg.utils.maths import set_seed
 T = TypeVar("T")
 
 
-class ParameterSelector:
+class _ParameterSelector:
     """A data structure for storing and retrieving classes based on parameter values."""
 
     # Ordered by specificity, with the most specific filters first
@@ -124,8 +124,8 @@ class ParameterSelector:
         raise NotImplementedError("No class found for the parameters.")
 
 
-SCENARIO_CLASS_REGISTRY: defaultdict[tuple[ScenarioType, type], ParameterSelector] = (
-    defaultdict(ParameterSelector)
+SCENARIO_CLASS_REGISTRY: defaultdict[tuple[ScenarioType, type], _ParameterSelector] = (
+    defaultdict(_ParameterSelector)
 )
 
 
@@ -365,6 +365,7 @@ def build_scenario_instance(
         or hyper_params.trainer == "spg"
         or hyper_params.trainer == "reinforce"
         or hyper_params.trainer == "pure_text_ei"
+        or hyper_params.trainer == "pure_text_malt"
     ):
         additional_rl_components = _build_components_for_rl_trainer(
             hyper_params=hyper_params,

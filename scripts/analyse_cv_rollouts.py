@@ -12,14 +12,16 @@ from pvg.factory import build_scenario_instance
 from pvg.trainers import PureTextEiTrainer, build_trainer
 from pvg.scenario_base import ROLLOUT_ANALYSERS
 from pvg.constants import (
-    WANDB_ENTITY,
-    WANDB_CV_PROJECT,
     CHECKPOINT_STATE_ARTIFACT_PREFIX,
     CHECKPOINT_STATE_ARTIFACT_TYPE,
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
 )
 import pvg.code_validation.rollout_analysis
+from pvg.utils.env import get_env_var
+
+wandb_entity = get_env_var("WANDB_ENTITY")
+wandb_cv_project = get_env_var("WANDB_CV_PROJECT")
 
 available_analysers = []
 for scenario, analyser in ROLLOUT_ANALYSERS.keys():
@@ -77,8 +79,8 @@ checkpoint_dir = PureTextEiTrainer.get_checkpoint_base_dir_from_run_id(
     cmd_args.checkpoint_name
 )
 artifact_name = (
-    f"{WANDB_ENTITY}"
-    f"/{WANDB_CV_PROJECT}"
+    f"{wandb_entity}"
+    f"/{wandb_cv_project}"
     f"/{CHECKPOINT_STATE_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
     f":latest"
 )
@@ -98,8 +100,8 @@ else:
 # Try to download the rollouts
 rollouts_dir = checkpoint_dir.joinpath("rollouts")
 artifact_name = (
-    f"{WANDB_ENTITY}"
-    f"/{WANDB_CV_PROJECT}"
+    f"{wandb_entity}"
+    f"/{wandb_cv_project}"
     f"/{ROLLOUTS_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
     f":latest"
 )

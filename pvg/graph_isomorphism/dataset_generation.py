@@ -39,12 +39,7 @@ from tqdm import tqdm
 from pvg.constants import GI_DATA_DIR
 from pvg.utils.types import TorchDevice
 
-try:
-    from primesieve.numpy import n_primes
-except ImportError:
-    raise ImportError(
-        "The primesieve package is required to generate graph isomorphism datasets."
-    )
+from sympy import sieve
 
 
 @dataclass
@@ -143,7 +138,7 @@ def wl_score(
     num_nodes = adjacency_a.shape[1]
 
     # Generate primes for hashing
-    primes = torch.from_numpy(n_primes(hash_size)).to(device)
+    primes = torch.tensor(sieve.primerange(hash_size), device=device)
 
     # Initialize labels and scores
     scores = torch.ones(batch_size, dtype=torch.int32, device=device) * -1

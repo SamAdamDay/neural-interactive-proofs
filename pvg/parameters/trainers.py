@@ -329,3 +329,18 @@ class PureTextEiParameters(SubParameters):
     weighting_minimum: Optional[float] = None
     weighting_use_replacement: bool = True
     weighting_epsilon: float = 0.01
+
+
+@register_parameter_class
+@dataclass
+class PureTextMaltParameters(SubParameters):
+    """Additional parameters for Multi-Agent LLM Training (MALT).
+
+    Parameters
+    ----------
+    num_responses_per_timestep : int
+        The number of responses to sample from the agents at each timestep. This yields
+        a tree of size at most `num_responses_per_timestep ** max_message_rounds`.
+    """
+
+    num_responses_per_timestep: int = 2

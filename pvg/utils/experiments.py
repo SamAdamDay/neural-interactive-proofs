@@ -38,13 +38,7 @@ from tqdm_multiprocess import TqdmMultiProcessPool
 from tqdm_multiprocess.std import init_worker
 
 from pvg.run import PreparedExperimentInfo
-from pvg.constants import (
-    WANDB_ENTITY,
-    WANDB_PROJECT,
-    WANDB_DUMMY_RUN_ENTITY,
-    WANDB_DUMMY_RUN_NAME,
-    WANDB_DUMMY_RUN_PROJECT,
-)
+from pvg.utils.env import get_env_var
 
 
 def _identity(string: str) -> str:
@@ -193,7 +187,7 @@ class HyperparameterExperiment(ABC):
         self.allow_resuming_wandb_run = allow_resuming_wandb_run
 
         if default_wandb_project is None:
-            default_wandb_project = WANDB_PROJECT
+            default_wandb_project = get_env_var("WANDB_PROJECT", "")
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -241,7 +235,7 @@ class HyperparameterExperiment(ABC):
             "--wandb-entity",
             type=str,
             help="The name of the W&B entity to use",
-            default=WANDB_ENTITY,
+            default=get_env_var("WANDB_ENTITY", ""),
         )
         self.parser.add_argument(
             "--tag",
@@ -363,9 +357,9 @@ class HyperparameterExperiment(ABC):
         if self.cmd_args.use_wandb:
             os.environ["WANDB_SILENT"] = "true"
             dummy_run = wandb.init(
-                id=WANDB_DUMMY_RUN_NAME,
-                project=WANDB_DUMMY_RUN_PROJECT,
-                entity=WANDB_DUMMY_RUN_ENTITY,
+                id=get_env_var("WANDB_DUMMY_RUN_NAME"),
+                project=get_env_var("WANDB_DUMMY_RUN_PROJECT"),
+                entity=get_env_var("WANDB_DUMMY_RUN_ENTITY"),
             )
             wandb.alert(
                 title=f"{self.common_run_name} finished",
@@ -420,8 +414,8 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
     arg_parser_description : str, default="Run hyperparameter experiments sequentially"
         The description of the argument parser.
     default_wandb_project : Optional[str], default=None
-        The default W&B project to use. If None, the default is to use the global
-        constant `WANDB_PROJECT`.
+        The default W&B project to use. If None, the default is to use the WANDB_PROJECT
+        environment variable.
     allow_resuming_wandb_run : bool, default=False
         Whether to allow resuming a W&B run with the same ID as a run in this
         experiment.
@@ -624,8 +618,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
     arg_parser_description : str, default="Run hyperparameter experiments in parallel"
         The description of the argument parser.
     default_wandb_project : Optional[str], default=None
-        The default W&B project to use. If None, the default is to use the global
-        constant `WANDB_PROJECT`.
+        The default W&B project to use. If None, the default is to use the WANDB_PROJECT
+        environment variable.
     allow_resuming_wandb_run : bool, default=False
         Whether to allow resuming a W&B run with the same ID as a run in this
         experiment.

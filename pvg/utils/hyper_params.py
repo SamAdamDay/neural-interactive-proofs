@@ -36,7 +36,10 @@ def get_agent_part_flags(
             or not hyper_params.reinforce.use_advantage_and_critic,
             False,
         )
-    elif hyper_params.trainer == "pure_text_ei":
+    elif (
+        hyper_params.trainer == "pure_text_ei"
+        or hyper_params.trainer == "pure_text_malt"
+    ):
         return False, False, True
     else:
         raise ValueError(f"Unknown trainer type: {hyper_params.trainer}")
