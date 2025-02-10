@@ -311,16 +311,6 @@ def generate_and_save_cv_dataset(
                 else:
                     buggy_solutions = process_results[-1]
 
-                # buggy_solutions = generate_buggy_solutions(
-                #     datum,
-                #     config.model,
-                #     config.openrouter_api_key,
-                #     config.system_prompt,
-                #     config.max_modifications,
-                #     max_attempts=config.max_attempts,
-                #     debug=True,
-                # )
-
                 # If we didn't manage to generate any buggy solutions, we make a note of
                 # this problem so we can skip it in the future
                 num_buggy_solutions_generated = len(
@@ -539,13 +529,13 @@ def _try_generate_buggy_solutions(
             logger.debug(f"Attempt: [{attempts+1}/{max_attempts}]")
 
             if multiple_completions:
-                model_outputs = get_openrouter_response(
+                model_outputs = _get_openrouter_response(
                     model, messages, openrouter_api_key, num_responses=max_attempts
                 )
                 model_outputs = [output["message"] for output in model_outputs]
             else:
                 model_outputs = [
-                    get_openrouter_response(model, messages, openrouter_api_key)[0][
+                    _get_openrouter_response(model, messages, openrouter_api_key)[0][
                         "message"
                     ]
                 ]
@@ -572,9 +562,6 @@ def _try_generate_buggy_solutions(
 
                 if valid_buggy_solution:
                     break
-
-        # if not (True in input_output_checks or False in input_output_checks):
-        #     valid_buggy_solution = False
 
         if valid_buggy_solution:
             logger.debug(f"Valid buggy solution generated in {attempts} attempts")
@@ -617,7 +604,7 @@ def _try_generate_buggy_solutions(
     return buggy_solutions
 
 
-def get_openrouter_response(
+def _get_openrouter_response(
     model: str,
     messages: list[dict[Literal["role", "content"], str]],
     temperature: float = 1.0,
@@ -667,8 +654,7 @@ def get_openrouter_response(
     responses = []
 
     # Crazily, the openrouter API doesn't support multiple completions in a single
-    # request, so we have to make multiple requests. Also, we don't seem to have access
-    # to the the o1 models via the OpenAI API atb the moment?
+    # request, so we have to make multiple requests.
     if "openai" not in model or "o1" in model or force_multiple_generations:
         completions = []
         for _ in range(num_responses):
@@ -942,24 +928,6 @@ def _test_buggy_solution(
     ):
         return True, results, None
 
-        # in_outs = json.loads(datum["input_output"])
-        # mismatched = []
-        # for i in range(len(results)):
-        #     buggy = False
-        #     if results[i] is not True:
-        #         if ignore_invalid_outputs:
-        #             buggy = True
-        #         else:
-        #             buggy = buggy_outputs[i] is not None
-        #         if buggy:
-        #             mismatched.append(
-        #                 {
-        #                     "input": in_outs['inputs'][i],
-        #                     "output": in_outs['outputs'][i],
-        #                     "buggy_output": buggy_outputs[i],
-        #                 }
-        #             )
-
     # Generate a new outputs based on the problematic inputs and test the buggy solution
     if len(problematic_inputs) == 0:
         return False, results, None
@@ -1097,312 +1065,3 @@ def _load_cv_dataset(
         buggy_data = _create_empty_cv_dataset()
 
     return buggy_data
-
-
-def _change_to_new_cv_dataset(max_solutions: int = 1) -> datasets.Dataset:
-
-    logger = getLogger(__name__)
-
-    data = datasets.load_dataset(
-        "codeparrot/apps",
-        trust_remote_code=True,
-    )
-
-    buggy_data = datasets.load_dataset("lrhammond/buggy-apps")
-
-    new_dataset = _create_empty_cv_dataset()
-
-    for split in ["train", "test"]:
-
-        indices = buggy_data[split]["problem_id"]
-        sliced_data = data[split].filter(lambda x: x["problem_id"] in indices)
-
-        logger.info(f"Split: {split!r}")
-
-        for buggy_datum, datum in tqdm(zip(buggy_data[split], sliced_data)):
-
-            if buggy_datum["problem_id"] != datum["problem_id"]:
-                raise ValueError("The data is not aligned.")
-
-            solutions: list[str] = json.loads(datum["solutions"])
-            buggy_solutions = json.loads(buggy_datum["solutions"])
-
-            # Don't add items for problems with only one solution
-            if len(solutions) <= 1:
-                continue
-
-            new_datum = {
-                "apps_split": split,
-                "apps_problem_id": datum["problem_id"],
-                "difficulty": datum["difficulty"],
-                "question": datum["question"],
-                "solutions": [],
-                "buggy_solutions": [],
-            }
-
-            num_checks = len(json.loads(datum["input_output"])["inputs"])
-
-            # Add at most 10 pairs of solutions, and keep the dataset balanced
-            num_pairs_to_add = min(
-                max_solutions,
-                len(buggy_solutions) - buggy_solutions.count(None),
-                buggy_solutions.count(None),
-            )
-            added = {"solutions": 0, "buggy_solutions": 0}
-
-            for solution_id, (solution, buggy_solution) in enumerate(
-                zip(solutions, buggy_solutions)
-            ):
-
-                if buggy_solution is not None:
-
-                    if added["buggy_solutions"] >= num_pairs_to_add:
-                        continue
-
-                    buggy_solution_dict = json.loads(buggy_solution)
-                    passed = buggy_solution_dict["input_output_checks"].count(True)
-                    failed = buggy_solution_dict["input_output_checks"].count(False)
-                    # if max(passed, failed) == 0:
-                    #     raise ValueError("No checks were performed")
-
-                    new_solution = {
-                        "apps_solution_number": solution_id,
-                        "solution": buggy_solution_dict["solution"],
-                        "levenshtein_distance": buggy_solution_dict[
-                            "levenshtein_distance"
-                        ],
-                        "checks": {
-                            "pass": passed,
-                            "fail": failed,
-                            "error": num_checks - passed - failed,
-                        },
-                        "generation_attempts": buggy_solution_dict[
-                            "generation_attempts"
-                        ],
-                    }
-
-                    new_datum["buggy_solutions"].append(new_solution)
-                    added["buggy_solutions"] += 1
-
-                else:
-
-                    if added["solutions"] >= num_pairs_to_add:
-                        continue
-
-                    new_solution = {
-                        "apps_solution_number": solution_id,
-                        "solution": solution,
-                        "levenshtein_distance": {"normalised": 0.0, "raw": 0},
-                        "checks": {"pass": num_checks, "fail": 0, "error": 0},
-                        "generation_attempts": 0,
-                    }
-
-                    new_datum["solutions"].append(new_solution)
-                    added["solutions"] += 1
-
-            new_dataset = new_dataset.add_item(new_datum)
-
-    new_dataset.save_to_disk(os.path.join(CV_DATA_DIR, "new_cv_dataset.data"))
-    new_dataset.to_json(os.path.join(CV_DATA_DIR, "new_cv_dataset.jsonl"))
-
-    return new_dataset
-
-
-def _suppress_output(func: callable) -> callable:
-    """Suppress stdout and stderr during function execution."""
-
-    def wrapper(*args, **kwargs):
-        with open(os.devnull, "w") as fnull:
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-            sys.stdout = fnull
-            sys.stderr = fnull
-            result = func(*args, **kwargs)
-            sys.stdout = original_stdout
-            sys.stderr = original_stderr
-        return result
-
-    return wrapper
-
-
-# TODO (work in progress, original version that is useful for more intelligently updating or extending the buggy dataset)
-def _update_cv_dataset(config: CodeValidationDatasetConfig | dict):
-
-    return
-
-    # return
-
-    if isinstance(config, dict):
-        config = CodeValidationDatasetConfig(**config)
-
-    split = ["train", "test"] if config.split is None else [config.split]
-
-    # Load original data
-    data = datasets.load_dataset(
-        "codeparrot/apps",
-        trust_remote_code=True,
-        split=config.split,
-    )
-
-    # Load existing buggy data
-    if config.pull_repo is not None:
-        buggy_data = datasets.load_dataset(config.pull_repo, split=config.split)
-    else:
-        if config.local_dir is None:
-            raise ValueError(
-                "local_dir must be specified if pull_repo is not specified"
-            )
-        elif os.path.exists(config.local_dir):
-            buggy_data = datasets.load_dataset(
-                "json", data_dir=config.local_dir, split=config.split
-            )
-        else:
-            all_data = (
-                data
-                if config.split is None
-                else datasets.load_dataset("codeparrot/apps", trust_remote_code=True)
-            )
-            buggy_data = datasets.DatasetDict(
-                {
-                    s: datasets.Dataset.from_dict(
-                        {k: all_data[s][k] for k in ["problem_id", "difficulty"]}
-                        | {"solutions": [""] * len(all_data[s])}
-                    )
-                    for s in ["train", "test"]
-                }
-            )
-
-    # To help with indexing
-    if config.split is not None:
-        buggy_data = {s: buggy_data for s in split}
-        data = {s: data for s in split}
-
-    for s in split:
-        if len(data[s]) != len(buggy_data[s]):
-            raise ValueError("The lengths of the original and buggy data do not match")
-
-    num_data_added = 0
-    num_data_updated = 0
-    start_time = datetime.now()
-
-    for s in split:
-        # print(f"Generating {len(config.data_range)} buggy data for the {s} split")
-        counters = {d: 0 for d in config.difficulties}
-        for i in range(len(data[s])):
-
-            datum = data[s][i]
-            d = datum["difficulty"]
-
-            # Skip difficulties not in the list
-            if d not in config.difficulties:
-                continue
-            # Skip if we have already generated enough buggy data for this difficulty level
-            if counters[d] >= config.num_data:
-                continue
-
-            # Sanity check matching problem IDs and difficulties
-            buggy_datum = buggy_data[s][i]
-            if buggy_datum["problem_id"] != datum["problem_id"]:
-                raise ValueError("Problem IDs do not match")
-            if buggy_datum["difficulty"] != d:
-                raise ValueError("Difficulties do not match")
-
-            # Check if have already generated buggy solutions
-            if buggy_datum["solutions"] == "":
-                buggy_solutions = [None] * len(json.loads(datum["solutions"]))
-                num_data_added += 1
-            else:
-                buggy_solutions = json.loads(buggy_datum["solutions"])
-                if (
-                    buggy_solutions.count(None) / len(buggy_solutions)
-                    <= 1 - config.fraction_to_modify
-                ):
-                    continue
-                num_data_updated += 1
-
-            # Generate new buggy solutions
-            new_buggy_solutions = _try_generate_buggy_solutions(
-                datum,
-                buggy_solutions,
-                config.model,
-                config.system_prompt,
-                config.fraction_to_modify,
-            )
-            # buggy_data.map(lambda x: x["solutions"] = json.dumps(new_buggy_solutions))
-            buggy_data[s][i]["solutions"] = json.dumps(new_buggy_solutions)
-
-            # Update the counters
-            counters[d] += 1
-
-            # Save if required
-            if config.save_after is None:
-                continue
-            elif sum(counters.values()) % config.save_after == 0:
-                Path(config.local_dir).mkdir(parents=True, exist_ok=True)
-                buggy_data[s].to_json(os.path.join(config.local_dir, f"{s}.jsonl"))
-                if config.push_repo is not None:
-                    buggy_data[s].push_to_hub(config.push_repo, token=config.token)
-
-    # Calculate the elapsed time, rounding microseconds down
-    elapsed_time = datetime.now() - start_time
-    elapsed_time = timedelta(days=elapsed_time.days, seconds=elapsed_time.seconds)
-    print(f"Done in {elapsed_time}")  # noqa: T201
-
-    # Add new buggy data to the existing buggy data
-    # for s in config.split:
-    #     with open(os.path.join(config.local_dir, f"{s}.jsonl"), 'a') as file:
-    #         for d in new_buggy_data[s]:
-    #             # Convert the dictionary to a JSON string and write it to the file
-    #             file.write(json.dumps(d) + '\n')
-
-    # Save
-    if sum(counters.values()) > 0:
-        Path(config.local_dir).mkdir(parents=True, exist_ok=True)
-        for s in split:
-            buggy_data[s].to_json(os.path.join(config.local_dir, f"{s}.jsonl"))
-            if config.push_repo is not None:
-                buggy_data.push_to_hub(config.push_repo, split=s)
-
-            new_datum = {  # noqa: F841
-                "apps_split": split,
-                "apps_problem_id": datum["problem_id"],
-                "difficulty": datum["difficulty"],
-                "question": datum["question"],
-                "solutions": [],
-                "buggy_solutions": [],
-            }
-
-            num_checks = len(json.loads(datum["input_output"])["inputs"])
-
-            # Add at most 10 pairs of solutions, and keep the dataset balanced
-            num_pairs_to_add = min(
-                max_solutions,
-                len(buggy_solutions) - buggy_solutions.count(None),
-                buggy_solutions.count(None),
-            )
-            added = {"solutions": 0, "buggy_solutions": 0}
-
-            for i in range(len(solutions)):
-
-                if buggy_solutions[i] is not None:
-
-                    if added["buggy_solutions"] >= num_pairs_to_add:
-                        continue
-
-                    buggy_solution = json.loads(buggy_solutions[i])
-                    passed = buggy_solution["input_output_checks"].count(True)
-                    failed = buggy_solution["input_output_checks"].count(False)
-                    if max(passed, failed) == 0:
-                        raise ValueError("No checks were performed")
-
-                    new_solution = {  # noqa: F841
-                        "apps_solution_number": i,
-                        "solution": buggy_solution["solution"],
-                        "levenshtein_distance": buggy_solution["levenshtein_distance"],
-                        "checks": {
-                            "pass": passed,
-                            "fail": failed,
-                            "error": num_checks - passed - failed,
-                        },
-                        "generation_attempts": buggy_solution["generation_attempts"],
-                    }

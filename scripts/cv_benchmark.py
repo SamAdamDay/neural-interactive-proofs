@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from pvg.utils.env import get_env_var
 from pvg.constants import HF_BUGGY_APPS_REPO
-from pvg.code_validation.dataset_generation import get_openrouter_response
+from pvg.code_validation.dataset_generation import _get_openrouter_response
 
 MODELS = [
     "openai/gpt-3.5-turbo" "openai/gpt-4o-mini",
@@ -127,7 +127,7 @@ def _guess_if_correct(
     if debug:
         start_time = datetime.now()
 
-    responses = get_openrouter_response(
+    responses = _get_openrouter_response(
         model,
         query,
         api_key,
