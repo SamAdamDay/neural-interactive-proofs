@@ -36,6 +36,8 @@ SEEDS = [8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030]
 
 HF_PRETRAINED_MODELS_USER = "SamAdamDay"
 """The user hosting the pretrained models"""
+HF_BUGGY_APPS_REPO = "lrhammond/buggy-apps"
+"""The repository containing the buggy apps dataset"""
 
 # Weights & Biases defaults
 ROLLOUT_SAMPLE_ARTIFACT_PREFIX = "rollout_sample_"

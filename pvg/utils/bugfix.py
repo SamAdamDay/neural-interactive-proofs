@@ -1,7 +1,6 @@
 """Replacements for buggy parts of libraries we use."""
 
 import torch
-
 from torchrl.objectives.value.functional import (
     _geom_series_like,
     _custom_conv1d,

@@ -16,6 +16,7 @@ pyyaml==6.0.2
 safetensors==0.4.3
 scikit-learn==1.5.0
 tensordict==0.4.0
+textdistance==4.6.3
 timm==1.0.7
 torch_geometric==2.5.3
 torch==2.3.1

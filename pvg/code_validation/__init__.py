@@ -1,4 +1,4 @@
-"""All components for the graph isomorphism task.
+"""All components for the code validation task.
 
 Has classes for:
 
