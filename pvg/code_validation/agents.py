@@ -1210,6 +1210,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         # OpenAI requires at least 10 examples for fine-tuning
         if len(fine_tune_dataset) < 10:
             self.fine_tune_job_id = "insufficient_data_job_id"
+            warn(
+                f"Not fine-tuning for agent group {self.group_name!r} because the "
+                f"dataset has only {len(fine_tune_dataset)} examples. At least 10 are "
+                f"required for fine-tuning."
+            )
             return
 
         if self.shared_agent_params.use_dummy_api:
