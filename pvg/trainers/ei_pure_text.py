@@ -86,6 +86,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
             shared_model_group.create_supervised_fine_tune_job(
                 selected_rollouts_per_agent,
                 guess_replaced_rollouts,
+                job_name=self._get_fine_tune_job_name(shared_model_group),
             )
 
     def _select_rollouts_for_fine_tuning(

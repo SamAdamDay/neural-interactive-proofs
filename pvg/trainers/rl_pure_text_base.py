@@ -1284,3 +1284,31 @@ class PureTextRlTrainer(Trainer, ABC):
             prompts.append(prompts_by_round)
 
         return raw_transcripts, processed_transcripts, prompts
+
+    def _get_fine_tune_job_name(
+        self,
+        shared_model_group: PureTextSharedModelGroup,
+    ) -> str:
+        """Get a name for the fine-tune job for the given shared model group.
+
+        This name is generated from the run id, the iteration number, and the shared
+        model group name, and is used make the job more easily identifiable.
+
+        Parameters
+        ----------
+        shared_model_group : PureTextSharedModelGroup
+            The shared model group to create the fine-tune job for.
+
+        Returns
+        -------
+        job_name : str
+            The name of the fine-tune job.
+        """
+
+        if self.settings.run_id is not None:
+            job_name = self.settings.run_id
+        else:
+            job_name = "NO_RUN_ID"
+        job_name += f"_iter_{self.state.iteration}_{shared_model_group.group_name}"
+
+        return job_name

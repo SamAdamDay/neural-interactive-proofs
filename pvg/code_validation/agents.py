@@ -911,6 +911,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
+        job_name: Optional[str] = None,
     ):
         """Create a supervised fine-tune job for the agent.
 
@@ -944,6 +945,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             be replaced with the true label. In these the verifier's guess will be
             replaced with either 'Decision: accept' or 'Decision: reject' based on the
             true label.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
         if self.shared_agent_params.freeze_agent:
@@ -976,13 +979,16 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         fine_tune_dataset = sum(fine_tune_datasets.values(), [])
 
-        self._make_fine_tune_api_call(fine_tune_dataset, method="supervised")
+        self._make_fine_tune_api_call(
+            fine_tune_dataset, method="supervised", job_name=job_name
+        )
 
     def create_dpo_fine_tune_job(
         self,
         timesteps_per_agent: dict[str, NestedArrayDict],
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
+        job_name: Optional[str] = None,
     ):
         """Create a DPO fine-tune job for the agent group given sampled timesteps.
 
@@ -999,6 +1005,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         negative_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the non-preferred response for each of the timesteps in
             `timesteps_per_agent`.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
         if self.shared_agent_params.freeze_agent:
@@ -1072,7 +1080,9 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         fine_tune_dataset = sum(fine_tune_datasets.values(), [])
 
-        self._make_fine_tune_api_call(fine_tune_dataset, method="dpo")
+        self._make_fine_tune_api_call(
+            fine_tune_dataset, method="dpo", job_name=job_name
+        )
 
     def get_fine_tune_job_status(
         self,
@@ -1183,6 +1193,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         self,
         fine_tune_dataset: list[dict],
         method: Literal["supervised", "dpo"],
+        job_name: Optional[str] = None,
     ):
         """Make the API call to fine-tune the model.
 
@@ -1190,6 +1201,10 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         ----------
         fine_tune_dataset : list[dict]
             The dataset of examples to fine-tune the model with.
+        method : Literal["supervised", "dpo"]
+            The fine-tuning method to use.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
         # OpenAI requires at least 10 examples for fine-tuning
@@ -1236,6 +1251,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                         }
                     ],
                     method={"type": method},
+                    suffix=job_name,
                 )
 
             # If we are day rate limited, sleep for an hour and try again

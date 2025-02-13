@@ -546,6 +546,7 @@ class PureTextSharedModelGroup(ABC):
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
+        job_name: Optional[str] = None,
     ):
         """Create a supervised fine-tune job for the agent group given sampled rollouts.
 
@@ -559,6 +560,8 @@ class PureTextSharedModelGroup(ABC):
         guess_replaced_rollouts : dict[str, NestedArrayDict], default={}
             Additional rollouts for the verifier agents where the verifier's guess is to
             be replaced with the true label.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
     @abstractmethod
@@ -567,6 +570,7 @@ class PureTextSharedModelGroup(ABC):
         timesteps_per_agent: dict[str, NestedArrayDict],
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
+        job_name: Optional[str] = None,
     ):
         """Create a DPO fine-tune job for the agent group given sampled timesteps.
 
