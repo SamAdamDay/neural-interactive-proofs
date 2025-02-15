@@ -144,6 +144,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
                 timesteps_per_agent,
                 positive_examples_per_agent,
                 negative_examples_per_agent,
+                job_name=self._get_fine_tune_job_name(shared_model_group),
             )
 
     @staticmethod
