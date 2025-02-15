@@ -54,6 +54,8 @@ from typing import Optional
 import typing
 from dataclasses import dataclass, fields
 
+from pvg.utils.version import get_package_name, get_version
+
 from .parameters_base import (
     BaseHyperParameters,
     SubParameters,
@@ -113,6 +115,7 @@ from .update_schedule import (
 )
 from .message_regression import MessageRegressionParameters
 from .base_run import BaseRunParameters, BaseRunPreserve
+from .version import convert_hyper_param_dict
 
 # The agent names required for each protocol
 AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
@@ -407,6 +410,32 @@ class HyperParameters(BaseHyperParameters):
                 f"by interaction protocol {self.interaction_protocol}: "
                 f"{get_protocol_agent_names(self, zero_knowledge)}."
             )
+
+    def to_dict(self, include_package_meta: bool = False) -> dict:
+        """Convert the parameters object to a dictionary.
+
+        Turns enums into strings, and sub-parameters into dictionaries. Includes the
+        is_random parameter if it exists.
+
+        Parameters
+        ----------
+        include_package_meta : bool, default=False
+            Whether to include metadata about the PVG experiments package. This will set
+            the "_package_version" and "_package_name" fields.
+
+        Returns
+        -------
+        params_dict : dict
+            A dictionary of the parameters.
+        """
+
+        as_dict = super().to_dict()
+
+        if include_package_meta:
+            as_dict["_package_version"] = get_version(as_tuple=False)
+            as_dict["_package_name"] = get_package_name()
+
+        return as_dict
 
 
 def get_protocol_agent_names(

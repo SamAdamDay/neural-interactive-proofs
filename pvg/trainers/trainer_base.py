@@ -18,17 +18,20 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 import wandb
 from wandb import Artifact
-from wandb.sdk.wandb_run import Run as WandbActiveRun
-from wandb.apis.public import Run as WandbFinishedRun
 
 from tqdm import tqdm
+
 import wandb.apis
+
+from git import Repo
 
 from pvg.scenario_base.agents import AgentState
 from pvg.parameters import HyperParameters
 from pvg.factory import ScenarioInstance
 from pvg.experiment_settings import ExperimentSettings
 from pvg.utils.hyper_params import get_agent_part_flags
+from pvg.utils.io import yes_no_user_prompt
+from pvg.utils.version import get_package_name, get_version, compare_versions
 from pvg.constants import (
     EXPERIMENT_STATE_DIR,
     CHECKPOINT_STATE_ARTIFACT_PREFIX,
@@ -139,6 +142,11 @@ class Trainer(ABC):
         # Create the checkpoint directory if it doesn't exist
         self.checkpoint_base_dir.mkdir(parents=True, exist_ok=True)
 
+        # Save the metadata
+        with open(self.checkpoint_metadata_path, "w") as f:
+            json.dump(self._get_metadata(), f, indent=4)
+
+        # Save the experiment state
         with open(self.checkpoint_state_path, "w") as f:
             json.dump(dataclasses.asdict(self.state), f, indent=4)
 
@@ -193,6 +201,15 @@ class Trainer(ABC):
             return None
 
         return self.get_checkpoint_base_dir_from_run_id(self.settings.run_id)
+
+    @property
+    def checkpoint_metadata_path(self) -> Path | None:
+        """The path to the checkpoint metadata file."""
+
+        if self.checkpoint_base_dir is None:
+            return None
+
+        return self.checkpoint_base_dir.joinpath("metadata.json")
 
     @property
     def checkpoint_state_path(self) -> Path | None:
@@ -292,26 +309,61 @@ class Trainer(ABC):
         ):
             raise CheckPointNotFoundError
 
+        if self.checkpoint_metadata_path.exists():
+            with open(self.checkpoint_metadata_path, "r") as f:
+                metadata = json.load(f)
+                package_name = metadata.get("package_name", None)
+                package_version = metadata.get("package_version", None)
+        else:
+            package_name = None
+            package_version = None
+
+        warnings = []
+        default_answer = "y"
+
+        # Check if the package name in the checkpoint matches the current
+        if package_name is not None and package_name != get_package_name():
+            warnings.append(
+                f"The package name in the checkpoint is '{package_name!r}', but the "
+                f"current package name is '{get_package_name()!r}'"
+            )
+            default_answer = "n"
+
+        # Check if the package version in the checkpoint matches the current
+        comparison, difference = compare_versions(package_version, get_version())
+        if comparison != "match":
+            if difference == "major":
+                default_answer = "n"
+                version_warning = "Parameters are likely NOT compatible."
+            else:
+                version_warning = "Parameters are likely compatible."
+            warnings.append(
+                f"The package version in the checkpoint is {package_version!r}, but "
+                f"the current package version is {get_version()!r}. This is a "
+                f"{difference.upper()} version difference. {version_warning}"
+            )
+
         # Check if the parameters in the checkpoint match the current parameters
         with open(self.checkpoint_params_path, "r") as f:
             if (
                 json.dumps(self.hyper_params.to_dict(), sort_keys=True, indent=4)
                 != f.read()
             ):
-                print(  # noqa: T201
+                warnings.append(
                     "The parameters in the checkpoint do not match the current "
                     "parameters."
                 )
-                while True:
-                    response = input("Do you want to continue? [Y/n]: ")
-                    if response.lower() == "y" or response == "":
-                        break
-                    elif response.lower() == "n":
-                        sys.exit(1)
-                    else:
-                        print(  # noqa: T201
-                            "Invalid response. Please enter 'y' or 'n'."
-                        )
+
+        # If there are warnings, prompt the user to continue
+        initial_message = "Resuming existing experiment from checkpoint."
+        initial_message += "".join([f"\nWarning: {warning}" for warning in warnings])
+        option_selected = yes_no_user_prompt(
+            initial_message=initial_message,
+            query_message="Do you want to continue?",
+            default_answer=default_answer,
+        )
+        if option_selected == "n":
+            sys.exit(1)
 
         with open(self.checkpoint_state_path, "r") as f:
             state_dict = json.load(f)
@@ -417,6 +469,23 @@ class Trainer(ABC):
 
         artifact.add_file(file_path)
         self.settings.wandb_run.log_artifact(artifact)
+
+    def _get_metadata(self) -> dict:
+        """Get metadata relevant to the current experiment, for saving the checkpoint.
+
+        Returns
+        -------
+        metadata : dict
+            The metadata to record
+        """
+
+        repo = Repo(search_parent_directories=True)
+
+        return {
+            "package_version": get_version(),
+            "package_name": get_package_name(),
+            "git_sha": repo.head.object.hexsha,
+        }
 
     def get_total_num_iterations(self) -> int:
         """Get the total number of iterations that the trainer will run for.

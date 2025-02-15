@@ -94,8 +94,9 @@ sub-parameters). This performs the following special operations:
 - Some parameter values are not serialisable to JSON (e.g. :class:`AgentUpdateSchedule
   <pvg.parameters.update_schedule.AgentUpdateSchedule>`). These are converted to special
   dictionaries that can be converted back to the original object later.
-- Agents get the special key ``is_random`` added to their dictionary. This is a convenient
-  way to see just from the dict if the agent selects their actions uniformly at random.
+- Agents get the special key ``is_random`` added to their dictionary. This is a
+  convenient way to see just from the dict if the agent selects their actions uniformly
+  at random.
 
 To convert a nested dictionary to a :class:`HyperParameters` object, use the
 :func:`from_dict <pvg.parameters.HyperParameters.from_dict>` class method. This will
@@ -145,8 +146,8 @@ Main hyper-parameters class
 Modules for sub-parameters
 --------------------------
 
-Sub-parameter classes are grouped into sub-modules of. Each module contains classes for a
-specific part of the hyper-parameters.
+Sub-parameter classes are grouped into sub-modules of. Each module contains classes for
+a specific part of the hyper-parameters.
 
 .. autosummary::
    :toctree: generated
@@ -171,6 +172,16 @@ Bases classes and enum types
 
    parameters_base
    types
+
+
+Handling parameter versions
+---------------------------
+
+.. autosummary::
+   :toctree: generated
+   :recursive:
+
+   version
 
 
 Module-level functions

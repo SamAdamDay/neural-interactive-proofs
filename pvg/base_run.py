@@ -3,8 +3,10 @@
 The hyper-parameters and/or log statistics of a previous run can be used to initialize
 the current experiment.
 
-This module contains a function which loads the previous run and creates a new 
-hyper-parameters object with the hyper-parameters of the previous run.
+This module contains a function which loads the previous run and creates a new
+hyper-parameters object with the hyper-parameters of the previous run. If the
+hyper-parameters come from an older version of the package, it will attempt to convert
+them to be compatible.
 """
 
 from typing import Optional, Annotated, get_origin
@@ -21,8 +23,9 @@ from pvg.parameters import (
     BaseHyperParameters,
     SubParameters,
     AgentsParameters,
+    BaseRunPreserve,
+    convert_hyper_param_dict,
 )
-from pvg.parameters.base_run import BaseRunParameters, BaseRunPreserve
 from pvg.utils.types import get_union_elements
 
 
@@ -67,8 +70,13 @@ def get_base_wandb_run_and_new_hyper_params(
         f"/{hyper_params.base_run.run_id}"
     )
 
+    # Convert the config dict to be compatible with the current package version
+    hyper_param_dict = convert_hyper_param_dict(run.config)
+
     # First create the new hyper-parameters object by using the W&B run config dict
-    new_hyper_params = HyperParameters.from_dict(run.config, ignore_extra_keys=True)
+    new_hyper_params = HyperParameters.from_dict(
+        hyper_param_dict, ignore_extra_keys=True
+    )
 
     def revert_preserved_hyper_params(
         hyper_params: BaseHyperParameters,
