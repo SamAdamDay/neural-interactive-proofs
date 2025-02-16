@@ -120,6 +120,10 @@ class BaseHyperParameters(ParameterValue, ABC):
                     f"of {cls.__name__!r}"
                 )
 
+        # Remove the package metadata fields
+        params_dict.pop("_package_version", None)
+        params_dict.pop("_package_name", None)
+
         # Remove extra keys if necessary
         if ignore_extra_keys:
             params_dict = {

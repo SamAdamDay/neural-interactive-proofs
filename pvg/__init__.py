@@ -1,5 +1,9 @@
 """The PVG experiments package."""
 
+import importlib.metadata
+
+__version__ = importlib.metadata.version(__name__)
+
 from .parameters import (
     HyperParameters,
     LrFactors,
