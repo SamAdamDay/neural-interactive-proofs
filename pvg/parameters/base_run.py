@@ -6,25 +6,11 @@ the current experiment.
 
 from dataclasses import dataclass
 import dataclasses
-from typing import Optional, Literal
+from typing import Optional
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
+from pvg.parameters.types import BaseRunType
 from pvg.utils.env import env_var_default_factory
-
-
-BaseRunType = Literal["none", "parameters", "rerun_tests"]
-"""Enum for how to base the current experiment on a previous W&B run.
-
-Values
-------
-none
-    Do not base the current experiment on a previous run.
-parameters
-    Use the hyper-parameters of a previous run to initialize the current experiment.
-rerun_tests
-    Rerun the tests of a previous run. The hyper-parameters controlling the tests
-    can be different.
-"""
 
 
 @register_parameter_class

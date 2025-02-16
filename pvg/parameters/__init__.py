@@ -68,6 +68,7 @@ from .types import (
     IhvpVariantType,
     GuessType,
     TrainerType,
+    TestSchemeType,
     PpoLossType,
     BinarificationMethodType,
     ActivationType,
@@ -75,6 +76,7 @@ from .types import (
     MinMessageRoundsSchedulerType,
     ImageBuildingBlockType,
     MessageRegressionMethodType,
+    BaseRunType,
 )
 from .agents import (
     LrFactors,
@@ -87,7 +89,6 @@ from .agents import (
     AgentsParameters,
 )
 from .trainers import (
-    TestSchemeType,
     RlTrainerParameters,
     CommonPpoParameters,
     VanillaPpoParameters,

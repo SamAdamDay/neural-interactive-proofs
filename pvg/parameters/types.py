@@ -3,17 +3,19 @@
 Used when a parameter can only take on a specific set of values.
 """
 
-from typing import Literal
+from typing import Literal, TypeAlias
 
 
-ScenarioType = Literal["graph_isomorphism", "image_classification", "code_validation"]
+ScenarioType: TypeAlias = Literal[
+    "graph_isomorphism", "image_classification", "code_validation"
+]
 """Type for the scenario to run."""
 
-SpgVariantType = Literal["spg", "pspg", "lola", "pola", "sos", "psos"]
+SpgVariantType: TypeAlias = Literal["spg", "pspg", "lola", "pola", "sos", "psos"]
 """Type for SPG variants."""
 
 
-IhvpVariantType = Literal["conj_grad", "neumann", "nystrom"]
+IhvpVariantType: TypeAlias = Literal["conj_grad", "neumann", "nystrom"]
 """Type for the variants of the inverse Hessian-vector product computation.
 
 Possible Values
@@ -26,11 +28,11 @@ nystrom
     Use the Nyström method.
 """
 
-GuessType = Literal["zero", "one", "y"]
+GuessType: TypeAlias = Literal["zero", "one", "y"]
 """Type for the possible guesses of the verifier in binary cases."""
 
 
-TrainerType = Literal[
+TrainerType: TypeAlias = Literal[
     "vanilla_ppo", "solo_agent", "spg", "reinforce", "pure_text_ei", "pure_text_malt"
 ]
 """Type for the RL trainer to use.
@@ -54,11 +56,14 @@ pure_text_malt
      represented as text).
 """
 
-PpoLossType = Literal["clip", "kl_penalty"]
+TestSchemeType = Literal["none", "all", "last", "first_and_last"]
+"""Enum specifying on which iterations to test the model during training."""
+
+PpoLossType: TypeAlias = Literal["clip", "kl_penalty"]
 """Type for the PPO loss function to use."""
 
 
-BinarificationMethodType = Literal["select_two", "merge", "random"]
+BinarificationMethodType: TypeAlias = Literal["select_two", "merge", "random"]
 """Type for ways of turning a multi-class classification task into a binary one.
 
 Possible Values
@@ -72,7 +77,7 @@ random
     Select classes completely at random.
 """
 
-ActivationType = Literal["relu", "tanh", "sigmoid"]
+ActivationType: TypeAlias = Literal["relu", "tanh", "sigmoid"]
 """Type for the activation function to use.
 
 To add a new activation function, add it to this type, and add the corresponding
@@ -88,7 +93,7 @@ sigmoid
     Sigmoid.
 """
 
-InteractionProtocolType = Literal[
+InteractionProtocolType: TypeAlias = Literal[
     "pvg",
     "abstract_decision_problem",
     "debate",
@@ -121,7 +126,7 @@ multi_channel_test
     A protocol for testing multi-channel communication.
 """
 
-MinMessageRoundsSchedulerType = Literal[
+MinMessageRoundsSchedulerType: TypeAlias = Literal[
     "constant", "linear_decrease", "linear_increase", "linear_increase_decrease"
 ]
 """Type for the scheduler to use for the minimum number of message rounds.
@@ -143,7 +148,7 @@ linear_increase_decrease
     `min_message_rounds`.
 """
 
-ImageBuildingBlockType = Literal["conv2d", "residual_basic"]
+ImageBuildingBlockType: TypeAlias = Literal["conv2d", "residual_basic"]
 """Type for the type of building block to use in the image classification network.
 
 Possible Values
@@ -154,7 +159,7 @@ residual_basic
     A basic residual block used in the ResNet architecture.
 """
 
-MessageRegressionMethodType = Literal["mlp", "cnn"]
+MessageRegressionMethodType: TypeAlias = Literal["mlp", "cnn"]
 """Type for the method to use to do regression analysis on the messages.
 
 Possible Values
@@ -163,4 +168,18 @@ mlp
     Use a multi-layer perceptron to do the regression.
 cnn
     Use a convolutional neural network to do the regression.
+"""
+
+BaseRunType: TypeAlias = Literal["none", "parameters", "rerun_tests"]
+"""Enum for how to base the current experiment on a previous W&B run.
+
+Values
+------
+none
+    Do not base the current experiment on a previous run.
+parameters
+    Use the hyper-parameters of a previous run to initialize the current experiment.
+rerun_tests
+    Rerun the tests of a previous run. The hyper-parameters controlling the tests
+    can be different.
 """
