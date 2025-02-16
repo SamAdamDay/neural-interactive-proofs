@@ -1,16 +1,16 @@
 """Type definitions for the PVG package."""
 
 import logging
-from typing import Annotated as String, Any, get_origin, get_args, Union
+from typing import Annotated as String, Any, get_origin, get_args, Union, TypeAlias
 from types import UnionType
 
 import torch
 
 from numpy.dtypes import StringDType
 
-TorchDevice = torch.device | str | int
+TorchDevice: TypeAlias = torch.device | str | int
 
-LoggingType = logging.Logger | logging.LoggerAdapter
+LoggingType: TypeAlias = logging.Logger | logging.LoggerAdapter
 
 NumpyStringDtype = StringDType(na_object=None)
 

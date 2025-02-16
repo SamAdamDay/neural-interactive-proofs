@@ -1,9 +1,9 @@
 """Utilities for dealing with this package's version number."""
 
 import importlib
-from typing import Literal
+from typing import Literal, TypeAlias
 
-VersionTupleType = tuple[int, int, int] | tuple[int, int] | tuple[int]
+VersionTupleType: TypeAlias = tuple[int, int, int] | tuple[int, int] | tuple[int]
 
 
 def get_package_name() -> str:

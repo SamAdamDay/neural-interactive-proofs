@@ -4,13 +4,14 @@ from typing import Optional, Literal, Annotated
 from dataclasses import dataclass
 
 from pvg.parameters.parameters_base import SubParameters, register_parameter_class
-from pvg.parameters.types import PpoLossType, SpgVariantType, IhvpVariantType
+from pvg.parameters.types import (
+    PpoLossType,
+    SpgVariantType,
+    IhvpVariantType,
+    TestSchemeType,
+)
 from pvg.parameters.base_run import BaseRunPreserve
 from pvg.parameters.agents import LrFactors
-
-
-TestSchemeType = Literal["none", "all", "last", "first_and_last"]
-"""Enum specifying on which iterations to test the model during training."""
 
 
 @register_parameter_class
