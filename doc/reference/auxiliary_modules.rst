@@ -8,10 +8,10 @@ secondary functionality.
    :toctree: generated
    :recursive:
 
-    pvg.rl_objectives
-    pvg.utils
-    pvg.stat_logger
-    pvg.artifact_logger
-    pvg.base_run
-    pvg.model_cache
-    pvg.timing
+    nip.rl_objectives
+    nip.utils
+    nip.stat_logger
+    nip.artifact_logger
+    nip.base_run
+    nip.model_cache
+    nip.timing

@@ -14,10 +14,10 @@ Glossary
         determine whether the solution is correct.
 
         Scenarios are implemented by subclassing the base classes in the
-        ``pvg.scenario_base`` module.
+        ``nip.scenario_base`` module.
 
     scenario instance
-        A :class:`ScenarioInstance <pvg.factory.ScenarioInstance>` object, which
+        A :class:`ScenarioInstance <nip.factory.ScenarioInstance>` object, which
         contains all the components of the experiment. These components are instances of
         the classes defined in the :term:`scenario`.
 
@@ -26,19 +26,19 @@ Glossary
         includes the names of the agents involved, the communication channels between
         agents, the turn order and the reward signal for each agent in each turn.
         Protocols are implemented by subclassing :class:`ProtocolHandler
-        <pvg.protocols.protocol_base.ProtocolHandler>`. See
+        <nip.protocols.protocol_base.ProtocolHandler>`. See
         :ref:`creating-new-protocol`.
 
     hyper-parameters
         The parameters that define the configuration of an experiment. These are
-        implemented by the :class:`HyperParameters <pvg.parameters.HyperParameters>`
+        implemented by the :class:`HyperParameters <nip.parameters.HyperParameters>`
         class and its sub-parameters classes.
 
         An experiment should be completely reproducible from its hyper-parameters, up to
         hardware quirks and model API non-reproducibility.
 
     experiment settings
-        An `ExperimentSettings <pvg.experiment_settings.ExperimentSettings>` object,
+        An `ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object,
         which contains various settings for the experiment not relevant to
         reproducibility (e.g. the GPU device number and whether to use Weights &
         Biases).
@@ -46,7 +46,7 @@ Glossary
     trainer
         The class that performs the optimisation steps on the agents, using the
         environment to generate the training data. Trainers are implemented by
-        subclassing :class:`Trainer <pvg.trainers.trainer_base.Trainer>`.
+        subclassing :class:`Trainer <nip.trainers.trainer_base.Trainer>`.
 
     TensorDict
         A nested dictionary of PyTorch tensors. :tensordict:doc:`Read the documentation

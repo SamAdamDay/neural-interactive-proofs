@@ -15,18 +15,16 @@ import numpy as np
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     SoloAgentParameters,
-    ScenarioType,
-    TrainerType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
 )
-from pvg.utils.experiments import (
+from nip.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,

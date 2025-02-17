@@ -3,7 +3,7 @@
 from argparse import ArgumentParser
 from textwrap import indent
 
-from pvg.timing import time_timeable, time_all_timeables, list_timeables
+from nip.timing import time_timeable, time_all_timeables, list_timeables
 
 parser = ArgumentParser(description="Time a timeable action")
 parser.add_argument(

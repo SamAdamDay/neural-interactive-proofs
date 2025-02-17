@@ -6,7 +6,7 @@ import logging
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     RandomAgentParameters,
@@ -16,24 +16,15 @@ from pvg import (
     CommonPpoParameters,
     SoloAgentParameters,
     SpgParameters,
-    ScenarioType,
-    TrainerType,
-    PpoLossType,
-    ActivationType,
-    BinarificationMethodType,
-    ImageBuildingBlockType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     ConstantUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
-    SpgVariantType,
-    IhvpVariantType,
-    GuessType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
 )
-from pvg.utils.experiments import (
+from nip.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
@@ -215,7 +206,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         protocol_common=CommonProtocolParameters(
             shared_reward=combo["shared_reward"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),

@@ -6,17 +6,14 @@ import logging
 from datetime import datetime
 
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     CodeValidationAgentParameters,
     RlTrainerParameters,
     TextRlParameters,
-    ScenarioType,
-    TrainerType,
-    InteractionProtocolType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     DebateProtocolParameters,
     PureTextEiParameters,
     CodeValidationParameters,
@@ -25,14 +22,14 @@ from pvg import (
     prepare_experiment,
     PreparedExperimentInfo,
 )
-from pvg.utils.experiments import (
+from nip.utils.experiments import (
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
 )
-from pvg.utils.env import get_env_var
+from nip.utils.env import get_env_var
 
 param_grid = dict(
-    interaction_protocol=["pvg"],
+    interaction_protocol=["nip"],
     dataset_name=["lrhammond/buggy-apps"],
     apps_difficulty=["interview"],
     num_iterations=[8],
@@ -106,7 +103,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         prover_params_dict["shared_model_group"] = None
 
     if combo["interaction_protocol"] in [
-        "pvg",
+        "nip",
         "abstract_decision_problem",
     ]:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
@@ -176,7 +173,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             verifier_first=combo["verifier_first"],
             randomize_prover_stance=combo["randomize_prover_stance"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),

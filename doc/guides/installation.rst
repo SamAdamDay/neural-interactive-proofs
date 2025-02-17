@@ -29,13 +29,13 @@ Installation Steps
 
    .. code-block:: bash
 
-      git clone https://github.com/SamAdamDay/pvg-experiments.git
+      git clone https://github.com/SamAdamDay/nip-experiments.git
 
 2. Change to the repository directory:
 
    .. code-block:: bash
 
-      cd pvg-experiments
+      cd nip-experiments
 
 3. Install the requirements:
 

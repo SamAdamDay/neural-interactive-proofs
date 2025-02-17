@@ -1,9 +1,9 @@
 """Generate the validation dataset."""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from pvg.constants import OPENROUTER_API_KEY
+from nip.constants import OPENROUTER_API_KEY
 
-from pvg.code_validation.dataset_generation import (
+from nip.code_validation.dataset_generation import (
     generate_and_save_cv_dataset,
     CodeValidationDatasetConfig,
 )

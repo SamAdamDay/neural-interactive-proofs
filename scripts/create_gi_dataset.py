@@ -4,7 +4,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import torch
 
-from pvg.graph_isomorphism.dataset_generation import (
+from nip.graph_isomorphism.dataset_generation import (
     generate_gi_dataset,
     GraphIsomorphicDatasetConfig,
 )

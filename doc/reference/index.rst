@@ -1,7 +1,7 @@
 API Reference
 =============
 
-.. currentmodule:: pvg
+.. currentmodule:: nip
 
 
 Public API
