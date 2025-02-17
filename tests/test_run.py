@@ -18,11 +18,6 @@ from nip import (
     RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
-    SpgVariantType,
-    ScenarioType,
-    PpoLossType,
-    TrainerType,
-    InteractionProtocolType,
     run_experiment,
     prepare_experiment,
 )
@@ -47,7 +42,7 @@ param_specs = [
         "protocol": [
             "nip",
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
             "solo_verifier",
@@ -96,7 +91,7 @@ param_specs = [
     {
         "protocol": [
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
         ],
@@ -107,7 +102,7 @@ param_specs = [
         "protocol": [
             "nip",
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
         ],

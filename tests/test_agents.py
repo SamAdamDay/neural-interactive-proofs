@@ -12,8 +12,6 @@ from einops import repeat
 from nip import (
     HyperParameters,
     ScenarioType,
-    TrainerType,
-    InteractionProtocolType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,

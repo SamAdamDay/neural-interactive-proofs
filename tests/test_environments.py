@@ -20,7 +20,6 @@ from nip.scenario_base import Environment, TensorDictDataset
 from nip.parameters import (
     HyperParameters,
     ScenarioType,
-    TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,

@@ -477,7 +477,7 @@ class NipCodeValidationProtocol(CodeValidationProtocolHandler, NipProtocol):
     }
 
 
-@register_protocol_handler("abstract_decision_problem", "code_validation")
+@register_protocol_handler("adp", "code_validation")
 class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
     """The abstract decision problem protocol for code validation."""
 

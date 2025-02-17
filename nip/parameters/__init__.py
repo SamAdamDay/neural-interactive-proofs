@@ -121,7 +121,7 @@ from .version import convert_hyper_param_dict
 # The agent names required for each protocol
 AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     "nip": ("verifier", "prover"),
-    "abstract_decision_problem": ("verifier", "prover"),
+    "adp": ("verifier", "prover"),
     "debate": ("prover0", "prover1", "verifier"),
     "merlin_arthur": ("prover0", "prover1", "verifier"),
     "market_making": ("verifier", "prover"),
@@ -139,7 +139,7 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
     InteractionProtocolType, tuple[tuple[str, ...], ...]
 ] = {
     "nip": (("verifier",), ("prover",)),
-    "abstract_decision_problem": (("verifier",), ("prover",)),
+    "adp": (("verifier",), ("prover",)),
     "debate": (("verifier",), ("prover0", "prover1")),
     "merlin_arthur": (("verifier",), ("prover0", "prover1")),
     "market_making": (("verifier",), ("prover",)),

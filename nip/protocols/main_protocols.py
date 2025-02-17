@@ -109,7 +109,7 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
                 return round_id % 2 == 1
 
 
-@register_protocol_handler("abstract_decision_problem")
+@register_protocol_handler("adp")
 class AdpProtocol(NipProtocol):
     """Implementation of the Abstract Decision Problem protocol.
 

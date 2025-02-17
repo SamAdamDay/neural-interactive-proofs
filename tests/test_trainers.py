@@ -15,8 +15,6 @@ from sklearn.model_selection import ParameterGrid
 
 from nip import (
     HyperParameters,
-    ScenarioType,
-    TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,

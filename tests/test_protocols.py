@@ -21,8 +21,6 @@ from nip.experiment_settings import ExperimentSettings
 from nip.parameters import (
     HyperParameters,
     InteractionProtocolType,
-    ScenarioType,
-    TrainerType,
     CommonProtocolParameters,
     NipProtocolParameters,
     ZkProtocolParameters,
@@ -36,7 +34,7 @@ from nip.utils.maths import set_seed
     [
         "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",
@@ -84,7 +82,7 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
     [
         "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",
@@ -129,7 +127,7 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
     [
         "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",

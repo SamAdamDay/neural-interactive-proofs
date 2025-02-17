@@ -202,10 +202,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
         update_schedule=verifier_update_schedule,
     )
-    if combo["interaction_protocol"] in (
-        "nip",
-        "abstract_decision_problem",
-    ):
+    if combo["interaction_protocol"] in ("nip", "adp"):
         agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
     elif combo["interaction_protocol"] in (
         "debate",

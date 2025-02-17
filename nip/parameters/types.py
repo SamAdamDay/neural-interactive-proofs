@@ -95,7 +95,7 @@ sigmoid
 
 InteractionProtocolType: TypeAlias = Literal[
     "nip",
-    "abstract_decision_problem",
+    "adp",
     "debate",
     "merlin_arthur",
     "mnip",
@@ -109,7 +109,7 @@ Possible Values
 ---------------
 nip
     The full Prover-Verifier Game protocol.
-abstract_decision_problem
+adp
     The Abstract Decision Problem protocol.
 debate
     The Debate protocol.

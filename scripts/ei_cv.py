@@ -102,10 +102,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     else:
         prover_params_dict["shared_model_group"] = None
 
-    if combo["interaction_protocol"] in [
-        "nip",
-        "abstract_decision_problem",
-    ]:
+    if combo["interaction_protocol"] in ["nip", "adp"]:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
