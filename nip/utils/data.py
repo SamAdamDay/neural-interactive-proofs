@@ -285,3 +285,34 @@ def is_nested_key(index: Any) -> bool:
         return all(isinstance(key, str) for key in index)
 
     return False
+
+
+def rename_dict_key(
+    dictionary: dict, old_key: str, new_key: str, allow_non_existant: bool = False
+):
+    """Rename a key in a dictionary, modifying the dictionary in place.
+
+    Parameters
+    ----------
+    dictionary : dict
+        The dictionary to rename the key in.
+    old_key : str
+        The old key to rename.
+    new_key : str
+        The new key to rename to.
+    allow_non_existant : bool, default=False
+        Whether to allow the old key to not exist in the dictionary. In this case, the
+        dictionary is returned unchanged.
+
+    Raises
+    ------
+    KeyError
+        If the old key is not found in the dictionary and `allow_non_existant` is False.
+    """
+
+    if old_key not in dictionary:
+        if allow_non_existant:
+            return dictionary
+        raise KeyError(f"Key '{old_key}' not found in dictionary.")
+
+    dictionary[new_key] = dictionary.pop(old_key)
