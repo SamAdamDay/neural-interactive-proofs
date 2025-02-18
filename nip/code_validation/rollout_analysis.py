@@ -403,16 +403,13 @@ class ProverAnalyserMixin:
             if agent_name not in self.protocol_handler.prover_names:
                 continue
 
-            # TODO: need a function to tell if the agent can be active in *any* round
+            # If the agent can be active in any round, yield the agent and channel
             for round_id in range(self.protocol_handler.max_message_rounds):
                 if self.protocol_handler.can_agent_be_active(
                     agent_name, round_id, channel_name
                 ):
+                    yield agent_name, channel_name
                     break
-            else:
-                continue
-
-            yield agent_name, channel_name
 
 
 @register_rollout_analyser("code_validation")

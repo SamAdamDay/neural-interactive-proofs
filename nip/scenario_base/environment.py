@@ -619,7 +619,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         shared_done, agent_done, terminated, reward = (
             self.protocol_handler.step_interaction_protocol(env_td)
         )
-        shared_done = shared_done | terminated  # TODO: Improve handling of terminated
+        shared_done = shared_done | terminated
         next_td.set("done", shared_done)
         next_td.set(("agents", "done"), agent_done)
         next_td.set("terminated", terminated)
