@@ -377,7 +377,7 @@ class ProtocolHandler(ABC):
 
         verifier_decision_made = guess_mask & (decision != 2)
         verifier_decision_made = verifier_decision_made & (
-            round_id >= self.min_message_rounds  # TODO: Maybe this should be -1
+            round_id >= self.min_message_rounds - 1
         )
 
         return verifier_decision_made

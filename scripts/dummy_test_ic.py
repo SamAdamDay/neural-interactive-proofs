@@ -93,7 +93,7 @@ def run(cmd_args: Namespace):
             force_guess=None,
         ),
         nip_protocol=NipProtocolParameters(
-            min_message_rounds=0,
+            min_message_rounds=1,
         ),
         pretrain_agents=False,
         include_linear_message_space=False,

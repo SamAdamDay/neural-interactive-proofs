@@ -211,4 +211,11 @@ def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
     if hyper_param_dict.get("decision_problem", None) == "abstract_decision_problem":
         hyper_param_dict["decision_problem"] = "adp"
 
+    # The interpretation of "min_message_rounds" was fixed. Previously there was an
+    # off-by-one error.
+    for protocol_name in ("nip", "debate", "mnip"):
+        key = f"{protocol_name}_protocol"
+        if key in hyper_param_dict and "min_message_rounds" in hyper_param_dict[key]:
+            hyper_param_dict[key]["min_message_rounds"] += 1
+
     return hyper_param_dict

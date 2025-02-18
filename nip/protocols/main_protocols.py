@@ -126,7 +126,7 @@ class AdpProtocol(NipProtocol):
 
     agent_names = ["prover", "verifier"]
     max_message_rounds = 2
-    min_message_rounds = 0
+    min_message_rounds = 1
     verifier_first = False
 
 
@@ -285,7 +285,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     ]
 
     max_message_rounds = 2
-    min_message_rounds = 0
+    min_message_rounds = 1
     max_verifier_turns = 1
 
     def get_active_agents_mask_from_rounds_and_seed(
@@ -510,7 +510,7 @@ class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
     agent_names = ["verifier"]
     message_channel_names = ["main"]
     agent_channel_visibility = [("verifier", "main")]
-    min_message_rounds = 0
+    min_message_rounds = 1
     max_verifier_turns = 1
 
     # The maximum number of message rounds is set to 2, but the episode is always

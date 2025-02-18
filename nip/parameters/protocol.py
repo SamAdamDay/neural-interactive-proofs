@@ -71,7 +71,7 @@ class LongProtocolParameters(SubParameters, ABC):
     """
 
     max_message_rounds: int = 8
-    min_message_rounds: int = 0
+    min_message_rounds: int = 1
 
 
 @register_parameter_class
