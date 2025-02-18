@@ -5,29 +5,22 @@ import os
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     RlTrainerParameters,
     CommonPpoParameters,
     ReinforceParameters,
-    ScenarioType,
-    TrainerType,
-    InteractionProtocolType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     SpgParameters,
     MessageRegressionParameters,
-    PpoLossType,
-    SpgVariantType,
-    GuessType,
-    AGENT_NAMES,
     run_experiment,
     prepare_experiment,
 )
-from pvg.parameters import get_protocol_agent_names
-from pvg.utils.env import get_env_var
+from nip.parameters import get_protocol_agent_names
+from nip.utils.env import get_env_var
 
 
 def run(cmd_args: Namespace):
@@ -109,7 +102,7 @@ def run(cmd_args: Namespace):
             force_guess=None,
             zero_knowledge=zero_knowledge,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=0,
         ),
         pretrain_agents=False,

@@ -5,28 +5,21 @@ import os
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
-    ImageBuildingBlockType,
     RlTrainerParameters,
     CommonPpoParameters,
     ReinforceParameters,
-    ScenarioType,
-    TrainerType,
-    InteractionProtocolType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     SpgParameters,
-    PpoLossType,
-    SpgVariantType,
-    GuessType,
     AGENT_NAMES,
     ImageClassificationParameters,
     run_experiment,
 )
-from pvg.utils.env import get_env_var
+from nip.utils.env import get_env_var
 
 
 def run(cmd_args: Namespace):
@@ -48,7 +41,7 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = "pvg"
+    interaction_protocol = "nip"
     hyper_params = HyperParameters(
         scenario="image_classification",
         trainer="vanilla_ppo",
@@ -99,7 +92,7 @@ def run(cmd_args: Namespace):
             shared_reward=True,
             force_guess=None,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=0,
         ),
         pretrain_agents=False,

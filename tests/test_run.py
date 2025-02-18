@@ -8,7 +8,7 @@ import pytest
 
 from sklearn.model_selection import ParameterGrid
 
-from pvg import (
+from nip import (
     HyperParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
@@ -18,16 +18,11 @@ from pvg import (
     RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
-    SpgVariantType,
-    ScenarioType,
-    PpoLossType,
-    TrainerType,
-    InteractionProtocolType,
     run_experiment,
     prepare_experiment,
 )
-from pvg.parameters import AGENT_NAMES
-from pvg.utils.output import DummyTqdm
+from nip.parameters import AGENT_NAMES
+from nip.utils.output import DummyTqdm
 
 # Specification for creating a grid of parameters using ParameterGrid
 param_specs = [
@@ -45,9 +40,9 @@ param_specs = [
         "scenario": ["code_validation"],
         "trainer": ["pure_text_ei"],
         "protocol": [
-            "pvg",
+            "nip",
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
             "solo_verifier",
@@ -96,7 +91,7 @@ param_specs = [
     {
         "protocol": [
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
         ],
@@ -105,9 +100,9 @@ param_specs = [
     {
         "zero_knowledge": [True],
         "protocol": [
-            "pvg",
+            "nip",
             "debate",
-            "abstract_decision_problem",
+            "adp",
             "merlin_arthur",
             "mnip",
         ],
@@ -177,7 +172,7 @@ def test_prepare_run_experiment(param_spec: dict):
     scenario_type = param_spec.get("scenario", "graph_isomorphism")
     trainer_type = param_spec.get("trainer", "vanilla_ppo")
     ppo_loss_type = param_spec.get("ppo_loss", "clip")
-    protocol_type = param_spec.get("protocol", "pvg")
+    protocol_type = param_spec.get("protocol", "nip")
     zero_knowledge = param_spec.get("zero_knowledge", False)
     is_random = param_spec.get("is_random", False)
     pretrain_agents = param_spec.get("pretrain_agents", False)

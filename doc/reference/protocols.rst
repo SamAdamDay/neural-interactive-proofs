@@ -1,7 +1,7 @@
-Interaction Protocols (``pvg.protocols``)
+Interaction Protocols (``nip.protocols``)
 =========================================
 
-.. currentmodule:: pvg.protocols
+.. currentmodule:: nip.protocols
 
 
 Overview
@@ -23,9 +23,9 @@ Creating a New Protocol
 
 To create a new protocol, follow these steps:
 
-1. Add the name of the protocol to :const:`pvg.parameters.types.InteractionProtocolType`.
-2. If necessary, create a :class:`pvg.parameters.parameters_base.SubParameters` subclass
-   in :doc:`generated/pvg.parameters.protocol` to hold the protocol-specific
+1. Add the name of the protocol to :const:`nip.parameters.types.InteractionProtocolType`.
+2. If necessary, create a :class:`nip.parameters.parameters_base.SubParameters` subclass
+   in :doc:`generated/nip.parameters.protocol` to hold the protocol-specific
    parameters (see :ref:`creating-new-parameters`)
 3. Define the implementation of the protocol by subclassing one of
    :class:`ProtocolHandler <protocol_base.ProtocolHandler>`,
@@ -55,7 +55,7 @@ Built-in Protocols
    :toctree: generated/classes
    :recursive:
 
-   main_protocols.PvgProtocol
+   main_protocols.NipProtocol
    main_protocols.AdpProtocol
    main_protocols.DebateProtocol
    main_protocols.MerlinArthurProtocol
@@ -69,5 +69,5 @@ Protocol Registry
 
 The following methods handle registering and building protocol handlers:
 
-.. autofunction:: pvg.protocols.registry.register_protocol_handler
-.. autofunction:: pvg.protocols.registry.build_protocol_handler
+.. autofunction:: nip.protocols.registry.register_protocol_handler
+.. autofunction:: nip.protocols.registry.build_protocol_handler

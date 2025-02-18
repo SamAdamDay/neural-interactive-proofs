@@ -14,9 +14,9 @@ import numpy as np
 
 from tqdm import tqdm
 
-from pvg.utils.env import get_env_var
-from pvg.constants import HF_BUGGY_APPS_REPO
-from pvg.code_validation.dataset_generation import _get_openrouter_response
+from nip.utils.env import get_env_var
+from nip.constants import HF_BUGGY_APPS_REPO
+from nip.code_validation.dataset_generation import _get_openrouter_response
 
 MODELS = [
     "openai/gpt-3.5-turbo" "openai/gpt-4o-mini",

@@ -7,18 +7,18 @@ import numpy as np
 
 import wandb
 
-from pvg import HyperParameters, ExperimentSettings, ScenarioType
-from pvg.factory import build_scenario_instance
-from pvg.trainers import PureTextEiTrainer, build_trainer
-from pvg.scenario_base import ROLLOUT_ANALYSERS
-from pvg.constants import (
+from nip import HyperParameters, ExperimentSettings
+from nip.factory import build_scenario_instance
+from nip.trainers import PureTextEiTrainer, build_trainer
+from nip.scenario_base import ROLLOUT_ANALYSERS
+from nip.constants import (
     CHECKPOINT_STATE_ARTIFACT_PREFIX,
     CHECKPOINT_STATE_ARTIFACT_TYPE,
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
 )
-import pvg.code_validation.rollout_analysis
-from pvg.utils.env import get_env_var
+import nip.code_validation.rollout_analysis
+from nip.utils.env import get_env_var
 
 wandb_entity = get_env_var("WANDB_ENTITY")
 wandb_cv_project = get_env_var("WANDB_CV_PROJECT")

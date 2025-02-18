@@ -1,27 +1,27 @@
-Trainers (``pvg.trainers``)
+Trainers (``nip.trainers``)
 ===========================
 
-.. currentmodule:: pvg.trainers
+.. currentmodule:: nip.trainers
 
 
 Overview
 --------
 
 Trainers are responsible for optimising the agents in an experiment. A trainer
-(:class:`Trainer <pvg.trainers.trainer_base.Trainer>`) takes as input the following:
+(:class:`Trainer <nip.trainers.trainer_base.Trainer>`) takes as input the following:
 
 1. The hyper-parameter of the experiment (a :class:`HyperParameters
-   <pvg.parameters.HyperParameters>` object).
-2. A `ScenarioInstance <pvg.factory.ScenarioInstance>` object, which contains all the
+   <nip.parameters.HyperParameters>` object).
+2. A `ScenarioInstance <nip.factory.ScenarioInstance>` object, which contains all the
    components of the experiment. The most important components are:
 
     - The datasets.
     - The interaction protocol handler (:class:`ProtocolHandler
-      <pvg.protocols.protocol_base.ProtocolHandler>`).
+      <nip.protocols.protocol_base.ProtocolHandler>`).
     - The agents.
     - The environment.
 
-3. An `ExperimentSettings <pvg.experiment_settings.ExperimentSettings>` object, which
+3. An `ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object, which
    contains various settings for the experiment not relevant to reproducibility (e.g.
    the GPU device number and whether to use :term:`Weights & Biases`).
 
@@ -39,7 +39,7 @@ that interact with text-based models through an API. The former kind use data st
 based on PyTorch's :external+tensordict:class:`TensorDict <tensordict.TensorDict>`
 objects, while the latter use a similar, custom data structure containing nested
 dictionaries of Numpy string arrays (:class:`NestedArrayDict
-<pvg.utils.nested_array_dict.NestedArrayDict>`). TensorDict-based trainers use the
+<nip.utils.nested_array_dict.NestedArrayDict>`). TensorDict-based trainers use the
 :torchrl:doc:`TorchRL Library <torchrl:index>`.
 
 Which of these two types is appropriate depends on the type of agents in the experiment.
@@ -81,4 +81,4 @@ Trainer Registry
 
 Trainers are registered by using the following function as a decorator:
 
-.. autofunction:: pvg.trainers.registry.register_trainer
+.. autofunction:: nip.trainers.registry.register_trainer

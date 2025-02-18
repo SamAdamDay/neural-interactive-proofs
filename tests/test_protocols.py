@@ -1,6 +1,6 @@
 """Tests for implementations of protocols.
 
-Currently tests the zero-knowledge extensions of the PVG protocol.
+Currently tests the zero-knowledge extensions of the NIP protocol.
 """
 
 from itertools import product
@@ -17,26 +17,24 @@ from einops import rearrange, repeat
 
 from jaxtyping import Int, Bool, Float
 
-from pvg.experiment_settings import ExperimentSettings
-from pvg.parameters import (
+from nip.experiment_settings import ExperimentSettings
+from nip.parameters import (
     HyperParameters,
     InteractionProtocolType,
-    ScenarioType,
-    TrainerType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     ZkProtocolParameters,
 )
-from pvg.protocols import build_protocol_handler, ZeroKnowledgeProtocol
-from pvg.utils.maths import set_seed
+from nip.protocols import build_protocol_handler, ZeroKnowledgeProtocol
+from nip.utils.maths import set_seed
 
 
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        "pvg",
+        "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",
@@ -82,9 +80,9 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        "pvg",
+        "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",
@@ -127,9 +125,9 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
 @pytest.mark.parametrize(
     "base_protocol",
     [
-        "pvg",
+        "nip",
         "debate",
-        "abstract_decision_problem",
+        "adp",
         "mnip",
         "merlin_arthur",
         "multi_channel_test",
@@ -222,8 +220,8 @@ def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType
         assert active_agents[round_id] == expected_active_agents[round_id], message
 
 
-def test_zero_knowledge_pvg_step_method():
-    """Test the implementation of taking a step in the zero-knowledge PVG protocol."""
+def test_zero_knowledge_nip_step_method():
+    """Test the implementation of taking a step in the zero-knowledge NIP protocol."""
 
     message_size = 1
     num_message_logits = 2
@@ -234,11 +232,11 @@ def test_zero_knowledge_pvg_step_method():
         scenario="graph_isomorphism",
         trainer="vanilla_ppo",
         dataset="test",
-        interaction_protocol="pvg",
+        interaction_protocol="nip",
         protocol_common=CommonProtocolParameters(
             zero_knowledge=True, verifier_first=True
         ),
-        pvg_protocol=PvgProtocolParameters(),
+        nip_protocol=NipProtocolParameters(),
         message_size=message_size,
         zk_protocol=ZkProtocolParameters(
             simulator_reward_coefficient=simulator_reward_coefficient,

@@ -4,8 +4,8 @@ This is useful to ensure that all datasets are already in the Docker image. This
 can be called from the Dockerfile.
 """
 
-from pvg import HyperParameters, ScenarioType, TrainerType, prepare_experiment
-from pvg.image_classification.data import DATASET_WRAPPER_CLASSES
+from nip import HyperParameters, ScenarioType, TrainerType, prepare_experiment
+from nip.image_classification.data import DATASET_WRAPPER_CLASSES
 
 if __name__ == "__main__":
 

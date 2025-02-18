@@ -16,27 +16,26 @@ from torchrl.envs.utils import check_env_specs
 
 from einops import rearrange, repeat
 
-from pvg.scenario_base import Environment, TensorDictDataset
-from pvg.parameters import (
+from nip.scenario_base import Environment, TensorDictDataset
+from nip.parameters import (
     HyperParameters,
     ScenarioType,
-    TrainerType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     RlTrainerParameters,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     ImageClassificationParameters,
 )
-from pvg.experiment_settings import ExperimentSettings
-from pvg.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
-from pvg.image_classification import (
+from nip.experiment_settings import ExperimentSettings
+from nip.graph_isomorphism import GraphIsomorphismEnvironment, GraphIsomorphismDataset
+from nip.image_classification import (
     ImageClassificationEnvironment,
     ImageClassificationDataset,
 )
-from pvg.protocols import build_protocol_handler
-from pvg.utils.maths import set_seed
+from nip.protocols import build_protocol_handler
+from nip.utils.maths import set_seed
 
 
 @pytest.mark.parametrize(
@@ -110,7 +109,7 @@ def test_graph_isomorphism_environment_step():
             verifier_incorrect_penalty=-16,
             verifier_first=False,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
         ),
@@ -294,7 +293,7 @@ def test_image_classification_environment_step():
             verifier_incorrect_penalty=-16,
             verifier_first=False,
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             max_message_rounds=max_message_rounds,
             min_message_rounds=1,
         ),

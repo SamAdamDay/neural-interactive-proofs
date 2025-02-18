@@ -1,6 +1,6 @@
-Global Constants (``pvg.constants``)
+Global Constants (``nip.constants``)
 ====================================
 
-.. automodule:: pvg.constants
+.. automodule:: nip.constants
     :members:
     :no-index-entry:

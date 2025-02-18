@@ -11,22 +11,18 @@ import logging
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     ImageClassificationAgentParameters,
     ImageClassificationParameters,
     SoloAgentParameters,
     DatasetParameters,
-    ScenarioType,
-    TrainerType,
-    BinarificationMethodType,
-    ImageBuildingBlockType,
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
 )
-from pvg.utils.experiments import (
+from nip.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,

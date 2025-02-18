@@ -1,9 +1,0 @@
-#!/bin/bash
-
-# This script is used to start a tmux session for the pvg project
-
-# Get the directory of the script
-script_dir=`dirname -- "$( readlink -f -- "$0"; )";`
-
-# Run the python script with all the arguments
-python3 "$script_dir/pvg-tmux.py" $@

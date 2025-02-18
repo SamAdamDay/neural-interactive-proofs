@@ -1,4 +1,4 @@
-# PVG Experiments
+# NIP Experiments
 
 ## Requirements
 
@@ -16,10 +16,10 @@
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/SamAdamDay/pvg-experiments.git
+   git clone https://github.com/SamAdamDay/nip-experiments.git
    ```
 
-2. Change to the repository directory: `cd pvg-experiments`
+2. Change to the repository directory: `cd nip-experiments`
 
 3. Install the requirements. If you just want to run experiments do:
 
@@ -51,7 +51,7 @@ The `HyperParameters` class contains all experiment parameters needed for a repr
 experiment. Running an experiment looks like:
 
 ```python
-from pvg import HyperParameters, run_experiment
+from nip import HyperParameters, run_experiment
 hyper_params = HyperParameters(
     "{scenario_name}", 
     "{trainer_name}", 
@@ -65,7 +65,7 @@ run_experiment(hyper_params)
   for details.
 - `run_experiment` takes additional parameters, like the device and whether to log to
   Weights & Biases.
-- The `pvg.utils.experiment` contains utility classes for running hyperparameter
+- The `nip.utils.experiment` contains utility classes for running hyperparameter
   experiments in sequence or in parallel.
 
 
@@ -133,7 +133,7 @@ docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target default --secret id=
 ```
 
 replacing `DOCKER_USER` with your Docker Hub username, and `DOCKER_REPO` and
-`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'pvg-experiments/default').
+`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'nip-experiments/default').
 
 Alternatively, you can build an image with all of the datasets already downloaded. This
 will result in a much larger image, but can make the process of spinning up and running

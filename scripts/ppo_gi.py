@@ -7,7 +7,7 @@ import dataclasses
 
 import torch
 
-from pvg import (
+from nip import (
     HyperParameters,
     AgentsParameters,
     RandomAgentParameters,
@@ -15,15 +15,8 @@ from pvg import (
     RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
-    ScenarioType,
-    TrainerType,
-    PpoLossType,
-    ActivationType,
-    SpgVariantType,
-    IhvpVariantType,
-    InteractionProtocolType,
     CommonProtocolParameters,
-    PvgProtocolParameters,
+    NipProtocolParameters,
     DebateProtocolParameters,
     DatasetParameters,
     ConstantUpdateSchedule,
@@ -33,7 +26,7 @@ from pvg import (
     prepare_experiment,
     PreparedExperimentInfo,
 )
-from pvg.utils.experiments import (
+from nip.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
@@ -43,7 +36,7 @@ MULTIPROCESS = True
 
 param_grid = dict(
     trainer=["vanilla_ppo"],
-    interaction_protocol=["pvg"],
+    interaction_protocol=["nip"],
     dataset_name=["eru10000"],
     num_iterations=[5000],
     num_epochs=[10],
@@ -209,10 +202,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         use_orthogonal_initialisation=combo["use_orthogonal_initialisation"],
         update_schedule=verifier_update_schedule,
     )
-    if combo["interaction_protocol"] in (
-        "pvg",
-        "abstract_decision_problem",
-    ):
+    if combo["interaction_protocol"] in ("nip", "adp"):
         agents_params = AgentsParameters(verifier=verifier_params, prover=prover_params)
     elif combo["interaction_protocol"] in (
         "debate",
@@ -278,7 +268,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             verifier_no_guess_reward=combo["verifier_no_guess_reward"],
             verifier_first=combo["verifier_first"],
         ),
-        pvg_protocol=PvgProtocolParameters(
+        nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],
             max_message_rounds=combo["max_message_rounds"],
         ),

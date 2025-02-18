@@ -3,12 +3,12 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pvg"
-version = "0.1.0"
+name = "nip"
+version = "1.0.0"
 requires-python = ">= 3.11"
 
 [tool.black]
-extend-exclude = "pvg/utils/runtime_module.py"
+extend-exclude = "nip/utils/runtime_module.py"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -40,8 +40,8 @@ exclude = [
     "site-packages",
     "venv",
     "playground",
-    "pvg/utils/runtime_module.py",
-    "pvg/utils/apps_metric.py"
+    "nip/utils/runtime_module.py",
+    "nip/utils/apps_metric.py"
 ]
 
 # Same as Black.

@@ -9,25 +9,23 @@ from tensordict.nn import TensorDictSequential
 
 from einops import repeat
 
-from pvg import (
+from nip import (
     HyperParameters,
     ScenarioType,
-    TrainerType,
-    InteractionProtocolType,
     AgentsParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     RlTrainerParameters,
 )
-from pvg.parameters import AgentParameters, AGENT_NAMES
-from pvg.factory import build_scenario_instance
-from pvg.experiment_settings import ExperimentSettings
-from pvg.scenario_base import (
+from nip.parameters import AgentParameters, AGENT_NAMES
+from nip.factory import build_scenario_instance
+from nip.experiment_settings import ExperimentSettings
+from nip.scenario_base import (
     TensorDictDataLoader,
     TensorDictEnvironment,
     TensorDictAgentPartMixin,
 )
-from pvg.utils.maths import set_seed
+from nip.utils.maths import set_seed
 
 
 def test_graph_isomorphism_combined_agents():
