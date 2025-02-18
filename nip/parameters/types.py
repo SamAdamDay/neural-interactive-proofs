@@ -100,7 +100,6 @@ InteractionProtocolType: TypeAlias = Literal[
     "merlin_arthur",
     "mnip",
     "solo_verifier",
-    "market_making",
     "multi_channel_test",
 ]
 """Type for the interaction protocol to use in the environment.
@@ -120,8 +119,6 @@ mnip
 solo_verifier
     A protocol consisting of a single verifier, which makes a decision without
     interacting with a prover.
-market_making
-    A protocol for market making. (TODO: not implemented)
 multi_channel_test
     A protocol for testing multi-channel communication.
 """
