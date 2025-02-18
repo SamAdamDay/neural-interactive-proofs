@@ -35,7 +35,6 @@ from nip.utils.version import (
     compare_versions,
     VersionTupleType,
 )
-from nip.utils.data import rename_dict_key
 
 
 class MultipleConversionFunctionsMatchError(Exception):
@@ -204,9 +203,9 @@ def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
     # "pvg" was renamed to "nip"
     if hyper_param_dict.get("interaction_protocol", None) == "pvg":
         hyper_param_dict["interaction_protocol"] = "nip"
-    rename_dict_key(
-        hyper_param_dict, "pvg_protocol", "nip_protocol", allow_non_existant=True
-    )
+    if "pvg_protocol" in hyper_param_dict:
+        hyper_param_dict["nip_protocol"] = hyper_param_dict.pop("pvg_protocol")
+        hyper_param_dict["nip_protocol"]["_type"] = "NipProtocolParameters"
 
     # "abstract_decision_problem" was renamed to "adp"
     if hyper_param_dict.get("decision_problem", None) == "abstract_decision_problem":
