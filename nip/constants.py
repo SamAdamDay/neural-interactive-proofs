@@ -1,7 +1,5 @@
 """Global constants for the NIP project."""
 
-# TODO: Move the configuration options to the .env file
-
 import os
 from pathlib import Path
 

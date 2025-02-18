@@ -1437,7 +1437,6 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
             The output expanded to all channels. This has the same shape as `output`,
             except that the channel dimension is the full set of message channels.
         """
-        # TODO: Combine this with _expand_logits_to_all_channels
 
         agent_index = self.agent_names.index(agent_name)
 

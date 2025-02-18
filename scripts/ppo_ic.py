@@ -87,7 +87,7 @@ param_grid = dict(
     normalize_observations=[True],
     include_linear_message=[False],
     message_size=[1],
-    min_message_rounds=[2],
+    min_message_rounds=[3],
     max_message_rounds=[8],
     # update_spec can be `None` or `(num_verifier_iterations, num_prover_iterations)`
     update_spec=[None],

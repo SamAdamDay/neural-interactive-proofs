@@ -284,10 +284,7 @@ class NestedArrayDict:
                 f"Index {index} is not supported in {type(self).__name__}"
             ) from e
 
-        # Compute the batch size of the selected arrays. TODO: This is inefficient
-        # because it requires allocating memory for an array of shape self.batch_size.
-        # However, it means we can compute batch sizes for any index which numpy can
-        # handle
+        # Compute the batch size of the selected arrays.
         dummy_array = np.empty(self._batch_size, dtype=[])
         index_array = dummy_array[index]
         indexed_batch_size = index_array.shape

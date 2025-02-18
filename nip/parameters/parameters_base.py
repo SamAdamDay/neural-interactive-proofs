@@ -155,9 +155,7 @@ class BaseHyperParameters(ParameterValue, ABC):
             else:
                 continue
 
-            # Get the specific class name of the parameter. TODO: It would be better if
-            # this class could be inferred from the other parameters, rather than being
-            # specified in the dictionary.
+            # Get the specific class name of the parameter.
             param_class = cls._get_param_class_from_dict(param_value)
 
             if param_class is None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from nip.parameters.parameters_base import SubParameters, register_parameter_class
-from nip.parameters.types import GuessType, MinMessageRoundsSchedulerType
+from nip.parameters.types import GuessType
 
 
 @register_parameter_class
@@ -68,14 +68,10 @@ class LongProtocolParameters(SubParameters, ABC):
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, the verifier's
         guesses are not registered.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
     """
 
     max_message_rounds: int = 8
-    min_message_rounds: int = 0
-    min_message_rounds_scheduler: MinMessageRoundsSchedulerType = "constant"
+    min_message_rounds: int = 1
 
 
 @register_parameter_class
@@ -91,9 +87,6 @@ class NipProtocolParameters(LongProtocolParameters):
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, the verifier's
         guesses are not registered.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
     """
 
 
@@ -110,9 +103,6 @@ class DebateProtocolParameters(LongProtocolParameters):
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, the verifier's
         guesses are not registered.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
     sequential : bool
         Whether the provers send messages one after the other, or both simultaneously.
     prover0_first : bool
@@ -141,9 +131,6 @@ class MnipProtocolParameters(LongProtocolParameters):
     min_message_rounds : int
         The minimum number of rounds of messages. Before this point, the verifier's
         guesses are not registered.
-    min_message_rounds_scheduler : MinMessageRoundsScheduler
-        The scheduler to use for the minimum number of message rounds, allowing it to
-        change over time. TODO: not currently implemented.
     sequential : bool
         Whether the provers send messages one after the other, or both simultaneously.
     prover0_first : bool

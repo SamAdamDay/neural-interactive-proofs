@@ -556,9 +556,6 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         timesteps we will be comparing logits that don't correspond to any action that
         makes any difference. #TODO
 
-        #TODO: Maybe add linear message logits (low priority since linear message logits
-        are primarily for debugging)
-
         Note
         ----
         It is assumed that the adversarial verifier is active in the channels

@@ -73,7 +73,6 @@ from .types import (
     BinarificationMethodType,
     ActivationType,
     InteractionProtocolType,
-    MinMessageRoundsSchedulerType,
     ImageBuildingBlockType,
     MessageRegressionMethodType,
     BaseRunType,
@@ -124,7 +123,6 @@ AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
     "adp": ("verifier", "prover"),
     "debate": ("prover0", "prover1", "verifier"),
     "merlin_arthur": ("prover0", "prover1", "verifier"),
-    "market_making": ("verifier", "prover"),
     "mnip": ("prover0", "prover1", "verifier"),
     "solo_verifier": ("verifier",),
     "multi_channel_test": (
@@ -142,7 +140,6 @@ DEFAULT_STACKELBERG_SEQUENCE: dict[
     "adp": (("verifier",), ("prover",)),
     "debate": (("verifier",), ("prover0", "prover1")),
     "merlin_arthur": (("verifier",), ("prover0", "prover1")),
-    "market_making": (("verifier",), ("prover",)),
     "mnip": (("verifier",), ("prover0", "prover1")),
     "solo_verifier": (("verifier",),),
     "multi_channel_test": (
@@ -294,10 +291,13 @@ class HyperParameters(BaseHyperParameters):
 
     def __post_init__(self):
 
-        # TODO: do this better
+        # Determine whether the protocol is zero-knowledge
         for protocol_common_field in fields(CommonProtocolParameters):
             if protocol_common_field.name == "zero_knowledge":
                 default_zero_knowledge = protocol_common_field.default
+                break
+        else:
+            raise RuntimeError("CommonProtocolParameters has no zero_knowledge field.")
         if isinstance(self.protocol_common, CommonProtocolParameters):
             zero_knowledge = self.protocol_common.zero_knowledge
         elif isinstance(self.protocol_common, dict):

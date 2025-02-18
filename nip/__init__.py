@@ -38,7 +38,6 @@ from .parameters import (
     IhvpVariantType,
     GuessType,
     InteractionProtocolType,
-    MinMessageRoundsSchedulerType,
     MessageRegressionMethodType,
     AgentUpdateSchedule,
     ConstantUpdateSchedule,
