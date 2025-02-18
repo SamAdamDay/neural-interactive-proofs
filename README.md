@@ -149,20 +149,3 @@ docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target datasets --secret id
 ```
 docker push DOCKER_USER/DOCKER_REPO:DOCKER_TAG
 ```
-
-
-## Wishlist TODOs
-
-These are things which would be nice to have (e.g. for efficiency reasons) but which
-aren't essential.
-
-- [ ] Currently when doing a rollout the prover and verifier are run each round, even
-  though it's only one of their turns. This is because TorchRL passes the value net
-  through vmap, and [vmap can't do data-dependent control
-  flow](https://github.com/pytorch/functorch/issues/257). This makes the rollout twice a
-  slow.
-
-  It's possible to overcome this using an 'interleaved' execution. Under this each
-  rollout is actually two rollouts. At the beginning we sample two datapoints in a new
-  batch dimension, and each round we swap these two. In the first round we ignore the
-  verifier output. This way we use the output of both agents in every round.
