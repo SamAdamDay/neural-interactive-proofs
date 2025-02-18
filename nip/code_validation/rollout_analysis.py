@@ -15,7 +15,7 @@ from openai import OpenAI
 
 from tqdm import tqdm
 
-from nip.parameters import HyperParameters, InteractionProtocolType, ScenarioType
+from nip.parameters import HyperParameters
 from nip.protocols import ProtocolHandler
 from nip.experiment_settings import ExperimentSettings
 from nip.scenario_base.rollout_analysis import (
@@ -187,9 +187,13 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
                 last_message_history = rollouts["message_history"][batch_id][
                     -1, :, channel_id
                 ]
+                last_message_agent_id = rollouts["message_agent_id"][batch_id][
+                    -1, channel_id
+                ]
 
                 evaluation = self._generate_evaluation(
                     last_message_history,
+                    last_message_agent_id,
                     agent_name=agent_name,
                     channel_name=channel_name,
                     question=rollouts["question"][batch_id][-1],
@@ -209,6 +213,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
     def _generate_evaluation(
         self,
         message_history: NDArray,
+        message_agent_id: NDArray,
         agent_name: str,
         channel_name: str,
         question: str,
@@ -220,6 +225,8 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         ----------
         message_history : NDArray
             The history of messages exchanged between the agents in the channel.
+        message_agent_id : NDArray
+            The agent ID of the agent which sent each message in the message history.
         agent_name : str
             The name of the agent being evaluated.
         channel_name : str
@@ -237,6 +244,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         chat_messages_prompt = self._build_chat_messages_prompt(
             message_history,
+            message_agent_id,
             agent_name=agent_name,
             channel_name=channel_name,
             question=question,
@@ -310,6 +318,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
     def _build_chat_messages_prompt(
         self,
         message_history: NDArray,
+        message_agent_id: NDArray,
         agent_name: str,
         channel_name: str,
         question: str,
@@ -321,6 +330,8 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         ----------
         message_history : NDArray
             The list of messages in the chat history.
+        message_agent_id : NDArray
+            The agent ID of the agent which sent each message in the message history.
         agent_name : str
             The name of the agent being evaluated.
         channel_name : str
@@ -352,16 +363,13 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
             if message is None:
                 break
 
-            # Add the message with the name of the agent that can be active
-            # TODO: This will need to be modified for the Merlin-Arthur protocol
-            for agent_name in self.protocol_handler.agent_names:
-                if self.protocol_handler.can_agent_be_active(
-                    agent_name, round_id, channel_name
-                ):
-                    chat_messages.append(
-                        dict(role="user", name=agent_name, content=str(message))
-                    )
-                    break
+            message_agent_name = self.protocol_handler.agent_names[
+                message_agent_id[round_id]
+            ]
+
+            chat_messages.append(
+                dict(role="user", name=message_agent_name, content=str(message))
+            )
 
         chat_messages.append(
             dict(
