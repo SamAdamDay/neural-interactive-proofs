@@ -73,7 +73,6 @@ from .types import (
     BinarificationMethodType,
     ActivationType,
     InteractionProtocolType,
-    MinMessageRoundsSchedulerType,
     ImageBuildingBlockType,
     MessageRegressionMethodType,
     BaseRunType,
@@ -294,10 +293,13 @@ class HyperParameters(BaseHyperParameters):
 
     def __post_init__(self):
 
-        # TODO: do this better
+        # Determine whether the protocol is zero-knowledge
         for protocol_common_field in fields(CommonProtocolParameters):
             if protocol_common_field.name == "zero_knowledge":
                 default_zero_knowledge = protocol_common_field.default
+                break
+        else:
+            raise RuntimeError("CommonProtocolParameters has no zero_knowledge field.")
         if isinstance(self.protocol_common, CommonProtocolParameters):
             zero_knowledge = self.protocol_common.zero_knowledge
         elif isinstance(self.protocol_common, dict):

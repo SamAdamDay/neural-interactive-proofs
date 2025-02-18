@@ -126,28 +126,6 @@ multi_channel_test
     A protocol for testing multi-channel communication.
 """
 
-MinMessageRoundsSchedulerType: TypeAlias = Literal[
-    "constant", "linear_decrease", "linear_increase", "linear_increase_decrease"
-]
-"""Type for the scheduler to use for the minimum number of message rounds.
-
-Possible Values
----------------
-constant
-    Use a constant `min_message_rounds` minimum number of message rounds.
-linear_decrease
-    Linearly increase the minimum number of message rounds over time, starting with
-    `min_message_rounds` and ending with 1.
-linear_increase
-    Linearly decrease the minimum number of message rounds over time, starting with
-    1 and ending with `min_message_rounds`.
-linear_increase_decrease
-    Linearly increase the minimum number of message rounds over time, starting with
-    `min_message_rounds` and ending with 1, then linearly decrease the minimum
-    number of message rounds over time, starting with 1 and ending with
-    `min_message_rounds`.
-"""
-
 ImageBuildingBlockType: TypeAlias = Literal["conv2d", "residual_basic"]
 """Type for the type of building block to use in the image classification network.
 
