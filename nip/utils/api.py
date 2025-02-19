@@ -45,6 +45,10 @@ class ContentFilterError(GenerationError):
     """Raised when the agent's response is blocked by a content filter."""
 
 
+class ContentIsNoneError(GenerationError):
+    """Raised when the content of the generated message is `None`."""
+
+
 class UnknownFinishReasonError(GenerationError):
     """Raised when the agent's finishes generating for an unknown reason."""
 
