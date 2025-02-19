@@ -92,6 +92,30 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
         """A dictionary mapping agent names to specifications."""
 
+    def modify_system_prompt_variables(
+        self, agent_name: str, current_variables: dict
+    ) -> dict:
+        """Modify the system prompt variables for a given agent.
+
+        This method can be overridden by any protocol handler which needs to include
+        additional variables in the system prompts.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        current_variables : dict
+            The current variables to include in the system prompts.
+
+        Returns
+        -------
+        dict
+            A dictionary mapping variable names to values. To add new variables, return
+            `current_variables` with the new variables added.
+        """
+
+        return current_variables
+
     @property
     def system_prompt_directory(self) -> str:
         """The dot-separated path to the directory containing the system prompts."""
@@ -134,7 +158,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             prompt_template_traversable.joinpath(template_filename).read_text()
         )
 
-    def get_agent_system_prompt(self, agent_name: str, **kwargs) -> str:
+    def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
         """Get the system prompt for a given agent.
 
         This prompt is used to generate system prompts at the beginning of the chat
@@ -158,15 +182,19 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             self.prover_stance_can_be_randomized
             and self.hyper_params.protocol_common.randomize_prover_stance
         ):
-            agent_stance: int = kwargs.pop(
+            agent_stance: int = prompt_variables.pop(
                 "agent_stance", self.agent_specs[agent_name].default_stance
             )
         else:
             agent_stance = self.agent_specs[agent_name].default_stance
         agent_stance_string = "accept" if agent_stance == 1 else "reject"
 
+        prompt_variables = self.modify_system_prompt_variables(
+            agent_name, prompt_variables
+        )
+
         return self.get_agent_system_prompt_template(agent_name).substitute(
-            **kwargs, agent_stance_string=agent_stance_string
+            **prompt_variables, agent_stance_string=agent_stance_string
         )
 
     def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
