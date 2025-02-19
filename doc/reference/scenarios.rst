@@ -41,6 +41,8 @@ The :term:`trainer` used must be compatible with the scenario type. See
 :ref:`tensordict-or-pure-text-trainer` for more information.
 
 
+.. _scenario-base-classes:
+
 Base Classes
 ------------
 
@@ -77,8 +79,8 @@ are available:
 Scenario Hyper-Parameters
 -------------------------
 
-Each scenario may have its own :term:`hyper-parameters`, which are sub-parameter objects living
-in the main :class:`HyperParameters <nip.parameters.HyperParameters>` object. See
+Each scenario may have its own :term:`hyper-parameters`, which are sub-parameter objects
+living in the main :class:`HyperParameters <nip.parameters.HyperParameters>` object. See
 :doc:`generated/nip.parameters.scenario` for more information.
 
 

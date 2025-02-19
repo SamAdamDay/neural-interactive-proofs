@@ -14,7 +14,7 @@ Glossary
         determine whether the solution is correct.
 
         Scenarios are implemented by subclassing the base classes in the
-        ``nip.scenario_base`` module.
+        :ref:`nip.scenario_base <scenario-base-classes>` module.
 
     scenario instance
         A :class:`ScenarioInstance <nip.factory.ScenarioInstance>` object, which
@@ -26,9 +26,18 @@ Glossary
         includes the names of the agents involved, the communication channels between
         agents, the turn order and the reward signal for each agent in each turn.
         Protocols are implemented by subclassing :class:`ProtocolHandler
-        <nip.protocols.protocol_base.ProtocolHandler>`. See
-        :ref:`creating-new-protocol`.
+        <nip.protocols.protocol_base.ProtocolHandler>`. See the guide to 
+        :doc:`Creating a new protocol <guides/new-protocol>`.
 
+    deterministic interaction protocol
+        An :term:`interaction protocol` where the turn order is fixed and does not vary
+        between trajectories. Deterministic protocols with a single verifier are
+        implemented by subclassing :class:`DeterministicSingleVerifierProtocolHandler
+        <nip.protocols.protocol_base.DeterministicSingleVerifierProtocolHandler>`.
+
+    hyper-parameter
+        One of the :term:`hyper-parameters`.
+    
     hyper-parameters
         The parameters that define the configuration of an experiment. These are
         implemented by the :class:`HyperParameters <nip.parameters.HyperParameters>`
@@ -38,8 +47,8 @@ Glossary
         hardware quirks and model API non-reproducibility.
 
     experiment settings
-        An `ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object,
-        which contains various settings for the experiment not relevant to
+        An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>`
+        object, which contains various settings for the experiment not relevant to
         reproducibility (e.g. the GPU device number and whether to use Weights &
         Biases).
 

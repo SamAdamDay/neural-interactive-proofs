@@ -72,8 +72,8 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
         return self.hyper_params.nip_protocol.max_message_rounds
 
     @property
-    def max_verifier_turns(self) -> int:
-        """The maximum number of turns the verifier can take."""
+    def max_verifier_questions(self) -> int:
+        """The maximum number of questions the verifier can make to the other agents."""
         if self.hyper_params.protocol_common.verifier_first:
             return ceil(self.max_message_rounds / 2)
         else:
@@ -286,7 +286,7 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
 
     max_message_rounds = 2
     min_message_rounds = 1
-    max_verifier_turns = 1
+    max_verifier_questions = 1
 
     def get_active_agents_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
@@ -511,7 +511,7 @@ class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
     message_channel_names = ["main"]
     agent_channel_visibility = [("verifier", "main")]
     min_message_rounds = 1
-    max_verifier_turns = 1
+    max_verifier_questions = 1
 
     # The maximum number of message rounds is set to 2, but the episode is always
     # terminated after the first round. See the note in the class docstring.
@@ -593,7 +593,7 @@ class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
 
     max_message_rounds = 8
     min_message_rounds = 2
-    max_verifier_turns = 4
+    max_verifier_questions = 4
 
     def is_agent_active(self, agent_name: str, round_id: int, channel_name: str):
         """Specify whether an agent is active in a given round and channel."""

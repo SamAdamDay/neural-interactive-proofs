@@ -30,23 +30,23 @@ class ProtocolHandler(ABC):
     To implement a new protocol, subclass this class and implement the following
     properties and methods:
 
-    - `agent_names` (property): The names of the agents in the protocol in turn order.
-    - `max_message_rounds` (property): The maximum number of rounds in the protocol.
-    - `min_message_rounds` (property): The minimum number of rounds in the protocol.
-    - `max_verifier_turns` (property): The maximum number of turns the verifier can
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
       take.
-    - `message_channel_names` (property): The names of the message channels in the
+    - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
-    - `agent_channel_visibility` (property): A specification of which agents can see
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
        which message channels.
-    - `get_active_agents_mask_from_rounds_and_seed` (method): Get a boolean mask of
+    - ``get_active_agents_mask_from_rounds_and_seed`` (method): Get a boolean mask of
       active agents for a batch of rounds.
-    - `can_agent_be_active` (method): Specify whether an agent can be active in a given
-      round and channel.
-    - `get_verifier_guess_mask_from_rounds_and_seed` (method): Get a boolean mask of the
-      verifier's guesses for a batch of rounds.
-    - `step_interaction_protocol` (method): Take a step in the interaction protocol.
-    - `reward_mid_point_estimate` (method): Get an estimate of the expected reward if
+    - ``can_agent_be_active`` (method): Specify whether an agent can be active in a
+      given round and channel.
+    - ``get_verifier_guess_mask_from_rounds_and_seed`` (method): Get a boolean mask of
+      the verifier's guesses for a batch of rounds.
+    - ``step_interaction_protocol`` (method): Take a step in the interaction protocol.
+    - ``reward_mid_point_estimate`` (method): Get an estimate of the expected reward if
       all agents play randomly.
 
     Parameters
@@ -102,8 +102,8 @@ class ProtocolHandler(ABC):
 
     @property
     @abstractmethod
-    def max_verifier_turns(self) -> int:
-        """The maximum number of turns the verifier can take."""
+    def max_verifier_questions(self) -> int:
+        """The maximum number of questions the verifier can make to the other agents."""
 
     @property
     @abstractmethod
@@ -414,19 +414,19 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     To implement a new protocol, subclass this class and implement the following
     properties and methods, all of which come from the `ProtocolHandler` class:
 
-    - `agent_names` (property): The names of the agents in the protocol in turn order.
-    - `max_message_rounds` (property): The maximum number of rounds in the protocol.
-    - `min_message_rounds` (property): The minimum number of rounds in the protocol.
-    - `max_verifier_turns` (property): The maximum number of turns the verifier can
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
       take.
-    - `message_channel_names` (property): The names of the message channels in the
+    - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
-    - `agent_channel_visibility` (property): A specification of which agents can see
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
        which message channels.
-    - `get_active_agents_mask_from_rounds_and_seed` (method): Get a boolean mask of
+    - ``get_active_agents_mask_from_rounds_and_seed`` (method): Get a boolean mask of
       active agents for a batch of rounds.
-    - `can_agent_be_active` (method): Specify whether an agent can be active in a given
-      round and channel.
+    - ``can_agent_be_active`` (method): Specify whether an agent can be active in a
+      given round and channel.
 
     Parameters
     ----------
@@ -725,16 +725,16 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     To implement a new protocol, subclass this class and implement the following
     properties and methods:
 
-    - `agent_names` (property): The names of the agents in the protocol in turn order.
-    - `max_message_rounds` (property): The maximum number of rounds in the protocol.
-    - `min_message_rounds` (property): The minimum number of rounds in the protocol.
-    - `max_verifier_turns` (property): The maximum number of turns the verifier can
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
       take.
-    - `message_channel_names` (property): The names of the message channels in the
+    - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
-    - `agent_channel_visibility` (property): A specification of which agents can see
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
        which message channels.
-    - `is_agent_active` (method): Specify whether an agent is active in a given round
+    - ``is_agent_active`` (method): Specify whether an agent is active in a given round
       and channel.
 
     Parameters

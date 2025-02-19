@@ -11,11 +11,11 @@ from torch import Tensor, as_tensor
 
 from tensordict.tensordict import TensorDictBase
 
-from einops import rearrange, repeat, reduce
+from einops import rearrange, repeat
 
 from jaxtyping import Int, Bool, Float
 
-from nip.parameters import HyperParameters, ScenarioType
+from nip.parameters import HyperParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.nested_array_dict import NestedArrayDict
 
@@ -91,9 +91,9 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         return self.base_protocol.min_message_rounds
 
     @property
-    def max_verifier_turns(self) -> int:
+    def max_verifier_questions(self) -> int:
         """The maximum number of verifier turns in the protocol."""
-        return self.base_protocol.max_verifier_turns
+        return self.base_protocol.max_verifier_questions
 
     @property
     def agent_names(self) -> list[str]:

@@ -32,41 +32,40 @@ Examples
 
 1. Create a parameters object, using default values for ppo parameters, and others
 
-.. code-block:: python
+   .. code-block:: python
 
-   from nip.parameters import HyperParameters, AgentsParams, GraphIsomorphismAgentParameters
+      from nip.parameters import HyperParameters, AgentsParams, GraphIsomorphismAgentParameters
 
-   hyper_params = HyperParameters(
-        scenario="graph_isomorphism",
-        trainer="ppo",
-        dataset="eru10000",
-        agents=AgentsParams(
-            prover=GraphIsomorphismAgentParameters(d_gnn=128),
-            verifier=GraphIsomorphismAgentParameters(num_gnn_layers=2),
-        ),
-    )
+      hyper_params = HyperParameters(
+         scenario="graph_isomorphism",
+         trainer="ppo",
+         dataset="eru10000",
+         agents=AgentsParams(
+               prover=GraphIsomorphismAgentParameters(d_gnn=128),
+               verifier=GraphIsomorphismAgentParameters(num_gnn_layers=2),
+         ),
+      )
 
 2. Convert the parameters object to a dictionary
 
->>> hyper_params.to_dict()
-{'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
+   >>> hyper_params.to_dict()
+   {'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
 
 3. Create a parameters object using a dictionary for the ppo parameters
 
+   .. code-block:: python
+      
+      from nip.parameters import HyperParameters
 
-.. code-block:: python
-   
-   from nip.parameters import HyperParameters
-
-   hyper_params = HyperParameters(
-        scenario="graph_isomorphism",
-        trainer="ppo",
-        dataset="eru10000",
-        ppo={
-            "num_epochs": 100,
-            "batch_size": 256,
-        },
-    )
+      hyper_params = HyperParameters(
+         scenario="graph_isomorphism",
+         trainer="ppo",
+         dataset="eru10000",
+         ppo={
+               "num_epochs": 100,
+               "batch_size": 256,
+         },
+      )
 
 Specifying agent parameters
 ---------------------------

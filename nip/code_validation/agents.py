@@ -654,7 +654,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             agent_name=self.agent_name,
             question=question,
             solution=solution,
-            max_questions=self.protocol_handler.max_verifier_turns - 1,
+            max_questions=self.protocol_handler.max_verifier_questions - 1,
             max_response_words=self.agent_params.max_response_words,
             agent_stance=prover_stance,
         )
@@ -925,14 +925,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
             - "round" (batch round): The current round number.
             - "message_history" (batch round round channel): The history of messages
-              exchanged
-                between the agents in each channel.
+              exchanged between the agents in each channel.
             - "message_agent_id" (batch round round channel): The id of the agent who
-              messaged
-                at a round-channel pair.
+              messaged at a round-channel pair.
             - "raw_message_history" (batch round round agent): The raw message generated
-              by each
-                model in each timestep.
+              by each model in each timestep.
             - "question" (batch round): The problem text.
             - "solution" (batch round): The proposed solution text.
             - "y" (batch round): The true label (0 for incorrect, 1 for correct).

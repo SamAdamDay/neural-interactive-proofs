@@ -16,24 +16,10 @@ protocol specifies the following:
 - **Rewards**. The reward signal for each agent in each turn.
 
 
-.. _creating-new-protocol:
-
 Creating a New Protocol
 -----------------------
 
-To create a new protocol, follow these steps:
-
-1. Add the name of the protocol to :const:`nip.parameters.types.InteractionProtocolType`.
-2. If necessary, create a :class:`nip.parameters.parameters_base.SubParameters` subclass
-   in :doc:`generated/nip.parameters.protocol` to hold the protocol-specific
-   parameters (see :ref:`creating-new-parameters`)
-3. Define the implementation of the protocol by subclassing one of
-   :class:`ProtocolHandler <protocol_base.ProtocolHandler>`,
-   :class:`SingleVerifierProtocolHandler <protocol_base.SingleVerifierProtocolHandler>`
-   or :class:`DeterministicSingleVerifierProtocolHandler
-   <protocol_base.DeterministicSingleVerifierProtocolHandler>`. This class may use the
-   protocol-specific parameters to configure the protocol. Register the class with
-   :func:`register_protocol_handler`.
+See :doc:`../guides/new-protocol` for a guide on how to create a new protocol.
 
 
 Base classes
@@ -62,6 +48,44 @@ Built-in Protocols
    main_protocols.MnipProtocol
    main_protocols.SoloVerifierProtocol
    main_protocols.MultiChannelTestProtocol
+
+
+.. _zero-knowledge-protocols-reference:
+
+Zero-Knowledge Protocols
+------------------------
+
+All protocols can be converted to zero-knowledge protocols by settings the
+``protocol_common.zero_knowledge`` :term:`hyper-parameter <hyper-parameters>` to
+``True``. The way this is implemented is that a :class:`ZeroKnowledgeProtocol
+<zero_knowledge.ZeroKnowledgeProtocol>` meta-handler is used as the protocol handler for
+the experiment. This handler creates a child handler for the actual protocol, and runs
+the zero-knowledge protocol on top of it.
+
+.. autosummary::
+   :toctree: generated/classes
+   :recursive:
+
+   zero_knowledge.ZeroKnowledgeProtocol
+
+
+Code Validation Protocols
+-------------------------
+
+In order for protocols to be used in code validation scenarios, some additional
+configuration is required:
+
+- Various configuration options should be specified, such as the human-readable names of
+  the agents.
+- System prompt templates should be defined for each agent.
+
+The first item is done by creating and registering a
+:class:`nip.code_validation.protocols.CodeValidationProtocolHandler` class, which
+subclasses the desired protocol handler, and provides an
+:class:`nip.code_validation.protocols.CodeValidationAgentSpec` specification for each
+agent. The second is done by creating files of the form ``nip/code_validation/prompt_templates/system_prompts/{protocol_name}/{agent_name}.txt``.
+
+See :doc:`../guides/new-protocol` for more information.
 
 
 Protocol Registry

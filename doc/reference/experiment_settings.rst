@@ -7,4 +7,3 @@ The :class:`ExperimentSettings` object contains various settings for the experim
 relevant to reproducibility.
 
 .. autoclass:: ExperimentSettings
-    :no-index-entry:
