@@ -21,6 +21,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx_tabs.tabs",
+    "sphinxcontrib.bibtex",
     # "sphinx.ext.napoleon",
     # "autoapi.extension",
 ]
@@ -54,3 +55,6 @@ intersphinx_mapping = {
     "tensordict": ("https://pytorch.org/tensordict/stable", None),
     "torchrl": ("https://pytorch.org/rl/stable", None),
 }
+
+# -- Options for sphinxcontrib-bibtex ----------------------------------------------
+bibtex_bibfiles = ["references.bib"]

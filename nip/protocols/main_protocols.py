@@ -10,22 +10,13 @@ function can then be used to build a protocol handler from parameters.
 The following protocols are implemented:
 
 - NIP: The base Prover-Verifier-Game protocol.
-- Abstract Decision Problem: A version of the NBIP protocol exactly two rounds.[^1]
-- Debate: A protocol in which two provers debate a question with a verifier.[^2]
-- Merlin-Arthur: A protocol with two provers where only one prover is active at a time,
-  and this is determined randomly.[^3]
+- Abstract Decision Problem :cite:p:`Anil2021`: A version of the NBIP protocol exactly
+  two rounds.
+- Debate :cite:p:`Irving2018`: A protocol in which two provers debate a question with a
+  verifier.
+- Merlin-Arthur :cite:p:`Waeldchen2022`: A protocol with two provers where only one
+  prover is active at a time, and this is determined randomly.
 - MNIP: A variant of the NIP protocol with two provers and a verifier.
-
-
-References
-----------
-[^1] Anil et al. 2021. "Learning to give checkable answers with prover-verifier games"
-arXiv:2108.12099
-
-[^2] Irving, Christiano and Amodei. 2018. "AI Safety via Debate." arXiv:1805.00899.
-
-[^3] Wäldchen et al. 2022. "Merlin-arthur classifiers: Formal interpretability with
-interactive black boxes". arXiv:2206.00759
 """
 
 from math import ceil, floor
@@ -111,17 +102,12 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
 
 @register_protocol_handler("adp")
 class AdpProtocol(NipProtocol):
-    """Implementation of the Abstract Decision Problem protocol.
+    """Implementation of the Abstract Decision Problem protocol :cite:p:`Anil2021`.
 
     Parameters
     ----------
     hyper_params : HyperParameters
         The parameters of the experiment.
-
-    References
-    ----------
-    [^1] Anil et al. "Learning to give checkable answers with prover-verifier games."
-    arXiv:2108.12099.
     """
 
     agent_names = ["prover", "verifier"]
@@ -132,7 +118,7 @@ class AdpProtocol(NipProtocol):
 
 @register_protocol_handler("debate")
 class DebateProtocol(NipProtocol):
-    """Implementation of the Debate protocol[^1].
+    """Implementation of the Debate protocol :cite:p:`Irving2018`.
 
     The protocol consists of two provers and a verifier. The provers debate a question
     with the verifier, who decides which prover is correct. "prover0" attempts to
@@ -143,10 +129,6 @@ class DebateProtocol(NipProtocol):
     ----------
     hyper_params : HyperParameters
         The parameters of the experiment.
-
-    References
-    ----------
-    [^1] Irving, Christiano and Amodei. "AI Safety via Debate." arXiv:1805.00899.
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
@@ -258,7 +240,7 @@ class DebateProtocol(NipProtocol):
 
 @register_protocol_handler("merlin_arthur")
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
-    """Implementation of the Merlin-Arthur protocol.
+    """Implementation of the Merlin-Arthur protocol :cite:p:`Waeldchen2022`.
 
     The protocol consists of two provers and a verifier. One of the two provers sends a
     message to the verifier, who then makes a decision. Which prover sends the message
@@ -269,11 +251,6 @@ class MerlinArthurProtocol(SingleVerifierProtocolHandler):
     ----------
     hyper_params : HyperParameters
         The parameters of the experiment.
-
-    References
-    ----------
-    [^1] Wäldchen et al. "Merlin-arthur classifiers: Formal interpretability with
-    interactive black boxes." arXiv:2206.00759.
     """
 
     agent_names = ["prover0", "prover1", "verifier"]
