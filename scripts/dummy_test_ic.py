@@ -15,8 +15,8 @@ from nip import (
     CommonProtocolParameters,
     NipProtocolParameters,
     SpgParameters,
-    AGENT_NAMES,
     ImageClassificationParameters,
+    InteractionProtocolType,
     run_experiment,
 )
 from nip.utils.env import get_env_var
@@ -41,27 +41,24 @@ def run(cmd_args: Namespace):
     os.environ["WANDB_SILENT"] = "true"
 
     # Create the parameters object
-    interaction_protocol = "nip"
+    interaction_protocol: InteractionProtocolType = "nip"
     hyper_params = HyperParameters(
         scenario="image_classification",
         trainer="vanilla_ppo",
         dataset="cifar10",
         agents=AgentsParameters(
-            **{
-                agent_name: ImageClassificationAgentParameters(
-                    building_block_type="conv2d",
-                    d_latent_pixel_selector=1,
-                    d_decider=1,
-                    num_decider_layers=1,
-                    d_value=1,
-                    num_value_layers=1,
-                    num_blocks_per_group=1,
-                    use_manual_architecture=False,
-                    agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                    use_orthogonal_initialisation=False,
-                )
-                for agent_name in AGENT_NAMES[interaction_protocol]
-            }
+            _default=ImageClassificationAgentParameters(
+                building_block_type="conv2d",
+                d_latent_pixel_selector=1,
+                d_decider=1,
+                num_decider_layers=1,
+                d_value=1,
+                num_value_layers=1,
+                num_blocks_per_group=1,
+                use_manual_architecture=False,
+                agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                use_orthogonal_initialisation=False,
+            )
         ),
         image_classification=ImageClassificationParameters(
             num_block_groups=1,

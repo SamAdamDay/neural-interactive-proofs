@@ -32,41 +32,40 @@ Examples
 
 1. Create a parameters object, using default values for ppo parameters, and others
 
-.. code-block:: python
+   .. code-block:: python
 
-   from nip.parameters import HyperParameters, AgentsParams, GraphIsomorphismAgentParameters
+      from nip.parameters import HyperParameters, AgentsParams, GraphIsomorphismAgentParameters
 
-   hyper_params = HyperParameters(
-        scenario="graph_isomorphism",
-        trainer="ppo",
-        dataset="eru10000",
-        agents=AgentsParams(
-            prover=GraphIsomorphismAgentParameters(d_gnn=128),
-            verifier=GraphIsomorphismAgentParameters(num_gnn_layers=2),
-        ),
-    )
+      hyper_params = HyperParameters(
+         scenario="graph_isomorphism",
+         trainer="ppo",
+         dataset="eru10000",
+         agents=AgentsParams(
+               prover=GraphIsomorphismAgentParameters(d_gnn=128),
+               verifier=GraphIsomorphismAgentParameters(num_gnn_layers=2),
+         ),
+      )
 
 2. Convert the parameters object to a dictionary
 
->>> hyper_params.to_dict()
-{'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
+   >>> hyper_params.to_dict()
+   {'scenario': 'graph_isomorphism', 'trainer': 'ppo', 'dataset': 'eru10000', ...}
 
 3. Create a parameters object using a dictionary for the ppo parameters
 
+   .. code-block:: python
+      
+      from nip.parameters import HyperParameters
 
-.. code-block:: python
-   
-   from nip.parameters import HyperParameters
-
-   hyper_params = HyperParameters(
-        scenario="graph_isomorphism",
-        trainer="ppo",
-        dataset="eru10000",
-        ppo={
-            "num_epochs": 100,
-            "batch_size": 256,
-        },
-    )
+      hyper_params = HyperParameters(
+         scenario="graph_isomorphism",
+         trainer="ppo",
+         dataset="eru10000",
+         ppo={
+               "num_epochs": 100,
+               "batch_size": 256,
+         },
+      )
 
 Specifying agent parameters
 ---------------------------
@@ -75,10 +74,11 @@ The number and names of the agents in the experiment vary depending on the proto
 Therefore, the sub-object which specifies the parameters for each agent is a special
 kind. The :class:`AgentsParameters <nip.parameters.agents.AgentsParameters>` class is a
 subclass of :class:`dict`. The keys are the agent names, and the values are the
-parameters for that agent. Note that the names of the agents must match those specified
-by the protocol. The :func:`get_protocol_agent_names
-<nip.parameters.get_protocol_agent_names>` function can be used to get the names of the
-agents in a protocol.
+parameters for that agent. 
+
+The special key ``"_default"`` can be used to specify default parameters for all agents.
+This is mostly useful in tests, where we want to use basic parameters for all agents,
+but don't want to specify the names of all agents.
 
 
 Converting to and from nested dicts
@@ -184,8 +184,7 @@ Handling parameter versions
    version
 
 
-Module-level functions
-----------------------
+Registering parameter classes
+-----------------------------
 
-.. autofunction:: get_protocol_agent_names
 .. autofunction:: register_parameter_class

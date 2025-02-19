@@ -161,9 +161,10 @@ class SpgParameters(SubParameters):
     ----------
     variant : SpgVariantType
         The variant of SPG to use.
-    stackelberg_sequence : tuple[tuple[str]]
+    stackelberg_sequence : tuple[tuple[str, ...]], optional
         The sequence of agents to use in the Stackelberg game. The leaders first then
-        their respective followers, and so forth.
+        their respective followers, and so forth. If `None`, the sequence is determined
+        automatically based on the protocol.
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
     sos_a_param: float
@@ -181,7 +182,7 @@ class SpgParameters(SubParameters):
     """
 
     variant: SpgVariantType = "psos"
-    stackelberg_sequence: tuple[tuple[int]] = (("verifier",), ("prover",))
+    stackelberg_sequence: Optional[tuple[tuple[str, ...]]] = None
     additional_lola_term: bool = True
     sos_a_param: float = 0.5
     sos_b_param: float = 0.1

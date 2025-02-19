@@ -19,7 +19,6 @@ from nip import (
     run_experiment,
     prepare_experiment,
 )
-from nip.parameters import get_protocol_agent_names
 from nip.utils.env import get_env_var
 
 
@@ -53,27 +52,13 @@ def run(cmd_args: Namespace):
         trainer=trainer,
         dataset=dataset,
         agents=AgentsParameters(
-            **{
-                agent_name: GraphIsomorphismAgentParameters(
-                    num_gnn_layers=1,
-                    num_transformer_layers=1,
-                    use_manual_architecture=False,
-                    agent_lr_factor={"actor": 1.0, "critic": 1.0},
-                    use_orthogonal_initialisation=False,
-                )
-                for agent_name in get_protocol_agent_names(
-                    HyperParameters(
-                        interaction_protocol=interaction_protocol,
-                        protocol_common=CommonProtocolParameters(
-                            zero_knowledge=zero_knowledge
-                        ),
-                        scenario=scenario,
-                        trainer=trainer,
-                        dataset=dataset,
-                    ),
-                    zero_knowledge=zero_knowledge,
-                )
-            }
+            _default=GraphIsomorphismAgentParameters(
+                num_gnn_layers=1,
+                num_transformer_layers=1,
+                use_manual_architecture=False,
+                agent_lr_factor={"actor": 1.0, "critic": 1.0},
+                use_orthogonal_initialisation=False,
+            )
         ),
         rl=RlTrainerParameters(
             num_iterations=100,

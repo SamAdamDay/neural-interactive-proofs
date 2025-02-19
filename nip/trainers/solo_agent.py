@@ -71,9 +71,9 @@ class SoloAgentTrainer(TensorDictTrainer):
         # Select the non-random agents
         agents_params = AgentsParameters(
             **{
-                name: hyper_params
-                for name, hyper_params in self.hyper_params.agents.items()
-                if not hyper_params.is_random
+                name: self.hyper_params.agents[name]
+                for name in self.protocol_handler.agent_names
+                if not self.hyper_params.agents[name].is_random
             }
         )
         agents = {

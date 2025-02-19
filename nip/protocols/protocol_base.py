@@ -27,6 +27,28 @@ class ProtocolHandler(ABC):
     A protocol handler gives the implementation of an exchange protocol, specifying what
     agents are present, how they interact, and how the environment is updated.
 
+    To implement a new protocol, subclass this class and implement the following
+    properties and methods:
+
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
+      take.
+    - ``message_channel_names`` (property): The names of the message channels in the
+      protocol.
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
+       which message channels.
+    - ``get_active_agents_mask_from_rounds_and_seed`` (method): Get a boolean mask of
+      active agents for a batch of rounds.
+    - ``can_agent_be_active`` (method): Specify whether an agent can be active in a
+      given round and channel.
+    - ``get_verifier_guess_mask_from_rounds_and_seed`` (method): Get a boolean mask of
+      the verifier's guesses for a batch of rounds.
+    - ``step_interaction_protocol`` (method): Take a step in the interaction protocol.
+    - ``reward_mid_point_estimate`` (method): Get an estimate of the expected reward if
+      all agents play randomly.
+
     Parameters
     ----------
     hyper_params : HyperParameters
@@ -68,6 +90,46 @@ class ProtocolHandler(ABC):
         """The number of agents in the protocol."""
         return len(self.agent_names)
 
+    @cached_property
+    def default_stackelberg_sequence(self) -> tuple[tuple[str, ...], ...]:
+        """The default Stackelberg sequence for the protocol.
+
+        This is a tuple of agent groups, in Stackelberg order, where all agents in a
+        group are in the same position.
+
+        All agent names must be present in some group.
+
+        If this is not overridden, the default is to have the verifier(s) first,
+        followed by all other agents in one group.
+        """
+
+        return (
+            tuple(self.verifier_names),
+            tuple(set(self.agent_names) - set(self.verifier_names)),
+        )
+
+    @cached_property
+    def stackelberg_sequence(self) -> tuple[tuple[str, ...], ...]:
+        """The actual Stackelberg sequence used in this experiment.
+
+        This is a tuple of agent groups, in Stackelberg order, where all agents in a
+        group are in the same position.
+
+        This function first tries to get the stackelberg sequence from the
+        hyper-parameters. If it is not present, it returns the default stackelberg
+        sequence specified by the `default_stackelberg_sequence` property.
+
+        Returns
+        -------
+        stackelberg_sequence : tuple[tuple[str, ...], ...]
+            The stackelberg sequence for the protocol.
+        """
+
+        if self.hyper_params.spg.stackelberg_sequence is not None:
+            return self.hyper_params.spg.stackelberg_sequence
+        else:
+            return self.default_stackelberg_sequence
+
     @property
     @abstractmethod
     def max_message_rounds(self) -> int:
@@ -80,8 +142,8 @@ class ProtocolHandler(ABC):
 
     @property
     @abstractmethod
-    def max_verifier_turns(self) -> int:
-        """The maximum number of turns the verifier can take."""
+    def max_verifier_questions(self) -> int:
+        """The maximum number of questions the verifier can make to the other agents."""
 
     @property
     @abstractmethod
@@ -386,6 +448,26 @@ class ProtocolHandler(ABC):
 class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     """Base class for protocol handlers with a single verifier.
 
+    This class assumes there is a single verifier, and implements the logic for stepping
+    through the protocol and computing rewards.
+
+    To implement a new protocol, subclass this class and implement the following
+    properties and methods, all of which come from the `ProtocolHandler` class:
+
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
+      take.
+    - ``message_channel_names`` (property): The names of the message channels in the
+      protocol.
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
+       which message channels.
+    - ``get_active_agents_mask_from_rounds_and_seed`` (method): Get a boolean mask of
+      active agents for a batch of rounds.
+    - ``can_agent_be_active`` (method): Specify whether an agent can be active in a
+      given round and channel.
+
     Parameters
     ----------
     hyper_params : HyperParameters
@@ -676,6 +758,24 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
 
     An exchange protocol is deterministic if the agents' which agents are active in each
     round and channel is determined by the round and channel alone.
+
+    This class assumes there is a single verifier, and implements the logic for stepping
+    through the protocol and computing rewards.
+
+    To implement a new protocol, subclass this class and implement the following
+    properties and methods:
+
+    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
+    - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
+    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
+      take.
+    - ``message_channel_names`` (property): The names of the message channels in the
+      protocol.
+    - ``agent_channel_visibility`` (property): A specification of which agents can see
+       which message channels.
+    - ``is_agent_active`` (method): Specify whether an agent is active in a given round
+      and channel.
 
     Parameters
     ----------
