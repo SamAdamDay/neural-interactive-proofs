@@ -4,6 +4,8 @@ These are basic tests which just run various experiments to make sure there are 
 errors. They do not check that the experiments are correct.
 """
 
+import typing
+
 import pytest
 
 from sklearn.model_selection import ParameterGrid
@@ -21,8 +23,16 @@ from nip import (
     run_experiment,
     prepare_experiment,
 )
-from nip.parameters import AGENT_NAMES
+from nip.parameters import AGENT_NAMES, InteractionProtocolType
 from nip.utils.output import DummyTqdm
+
+PROTOCOLS_TO_EXCLUDE = ("multi_channel_test", "solo_verifier")
+
+protocols_to_test = [
+    protocol_name
+    for protocol_name in typing.get_args(InteractionProtocolType)
+    if protocol_name not in PROTOCOLS_TO_EXCLUDE
+]
 
 # Specification for creating a grid of parameters using ParameterGrid
 param_specs = [
@@ -39,14 +49,7 @@ param_specs = [
     {
         "scenario": ["code_validation"],
         "trainer": ["pure_text_ei"],
-        "protocol": [
-            "nip",
-            "debate",
-            "adp",
-            "merlin_arthur",
-            "mnip",
-            "solo_verifier",
-        ],
+        "protocol": protocols_to_test,
     },
     # Test pretraining the agents
     {
@@ -89,23 +92,12 @@ param_specs = [
     },
     # Test the other protocols
     {
-        "protocol": [
-            "debate",
-            "adp",
-            "merlin_arthur",
-            "mnip",
-        ],
+        "protocol": list(set(protocols_to_test) - {"nip"}),
     },
     # Test the zero-knowledge protocols
     {
         "zero_knowledge": [True],
-        "protocol": [
-            "nip",
-            "debate",
-            "adp",
-            "merlin_arthur",
-            "mnip",
-        ],
+        "protocol": protocols_to_test,
     },
     # Test manual architectures
     {

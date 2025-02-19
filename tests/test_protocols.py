@@ -4,6 +4,7 @@ Currently tests the zero-knowledge extensions of the NIP protocol.
 """
 
 from itertools import product
+import typing
 
 import pytest
 
@@ -28,18 +29,16 @@ from nip.parameters import (
 from nip.protocols import build_protocol_handler, ZeroKnowledgeProtocol
 from nip.utils.maths import set_seed
 
+PROTOCOLS_TO_EXCLUDE = ("solo_verifier",)
 
-@pytest.mark.parametrize(
-    "base_protocol",
-    [
-        "nip",
-        "debate",
-        "adp",
-        "mnip",
-        "merlin_arthur",
-        "multi_channel_test",
-    ],
-)
+protocols_to_test = [
+    protocol_name
+    for protocol_name in typing.get_args(InteractionProtocolType)
+    if protocol_name not in PROTOCOLS_TO_EXCLUDE
+]
+
+
+@pytest.mark.parametrize("base_protocol", protocols_to_test)
 def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
     """Make sure that the zero-knowledge protocol has the correct channel names.
 
@@ -77,17 +76,7 @@ def test_zero_knowledge_channel_names(base_protocol: InteractionProtocolType):
     assert protocol_handler.message_channel_names == expected_channel_names
 
 
-@pytest.mark.parametrize(
-    "base_protocol",
-    [
-        "nip",
-        "debate",
-        "adp",
-        "mnip",
-        "merlin_arthur",
-        "multi_channel_test",
-    ],
-)
+@pytest.mark.parametrize("base_protocol", protocols_to_test)
 def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
     """Make sure that the zero-knowledge protocol has the correct agent names.
 
@@ -122,17 +111,7 @@ def test_zero_knowledge_agent_names(base_protocol: InteractionProtocolType):
     assert protocol_handler.agent_names == expected_agent_names
 
 
-@pytest.mark.parametrize(
-    "base_protocol",
-    [
-        "nip",
-        "debate",
-        "adp",
-        "mnip",
-        "merlin_arthur",
-        "multi_channel_test",
-    ],
-)
+@pytest.mark.parametrize("base_protocol", protocols_to_test)
 def test_zero_knowledge_active_agent_mask(base_protocol: InteractionProtocolType):
     """Test that the active agent mask is correctly set for the zero-knowledge protocol.
 
