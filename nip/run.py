@@ -64,7 +64,8 @@ def run_experiment(
     Parameters
     ----------
     hyper_params : HyperParameters
-        The parameters of the experiment.
+        The parameters of the experiment. Note that the actual parameters used in the
+        experiment may differ from `hyper_params` if a base run is used.
     device : TorchDevice, default="cpu"
         The device to use for training.
     logger : logging.Logger | logging.LoggerAdapter, optional

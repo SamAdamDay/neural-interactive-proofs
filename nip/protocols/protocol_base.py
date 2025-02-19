@@ -90,6 +90,46 @@ class ProtocolHandler(ABC):
         """The number of agents in the protocol."""
         return len(self.agent_names)
 
+    @cached_property
+    def default_stackelberg_sequence(self) -> tuple[tuple[str, ...], ...]:
+        """The default Stackelberg sequence for the protocol.
+
+        This is a tuple of agent groups, in Stackelberg order, where all agents in a
+        group are in the same position.
+
+        All agent names must be present in some group.
+
+        If this is not overridden, the default is to have the verifier(s) first,
+        followed by all other agents in one group.
+        """
+
+        return (
+            tuple(self.verifier_names),
+            tuple(set(self.agent_names) - set(self.verifier_names)),
+        )
+
+    @cached_property
+    def stackelberg_sequence(self) -> tuple[tuple[str, ...], ...]:
+        """The actual Stackelberg sequence used in this experiment.
+
+        This is a tuple of agent groups, in Stackelberg order, where all agents in a
+        group are in the same position.
+
+        This function first tries to get the stackelberg sequence from the
+        hyper-parameters. If it is not present, it returns the default stackelberg
+        sequence specified by the `default_stackelberg_sequence` property.
+
+        Returns
+        -------
+        stackelberg_sequence : tuple[tuple[str, ...], ...]
+            The stackelberg sequence for the protocol.
+        """
+
+        if self.hyper_params.spg.stackelberg_sequence is not None:
+            return self.hyper_params.spg.stackelberg_sequence
+        else:
+            return self.default_stackelberg_sequence
+
     @property
     @abstractmethod
     def max_message_rounds(self) -> int:

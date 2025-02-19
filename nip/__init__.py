@@ -43,7 +43,6 @@ from .parameters import (
     ConstantUpdateSchedule,
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
-    AGENT_NAMES,
     TestSchemeType,
 )
 from .experiment_settings import ExperimentSettings

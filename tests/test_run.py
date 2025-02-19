@@ -5,13 +5,15 @@ errors. They do not check that the experiments are correct.
 """
 
 import typing
+from copy import deepcopy
 
 import pytest
 
 from sklearn.model_selection import ParameterGrid
 
-from nip import (
+from nip.parameters import (
     HyperParameters,
+    AgentParameters,
     GraphIsomorphismAgentParameters,
     ImageClassificationAgentParameters,
     CodeValidationAgentParameters,
@@ -20,10 +22,9 @@ from nip import (
     RlTrainerParameters,
     CommonPpoParameters,
     SpgParameters,
-    run_experiment,
-    prepare_experiment,
 )
-from nip.parameters import AGENT_NAMES, InteractionProtocolType
+from nip.run import run_experiment, prepare_experiment
+from nip.parameters import InteractionProtocolType
 from nip.utils.output import DummyTqdm
 
 PROTOCOLS_TO_EXCLUDE = ("multi_channel_test", "solo_verifier")
@@ -130,7 +131,7 @@ def test_prepare_run_experiment(param_spec: dict):
     """
 
     # Very basic agent parameters for each scenario
-    basic_agent_params = {}
+    basic_agent_params: dict[str, AgentParameters] = {}
     basic_agent_params["graph_isomorphism"] = (
         GraphIsomorphismAgentParameters.construct_test_params()
     )
@@ -180,17 +181,16 @@ def test_prepare_run_experiment(param_spec: dict):
     rl_params.use_shared_body = use_shared_body
 
     # Construct the agent parameters
-    agents_param = {}
-    agent_names = list(AGENT_NAMES[protocol_type])
-    if zero_knowledge:
-        agent_names.extend(["simulator", "adversarial_verifier"])
-    for agent_name in agent_names:
-        if is_random and agent_name != "verifier":
-            agents_param[agent_name] = {"is_random": True}
-        else:
-            agents_param[agent_name] = basic_agent_params[scenario_type]
+    if is_random:
+        agents_param = {
+            "_default": {"is_random": True},
+            "verifier": basic_agent_params[scenario_type],
+        }
+    else:
+        agents_param = {"_default": basic_agent_params[scenario_type]}
     if manual_architecture is not None:
         for agent_name in manual_architecture:
+            agents_param[agent_name] = deepcopy(basic_agent_params[scenario_type])
             agents_param[agent_name].use_manual_architecture = True
 
     # Construct the trainer parameters

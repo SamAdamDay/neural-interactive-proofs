@@ -74,10 +74,11 @@ The number and names of the agents in the experiment vary depending on the proto
 Therefore, the sub-object which specifies the parameters for each agent is a special
 kind. The :class:`AgentsParameters <nip.parameters.agents.AgentsParameters>` class is a
 subclass of :class:`dict`. The keys are the agent names, and the values are the
-parameters for that agent. Note that the names of the agents must match those specified
-by the protocol. The :func:`get_protocol_agent_names
-<nip.parameters.get_protocol_agent_names>` function can be used to get the names of the
-agents in a protocol.
+parameters for that agent. 
+
+The special key ``"_default"`` can be used to specify default parameters for all agents.
+This is mostly useful in tests, where we want to use basic parameters for all agents,
+but don't want to specify the names of all agents.
 
 
 Converting to and from nested dicts
@@ -183,8 +184,7 @@ Handling parameter versions
    version
 
 
-Module-level functions
-----------------------
+Registering parameter classes
+-----------------------------
 
-.. autofunction:: get_protocol_agent_names
 .. autofunction:: register_parameter_class

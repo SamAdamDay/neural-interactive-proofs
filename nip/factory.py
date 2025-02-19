@@ -312,9 +312,9 @@ def build_scenario_instance(
         agent_whole_groups: defaultdict[str, list[WholeAgent]] = defaultdict(list)
         scenario_classes: dict[str, type[PureTextSharedModelGroup]] = {}
 
-        for agent_name, agent_params in hyper_params.agents.items():
+        for agent_name in protocol_handler.agent_names:
 
-            agent_params: PureTextAgentParameters
+            agent_params: PureTextAgentParameters = hyper_params.agents[agent_name]
 
             # If the `shared_model_group` is None, the group name is the agent name
             if agent_params.shared_model_group is None:
@@ -424,8 +424,10 @@ def _build_agents(
 
     # Create the agents
     agents: dict[str, Agent] = {}
-    for agent_name, agent_params in hyper_params.agents.items():
+    for agent_name in protocol_handler.agent_names:
         agent_dict = {}
+
+        agent_params = hyper_params.agents[agent_name]
 
         # If we're loading a checkpoint and parameters, get the run and replace the
         # parameters with the ones from the checkpoint
@@ -662,7 +664,7 @@ def _build_components_for_rl_trainer(
             hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
-            wholes={name: agents[name].whole for name in hyper_params.agents},
+            wholes={name: agents[name].whole for name in protocol_handler.agent_names},
         )
     else:
         if use_single_body:
@@ -672,7 +674,9 @@ def _build_components_for_rl_trainer(
                 hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                bodies={name: agents[name].body for name in hyper_params.agents},
+                bodies={
+                    name: agents[name].body for name in protocol_handler.agent_names
+                },
             )
         else:
             additional_rl_components["combined_policy_body"] = get_scenario_class(
@@ -681,7 +685,10 @@ def _build_components_for_rl_trainer(
                 hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
-                bodies={name: agents[name].policy_body for name in hyper_params.agents},
+                bodies={
+                    name: agents[name].policy_body
+                    for name in protocol_handler.agent_names
+                },
             )
             if use_critic:
                 additional_rl_components["combined_value_body"] = get_scenario_class(
@@ -691,7 +698,8 @@ def _build_components_for_rl_trainer(
                     settings=settings,
                     protocol_handler=protocol_handler,
                     bodies={
-                        name: agents[name].value_body for name in hyper_params.agents
+                        name: agents[name].value_body
+                        for name in protocol_handler.agent_names
                     },
                 )
         additional_rl_components["combined_policy_head"] = get_scenario_class(
@@ -701,7 +709,7 @@ def _build_components_for_rl_trainer(
             settings=settings,
             protocol_handler=protocol_handler,
             policy_heads={
-                name: agents[name].policy_head for name in hyper_params.agents
+                name: agents[name].policy_head for name in protocol_handler.agent_names
             },
         )
         if use_critic:
@@ -712,7 +720,8 @@ def _build_components_for_rl_trainer(
                 settings=settings,
                 protocol_handler=protocol_handler,
                 value_heads={
-                    name: agents[name].value_head for name in hyper_params.agents
+                    name: agents[name].value_head
+                    for name in protocol_handler.agent_names
                 },
             )
 

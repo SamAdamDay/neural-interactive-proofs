@@ -43,6 +43,10 @@ Examples
 ...     scenario="graph_isomorphism",
 ...     trainer="ppo",
 ...     dataset="eru10000",
+...     agents=AgentsParams(
+...         prover={"d_gnn": 128},
+...         verifier={"num_gnn_layers": 2},
+...     ),
 ...     ppo={
 ...         "num_epochs": 100,
 ...         "batch_size": 256,
@@ -116,37 +120,6 @@ from .update_schedule import (
 from .message_regression import MessageRegressionParameters
 from .base_run import BaseRunParameters, BaseRunPreserve
 from .version import convert_hyper_param_dict
-
-# The agent names required for each protocol
-AGENT_NAMES: dict[InteractionProtocolType, tuple[str, ...]] = {
-    "nip": ("verifier", "prover"),
-    "adp": ("verifier", "prover"),
-    "debate": ("prover0", "prover1", "verifier"),
-    "merlin_arthur": ("prover0", "prover1", "verifier"),
-    "mnip": ("prover0", "prover1", "verifier"),
-    "solo_verifier": ("verifier",),
-    "multi_channel_test": (
-        "verifier",
-        "prover0",
-        "prover1",
-        "prover2",
-    ),
-}
-
-DEFAULT_STACKELBERG_SEQUENCE: dict[
-    InteractionProtocolType, tuple[tuple[str, ...], ...]
-] = {
-    "nip": (("verifier",), ("prover",)),
-    "adp": (("verifier",), ("prover",)),
-    "debate": (("verifier",), ("prover0", "prover1")),
-    "merlin_arthur": (("verifier",), ("prover0", "prover1")),
-    "mnip": (("verifier",), ("prover0", "prover1")),
-    "solo_verifier": (("verifier",),),
-    "multi_channel_test": (
-        ("verifier",),
-        ("prover0", "prover1", "prover2"),
-    ),
-}
 
 
 @register_parameter_class
@@ -328,15 +301,6 @@ class HyperParameters(BaseHyperParameters):
                 zero_knowledge,
             )
 
-        # Add PPO parameters for specific variants to the appropriate class
-        if self.trainer == "spg":
-            if self.spg is None:
-                self.spg = SpgParameters(
-                    stackelberg_sequence=DEFAULT_STACKELBERG_SEQUENCE[
-                        self.interaction_protocol
-                    ]
-                )
-
         super().__post_init__()
 
     def _process_agents_params(
@@ -361,14 +325,9 @@ class HyperParameters(BaseHyperParameters):
         """
 
         # If no agent parameters are provided, use the default parameters for the
-        # protocol and scenario
+        # protocol and scenario for all agents
         if self.agents is None:
-            self.agents = AgentsParameters(
-                **{
-                    name: agent_params_class()
-                    for name in get_protocol_agent_names(self, zero_knowledge)
-                }
-            )
+            self.agents = AgentsParameters(_default=agent_params_class())
 
         if not isinstance(self.agents, dict):
             raise ValueError(
@@ -403,15 +362,6 @@ class HyperParameters(BaseHyperParameters):
 
         self.agents = new_agents_params
 
-        # Make sure the agent names match the agent names expected by the protocol
-        agent_names = tuple(self.agents.keys())
-        if set(agent_names) != set(get_protocol_agent_names(self, zero_knowledge)):
-            raise ValueError(
-                f"Agent names {agent_names} do not match the agent names expected"
-                f"by interaction protocol {self.interaction_protocol}: "
-                f"{get_protocol_agent_names(self, zero_knowledge)}."
-            )
-
     def to_dict(self, include_package_meta: bool = False) -> dict:
         """Convert the parameters object to a dictionary.
 
@@ -437,26 +387,3 @@ class HyperParameters(BaseHyperParameters):
             as_dict["_package_name"] = get_package_name()
 
         return as_dict
-
-
-def get_protocol_agent_names(
-    hyper_params: HyperParameters, zero_knowledge: bool
-) -> list[str]:
-    """Get the agent names required for the protocol.
-
-    Parameters
-    ----------
-    hyper_params : HyperParameters
-        The parameters of the experiment.
-    zero_knowledge : bool
-        Whether the protocol is zero-knowledge.
-
-    Returns
-    -------
-    list[str]
-        The agent names required for the protocol.
-    """
-    agent_names = list(AGENT_NAMES[hyper_params.interaction_protocol])
-    if zero_knowledge:
-        agent_names.extend(["simulator", "adversarial_verifier"])
-    return agent_names

@@ -573,6 +573,10 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
     agent.
 
     Agent names must not be substrings of each other.
+
+    If the special key "_default" is present in the dictionary, its value is used as the
+    default parameters when accessing an agent name not present in the dictionary. This
+    is useful for specifying default parameters for all agents.
     """
 
     def to_dict(self) -> dict:
@@ -634,6 +638,57 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
         agents_params_obj = cls(**agents_params)
 
         return agents_params_obj
+
+    def __contains__(self, key: str) -> bool:
+        """Check if the agent name is present in the dictionary.
+
+        Parameters
+        ----------
+        key : str
+            The name of the agent.
+
+        Returns
+        -------
+        contains_key : bool
+            Whether the agent name is present in the dictionary.
+        """
+
+        # If the agent name is not present in the dictionary, but the special key
+        # "_default" is present, return True
+        if super().__contains__(key):
+            return True
+        elif super().__contains__("_default"):
+            return True
+        return False
+
+    def __getitem__(self, key: str) -> AgentParameters:
+        """Get the agent parameters for the given agent name.
+
+        Parameters
+        ----------
+        key : str
+            The name of the agent. If the agent name is not present in the dictionary,
+            but the special key "_default" is present, the value of "_default" is
+            returned.
+
+        Returns
+        -------
+        agent_params : AgentParameters
+            The parameters for the agent.
+
+        Raises
+        ------
+        KeyError
+            If the agent name is not present in the dictionary and the special key
+            "_default" is not present.
+        """
+
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        elif super().__contains__("_default"):
+            return super().__getitem__("_default")
+        else:
+            raise KeyError(f"Agent {key!r} not found in agents parameters")
 
     def _agents_update_repr(self) -> str:
         """Return a string representation of the combined agents update schedule.

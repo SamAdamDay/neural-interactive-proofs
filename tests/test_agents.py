@@ -17,7 +17,7 @@ from nip import (
     ImageClassificationAgentParameters,
     RlTrainerParameters,
 )
-from nip.parameters import AgentParameters, AGENT_NAMES
+from nip.parameters import AgentParameters
 from nip.factory import build_scenario_instance
 from nip.experiment_settings import ExperimentSettings
 from nip.scenario_base import (
@@ -131,7 +131,7 @@ def test_channel_visibility(
         agents=AgentsParameters(
             **{
                 agent_name: basic_agent_params
-                for agent_name in AGENT_NAMES["multi_channel_test"]
+                for agent_name in ("verifier", "prover0", "prover1", "prover2")
             }
         ),
         rl=RlTrainerParameters(frames_per_batch=max_message_rounds * batch_size),
