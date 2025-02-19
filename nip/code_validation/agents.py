@@ -514,7 +514,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     raise UnknownFinishReasonError(
                         num_retries=num_generation_errors, reason=finish_reason
                     )
-                
+
                 if completion_text is None:
                     raise ContentIsNoneError(num_retries=num_generation_errors)
 
@@ -772,7 +772,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         self,
         chat_messages_prompt: list[PromptMessage],
     ) -> tuple[
-        str | None, Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
+        str | None,
+        Literal["stop", "length", "tool_calls", "content_filter", "function_call"],
     ]:
         """Call the OpenAI API to generate the next message.
 
