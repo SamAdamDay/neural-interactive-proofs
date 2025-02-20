@@ -698,17 +698,21 @@ class SpgLoss(ClipPPOLossImproved):
             ihvps = self._compute_ihvps(loss_vals)
 
         # The gradient of each parameter with respect to the corresponding agent's loss.
-        # Named $\xi$ in Letcher et al.
-        simultaneous_grad = {}
+        # Named $\xi$ in Letcher et al. A mapping from parameter names to tensors.
+        simultaneous_grad: dict[str, Tensor] = {}
 
         # The opponent shaping term for each parameter. Named $\chi$ in Letcher et al.
-        opponent_shaping = {}
+        # A mapping from parameter names to tensors.
+        opponent_shaping: dict[str, Tensor] = {}
 
         # TODO (Sam): Rename this to something more descriptive
-        H_0_xi = {}
+        H_0_xi: dict[str, Tensor] = {}
 
-        total_derivatives = {}
+        # TODO (Sam): Explain what this is
+        total_derivatives: dict[str, dict[str, Tensor]] = {}
 
+        # TODO (Sam): Explain a bit more what's happening here, adding some comments and
+        # maybe putting this inside a method with a nice docstring
         for leader_name in reversed(list(self.stackelberg_sequence_flat)):
 
             simultaneous_grad.update(objective_loss_grads[leader_name, leader_name])

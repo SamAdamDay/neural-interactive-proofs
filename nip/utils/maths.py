@@ -101,19 +101,23 @@ def dict_scalar_multiple(dictionary: dict[Tensor], scalar: float) -> dict[Tensor
 
 
 def compute_sos_update(
-    xi: dict, H_0_xi: dict, chi: dict, scaling_factor: float, threshold_factor: float
-):
+    xi: dict[str, Tensor],
+    H_0_xi: dict[str, Tensor],
+    chi: dict[str, Tensor],
+    scaling_factor: float,
+    threshold_factor: float,
+) -> dict[str, Tensor]:
     """Compute the update for the Stable Opponent Shaping (SOS) algorithm.
 
     See Algorithm 1 in :cite:t:`Letcher2019`.
 
     Parameters
     ----------
-    xi : dict
+    xi : dict[str, Tensor]
         The vanilla individual updates.
-    H_0_xi : dict
+    H_0_xi : dict[str, Tensor]
         See the original paper for a definition of this term.
-    chi : dict
+    chi : dict[str, Tensor]
         See the original paper for a definition of this term.
     scaling_factor : float
         A scaling factor (between 0 and 1).
@@ -122,9 +126,12 @@ def compute_sos_update(
 
     Returns
     -------
-    update : dict
+    update : dict[str, Tensor]
         The update to be made to the parameters.
     """
+
+    # TODO (Sam): rename these variables to be more descriptive, and add some comments
+    # to explain what's going on
 
     xi_0 = {}
     for k in xi:
@@ -232,6 +239,7 @@ def compute_nystrom_ihvp(
     Adapted from
     https://github.com/moskomule/hypergrad/blob/main/hypergrad/approx_hypergrad.py
     """
+
     follower_param_values = list(follower_params.values())
     device = follower_param_values[0].device
 
@@ -315,6 +323,8 @@ def inverse_hessian_vector_product(
     generator: Optional[torch.Generator] = None,
 ) -> dict[str, Tensor]:
     """Compute the inverse Hessian-vector product using specified approximation method.
+
+    Note that this method zeros the gradients of the leader and follower parameters.
 
     Parameters
     ----------
