@@ -12,7 +12,23 @@ ScenarioType: TypeAlias = Literal[
 """Type for the scenario to run."""
 
 SpgVariantType: TypeAlias = Literal["spg", "pspg", "lola", "pola", "sos", "psos"]
-"""Type for SPG variants."""
+"""Type for SPG variants.
+
+Possible Values
+---------------
+spg
+    Stackelberg Policy Gradient  :cite:p:`Huang2022`.
+pspg
+    ...
+lola
+    Learning with Opponent-Learning Awareness :cite:p:`Foerster2018`.
+pola
+    ...
+sos
+    Stable Opponent Shaping :cite:p:`Letcher2019`.
+psos
+    ...
+"""
 
 
 IhvpVariantType: TypeAlias = Literal["conj_grad", "neumann", "nystrom"]
@@ -44,16 +60,17 @@ vanilla_ppo
 solo_agent
     A trainer that trains a single agent to solve the task using supervised learning.
 spg
-    Stackelberg Policy Gradient and its variants.
+    Stackelberg Policy Gradient :cite:p:`Huang2022` and its variants.
 reinforce
     The REINFORCE algorithm.
 pure_text_ei
-    Expert Iteration for text-based tasks, where agents are run through text-based APIs
-    (i.e. we don't run them locally, so everything can be represented as text).
+    Expert Iteration :cite:p:`Anthony2017` for text-based tasks, where agents are run
+    through text-based APIs (i.e. we don't run them locally, so everything can be
+    represented as text).
 pure_text_malt
-     Multi-Agent LLM Training :cite:`Motwani24` for text-based tasks, where agents are
-     run through text-based APIs (i.e. we don't run them locally, so everything can be
-     represented as text).
+     Multi-Agent LLM Training :cite:p:`Motwani2024` for text-based tasks, where agents
+     are run through text-based APIs (i.e. we don't run them locally, so everything can
+     be represented as text).
 """
 
 TestSchemeType = Literal["none", "all", "last", "first_and_last"]

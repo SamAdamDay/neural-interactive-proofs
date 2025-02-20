@@ -146,8 +146,8 @@ Main hyper-parameters class
 Modules for sub-parameters
 --------------------------
 
-Sub-parameter classes are grouped into sub-modules of. Each module contains classes for
-a specific part of the hyper-parameters.
+Sub-parameter classes are grouped into sub-modules of :mod:`nip.parameters`. Each module
+contains classes for a specific part of the hyper-parameters.
 
 .. autosummary::
    :toctree: generated

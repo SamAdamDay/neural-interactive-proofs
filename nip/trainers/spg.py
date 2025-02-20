@@ -1,4 +1,4 @@
-"""Stackelberg Policy Gradient RL trainer."""
+"""Stackelberg Policy Gradient :cite:p:`Huang2022` RL trainer."""
 
 from torchrl.objectives.value import GAE
 from torchrl.objectives import ValueEstimators
@@ -6,12 +6,11 @@ from torchrl.objectives import ValueEstimators
 from nip.rl_objectives import SpgLoss
 from nip.trainers.rl_tensordict_base import ReinforcementLearningTrainer
 from nip.trainers.registry import register_trainer
-from nip.parameters import TrainerType
 
 
 @register_trainer("spg")
 class SpgTrainer(ReinforcementLearningTrainer):
-    """Stackelberg Policy Gradient trainer.
+    """Stackelberg Policy Gradient :cite:p:`Huang2022` trainer.
 
     Implements an n-player version of Stackelberg Policy Gradient / Opponent-Shaping
 
