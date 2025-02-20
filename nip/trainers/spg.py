@@ -43,16 +43,17 @@ class SpgTrainer(ReinforcementLearningTrainer):
             critic=self.value_operator,
             variant=self.hyper_params.spg.variant,
             stackelberg_sequence=stackelberg_sequence_int,
-            names=self.agent_names,
-            ihvp={
+            agent_names=self.agent_names,
+            agents=self.scenario_instance.agents,
+            ihvp_arguments={
                 "variant": self.hyper_params.spg.ihvp_variant,
                 "num_iterations": self.hyper_params.spg.ihvp_num_iterations,
                 "rank": self.hyper_params.spg.ihvp_rank,
                 "rho": self.hyper_params.spg.ihvp_rho,
             },
             additional_lola_term=self.hyper_params.spg.additional_lola_term,
-            sos_a_param=self.hyper_params.spg.sos_a_param,
-            sos_b_param=self.hyper_params.spg.sos_b_param,
+            sos_scaling_factor=self.hyper_params.spg.sos_a_param,
+            sos_threshold_factor=self.hyper_params.spg.sos_b_param,
             agent_lr_factors=[
                 self.hyper_params.agents[name].agent_lr_factor
                 for name in self.protocol_handler.agent_names
@@ -64,6 +65,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
             functional=self.hyper_params.functionalize_modules,
             loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
+            device=self.device,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

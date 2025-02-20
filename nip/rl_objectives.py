@@ -1,7 +1,7 @@
 """Implementations of RL objectives, extending those of TorchRL."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Iterator
 import contextlib
 from abc import ABC, abstractmethod
 import warnings
@@ -22,10 +22,16 @@ from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
 from nip.parameters import SpgVariantType, LrFactors
-from nip.utils.maths import dot_td, ihvp, compute_sos_update
+from nip.scenario_base.agents import Agent
+from nip.utils.maths import (
+    dict_dot_product,
+    inverse_hessian_vector_product,
+    compute_sos_update,
+)
 from nip.utils.torch import flatten_batch_dims
 from nip.utils.distributions import CompositeCategoricalDistribution
 from nip.utils.tensordict import get_key_batch_size
+from nip.utils.data import dict_update_add
 
 
 class Objective(LossModule, ABC):
@@ -503,24 +509,40 @@ class SpgLoss(ClipPPOLossImproved):
     - PSOS: ...
     """
 
+    @property
+    def stackelberg_sequence_flat(self) -> Iterator[int]:
+        """A flattened version of the Stackelberg sequence.
+
+        Yields
+        ------
+        agent_id : int
+            The index of the agent in the Stackelberg sequence.
+        """
+
+        for group in self.stackelberg_sequence:
+            for agent_id in group:
+                yield agent_id
+
     def __init__(
         self,
-        actor,
-        critic,
+        actor: TensorDictModule,
+        critic: TensorDictModule,
         variant: SpgVariantType,
-        stackelberg_sequence: tuple[tuple[int]],
-        names: list[str],
-        ihvp: dict,
+        stackelberg_sequence: list[tuple[int]],
+        agent_names: list[str],
+        agents: dict[str, Agent],
+        ihvp_arguments: dict,
         additional_lola_term: bool,
-        sos_a_param: float,
-        sos_b_param: float,
+        sos_scaling_factor: float,
+        sos_threshold_factor: float,
         agent_lr_factors: list[Optional[LrFactors | dict]],
         lr: float,
-        clip_epsilon,
-        entropy_coef,
-        normalize_advantage,
-        loss_critic_type,
-        clip_value,
+        clip_epsilon: float,
+        entropy_coef: float,
+        normalize_advantage: bool,
+        loss_critic_type: str,
+        clip_value: bool | float | None,
+        device: torch.device,
         functional: bool = True,
     ):
 
@@ -536,37 +558,256 @@ class SpgLoss(ClipPPOLossImproved):
         )
         self.variant = variant
         self.stackelberg_sequence = stackelberg_sequence
-        self.agent_indices = range(len(names))
-        self.agent_groups = {
-            i: stackelberg_sequence.index(g) for g in stackelberg_sequence for i in g
-        }
-        self.followers, self.all_followers = self.get_followers()
-        self.leaders = {
-            i: tuple(j for j in self.agent_indices if i in self.followers[j])
-            for i in self.agent_indices
-        }
-        self.all_leaders = {
-            i: tuple(j for j in self.agent_indices if i in self.all_followers[j])
-            for i in self.agent_indices
-        }
-        self.ihvp = ihvp
+        self.ihvp_arguments = ihvp_arguments
         self.additional_lola_term = additional_lola_term
-        self.sos_a_param = sos_a_param
-        self.sos_b_param = sos_b_param
+        self.sos_scaling_factor = sos_scaling_factor
+        self.sos_threshold_factor = sos_threshold_factor
         self.agent_lr_factors = agent_lr_factors
         self.lr = lr
-        self.names = names
+        self.agent_names = agent_names
+        self.agents = agents
+        self.device = device
 
-        try:
-            self.device = next(self.parameters()).device
-        except AttributeError:
-            self.device = torch.device("cpu")
+        self.num_agents = len(agent_names)
+        self.agent_indices = range(len(agent_names))
+
+        # Compute the index of the group of each agent
+        self.agent_group_indices = {
+            agent_id: stackelberg_sequence.index(group)
+            for group in stackelberg_sequence
+            for agent_id in group
+        }
+
+        # Compute the groups immediately before and after each agent, and also the set
+        # of all agents before or after each agent
+        self.immediate_followers, self.all_followers = self._get_followers()
+        self.immediate_leaders = {
+            agent_id: tuple(
+                follower_id
+                for follower_id in self.agent_indices
+                if agent_id in self.immediate_followers[follower_id]
+            )
+            for agent_id in self.agent_indices
+        }
+        self.all_leaders = {
+            agent_id: tuple(
+                follower_id
+                for follower_id in self.agent_indices
+                if agent_id in self.all_followers[follower_id]
+            )
+            for agent_id in self.agent_indices
+        }
+
+        # Get the actor parameters and names for each agent
+        self.actor_params = self._get_actor_params()
 
         self.register_buffer(
             "clip_epsilon", torch.tensor(clip_epsilon, device=self.device)
         )
 
-    def get_followers(self) -> tuple[dict[int, tuple[int]], dict[int, tuple[int]]]:
+    # Define the (variants of the) SPG loss @dispatch
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Compute the loss for the Stackelberg Policy Gradient algorithm.
+
+        Parameters
+        ----------
+        tensordict : TensorDictBase
+            The input TensorDict.
+
+        Returns
+        -------
+        td_out : TensorDictBase
+            The output TensorDict containing the losses.
+        """
+
+        tensordict = tensordict.clone(False)
+        num_batch_dims = len(tensordict.batch_size)
+        advantage = self._get_advantage(tensordict)
+        log_prob, log_weight, dist = self._log_weight(tensordict)
+
+        # TODO we don't take a mean across samples (because the score multiplicands
+        # have already been averaged across samples), which I believe is correct in
+        # theory, but might need changed in practice
+        log_prob_sum = log_prob.sum()
+
+        gains = {}
+
+        # Use vanilla A2C losses for SPG and LOLA and SOS
+        if self.variant == "spg" or self.variant == "lola" or self.variant == "sos":
+            probs = log_prob.exp()
+            for agent_id in self.agent_indices:
+                gains[agent_id] = flatten_batch_dims(
+                    (probs * advantage[..., agent_id].unsqueeze(dim=-1)), num_batch_dims
+                ).mean(dim=0)
+
+        # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
+        elif self.variant == "pspg" or self.variant == "pola" or self.variant == "psos":
+            gains = {}
+            for agent_id in self.agent_indices:
+                gain1 = log_weight.exp() * advantage[..., agent_id].unsqueeze(dim=-1)
+                log_weight_clip = log_weight.clamp(*self._clip_bounds)
+                gain2 = log_weight_clip.exp() * advantage[..., agent_id].unsqueeze(
+                    dim=-1
+                )
+                gains[agent_id] = flatten_batch_dims(
+                    torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
+                ).mean(dim=0)
+
+            # log_prob_sum = log_weight.sum()
+            # TODO maybe this should be log_weight.sum(), also note that we don't take a
+            # mean across samples because the score multiplicands have already been
+            # averaged across samples
+
+        loss_objective_per_agent = torch.stack(
+            [-gains[agent_index] for agent_index in self.agent_indices], dim=-1
+        )
+
+        # Return losses per agent and set of followers
+        td_out = TensorDict(
+            {
+                "sum_log_probs": log_prob_sum,
+                "agents": {
+                    "loss_objective": loss_objective_per_agent,
+                },
+            },
+            [],
+        )
+
+        self._set_entropy_and_critic_losses(tensordict, td_out, dist)
+        self._set_ess(num_batch_dims, td_out, log_weight)
+
+        return td_out
+
+    def backward(self, loss_vals: TensorDictBase):
+        """Compute and assign the gradients of the loss for each agent.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+        """
+
+        # Compute scores first
+        loss_vals["sum_log_probs"].backward(retain_graph=True)
+        scores = self._get_and_zero_all_grads()
+
+        # Then compute objective gradients for all agents
+        objective_loss_grads: list[list[dict[str, Tensor]]] = []
+        for leader_id in self.agent_indices:
+            loss_vals.get(("agents", "loss_objective"))[..., leader_id].sum().backward(
+                retain_graph=True
+            )
+            objective_loss_grads.append(self._get_and_zero_all_grads())
+
+        # TODO This is not very memory-efficient but it does prevent the gradients of
+        # the parameters getting messed up between calculating JVPs and assigning
+        # gradients
+        if self.variant == "spg" or self.variant == "pspg":
+            ihvps = self._compute_ihvps(loss_vals)
+
+        # The gradient of each parameter with respect to the corresponding agent's loss.
+        # Named $\xi$ in Letcher et al.
+        simultaneous_grad = {}
+
+        # The opponent shaping term for each parameter. Named $\chi$ in Letcher et al.
+        opponent_shaping = {}
+
+        # TODO (Sam): Rename this to something more descriptive
+        H_0_xi = {}
+
+        total_derivatives = {}
+
+        for leader_id in reversed(list(self.stackelberg_sequence_flat)):
+
+            simultaneous_grad.update(objective_loss_grads[leader_id][leader_id])
+            total_derivatives[leader_id] = objective_loss_grads[leader_id][leader_id]
+            param_names = list(total_derivatives[leader_id].keys())
+
+            for param_name in param_names:
+                H_0_xi[param_name] = 0.0
+                opponent_shaping[param_name] = 0.0
+
+            for follower_id in self.all_followers[leader_id]:
+                score_coefficient, pg_coefficient = self._compute_jacobian_terms(
+                    leader_id, follower_id, objective_loss_grads, scores
+                )
+
+                # Compute (an approximation of) the true Stackelberg gradient using
+                # an inverse Hessian vector product
+                if self.variant == "spg" or self.variant == "pspg":
+                    multiplier = ihvps[leader_id][follower_id]
+                # If using other algorithms we effectively assume that the inverse
+                # Hessian is the identity matrix
+                else:
+                    multiplier = objective_loss_grads[leader_id][follower_id]
+
+                chi_score_term = dict_dot_product(multiplier, scores[follower_id])
+                chi_pg_term = dict_dot_product(
+                    multiplier, objective_loss_grads[follower_id][follower_id]
+                )
+
+                H_0_xi_pg_term = dict_dot_product(
+                    scores[follower_id], total_derivatives[follower_id]
+                )
+                H_0_xi_score_term = dict_dot_product(
+                    objective_loss_grads[leader_id][follower_id],
+                    total_derivatives[follower_id],
+                )
+
+                for param_name in param_names:
+
+                    if self.variant == "spg" or self.variant == "pspg":
+                        lr_coefficient = 1.0
+                        H_0_xi_term = 0.0
+
+                    # For LOLA and POLA we need to multiply the gradients by the
+                    # learning rate of the follower agent
+                    else:
+                        lr_coefficient = (
+                            self.agent_lr_factors[follower_id].actor * self.lr
+                        )
+                        if (
+                            self.additional_lola_term
+                            or self.variant == "sos"
+                            or self.variant == "psos"
+                        ):
+                            H_0_xi_term = (
+                                H_0_xi_pg_term
+                                * objective_loss_grads[leader_id][leader_id][param_name]
+                            ) + (H_0_xi_score_term * scores[leader_id][param_name])
+
+                    chi_term = (chi_score_term * score_coefficient[param_name]) + (
+                        chi_pg_term * pg_coefficient[param_name]
+                    )
+
+                    opponent_shaping[param_name] += lr_coefficient * chi_term
+                    H_0_xi[param_name] += lr_coefficient * H_0_xi_term
+
+                    total_derivatives[leader_id][param_name] -= lr_coefficient * (
+                        chi_term + H_0_xi_term
+                    )
+
+        if self.variant == "sos" or self.variant == "psos":
+            update = compute_sos_update(
+                simultaneous_grad,
+                H_0_xi,
+                opponent_shaping,
+                self.sos_scaling_factor,
+                self.sos_threshold_factor,
+            )
+        else:
+            update = {}
+            for total_derivative in total_derivatives:
+                update.update(total_derivatives[total_derivative])
+
+        for actor_params in self.actor_params:
+            for param_name, param in actor_params.items():
+                param.grad = update[param_name]
+
+        additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
+        additional_loss.backward()
+
+    def _get_followers(self) -> tuple[dict[int, tuple[int]], dict[int, tuple[int]]]:
         """Get dictionaries of the followers of each agent.
 
         For each agent in the Stackelberg sequence, we get the agents in the group
@@ -614,276 +855,210 @@ class SpgLoss(ClipPPOLossImproved):
 
         return immediate_followers, descendent_followers
 
-    def get_actor_params(
-        self, grads=False
-    ):  # This probably isn't the most memory efficient way to do things
-        """Return a dictionary containing the split gradients for each agent.
+    def _get_actor_params(self) -> list[dict[str, Tensor]]:
+        """Get the parameters for each agent as dictionaries with the parameter names.
 
         Returns
         -------
-        actor_params : dict
-            A dictionary where the keys are agent indices and the values are
-            dictionaries containing the parameters or the gradients thereof for each
-            agent.
+        actor_params : list[dict[str, Tensor]]
+            A list of dictionaries for each agent where the keys are the parameter names
+            and the values are the parameters.
         """
-        actor_params = {i: {} for i in self.agent_indices}
-        for i in self.agent_indices:
-            for param_name, param in self.named_parameters():
-                if self.names[i] in param_name and "actor" in param_name:
-                    if grads:
-                        actor_params[i][
-                            param_name
-                        ] = param.grad.clone()  # Gradients are cloned
-                        param.grad.zero_()  # Zero the gradient after it's been recorded
-                    else:
-                        actor_params[i][param_name] = param  # Parameters are not cloned
+
+        actor_params = []
+        for agent_name in self.agent_names:
+            filtered_params = self.agents[agent_name].filter_actor_named_parameters(
+                self.named_parameters()
+            )
+            actor_params.append({name: param for name, param in filtered_params})
 
         return actor_params
 
-    # Define the (variants of the) SPG loss @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Compute the loss for the Stackelberg Policy Gradient algorithm.
-
-        Parameters
-        ----------
-        tensordict : TensorDictBase
-            The input TensorDict.
+    @torch.no_grad()
+    def _get_and_zero_all_grads(self) -> list[dict[str, Tensor]]:
+        """Get and zero the gradients for the parameters of all the agents.
 
         Returns
         -------
-        td_out : TensorDictBase
-            The output TensorDict containing the losses.
+        grads : list[dict[str, Tensor]]
+            A list of dictionaries containing the gradients for each actor and each
+            parameter.
         """
 
-        tensordict = tensordict.clone(False)
-        num_batch_dims = len(tensordict.batch_size)
-        advantage = self._get_advantage(tensordict)
-        log_prob, log_weight, dist = self._log_weight(tensordict)
+        grads = []
+        for actor_params in self.actor_params:
+            actor_grads = {}
+            for param_name, param in actor_params.items():
+                actor_grads[param_name] = param.grad
+                param.grad = torch.zeros_like(param)
+            grads.append(actor_grads)
 
-        # TODO we don't take a mean across samples (because the score multiplicands
-        # have already been averaged across samples), which I believe is correct in
-        # theory, but might need changed in practice
-        log_prob_sum = log_prob.sum()
+        return grads
 
-        gains = {}
+    def _compute_jacobian_terms(
+        self,
+        leader_id: int,
+        follower_id: int,
+        objective_loss_grads: list[list[dict[str, Tensor]]],
+        scores: list[dict[str, Tensor]],
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        r"""Compute the score and policy gradient coefficients for the Jacobian terms.
 
-        # Use vanilla A2C losses for SPG and LOLA and SOS
-        if self.variant == "spg" or self.variant == "lola" or self.variant == "sos":
-            probs = log_prob.exp()
-            for i in self.agent_indices:
-                gains[i] = flatten_batch_dims(
-                    (probs * advantage[..., i].unsqueeze(dim=-1)), num_batch_dims
-                ).mean(dim=0)
+        Recursive function to compute elements of the Jacobian (of agent 2's loss with
+        respect to agent 2's parameters then agent 1's parameters) using the chain rule
+        -- we maintain separate coefficients for the score term and the policy gradient
+        term to avoid computing full Jacobian matrices.
 
-        # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
-        elif self.variant == "pspg" or self.variant == "pola" or self.variant == "psos":
-            gains = {}
-            for i in self.agent_indices:
-                gain1 = log_weight.exp() * advantage[..., i].unsqueeze(dim=-1)
-                log_weight_clip = log_weight.clamp(*self._clip_bounds)
-                gain2 = log_weight_clip.exp() * advantage[..., i].unsqueeze(dim=-1)
-                gains[i] = flatten_batch_dims(
-                    torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
-                ).mean(dim=0)
+        Consider a leader agent $g$ and a follower agent $f$. Let $\nabla_j \Ell_i$ be
+        the gradient loss of agent $i$ with respect to the parameters of agent $j$ and
+        $\bar S_i$ be the score for agent $i$, which is the gradient of the log sum
+        probability of the actions with respect to the parameters of agent $i$. This
+        function computes $C_S(g, f)$ and $C_{PG}(g, f)$, the coefficients for the score
+        and policy gradient terms in the Jacobian of agent $f$'s loss with respect to
+        agent $g$'s parameters.
 
-            # log_prob_sum = log_weight.sum()
-            # TODO maybe this should be log_weight.sum(), also note that we don't take a
-            # mean across samples because the score multiplicands have already been
-            # averaged across samples
+        When $f$ follows $g$ immediately in the Stackelberg sequence, the score
+        coefficient is:
+            $$
+                C_S(g, f) = \nabla_g \Ell_f
+            $$
+        and the policy gradient coefficient is:
+            $$
+                C_{PG}(g, f) = \bar S_g
+            $$
 
-        loss_objective_per_agent = torch.stack(
-            [-gains[i] for i in self.agent_indices], dim=-1
-        )
+        Otherwise, we recursively compute the Jacobian terms for the leader and
+        immediate leader $g'$ of $f$. Let $Q$ be the set of immediate leaders of $f$.
+        Then the score coefficient is:
+            $$
+                C_S(g, f) = \sum_{g' \in Q} (
+                    (\nabla_{g'} \Ell_f \cdot S_{g'}) C_S(g', f)
+                  + (\nabla_{g'} \Ell_f \cdot \nabla_{g'} \Ell_{g'}) C_{PG}(g', f)
+                )
+            $$
 
-        # Return losses per agent and set of followers
-        td_out = TensorDict(
-            {
-                "sum_log_probs": log_prob_sum,
-                "agents": {
-                    "loss_objective": loss_objective_per_agent,
-                },
-            },
-            [],
-        )
+        Parameters
+        ----------
+        leader_id : int
+            The index of the leader agent, which comes before the follower agent in the
+            stackelberg_sequence.
+        follower_id : int
+            The index of the follower agent.
+        objective_loss_grads : list[list[dict[str, Tensor]]]
+            The gradients of the objective loss for each agent with respect to each
+            agent's parameters. The first index is the agent whose loss it is, and the
+            second index is the agent whose parameters it is with respect to.
+        scores : list[dict[str, Tensor]]
+            The scores for each agent.
 
-        self._set_entropy_and_critic_losses(tensordict, td_out, dist)
-        self._set_ess(num_batch_dims, td_out, log_weight)
+        Returns
+        -------
+        score_coefficient : dict[str, Tensor]
+            A dictionary of the coefficients for the score term for each of the leader's
+            parameters.
+        pg_coefficient : dict[str, Tensor]
+            A dictionary of the coefficients for the policy gradient term for each of
+            the leader's parameters.
+        """
 
-        return td_out
+        # When the follower is an immediate follower of the leader, the score
+        # coefficient is the gradient of the follower's loss with respect to the
+        # leader's parameters, and the policy gradient coefficient is the score of the
+        # leader.
+        if follower_id in self.immediate_followers[leader_id]:
+            score_coefficient = objective_loss_grads[follower_id][leader_id]
+            pg_coefficient = scores[leader_id]
 
-    def backward(self, loss_vals: TensorDictBase):
-        """Compute and assign the gradients of the loss for each agent.
+            return score_coefficient, pg_coefficient
+
+        else:
+            score_coefficient = {}
+            pg_coefficient = {}
+
+            for immediate_leader_id in self.immediate_leaders[follower_id]:
+
+                # Recursively compute the Jacobian terms for leader and immediate leader
+                # of the follower
+                leader_score_coefficient, leader_pg_coefficient = (
+                    self._compute_jacobian_terms(leader_id, immediate_leader_id)
+                )
+
+                param_names = list(leader_score_coefficient.keys())
+
+                # Compute the contribution to the score function coefficient
+                score_coefficient_score = dict_dot_product(
+                    objective_loss_grads[follower_id][immediate_leader_id],
+                    scores[immediate_leader_id],
+                )
+                score_coefficient_pg = dict_dot_product(
+                    objective_loss_grads[follower_id][immediate_leader_id],
+                    objective_loss_grads[immediate_leader_id][immediate_leader_id],
+                )
+                for param_name in param_names:
+                    to_add = (
+                        score_coefficient_score * leader_score_coefficient[param_name]
+                    )
+                    to_add += score_coefficient_pg * leader_pg_coefficient[param_name]
+                    dict_update_add(score_coefficient, param_name, to_add)
+
+                # Policy gradient coefficient
+                pg_coefficient_score = dict_dot_product(
+                    scores[immediate_leader_id], scores[immediate_leader_id]
+                )
+                pg_coefficient_pg = dict_dot_product(
+                    scores[immediate_leader_id],
+                    objective_loss_grads[immediate_leader_id][immediate_leader_id],
+                )
+                for param_name in param_names:
+                    to_add = pg_coefficient_score * leader_score_coefficient[param_name]
+                    to_add += pg_coefficient_pg * leader_pg_coefficient[param_name]
+                    dict_update_add(pg_coefficient, param_name, to_add)
+
+            return score_coefficient, pg_coefficient
+
+    def _compute_ihvps(
+        self, loss_vals: TensorDictBase
+    ) -> list[dict[int, dict[str, Tensor]]]:
+        """Compute the inverse Hessian vector products for each agent and follower.
+
+        This is the inverse Hessian of the follower's loss with respect to the
+        follower's parameters multiplied by the gradient of the leader's loss with
+        respect to the follower's parameters.
 
         Parameters
         ----------
         loss_vals : TensorDictBase
             The loss values.
+
+        Returns
+        -------
+        ihvps : list[dict[int, dict[str, Tensor]]]
+            A list with for each agent a dictionary of the inverse Hessian vector
+            products for each follower.
         """
 
-        # Compute scores first
-        loss_vals["sum_log_probs"].backward(retain_graph=True)
-        scores = self.get_actor_params(grads=True)
+        loss_objective = loss_vals.get(("agents", "loss_objective"))
 
-        # Then compute objective gradients for all agents
-        objective_loss_grads = {}
-        for i in self.agent_indices:
-            loss_vals.get(("agents", "loss_objective"))[..., i].sum().backward(
-                retain_graph=True
-            )
-            objective_loss_grads[i] = self.get_actor_params(grads=True)
+        ihvps = []
+        for agent_id in range(self.num_agents):
+            if len(self.all_followers[agent_id]) == 0:
+                ihvps.append([])
+                continue
+            ihvps_agent = {}
+            for follower_id in self.all_followers[agent_id]:
+                ihvps_agent[follower_id] = inverse_hessian_vector_product(
+                    follower_loss=loss_objective[..., follower_id, follower_id],
+                    leader_loss=loss_objective[..., agent_id, agent_id],
+                    follower_params=self.actor_params[follower_id],
+                    leader_params=self.actor_params[agent_id],
+                    variant=self.ihvp_arguments["variant"],
+                    num_iterations=self.ihvp_arguments["num_iterations"],
+                    rank=self.ihvp_arguments["rank"],
+                    rho=self.ihvp_arguments["rho"],
+                )
+            ihvps.append(ihvps_agent)
 
-        # Recursive function to compute elements of the Jacobian (of agent j's loss with
-        # respect to agent j's parameters then agent i's parameters) using the chain
-        # rule – we maintain separate coefficients for the score term and the policy
-        # gradient term to avoid computing full Jacobian matrices
-        def jacobian_terms(i, j):
-            if j in self.followers[i]:
-                score_coefficient = objective_loss_grads[j][i]
-                pg_coefficient = scores[i]
-
-                return (score_coefficient, pg_coefficient)
-
-            else:
-                score_coefficient = {}
-                pg_coefficient = {}
-
-                for l in self.leaders[j]:  # noqa E741
-                    p = jacobian_terms(i, l)
-
-                    # Score coefficient
-                    temp_score_coefficient_p0 = dot_td(
-                        objective_loss_grads[j][l], scores[l]
-                    )
-                    temp_score_coefficient_p1 = dot_td(
-                        objective_loss_grads[j][l], objective_loss_grads[l][l]
-                    )
-                    temp_score_coefficient = {}
-                    for k in p[0]:
-                        temp_score_coefficient[k] = (
-                            temp_score_coefficient_p0 * p[0][k]
-                        ) + (temp_score_coefficient_p1 * p[1][k])
-
-                    # Policy gradient coefficient
-                    temp_pg_coefficient_p0 = dot_td(scores[l], scores[l])
-                    temp_pg_coefficient_p1 = dot_td(
-                        scores[l], objective_loss_grads[l][l]
-                    )
-                    temp_pg_coefficient = {}
-                    for k in p[0]:
-                        temp_pg_coefficient[k] = (temp_pg_coefficient_p0 * p[0][k]) + (
-                            temp_pg_coefficient_p1 * p[1][k]
-                        )
-
-                    if len(score_coefficient) == 0:
-                        score_coefficient = temp_score_coefficient
-                        pg_coefficient = temp_pg_coefficient
-                    else:
-                        for key in temp_score_coefficient:
-                            score_coefficient[key] += temp_score_coefficient[key]
-                            pg_coefficient[key] += temp_pg_coefficient[key]
-
-                return (score_coefficient, pg_coefficient)
-
-        # TODO This is not very memory-efficient but it does prevent the gradients of
-        # the parameters getting messed up between calculating JVPs and assigning
-        # gradients
-        if self.variant == "spg" or self.variant == "pspg":
-            actor_params = self.get_actor_params()
-            ihvps = {
-                i: {
-                    j: ihvp(
-                        loss_vals.get(("agents", "loss_objective"))[..., j, j],
-                        loss_vals.get(("agents", "loss_objective"))[..., i, i],
-                        actor_params[j],
-                        actor_params[i],
-                        self.ihvp["variant"],
-                        self.ihvp["num_iterations"],
-                        self.ihvp["rank"],
-                        self.ihvp["rho"],
-                    )
-                    for j in self.all_followers[i]
-                }
-                for i in self.agent_indices
-                if len(self.all_followers[i]) > 0
-            }
-
-        # The dictionaries are named after the terms in the paper "Stable Opponent Shaping in Differentiable Games" by Letcher et al.
-        xi = {}
-        H_0_xi = {}
-        chi = {}
-        total_derivatives = {}
-
-        for g in reversed(self.stackelberg_sequence):
-            for i in g:
-                xi.update(objective_loss_grads[i][i])
-                total_derivatives[i] = objective_loss_grads[i][i]
-                for k in total_derivatives[i].keys():
-                    H_0_xi[k] = 0.0
-                    chi[k] = 0.0
-
-                for j in self.all_followers[i]:
-                    p = jacobian_terms(i, j)
-
-                    # Compute (an approximation of) the true Stackelberg gradient using an
-                    # inverse Hessian vector product
-                    if self.variant == "spg" or self.variant == "pspg":
-                        multiplier = ihvps[i][j]
-                    # If using other algorithms we effectively assume that the inverse Hessian
-                    # is the identity matrix
-                    else:
-                        multiplier = objective_loss_grads[i][j]
-
-                    chi_score_term = dot_td(multiplier, scores[j])
-                    chi_pg_term = dot_td(multiplier, objective_loss_grads[j][j])
-
-                    H_0_xi_pg_term = dot_td(scores[j], total_derivatives[j])
-                    H_0_xi_score_term = dot_td(
-                        objective_loss_grads[i][j], total_derivatives[j]
-                    )
-
-                    for k in total_derivatives[i].keys():
-                        if self.variant == "spg" or self.variant == "pspg":
-                            lr_coefficient = 1.0
-                            H_0_xi_term = 0.0
-                        # For LOLA and POLA we need to multiply the gradients by the
-                        # learning rate of the follower agent
-                        else:
-                            lr_coefficient = self.agent_lr_factors[j].actor * self.lr
-                            if (
-                                self.additional_lola_term
-                                or self.variant == "sos"
-                                or self.variant == "psos"
-                            ):
-                                H_0_xi_term = (
-                                    H_0_xi_pg_term * objective_loss_grads[i][i][k]
-                                ) + (H_0_xi_score_term * scores[i][k])
-
-                        chi_term = (chi_score_term * p[0][k]) + (chi_pg_term * p[1][k])
-
-                        chi[k] += lr_coefficient * chi_term
-                        H_0_xi[k] += lr_coefficient * H_0_xi_term
-
-                        total_derivatives[i][k] -= lr_coefficient * (
-                            chi_term + H_0_xi_term
-                        )
-
-        if self.variant == "sos" or self.variant == "psos":
-            update = compute_sos_update(
-                xi, H_0_xi, chi, self.sos_a_param, self.sos_b_param
-            )
-        else:
-            update = {}
-            for td in total_derivatives:
-                update.update(total_derivatives[td])
-
-        for param_name, param in self.named_parameters():
-            if param_name[:5] == "actor":
-                param.grad = update[param_name]
-
-        additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
-        additional_loss.backward()
-
-        return
+        return ihvps
 
 
 class ReinforceLossImproved(Objective, ReinforceLoss):
@@ -949,7 +1124,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         functional: bool = True,
         normalize_advantage: bool = True,
         clip_value: Optional[float] = None,
-    ) -> None:
+    ):
         if actor_network is None:
             raise TypeError("Missing positional argument actor_network.")
         if not functional and delay_value:

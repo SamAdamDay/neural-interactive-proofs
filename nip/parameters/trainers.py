@@ -168,9 +168,9 @@ class SpgParameters(SubParameters):
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
     sos_a_param: float
-        The `a` parameter for the SOS loss.
+        The SOS scaling factor (between 0 and 1), used with Stable Opponent Shaping.
     sos_b_param: float
-        The `b` parameter for the SOS loss.
+        The SOS threshold factor (between 0 and 1), used with Stable Opponent Shaping.
     ihvp_variant : IhvpVariantType
         The variant of IHVP to use.
     ihvp_num_iterations : int

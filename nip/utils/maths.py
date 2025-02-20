@@ -5,7 +5,7 @@ import random
 
 import torch
 from torch import Tensor
-from torch.nn import functional as F
+from torch.nn import functional as F, Parameter
 
 import numpy as np
 
@@ -21,95 +21,121 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
 
 
-def dot_td(td1, td2):
-    """
-    Calculate the dot product between two (parameter) dictionaries.
+def dict_dot_product(dict_1: dict[Tensor], dict_2: dict[Tensor]) -> float:
+    """Calculate the dot product between two dictionaries of tensors.
 
     Parameters
     ----------
-    td1 (dict): The first dictionary.
-    td2 (dict): The second dictionary.
+    dict_1 : dict[Tensor]
+        The first dictionary.
+    dict_2 : dict[Tensor]
+        The second dictionary.
 
     Returns
     -------
-    float: The dot product of the two dictionaries.
+    dot_product : float
+        The dot product of the two dictionaries.
 
     Raises
     ------
-    ValueError: If td1 and td2 do not have the same keys.
+    ValueError:
+        If the dictionaries do not have the same keys.
     """
-    if td1.keys() != td2.keys():
-        raise ValueError("td1 and td2 must have the same keys.")
+
+    if set(dict_1.keys()) != set(dict_2.keys()):
+        raise ValueError(
+            f"dict_1 and dict_2 must have the same keys. "
+            f"Got {dict_1.keys()} and {dict_2.keys()}."
+        )
     else:
-        return sum((td1[k] * td2[k]).sum() for k in td1.keys())
+        return sum((dict_1[key] * dict_2[key]).sum() for key in dict_1.keys())
 
 
-def sum_td(td1, td2):
-    """
-    Calculate the sum of two (parameter) dictionaries.
+def dict_sum(dict_1: dict[Tensor], dict_2: dict[Tensor]) -> dict[Tensor]:
+    """Calculate the sum of two dictionaries of tensors, element-wise.
 
     Parameters
     ----------
-    td1 (dict): The first dictionary.
-    td2 (dict): The second dictionary.
+    dict_1 : dict[Tensor]
+        The first dictionary.
+    dict_2 : dict[Tensor]
+        The second dictionary.
 
     Returns
     -------
-    dict: The sum product of the two dictionaries.
+    sum_dict : dict[Tensor]
+        The sum of the two dictionaries.
 
     Raises
     ------
-    ValueError: If td1 and td2 do not have the same keys.
+    ValueError:
+        If the dictionaries do not have the same keys.
     """
-    if td1.keys() != td2.keys():
-        raise ValueError("td1 and td2 must have the same keys.")
+
+    if set(dict_1.keys()) != set(dict_2.keys()):
+        raise ValueError(
+            f"dict_1 and dict_2 must have the same keys. "
+            f"Got {dict_1.keys()} and {dict_2.keys()}."
+        )
     else:
-        return {k: td1[k] + td2[k] for k in td1.keys()}
+        return {key: dict_1[key] + dict_2[key] for key in dict_1.keys()}
 
 
-def mul_td(td, c):
-    """
-    Calculate a scalar multiple of a (parameter) dictionaries.
+def dict_scalar_multiple(dictionary: dict[Tensor], scalar: float) -> dict[Tensor]:
+    """Calculate a scalar multiple of a dictionary of tensors.
 
     Parameters
     ----------
-    td (dict): The dictionary.
-    c (float): The scalar.
+    dictionary : dict[Tensor]
+        The dictionary of tensors.
+    scalar : float
+        The scalar to multiply the dictionary by.
 
     Returns
     -------
-    float: The scalar multiple of the dictionary.
+    scaled_dict : dict[Tensor]
+        The scaled dictionary.
     """
-    return {k: td[k] * c for k in td.keys()}
+
+    return {key: dictionary[key] * scalar for key in dictionary.keys()}
 
 
-def compute_sos_update(xi, H_0_xi, chi, a, b):
-    """
-    Compute the update for the Stable Opponent Shaping (SOS) algorithm. See Algorithm 1 in the paper "Stable Opponent Shaping in Differentiable Games" by Letcher et al.
+def compute_sos_update(
+    xi: dict, H_0_xi: dict, chi: dict, scaling_factor: float, threshold_factor: float
+):
+    """Compute the update for the Stable Opponent Shaping (SOS) algorithm.
 
-    Args:
-        xi (dict): The vanilla individual updates.
-        H_0_xi (dict): See the original paper for a definition of this term.
-        chi (dict): See the original paper for a definition of this term.
-        a (float): A scaling factor (between 0 and 1).
-        b (float): A threshold value (between 0 and 1).
+    See Algorithm 1 in :cite:t:`Letcher2019`.
+
+    Parameters
+    ----------
+    xi : dict
+        The vanilla individual updates.
+    H_0_xi : dict
+        See the original paper for a definition of this term.
+    chi : dict
+        See the original paper for a definition of this term.
+    scaling_factor : float
+        A scaling factor (between 0 and 1).
+    threshold_factor : float
+        A threshold value (between 0 and 1).
 
     Returns
     -------
-        dict: The update to be made to the parameters.
-
+    update : dict
+        The update to be made to the parameters.
     """
 
     xi_0 = {}
     for k in xi:
         xi_0[k] = xi[k] - H_0_xi[k]
-    denom = -dot_td(chi, xi_0)
+    denom = -dict_dot_product(chi, xi_0)
     if denom >= 0.0:
         p_1 = 1.0
     else:
-        p_1 = min(1.0, -a * dot_td(xi_0, xi_0) / denom)
-    xi_norm_squared = dot_td(xi, xi)
-    if xi_norm_squared < b * b:
+        p_1 = min(1.0, -scaling_factor * dict_dot_product(xi_0, xi_0) / denom)
+    xi_norm_squared = dict_dot_product(xi, xi)
+    if xi_norm_squared < threshold_factor * threshold_factor:
         p_2 = xi_norm_squared
     else:
         p_2 = 1.0
@@ -121,146 +147,241 @@ def compute_sos_update(xi, H_0_xi, chi, a, b):
     return xi_0
 
 
-def conjugate_gradient(  # noqa: D103
-    f_loss: Tensor,
-    l_loss: Tensor,
-    f_params: Tuple[Tensor, ...],
-    l_params: Tuple[Tensor, ...],
+def compute_conjugate_gradient_ihvp(
+    follower_loss: Tensor,
+    leader_loss: Tensor,
+    follower_params: dict[str, Tensor],
+    leader_params: dict[str, Tensor],
     num_iterations: int,
     lr: float,
-) -> Tuple[Tensor, ...]: ...  # TODO
+) -> dict[str, Tensor]:
+    """Approximate the inverse Hessian vector product with conjugate gradient."""
+    raise NotImplementedError("Conjugate gradient is not yet implemented.")  # TODO
 
 
-def neumann(  # noqa: D103
-    f_loss: Tensor,
-    l_loss: Tensor,
-    f_params: Tuple[Tensor, ...],
-    l_params: Tuple[Tensor, ...],
+def compute_neumann_ihvp(
+    follower_loss: Tensor,
+    leader_loss: Tensor,
+    follower_params: dict[str, Tensor],
+    leader_params: dict[str, Tensor],
     num_iterations: int,
     lr: float,
-) -> Tuple[Tensor, ...]: ...  # TODO
+) -> dict[str, Tensor]:
+    """Approximate the inverse Hessian vector product with the Neumann method."""
+    raise NotImplementedError("Neumann approximation is not yet implemented.")  # TODO
 
 
-# Note that this is adapted from https://github.com/moskomule/hypergrad/blob/main/hypergrad/approx_hypergrad.py
-def nystrom(
-    f_loss: Tensor,
-    l_loss: Tensor,
-    f_params: Tuple[Tensor, ...],
-    l_params: Tuple[Tensor, ...],
-    rank: int,
-    rho: float,
-) -> Tuple[Tensor, ...]:
-    """Nystrom method to approximate inverse Hessian vector product.
+def compute_nystrom_ihvp(
+    follower_loss: Tensor,
+    leader_loss: Tensor,
+    follower_params: dict[str, Tensor | Parameter],
+    leader_params: dict[str, Tensor | Parameter],
+    rank: int = 5,
+    rho: float = 0.1,
+    retain_graph: bool = True,
+    generator: Optional[torch.Generator] = None,
+) -> dict[str, Tensor]:
+    r"""Approximate the inverse Hessian vector product with the Nystrom method.
 
-    Args:
-        f_loss: Follower objective
-        l_loss: Leader objective
-        f_params: Follower parameters
-        l_params: Leader parameters
-        rank: Rank of low-rank approximation
-        rho: additive constant to improve numerical stability
+    This function approximates the inverse Hessian of the follower's loss with respect
+    to the its parameters and multiplies it by the gradients of the leader's loss with
+    respect to the follower's parameters. See :cite:t:`Hataya2023` for more details.
 
-    Returns: approximated implicit gradients
+    The function computes:
+        $$
+            (H_k + \rho I) \frac{\partial g}{\partial \theta}
+        $$
+    where:
+        - $f$ is the follower's loss
+        - $g$ is the leader's loss
+        - $\theta$ are the follower's parameters
+        - $\phi$ are the leader's parameters
+        - $H_k$ is the $k$-rank approximation of the Hessian of $f$ with respect to
+          $\theta$
+
+    Parameters
+    ----------
+    follower_loss : Tensor
+        Follower objective
+    leader_loss : Tensor
+        Leader objective
+    follower_params : dict[str, Tensor | Parameter]
+        The parameters of the follower agent
+    leader_params : dict[str, Tensor | Parameter]
+        The parameters of the leader agent
+    rank: int, default=5
+        Rank of low-rank approximation
+    rho : float, default=0.1
+        Additive constant to improve numerical stability
+    retain_graph : bool, default=True
+        Whether to retain the computation graph for use in computing higher-order
+        derivatives.
+    generator : torch.Generator, optional
+        The PyTorch random number generator, used for sampling the rank columns of the
+        Hessian matrix.
+
+    Returns
+    -------
+    ihvp : dict[str, Tensor]
+        A dictionary where the keys are the follower parameter names and the values are
+        the inverse Hessian-vector product, i.e. the inverse Hessian multiplied by the
+        leader gradients
+
+    Notes
+    -----
+    Adapted from
+    https://github.com/moskomule/hypergrad/blob/main/hypergrad/approx_hypergrad.py
     """
-
-    device = f_params[0].device
+    follower_param_values = list(follower_params.values())
+    device = follower_param_values[0].device
 
     # Compute gradients
-    f_grads = torch.autograd.grad(
-        f_loss, f_params, retain_graph=True, create_graph=True
+    follower_grads = torch.autograd.grad(
+        follower_loss, follower_param_values, retain_graph=True, create_graph=True
     )
-    indices = torch.randperm(sum([p.numel() for p in f_params]), device=device)[:rank]
-    f_grads = torch.cat([g.reshape(-1) for g in f_grads])
+    follower_grads = torch.cat([grad.reshape(-1) for grad in follower_grads])
 
-    # Compute rank rows of the Hessian
-    hessian_rows = [
-        torch.autograd.grad(f_grads[i], f_params, retain_graph=True) for i in indices
-    ]
-    c = torch.cat(
+    # Randomly sample `rank` parameters to compute the rank approximation
+    num_follower_params = sum(param.numel() for param in follower_param_values)
+    follower_param_indices = torch.randperm(
+        num_follower_params, device=device, generator=generator
+    )[:rank]
+
+    # Compute `rank` rows of the Hessian
+    hessian_rows = []
+    for i in follower_param_indices:
+        hessian_rows.append(
+            torch.autograd.grad(
+                follower_grads[i], follower_param_values, retain_graph=True
+            )
+        )
+    partial_hessian = torch.cat(
         [
-            torch.stack(tuple(r[i].flatten() for r in hessian_rows))
+            torch.stack([row[i].flatten() for row in hessian_rows])
             for i in range(len(hessian_rows[0]))
         ],
         dim=1,
     )
 
-    # Compute more gradients
-    for p in f_params:
-        p.grad.zero_()
-    l_grads = torch.autograd.grad(l_loss, f_params, retain_graph=True)
+    # Compute the gradients of the follower parameters with respect to the leader loss
+    leader_grads = torch.autograd.grad(
+        leader_loss, follower_param_values, retain_graph=retain_graph
+    )
 
-    # Woodbury matrix identity
-    m = c.take_along_dim(indices[None], dim=1)
-    v = torch.cat([v.view(-1) for v in l_grads])
-    x = 1 / rho * v - 1 / (rho**2) * c.t() @ torch.linalg.solve(
-        0.1 * rho * torch.eye(len(indices), device=device) + m + 1 / rho * c @ c.t(),
-        c @ v,
-    )  # We use a small extra identity matrix in case the matrix to be inversed is singular
+    # Select the columns of the partial Hessian matrix according to the parameter
+    # indices to yield a square matrix
+    square_hessian = partial_hessian.take_along_dim(follower_param_indices[None], dim=1)
 
-    # Reformat (this is vector_to_params from https://github.com/moskomule/hypergrad/blob/main/hypergrad/utils.py)
+    # The vector of leader gradients, which the inverse Hessian will be multiplied by
+    leader_grad_vector = torch.cat([grad.view(-1) for grad in leader_grads])
+
+    # Use the Woodbury matrix identity to compute the inverse Hessian multiplied by the
+    # leader gradients. We use a small extra identity matrix in case the matrix to be
+    # inverted is singular
+    to_solve = (
+        0.1 * rho * torch.eye(len(follower_param_indices), device=device)
+        + square_hessian
+        + 1 / rho * partial_hessian @ partial_hessian.t()
+    )
+    solved_part = torch.linalg.solve(
+        to_solve,
+        partial_hessian @ leader_grad_vector,
+    )
+    ihvp_cat = 1 / rho * leader_grad_vector
+    ihvp_cat = ihvp_cat - 1 / (rho**2) * partial_hessian.t() @ solved_part
+
+    # Convert the concatenated vector into a dictionary of tensors corresponding to the
+    # follower parameters
     pointer = 0
-    ihvp = []
-    for p in l_grads:
-        size = p.numel()
-        ihvp.append(x[pointer : pointer + size].view_as(p))
+    ihvp = {}
+    for param_name, param in follower_params.items():
+        size = param.numel()
+        ihvp[param_name] = ihvp_cat[pointer : pointer + size].view_as(param)
         pointer += size
 
     return ihvp
 
 
-def ihvp(f_loss, l_loss, f_params, l_params, variant, num_iterations, rank, rho):
-    """
-    Compute the inverse Hessian-vector product (IHVP) based on the specified approximation method.
+def inverse_hessian_vector_product(
+    follower_loss: Tensor,
+    leader_loss: Tensor,
+    follower_params: dict[str, Tensor | Parameter],
+    leader_params: dict[str, Tensor | Parameter],
+    variant: IhvpVariantType,
+    num_iterations: int,
+    rank: int = 5,
+    rho: float = 0.1,
+    retain_graph: bool = True,
+    generator: Optional[torch.Generator] = None,
+) -> dict[str, Tensor]:
+    """Compute the inverse Hessian-vector product using specified approximation method.
 
-    Args:
-        f_loss: The follower loss.
-        l_loss: The leader loss.
-        f_params: The parameters of the follower.
-        l_params: The parameters of the leader.
-        variant: The approximation method for computing the IHVP.
-        num_iterations: The number of iterations for the conujugate gradient or Neumann approximation methods.
-        rank: The rank parameter for the Nystrom approximation method.
-        rho: The rho parameter for the Nystrom approximation method.
+    Parameters
+    ----------
+    follower_loss : Tensor
+        The follower loss.
+    leader_loss : Tensor
+        The leader loss.
+    follower_params : dict[str, Tensor | Parameter]
+        The parameters of the follower.
+    leader_params : dict[str, Tensor | Parameter]
+        The parameters of the leader.
+    variant : IhvpVariantType
+        The approximation method for computing the IHVP.
+    num_iterations : int
+        The number of iterations for the conujugate gradient or Neumann approximation
+        methods.
+    rank : int, default=5
+        The rank parameter for the Nystrom approximation method.
+    rho : float, default=0.1
+        The rho parameter for the Nystrom approximation method.
+    retain_graph : bool, default=True
+        Whether to retain the computation graph for use in computing higher-order
+        derivatives.
+    generator : torch.Generator, optional
+        The PyTorch random number generator.
 
     Returns
     -------
+    ihvp : dict[str, Tensor]
         The computed IHVP.
     """
 
     if variant == "conj_grad":  # TODO not yet implemented
-        ihvp = conjugate_gradient(
-            f_loss,
-            l_loss,
-            tuple(f_params.values()),
-            tuple(l_params.values()),
+        ihvp = compute_conjugate_gradient_ihvp(
+            follower_loss,
+            leader_loss,
+            follower_params,
+            leader_params,
             num_iterations,
             lr=1.0,
         )
     elif variant == "neumann":  # TODO not yet implemented
-        ihvp = neumann(
-            f_loss,
-            l_loss,
-            tuple(f_params.values()),
-            tuple(l_params.values()),
+        ihvp = compute_neumann_ihvp(
+            follower_loss,
+            leader_loss,
+            follower_params,
+            leader_params,
             num_iterations,
             lr=1.0,
         )
     elif variant == "nystrom":
-        ihvp = nystrom(
-            f_loss,
-            l_loss,
-            tuple(f_params.values()),
-            tuple(l_params.values()),
+        ihvp = compute_nystrom_ihvp(
+            follower_loss,
+            leader_loss,
+            follower_params,
+            leader_params,
             rank,
             rho,
+            retain_graph=retain_graph,
+            generator=generator,
         )
 
-    for param in f_params.values():
-        param.grad.zero_()
-    for param in l_params.values():
-        param.grad.zero_()
+    # Zero the gradients of the parameters
+    _zero_grad(follower_params)
+    _zero_grad(leader_params)
 
-    return dict(zip(f_params.keys(), ihvp))
+    return ihvp
 
 
 def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
@@ -289,7 +410,9 @@ def logit_or_2(
     Compute the logit OR operation for two input tensors using the log-sum-exp trick.
 
     The logit OR operation is defined as:
+
         max_logit + log1p(exp(min_logit - max_logit))
+
     where max_logit is the element-wise maximum of the inputs,
     and min_logit is the element-wise minimum of the inputs.
 
@@ -558,3 +681,16 @@ def mean_for_unique_keys(
     keys_unique_mask = np.apply_along_axis(get_unique_mask, axis, key)
 
     return np.mean(data, axis=axis, where=keys_unique_mask)
+
+
+def _zero_grad(params: dict[str, Tensor | Parameter]):
+    """Zero the gradients of the parameters in a dictionary.
+
+    Parameters
+    ----------
+    params : dict[str, Tensor | Parameter]
+        The dictionary of parameters.
+    """
+    for param in params.values():
+        if param.grad is not None:
+            param.grad.zero_()

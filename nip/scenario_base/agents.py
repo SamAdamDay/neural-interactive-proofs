@@ -9,7 +9,7 @@ and output keys are specified in the module's `input_keys` and `output_keys` att
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Iterable, Callable, ClassVar, Literal
+from typing import Optional, Any, Iterable, Callable, ClassVar, Literal, Iterator
 from dataclasses import dataclass, fields, InitVar
 from functools import partial, cached_property
 import re
@@ -1543,6 +1543,31 @@ class Agent(ABC):
             )
 
         return model_param_dict
+
+    def filter_actor_named_parameters(
+        self, named_parameters: Iterable[tuple[str, TorchParameter]]
+    ) -> Iterator[tuple[str, TorchParameter]]:
+        """Filter the actor parameters from an iterable of named parameters.
+
+        This is useful for extracting the agent's actor parameters from an iterable of
+        named parameters obtained by calling `named_parameters()` on a loss module.
+
+        Parameters
+        ----------
+        named_parameters : Iterable[tuple[str, TorchParameter]]
+            The named parameters to filter.
+
+        Yields
+        ------
+        actor_named_parameter : tuple[str, TorchParameter]
+            A tuple of the name and the parameter of the agent's actor parameter.
+        """
+
+        for name, param in named_parameters:
+            if re.match(self._body_param_regex("actor"), name):
+                yield name, param
+            elif re.match(self._non_body_param_regex("actor"), name):
+                yield name, param
 
     def train(self):
         """Set the agent to training mode."""
