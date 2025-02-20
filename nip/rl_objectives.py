@@ -485,10 +485,22 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 
 
 class SpgLoss(ClipPPOLossImproved):
-    """Loss for Stackelberg Policy Gradient and variants, including LOLA and POLA.
+    """Loss for Stackelberg Policy Gradient :cite:p:`Huang2022` and several variants.
 
-    We return losses per agent, as well as the sum of the log probabilities, in order to
-    then compute the scores later on in the backward function.
+    In contrast to other objectives, the `forward` method returns the gains per agent
+    and the sum of the log probabilities separately. These must be combined later to
+    compute the true loss. This is because we need to compute the gradients of these
+    separately.
+
+    The following variants are supported:
+
+    - SPG: Standard Stackelberg Policy Gradient.
+    - PSPG: ...
+    - LOLA: The Learning with Opponent-Learning Awareness algorithm
+      :cite:p:`Foerster2018`.
+    - POLA: ...
+    - SOS: The Stable Opponent Shaping algorithm :cite:p:`Letcher2019`.
+    - PSOS: ...
     """
 
     def __init__(

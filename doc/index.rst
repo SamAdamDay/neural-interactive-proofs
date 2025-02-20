@@ -14,4 +14,4 @@ Neural Interactive Proofs documentation
    guides/index
    reference/index
    glossary
-   references
+   bibliography

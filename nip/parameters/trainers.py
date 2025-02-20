@@ -155,7 +155,7 @@ class VanillaPpoParameters(SubParameters):
 @register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
-    """Additional parameters for SPG and its variants.
+    """Additional parameters for SPG :cite:p:`Huang2022` and its variants.
 
     Parameters
     ----------
@@ -297,6 +297,8 @@ class TextRlParameters(SubParameters):
 class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 
+    See :cite:t:`Anthony2017` for more information on Expert Iteration.
+
     Parameters
     ----------
     rollout_selection_method : Literal["threshold", "weighted_sampling"]
@@ -336,7 +338,7 @@ class PureTextEiParameters(SubParameters):
 @register_parameter_class
 @dataclass
 class PureTextMaltParameters(SubParameters):
-    """Additional parameters for Multi-Agent LLM Training (MALT).
+    """Additional parameters for Multi-Agent LLM Training (MALT) :cite:p:`Motwani2024`.
 
     Parameters
     ----------

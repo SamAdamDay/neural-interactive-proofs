@@ -1,11 +1,11 @@
 """Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
 
-In the MALT protocol :cite:`Motwani24`, we sample multiple responses per timestep from
-the agents. This means that for each datapoint we have a tree of responses. For each
-agent `A`, at each decision point for `A` we look at the expected reward for `A` for
-each of the responses. We threshold this expected reward to get a binary classification
-label for each response. We select good-bad pairs of these, and train using Direct
-Preference Optimization :cite:`Rafailov23`.
+In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per timestep
+from the agents. This means that for each datapoint we have a tree of responses. For
+each agent `A`, at each decision point for `A` we look at the expected reward for `A`
+for each of the responses. We threshold this expected reward to get a binary
+classification label for each response. We select good-bad pairs of these, and train
+using Direct Preference Optimization :cite:`Rafailov2023`.
 """
 
 from typing import Optional, ClassVar, Any
@@ -33,6 +33,13 @@ from nip.utils.maths import mean_for_unique_keys
 @register_trainer("pure_text_malt")
 class PureTextMaltTrainer(PureTextRlTrainer):
     """Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
+
+    In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per
+    timestep from the agents. This means that for each datapoint we have a tree of
+    responses. For each agent `A`, at each decision point for `A` we look at the
+    expected reward for `A` for each of the responses. We threshold this expected reward
+    to get a binary classification label for each response. We select good-bad pairs of
+    these, and train using Direct Preference Optimization :cite:`Rafailov2023`.
 
     Parameters
     ----------
