@@ -8,6 +8,7 @@ import warnings
 
 import torch
 from torch import Tensor
+from torch.nn import Parameter
 
 from torchrl.objectives import (
     PPOLoss,
@@ -501,41 +502,41 @@ class SpgLoss(ClipPPOLossImproved):
     The following variants are supported:
 
     - SPG: Standard Stackelberg Policy Gradient.
-    - PSPG: ...
+    - PSPG: SPG with the clipped PPO loss.
     - LOLA: The Learning with Opponent-Learning Awareness algorithm
       :cite:p:`Foerster2018`.
-    - POLA: ...
+    - POLA: LOLA with the clipped PPO loss.
     - SOS: The Stable Opponent Shaping algorithm :cite:p:`Letcher2019`.
-    - PSOS: ...
+    - PSOS: SOS with the clipped PPO loss.
     """
 
     @property
-    def stackelberg_sequence_flat(self) -> Iterator[int]:
+    def stackelberg_sequence_flat(self) -> Iterator[str]:
         """A flattened version of the Stackelberg sequence.
 
         Yields
         ------
-        agent_id : int
-            The index of the agent in the Stackelberg sequence.
+        agent_name : str
+            The name of the agent in the Stackelberg sequence.
         """
 
         for group in self.stackelberg_sequence:
-            for agent_id in group:
-                yield agent_id
+            for agent_name in group:
+                yield agent_name
 
     def __init__(
         self,
         actor: TensorDictModule,
         critic: TensorDictModule,
         variant: SpgVariantType,
-        stackelberg_sequence: list[tuple[int]],
+        stackelberg_sequence: list[tuple[str, ...]],
         agent_names: list[str],
         agents: dict[str, Agent],
         ihvp_arguments: dict,
         additional_lola_term: bool,
         sos_scaling_factor: float,
         sos_threshold_factor: float,
-        agent_lr_factors: list[Optional[LrFactors | dict]],
+        agent_lr_factors: dict[str, Optional[LrFactors | dict]],
         lr: float,
         clip_epsilon: float,
         entropy_coef: float,
@@ -568,34 +569,24 @@ class SpgLoss(ClipPPOLossImproved):
         self.agents = agents
         self.device = device
 
-        self.num_agents = len(agent_names)
-        self.agent_indices = range(len(agent_names))
-
-        # Compute the index of the group of each agent
-        self.agent_group_indices = {
-            agent_id: stackelberg_sequence.index(group)
-            for group in stackelberg_sequence
-            for agent_id in group
-        }
-
         # Compute the groups immediately before and after each agent, and also the set
         # of all agents before or after each agent
         self.immediate_followers, self.all_followers = self._get_followers()
         self.immediate_leaders = {
-            agent_id: tuple(
-                follower_id
-                for follower_id in self.agent_indices
-                if agent_id in self.immediate_followers[follower_id]
+            agent_name: tuple(
+                follower
+                for follower in self.agent_names
+                if agent_name in self.immediate_followers[follower]
             )
-            for agent_id in self.agent_indices
+            for agent_name in self.agent_names
         }
         self.all_leaders = {
-            agent_id: tuple(
-                follower_id
-                for follower_id in self.agent_indices
-                if agent_id in self.all_followers[follower_id]
+            agent_name: tuple(
+                follower
+                for follower in self.agent_names
+                if agent_name in self.all_followers[follower]
             )
-            for agent_id in self.agent_indices
+            for agent_name in self.agent_names
         }
 
         # Get the actor parameters and names for each agent
@@ -635,21 +626,20 @@ class SpgLoss(ClipPPOLossImproved):
         # Use vanilla A2C losses for SPG and LOLA and SOS
         if self.variant == "spg" or self.variant == "lola" or self.variant == "sos":
             probs = log_prob.exp()
-            for agent_id in self.agent_indices:
-                gains[agent_id] = flatten_batch_dims(
+            for agent_id, agent_name in enumerate(self.agent_names):
+                gains[agent_name] = flatten_batch_dims(
                     (probs * advantage[..., agent_id].unsqueeze(dim=-1)), num_batch_dims
                 ).mean(dim=0)
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
         elif self.variant == "pspg" or self.variant == "pola" or self.variant == "psos":
-            gains = {}
-            for agent_id in self.agent_indices:
+            for agent_id, agent_name in enumerate(self.agent_names):
                 gain1 = log_weight.exp() * advantage[..., agent_id].unsqueeze(dim=-1)
                 log_weight_clip = log_weight.clamp(*self._clip_bounds)
                 gain2 = log_weight_clip.exp() * advantage[..., agent_id].unsqueeze(
                     dim=-1
                 )
-                gains[agent_id] = flatten_batch_dims(
+                gains[agent_name] = flatten_batch_dims(
                     torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
                 ).mean(dim=0)
 
@@ -659,7 +649,7 @@ class SpgLoss(ClipPPOLossImproved):
             # averaged across samples
 
         loss_objective_per_agent = torch.stack(
-            [-gains[agent_index] for agent_index in self.agent_indices], dim=-1
+            [-gains[agent_name] for agent_name in self.agent_names], dim=-1
         )
 
         # Return losses per agent and set of followers
@@ -692,12 +682,14 @@ class SpgLoss(ClipPPOLossImproved):
         scores = self._get_and_zero_all_grads()
 
         # Then compute objective gradients for all agents
-        objective_loss_grads: list[list[dict[str, Tensor]]] = []
-        for leader_id in self.agent_indices:
+        objective_loss_grads: dict[tuple[str, str], dict[str, Tensor]] = {}
+        for leader_id, leader_name in enumerate(self.agent_names):
             loss_vals.get(("agents", "loss_objective"))[..., leader_id].sum().backward(
                 retain_graph=True
             )
-            objective_loss_grads.append(self._get_and_zero_all_grads())
+            grads = self._get_and_zero_all_grads()
+            for follower_name, follower_grads in grads.items():
+                objective_loss_grads[leader_name, follower_name] = follower_grads
 
         # TODO This is not very memory-efficient but it does prevent the gradients of
         # the parameters getting messed up between calculating JVPs and assigning
@@ -717,41 +709,43 @@ class SpgLoss(ClipPPOLossImproved):
 
         total_derivatives = {}
 
-        for leader_id in reversed(list(self.stackelberg_sequence_flat)):
+        for leader_name in reversed(list(self.stackelberg_sequence_flat)):
 
-            simultaneous_grad.update(objective_loss_grads[leader_id][leader_id])
-            total_derivatives[leader_id] = objective_loss_grads[leader_id][leader_id]
-            param_names = list(total_derivatives[leader_id].keys())
+            simultaneous_grad.update(objective_loss_grads[leader_name, leader_name])
+            total_derivatives[leader_name] = objective_loss_grads[
+                leader_name, leader_name
+            ]
+            param_names = list(total_derivatives[leader_name].keys())
 
             for param_name in param_names:
                 H_0_xi[param_name] = 0.0
                 opponent_shaping[param_name] = 0.0
 
-            for follower_id in self.all_followers[leader_id]:
+            for follower_name in self.all_followers[leader_name]:
                 score_coefficient, pg_coefficient = self._compute_jacobian_terms(
-                    leader_id, follower_id, objective_loss_grads, scores
+                    leader_name, follower_name, objective_loss_grads, scores
                 )
 
                 # Compute (an approximation of) the true Stackelberg gradient using
                 # an inverse Hessian vector product
                 if self.variant == "spg" or self.variant == "pspg":
-                    multiplier = ihvps[leader_id][follower_id]
+                    multiplier = ihvps[leader_name, follower_name]
                 # If using other algorithms we effectively assume that the inverse
                 # Hessian is the identity matrix
                 else:
-                    multiplier = objective_loss_grads[leader_id][follower_id]
+                    multiplier = objective_loss_grads[leader_name, follower_name]
 
-                chi_score_term = dict_dot_product(multiplier, scores[follower_id])
+                chi_score_term = dict_dot_product(multiplier, scores[follower_name])
                 chi_pg_term = dict_dot_product(
-                    multiplier, objective_loss_grads[follower_id][follower_id]
+                    multiplier, objective_loss_grads[follower_name, follower_name]
                 )
 
                 H_0_xi_pg_term = dict_dot_product(
-                    scores[follower_id], total_derivatives[follower_id]
+                    scores[follower_name], total_derivatives[follower_name]
                 )
                 H_0_xi_score_term = dict_dot_product(
-                    objective_loss_grads[leader_id][follower_id],
-                    total_derivatives[follower_id],
+                    objective_loss_grads[leader_name, follower_name],
+                    total_derivatives[follower_name],
                 )
 
                 for param_name in param_names:
@@ -764,7 +758,7 @@ class SpgLoss(ClipPPOLossImproved):
                     # learning rate of the follower agent
                     else:
                         lr_coefficient = (
-                            self.agent_lr_factors[follower_id].actor * self.lr
+                            self.agent_lr_factors[follower_name].actor * self.lr
                         )
                         if (
                             self.additional_lola_term
@@ -773,8 +767,10 @@ class SpgLoss(ClipPPOLossImproved):
                         ):
                             H_0_xi_term = (
                                 H_0_xi_pg_term
-                                * objective_loss_grads[leader_id][leader_id][param_name]
-                            ) + (H_0_xi_score_term * scores[leader_id][param_name])
+                                * objective_loss_grads[leader_name, leader_name][
+                                    param_name
+                                ]
+                            ) + (H_0_xi_score_term * scores[leader_name][param_name])
 
                     chi_term = (chi_score_term * score_coefficient[param_name]) + (
                         chi_pg_term * pg_coefficient[param_name]
@@ -783,7 +779,7 @@ class SpgLoss(ClipPPOLossImproved):
                     opponent_shaping[param_name] += lr_coefficient * chi_term
                     H_0_xi[param_name] += lr_coefficient * H_0_xi_term
 
-                    total_derivatives[leader_id][param_name] -= lr_coefficient * (
+                    total_derivatives[leader_name][param_name] -= lr_coefficient * (
                         chi_term + H_0_xi_term
                     )
 
@@ -800,14 +796,16 @@ class SpgLoss(ClipPPOLossImproved):
             for total_derivative in total_derivatives:
                 update.update(total_derivatives[total_derivative])
 
-        for actor_params in self.actor_params:
+        for actor_params in self.actor_params.values():
             for param_name, param in actor_params.items():
                 param.grad = update[param_name]
 
         additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
         additional_loss.backward()
 
-    def _get_followers(self) -> tuple[dict[int, tuple[int]], dict[int, tuple[int]]]:
+    def _get_followers(
+        self,
+    ) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
         """Get dictionaries of the followers of each agent.
 
         For each agent in the Stackelberg sequence, we get the agents in the group
@@ -816,91 +814,92 @@ class SpgLoss(ClipPPOLossImproved):
 
         Returns
         -------
-        immediate_followers : dict[int, tuple[int]
-            A dictionary where the keys are agent indices and the values are tuples of
-            agent indices for the immediate followers of each agent.
-        descendent_followers : dict[int, tuple[int]
-            A dictionary where the keys are agent indices and the values are tuples of
-            agent indices for all the followers of each agent (i.e. the immediate
+        immediate_followers : dict[str, tuple[str, ...]]
+            A dictionary where the keys are agent names and the values are tuples of
+            agent names for the immediate followers of each agent.
+        descendent_followers : dict[str, tuple[str, ...]]
+            A dictionary where the keys are agent names and the values are tuples of
+            agent names for all the followers of each agent (i.e. the immediate
             followers, as well as all the followers of the immediate followers, and so
             on).
         """
 
-        immediate_followers: dict[int, tuple[int]] = {}
-        descendent_followers: dict[int, tuple[int]] = {}
+        immediate_followers: dict[str, tuple[str, ...]] = {}
+        descendent_followers: dict[str, tuple[str, ...]] = {}
 
         for group_id in range(len(self.stackelberg_sequence)):
             if group_id != len(self.stackelberg_sequence) - 1:
 
                 # Flatten the remaining groups
-                remaining_agent_ids = []
+                remaining_agent_names = []
                 for subsequent_group_id in range(
                     group_id + 1, len(self.stackelberg_sequence)
                 ):
-                    remaining_agent_ids += self.stackelberg_sequence[
+                    remaining_agent_names += self.stackelberg_sequence[
                         subsequent_group_id
                     ]
-                remaining_agent_ids = tuple(remaining_agent_ids)
+                remaining_agent_names = tuple(remaining_agent_names)
 
-                for follower_id in self.stackelberg_sequence[group_id]:
-                    immediate_followers[follower_id] = self.stackelberg_sequence[
+                for follower in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower] = self.stackelberg_sequence[
                         group_id + 1
                     ]
-                    descendent_followers[follower_id] = remaining_agent_ids
+                    descendent_followers[follower] = remaining_agent_names
 
             else:
-                for follower_id in self.stackelberg_sequence[group_id]:
-                    immediate_followers[follower_id] = ()
-                    descendent_followers[follower_id] = ()
+                for follower in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower] = ()
+                    descendent_followers[follower] = ()
 
         return immediate_followers, descendent_followers
 
-    def _get_actor_params(self) -> list[dict[str, Tensor]]:
+    def _get_actor_params(self) -> dict[str, dict[str, Parameter]]:
         """Get the parameters for each agent as dictionaries with the parameter names.
 
         Returns
         -------
-        actor_params : list[dict[str, Tensor]]
-            A list of dictionaries for each agent where the keys are the parameter names
-            and the values are the parameters.
+        actor_params : dict[str, dict[str, Parameter]]
+            A dictionary whose keys are the agent names and whose values are
+            dictionaries where the keys are the parameter names and the values are the
+            parameters.
         """
 
-        actor_params = []
+        actor_params: dict[str, dict[str, Parameter]] = {}
         for agent_name in self.agent_names:
             filtered_params = self.agents[agent_name].filter_actor_named_parameters(
                 self.named_parameters()
             )
-            actor_params.append({name: param for name, param in filtered_params})
+            actor_params[agent_name] = {name: param for name, param in filtered_params}
 
         return actor_params
 
     @torch.no_grad()
-    def _get_and_zero_all_grads(self) -> list[dict[str, Tensor]]:
+    def _get_and_zero_all_grads(self) -> dict[str, dict[str, Tensor]]:
         """Get and zero the gradients for the parameters of all the agents.
 
         Returns
         -------
-        grads : list[dict[str, Tensor]]
-            A list of dictionaries containing the gradients for each actor and each
-            parameter.
+        grads : dict[str, dict[str, Tensor]]
+            A dictionary where the keys are agent names and the values are dictionaries
+            where the keys are the parameter names and the values are the gradients.
         """
 
-        grads = []
-        for actor_params in self.actor_params:
+        grads: dict[str, dict[str, Parameter]] = {}
+        for agent_name, actor_params in self.actor_params.items():
             actor_grads = {}
             for param_name, param in actor_params.items():
                 actor_grads[param_name] = param.grad
                 param.grad = torch.zeros_like(param)
-            grads.append(actor_grads)
+            grads[agent_name] = actor_grads
 
         return grads
 
     def _compute_jacobian_terms(
         self,
-        leader_id: int,
-        follower_id: int,
-        objective_loss_grads: list[list[dict[str, Tensor]]],
-        scores: list[dict[str, Tensor]],
+        leader_name: str,
+        follower_name: str,
+        objective_loss_grads: dict[tuple[str, str], dict[str, Tensor]],
+        scores: dict[str, dict[str, Tensor]],
     ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         r"""Compute the score and policy gradient coefficients for the Jacobian terms.
 
@@ -939,16 +938,16 @@ class SpgLoss(ClipPPOLossImproved):
 
         Parameters
         ----------
-        leader_id : int
-            The index of the leader agent, which comes before the follower agent in the
+        leader_name : str
+            The name of the leader agent, which comes before the follower agent in the
             stackelberg_sequence.
-        follower_id : int
-            The index of the follower agent.
-        objective_loss_grads : list[list[dict[str, Tensor]]]
+        follower_name : str
+            The name of the follower agent.
+        objective_loss_grads : dict[tuple[str, str], dict[str, Tensor]]
             The gradients of the objective loss for each agent with respect to each
             agent's parameters. The first index is the agent whose loss it is, and the
             second index is the agent whose parameters it is with respect to.
-        scores : list[dict[str, Tensor]]
+        scores : dict[str, dict[str, Tensor]]
             The scores for each agent.
 
         Returns
@@ -965,9 +964,9 @@ class SpgLoss(ClipPPOLossImproved):
         # coefficient is the gradient of the follower's loss with respect to the
         # leader's parameters, and the policy gradient coefficient is the score of the
         # leader.
-        if follower_id in self.immediate_followers[leader_id]:
-            score_coefficient = objective_loss_grads[follower_id][leader_id]
-            pg_coefficient = scores[leader_id]
+        if follower_name in self.immediate_followers[leader_name]:
+            score_coefficient = objective_loss_grads[follower_name, leader_name]
+            pg_coefficient = scores[leader_name]
 
             return score_coefficient, pg_coefficient
 
@@ -975,24 +974,29 @@ class SpgLoss(ClipPPOLossImproved):
             score_coefficient = {}
             pg_coefficient = {}
 
-            for immediate_leader_id in self.immediate_leaders[follower_id]:
+            for immediate_leader_name in self.immediate_leaders[follower_name]:
 
                 # Recursively compute the Jacobian terms for leader and immediate leader
                 # of the follower
                 leader_score_coefficient, leader_pg_coefficient = (
-                    self._compute_jacobian_terms(leader_id, immediate_leader_id)
+                    self._compute_jacobian_terms(
+                        leader_name,
+                        immediate_leader_name,
+                        objective_loss_grads,
+                        scores,
+                    )
                 )
 
                 param_names = list(leader_score_coefficient.keys())
 
                 # Compute the contribution to the score function coefficient
                 score_coefficient_score = dict_dot_product(
-                    objective_loss_grads[follower_id][immediate_leader_id],
-                    scores[immediate_leader_id],
+                    objective_loss_grads[follower_name, immediate_leader_name],
+                    scores[immediate_leader_name],
                 )
                 score_coefficient_pg = dict_dot_product(
-                    objective_loss_grads[follower_id][immediate_leader_id],
-                    objective_loss_grads[immediate_leader_id][immediate_leader_id],
+                    objective_loss_grads[follower_name, immediate_leader_name],
+                    objective_loss_grads[immediate_leader_name, immediate_leader_name],
                 )
                 for param_name in param_names:
                     to_add = (
@@ -1003,11 +1007,11 @@ class SpgLoss(ClipPPOLossImproved):
 
                 # Policy gradient coefficient
                 pg_coefficient_score = dict_dot_product(
-                    scores[immediate_leader_id], scores[immediate_leader_id]
+                    scores[immediate_leader_name], scores[immediate_leader_name]
                 )
                 pg_coefficient_pg = dict_dot_product(
-                    scores[immediate_leader_id],
-                    objective_loss_grads[immediate_leader_id][immediate_leader_id],
+                    scores[immediate_leader_name],
+                    objective_loss_grads[immediate_leader_name, immediate_leader_name],
                 )
                 for param_name in param_names:
                     to_add = pg_coefficient_score * leader_score_coefficient[param_name]
@@ -1018,7 +1022,7 @@ class SpgLoss(ClipPPOLossImproved):
 
     def _compute_ihvps(
         self, loss_vals: TensorDictBase
-    ) -> list[dict[int, dict[str, Tensor]]]:
+    ) -> dict[tuple[str, str], dict[str, Tensor]]:
         """Compute the inverse Hessian vector products for each agent and follower.
 
         This is the inverse Hessian of the follower's loss with respect to the
@@ -1032,31 +1036,30 @@ class SpgLoss(ClipPPOLossImproved):
 
         Returns
         -------
-        ihvps : list[dict[int, dict[str, Tensor]]]
-            A list with for each agent a dictionary of the inverse Hessian vector
-            products for each follower.
+        ihvps : dict[tuple[str, str], dict[str, Tensor]]
+            A dictionary where the keys are the agent and follower names, and the values
+            are dictionaries of the inverse Hessian vector products for each of the
+            follower's parameters.
         """
 
         loss_objective = loss_vals.get(("agents", "loss_objective"))
 
-        ihvps = []
-        for agent_id in range(self.num_agents):
-            if len(self.all_followers[agent_id]) == 0:
-                ihvps.append([])
+        ihvps = {}
+        for agent_id, agent_name in enumerate(self.agent_names):
+            if len(self.all_followers[agent_name]) == 0:
                 continue
-            ihvps_agent = {}
-            for follower_id in self.all_followers[agent_id]:
-                ihvps_agent[follower_id] = inverse_hessian_vector_product(
+            for follower_name in self.all_followers[agent_name]:
+                follower_id = self.agent_names.index(follower_name)
+                ihvps[(agent_name, follower_name)] = inverse_hessian_vector_product(
                     follower_loss=loss_objective[..., follower_id, follower_id],
                     leader_loss=loss_objective[..., agent_id, agent_id],
-                    follower_params=self.actor_params[follower_id],
-                    leader_params=self.actor_params[agent_id],
+                    follower_params=self.actor_params[follower_name],
+                    leader_params=self.actor_params[agent_name],
                     variant=self.ihvp_arguments["variant"],
                     num_iterations=self.ihvp_arguments["num_iterations"],
                     rank=self.ihvp_arguments["rank"],
                     rho=self.ihvp_arguments["rho"],
                 )
-            ihvps.append(ihvps_agent)
 
         return ihvps
 

@@ -34,15 +34,11 @@ class SpgTrainer(ReinforcementLearningTrainer):
         """
 
         # Construct the loss module
-        stackelberg_sequence_int = [
-            tuple(self.agent_names.index(name) for name in group)
-            for group in self.protocol_handler.stackelberg_sequence
-        ]
         loss_module = SpgLoss(
             actor=self.policy_operator,
             critic=self.value_operator,
             variant=self.hyper_params.spg.variant,
-            stackelberg_sequence=stackelberg_sequence_int,
+            stackelberg_sequence=self.protocol_handler.stackelberg_sequence,
             agent_names=self.agent_names,
             agents=self.scenario_instance.agents,
             ihvp_arguments={
@@ -54,10 +50,10 @@ class SpgTrainer(ReinforcementLearningTrainer):
             additional_lola_term=self.hyper_params.spg.additional_lola_term,
             sos_scaling_factor=self.hyper_params.spg.sos_a_param,
             sos_threshold_factor=self.hyper_params.spg.sos_b_param,
-            agent_lr_factors=[
-                self.hyper_params.agents[name].agent_lr_factor
+            agent_lr_factors={
+                name: self.hyper_params.agents[name].agent_lr_factor
                 for name in self.protocol_handler.agent_names
-            ],
+            },
             lr=self.hyper_params.rl.lr,
             clip_epsilon=self.hyper_params.ppo.clip_epsilon,
             entropy_coef=self.hyper_params.ppo.entropy_eps,

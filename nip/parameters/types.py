@@ -19,15 +19,15 @@ Possible Values
 spg
     Stackelberg Policy Gradient  :cite:p:`Huang2022`.
 pspg
-    ...
+    SPG with clipped PPO loss.
 lola
     Learning with Opponent-Learning Awareness :cite:p:`Foerster2018`.
 pola
-    ...
+    LOLA with clipped PPO loss.
 sos
     Stable Opponent Shaping :cite:p:`Letcher2019`.
 psos
-    ...
+    SOS with clipped PPO loss.
 """
 
 
