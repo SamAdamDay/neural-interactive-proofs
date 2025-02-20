@@ -705,27 +705,30 @@ class SpgLoss(ClipPPOLossImproved):
         # A mapping from parameter names to tensors.
         opponent_shaping: dict[str, Tensor] = {}
 
-        # TODO (Sam): Rename this to something more descriptive
-        H_0_xi: dict[str, Tensor] = {}
+        # The product of the anti-diagonal of the Hessian matrix with the vector $\xi$. A mapping from parameter names to tensors.
+        hessian_grad_product: dict[str, Tensor] = {}
 
-        # TODO (Sam): Explain what this is
+        # The total derivatives (i.e., taking into account that we differentiate a multi-variable expression in which some variables are functions of others) for each parameter for each agent. A mapping from agent names to mappings from parameter names to tensors.
         total_derivatives: dict[str, dict[str, Tensor]] = {}
 
-        # TODO (Sam): Explain a bit more what's happening here, adding some comments and
-        # maybe putting this inside a method with a nice docstring
+        # The total derivatives are a combination of an opponent shaping term and a Hessian gradient product term. These terms are computed separately for each agent, then combined. We proceed in reverse order through the agents in the Stackelberg sequence, the idea being that the followers' gradients are computed first and then used to compute the leaders' gradients.
         for leader_name in reversed(list(self.stackelberg_sequence_flat)):
 
+            # We begin by computing the gradients of the agent's loss with respect to its own parameters
             simultaneous_grad.update(objective_loss_grads[leader_name, leader_name])
             total_derivatives[leader_name] = objective_loss_grads[
                 leader_name, leader_name
             ]
             param_names = list(total_derivatives[leader_name].keys())
 
+            # Initialise the opponent shaping and Hessian gradient product dictionaries
             for param_name in param_names:
-                H_0_xi[param_name] = 0.0
+                hessian_grad_product[param_name] = 0.0
                 opponent_shaping[param_name] = 0.0
 
             for follower_name in self.all_followers[leader_name]:
+
+                # Compute the coefficients for the score and policy gradient terms in the Jacobian
                 score_coefficient, pg_coefficient = self._compute_jacobian_terms(
                     leader_name, follower_name, objective_loss_grads, scores
                 )
@@ -739,24 +742,27 @@ class SpgLoss(ClipPPOLossImproved):
                 else:
                     multiplier = objective_loss_grads[leader_name, follower_name]
 
-                chi_score_term = dict_dot_product(multiplier, scores[follower_name])
-                chi_pg_term = dict_dot_product(
+                # We compute the opponent shaping terms by keeping the score term and the policy gradient terms separate and multiplying by their respective coefficients to avoid computing full Jacobian matrices
+                opponent_shaping_score_term = dict_dot_product(multiplier, scores[follower_name])
+                opponent_shaping_pg_term = dict_dot_product(
                     multiplier, objective_loss_grads[follower_name, follower_name]
                 )
 
-                H_0_xi_pg_term = dict_dot_product(
+                # We compute the Hessian gradient product terms by keeping the score term and the policy gradient terms separate and multiplying by their respective coefficients to avoid computing full Jacobian matrices
+                hessian_grad_product_pg_term = dict_dot_product(
                     scores[follower_name], total_derivatives[follower_name]
                 )
-                H_0_xi_score_term = dict_dot_product(
+                hessian_grad_product_score_term = dict_dot_product(
                     objective_loss_grads[leader_name, follower_name],
                     total_derivatives[follower_name],
                 )
 
+                # We then iterate over parameters, as each requires different coefficients (as calculated above)
                 for param_name in param_names:
 
                     if self.variant == "spg" or self.variant == "pspg":
                         lr_coefficient = 1.0
-                        H_0_xi_term = 0.0
+                        hessian_grad_product_term = 0.0 # TODO (Lewis) Sanity check this
 
                     # For LOLA and POLA we need to multiply the gradients by the
                     # learning rate of the follower agent
@@ -769,28 +775,33 @@ class SpgLoss(ClipPPOLossImproved):
                             or self.variant == "sos"
                             or self.variant == "psos"
                         ):
-                            H_0_xi_term = (
-                                H_0_xi_pg_term
+                            # Compute the complete Hessian gradient product term
+                            hessian_grad_product_term = (
+                                hessian_grad_product_pg_term
                                 * objective_loss_grads[leader_name, leader_name][
                                     param_name
                                 ]
-                            ) + (H_0_xi_score_term * scores[leader_name][param_name])
+                            ) + (hessian_grad_product_score_term * scores[leader_name][param_name])
 
-                    chi_term = (chi_score_term * score_coefficient[param_name]) + (
-                        chi_pg_term * pg_coefficient[param_name]
+                    # Compute the complete opponent shaping term
+                    opponent_shaping_term = (opponent_shaping_score_term * score_coefficient[param_name]) + (
+                        opponent_shaping_pg_term * pg_coefficient[param_name]
                     )
 
-                    opponent_shaping[param_name] += lr_coefficient * chi_term
-                    H_0_xi[param_name] += lr_coefficient * H_0_xi_term
+                    # We save the overall opponent shaping and Hessian gradient product terms in case we are using SOS or PSOS and need to compute the update using these terms
+                    opponent_shaping[param_name] += lr_coefficient * opponent_shaping_term
+                    hessian_grad_product[param_name] += lr_coefficient * hessian_grad_product_term
 
+                    # Finally, we store the total derivative for the agent for this parameter
                     total_derivatives[leader_name][param_name] -= lr_coefficient * (
-                        chi_term + H_0_xi_term
+                        opponent_shaping_term + hessian_grad_product_term
                     )
 
+        # Create the gradient update
         if self.variant == "sos" or self.variant == "psos":
             update = compute_sos_update(
                 simultaneous_grad,
-                H_0_xi,
+                hessian_grad_product,
                 opponent_shaping,
                 self.sos_scaling_factor,
                 self.sos_threshold_factor,
@@ -799,11 +810,13 @@ class SpgLoss(ClipPPOLossImproved):
             update = {}
             for total_derivative in total_derivatives:
                 update.update(total_derivatives[total_derivative])
-
+        
+        # Apply the update to the parameters
         for actor_params in self.actor_params.values():
             for param_name, param in actor_params.items():
                 param.grad = update[param_name]
 
+        # Add the additional critic and entropy losses, then backpropagate
         additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
         additional_loss.backward()
 
