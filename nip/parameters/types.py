@@ -17,7 +17,7 @@ SpgVariantType: TypeAlias = Literal["spg", "pspg", "lola", "pola", "sos", "psos"
 Possible Values
 ---------------
 spg
-    Stackelberg Policy Gradient  :cite:p:`Huang2022`.
+    Stackelberg Policy Gradient  :cite:p:`Fiez2020`.
 pspg
     SPG with clipped PPO loss.
 lola
@@ -60,7 +60,7 @@ vanilla_ppo
 solo_agent
     A trainer that trains a single agent to solve the task using supervised learning.
 spg
-    Stackelberg Policy Gradient :cite:p:`Huang2022` and its variants.
+    Stackelberg Policy Gradient :cite:p:`Fiez2020` and its variants.
 reinforce
     The REINFORCE algorithm.
 pure_text_ei

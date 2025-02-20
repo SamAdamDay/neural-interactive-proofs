@@ -492,7 +492,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 
 
 class SpgLoss(ClipPPOLossImproved):
-    """Loss for Stackelberg Policy Gradient :cite:p:`Huang2022` and several variants.
+    """Loss for Stackelberg Policy Gradient :cite:p:`Fiez2020` and several variants.
 
     In contrast to other objectives, the `forward` method returns the gains per agent
     and the sum of the log probabilities separately. These must be combined later to

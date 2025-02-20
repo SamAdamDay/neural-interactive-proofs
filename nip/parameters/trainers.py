@@ -155,7 +155,7 @@ class VanillaPpoParameters(SubParameters):
 @register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
-    """Additional parameters for SPG :cite:p:`Huang2022` and its variants.
+    """Additional parameters for SPG :cite:p:`Fiez2020` and its variants.
 
     Parameters
     ----------
