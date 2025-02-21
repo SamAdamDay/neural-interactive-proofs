@@ -141,7 +141,7 @@ def compute_sos_update(
         p_1 = 1.0
     else:
         p_1 = min(1.0, -scaling_factor * dict_dot_product(xi_0, xi_0) / denom)
-    
+
     # After that, we ensure local convergence by scaling up if the magnitude of the simultaneous gradient is small
     xi_norm_squared = dict_dot_product(simultaneous_grad, simultaneous_grad)
     if xi_norm_squared < threshold_factor * threshold_factor:
