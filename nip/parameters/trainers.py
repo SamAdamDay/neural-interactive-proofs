@@ -155,7 +155,7 @@ class VanillaPpoParameters(SubParameters):
 @register_parameter_class
 @dataclass
 class SpgParameters(SubParameters):
-    """Additional parameters for SPG :cite:p:`Huang2022` and its variants.
+    """Additional parameters for SPG :cite:p:`Fiez2020` and its variants.
 
     Parameters
     ----------
@@ -167,10 +167,10 @@ class SpgParameters(SubParameters):
         automatically based on the protocol.
     additional_lola_term : bool
         Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
-    sos_a_param: float
-        The `a` parameter for the SOS loss.
-    sos_b_param: float
-        The `b` parameter for the SOS loss.
+    sos_scaling_factor: float
+        The SOS scaling factor (between 0 and 1), used with Stable Opponent Shaping.
+    sos_threshold_factor: float
+        The SOS threshold factor (between 0 and 1), used with Stable Opponent Shaping.
     ihvp_variant : IhvpVariantType
         The variant of IHVP to use.
     ihvp_num_iterations : int
@@ -184,8 +184,8 @@ class SpgParameters(SubParameters):
     variant: SpgVariantType = "psos"
     stackelberg_sequence: Optional[tuple[tuple[str, ...]]] = None
     additional_lola_term: bool = True
-    sos_a_param: float = 0.5
-    sos_b_param: float = 0.1
+    sos_scaling_factor: float = 0.5
+    sos_threshold_factor: float = 0.1
 
     # IHVP
     ihvp_variant: IhvpVariantType = "nystrom"

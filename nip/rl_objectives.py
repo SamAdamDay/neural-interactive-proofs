@@ -1,13 +1,14 @@
 """Implementations of RL objectives, extending those of TorchRL."""
 
 from dataclasses import dataclass, make_dataclass, field, fields
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Iterator
 import contextlib
 from abc import ABC, abstractmethod
 import warnings
 
 import torch
 from torch import Tensor
+from torch.nn import Parameter
 
 from torchrl.objectives import (
     PPOLoss,
@@ -22,10 +23,16 @@ from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 
 from nip.parameters import SpgVariantType, LrFactors
-from nip.utils.maths import dot_td, ihvp, compute_sos_update
+from nip.scenario_base.agents import Agent
+from nip.utils.maths import (
+    dict_dot_product,
+    inverse_hessian_vector_product,
+    compute_sos_update,
+)
 from nip.utils.torch import flatten_batch_dims
 from nip.utils.distributions import CompositeCategoricalDistribution
 from nip.utils.tensordict import get_key_batch_size
+from nip.utils.data import dict_update_add
 
 
 class Objective(LossModule, ABC):
@@ -485,7 +492,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 
 
 class SpgLoss(ClipPPOLossImproved):
-    """Loss for Stackelberg Policy Gradient :cite:p:`Huang2022` and several variants.
+    """Loss for Stackelberg Policy Gradient and several variants.
 
     In contrast to other objectives, the `forward` method returns the gains per agent
     and the sum of the log probabilities separately. These must be combined later to
@@ -494,33 +501,49 @@ class SpgLoss(ClipPPOLossImproved):
 
     The following variants are supported:
 
-    - SPG: Standard Stackelberg Policy Gradient.
-    - PSPG: ...
+    - SPG: Standard Stackelberg Policy Gradient :cite:p:`Fiez2020`.
+    - PSPG: SPG with the clipped PPO loss.
     - LOLA: The Learning with Opponent-Learning Awareness algorithm
       :cite:p:`Foerster2018`.
-    - POLA: ...
+    - POLA: LOLA with the clipped PPO loss.
     - SOS: The Stable Opponent Shaping algorithm :cite:p:`Letcher2019`.
-    - PSOS: ...
+    - PSOS: SOS with the clipped PPO loss.
     """
+
+    @property
+    def stackelberg_sequence_flat(self) -> Iterator[str]:
+        """A flattened version of the Stackelberg sequence.
+
+        Yields
+        ------
+        agent_name : str
+            The name of the agent in the Stackelberg sequence.
+        """
+
+        for group in self.stackelberg_sequence:
+            for agent_name in group:
+                yield agent_name
 
     def __init__(
         self,
-        actor,
-        critic,
+        actor: TensorDictModule,
+        critic: TensorDictModule,
         variant: SpgVariantType,
-        stackelberg_sequence: tuple[tuple[int]],
-        names: list[str],
-        ihvp: dict,
+        stackelberg_sequence: list[tuple[str, ...]],
+        agent_names: list[str],
+        agents: dict[str, Agent],
+        ihvp_arguments: dict,
         additional_lola_term: bool,
-        sos_a_param: float,
-        sos_b_param: float,
-        agent_lr_factors: list[Optional[LrFactors | dict]],
+        sos_scaling_factor: float,
+        sos_threshold_factor: float,
+        agent_lr_factors: dict[str, Optional[LrFactors | dict]],
         lr: float,
-        clip_epsilon,
-        entropy_coef,
-        normalize_advantage,
-        loss_critic_type,
-        clip_value,
+        clip_epsilon: float,
+        entropy_coef: float,
+        normalize_advantage: bool,
+        loss_critic_type: str,
+        clip_value: bool | float | None,
+        device: torch.device,
         functional: bool = True,
     ):
 
@@ -536,109 +559,42 @@ class SpgLoss(ClipPPOLossImproved):
         )
         self.variant = variant
         self.stackelberg_sequence = stackelberg_sequence
-        self.agent_indices = range(len(names))
-        self.agent_groups = {
-            i: stackelberg_sequence.index(g) for g in stackelberg_sequence for i in g
-        }
-        self.followers, self.all_followers = self.get_followers()
-        self.leaders = {
-            i: tuple(j for j in self.agent_indices if i in self.followers[j])
-            for i in self.agent_indices
-        }
-        self.all_leaders = {
-            i: tuple(j for j in self.agent_indices if i in self.all_followers[j])
-            for i in self.agent_indices
-        }
-        self.ihvp = ihvp
+        self.ihvp_arguments = ihvp_arguments
         self.additional_lola_term = additional_lola_term
-        self.sos_a_param = sos_a_param
-        self.sos_b_param = sos_b_param
+        self.sos_scaling_factor = sos_scaling_factor
+        self.sos_threshold_factor = sos_threshold_factor
         self.agent_lr_factors = agent_lr_factors
         self.lr = lr
-        self.names = names
+        self.agent_names = agent_names
+        self.agents = agents
+        self.device = device
 
-        try:
-            self.device = next(self.parameters()).device
-        except AttributeError:
-            self.device = torch.device("cpu")
+        # Compute the groups immediately before and after each agent, and also the set
+        # of all agents before or after each agent
+        self.immediate_followers, self.all_followers = self._get_followers()
+        self.immediate_leaders = {
+            agent_name: tuple(
+                follower
+                for follower in self.agent_names
+                if agent_name in self.immediate_followers[follower]
+            )
+            for agent_name in self.agent_names
+        }
+        self.all_leaders = {
+            agent_name: tuple(
+                follower
+                for follower in self.agent_names
+                if agent_name in self.all_followers[follower]
+            )
+            for agent_name in self.agent_names
+        }
+
+        # Get the actor parameters and names for each agent
+        self.actor_params = self._get_actor_params()
 
         self.register_buffer(
             "clip_epsilon", torch.tensor(clip_epsilon, device=self.device)
         )
-
-    def get_followers(self) -> tuple[dict[int, tuple[int]], dict[int, tuple[int]]]:
-        """Get dictionaries of the followers of each agent.
-
-        For each agent in the Stackelberg sequence, we get the agents in the group
-        immediately following them, as well as all the agents in the groups following
-        them. This is returned as two dictionaries.
-
-        Returns
-        -------
-        immediate_followers : dict[int, tuple[int]
-            A dictionary where the keys are agent indices and the values are tuples of
-            agent indices for the immediate followers of each agent.
-        descendent_followers : dict[int, tuple[int]
-            A dictionary where the keys are agent indices and the values are tuples of
-            agent indices for all the followers of each agent (i.e. the immediate
-            followers, as well as all the followers of the immediate followers, and so
-            on).
-        """
-
-        immediate_followers: dict[int, tuple[int]] = {}
-        descendent_followers: dict[int, tuple[int]] = {}
-
-        for group_id in range(len(self.stackelberg_sequence)):
-            if group_id != len(self.stackelberg_sequence) - 1:
-
-                # Flatten the remaining groups
-                remaining_agent_ids = []
-                for subsequent_group_id in range(
-                    group_id + 1, len(self.stackelberg_sequence)
-                ):
-                    remaining_agent_ids += self.stackelberg_sequence[
-                        subsequent_group_id
-                    ]
-                remaining_agent_ids = tuple(remaining_agent_ids)
-
-                for follower_id in self.stackelberg_sequence[group_id]:
-                    immediate_followers[follower_id] = self.stackelberg_sequence[
-                        group_id + 1
-                    ]
-                    descendent_followers[follower_id] = remaining_agent_ids
-
-            else:
-                for follower_id in self.stackelberg_sequence[group_id]:
-                    immediate_followers[follower_id] = ()
-                    descendent_followers[follower_id] = ()
-
-        return immediate_followers, descendent_followers
-
-    def get_actor_params(
-        self, grads=False
-    ):  # This probably isn't the most memory efficient way to do things
-        """Return a dictionary containing the split gradients for each agent.
-
-        Returns
-        -------
-        actor_params : dict
-            A dictionary where the keys are agent indices and the values are
-            dictionaries containing the parameters or the gradients thereof for each
-            agent.
-        """
-        actor_params = {i: {} for i in self.agent_indices}
-        for i in self.agent_indices:
-            for param_name, param in self.named_parameters():
-                if self.names[i] in param_name and "actor" in param_name:
-                    if grads:
-                        actor_params[i][
-                            param_name
-                        ] = param.grad.clone()  # Gradients are cloned
-                        param.grad.zero_()  # Zero the gradient after it's been recorded
-                    else:
-                        actor_params[i][param_name] = param  # Parameters are not cloned
-
-        return actor_params
 
     # Define the (variants of the) SPG loss @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -670,19 +626,20 @@ class SpgLoss(ClipPPOLossImproved):
         # Use vanilla A2C losses for SPG and LOLA and SOS
         if self.variant == "spg" or self.variant == "lola" or self.variant == "sos":
             probs = log_prob.exp()
-            for i in self.agent_indices:
-                gains[i] = flatten_batch_dims(
-                    (probs * advantage[..., i].unsqueeze(dim=-1)), num_batch_dims
+            for agent_id, agent_name in enumerate(self.agent_names):
+                gains[agent_name] = flatten_batch_dims(
+                    (probs * advantage[..., agent_id].unsqueeze(dim=-1)), num_batch_dims
                 ).mean(dim=0)
 
         # Otherwise use the clipped PPO loss for PSPG and POLA and PSOS
         elif self.variant == "pspg" or self.variant == "pola" or self.variant == "psos":
-            gains = {}
-            for i in self.agent_indices:
-                gain1 = log_weight.exp() * advantage[..., i].unsqueeze(dim=-1)
+            for agent_id, agent_name in enumerate(self.agent_names):
+                gain1 = log_weight.exp() * advantage[..., agent_id].unsqueeze(dim=-1)
                 log_weight_clip = log_weight.clamp(*self._clip_bounds)
-                gain2 = log_weight_clip.exp() * advantage[..., i].unsqueeze(dim=-1)
-                gains[i] = flatten_batch_dims(
+                gain2 = log_weight_clip.exp() * advantage[..., agent_id].unsqueeze(
+                    dim=-1
+                )
+                gains[agent_name] = flatten_batch_dims(
                     torch.stack([gain1, gain2], -1).min(dim=-1)[0], num_batch_dims
                 ).mean(dim=0)
 
@@ -692,7 +649,7 @@ class SpgLoss(ClipPPOLossImproved):
             # averaged across samples
 
         loss_objective_per_agent = torch.stack(
-            [-gains[i] for i in self.agent_indices], dim=-1
+            [-gains[agent_name] for agent_name in self.agent_names], dim=-1
         )
 
         # Return losses per agent and set of followers
@@ -722,168 +679,417 @@ class SpgLoss(ClipPPOLossImproved):
 
         # Compute scores first
         loss_vals["sum_log_probs"].backward(retain_graph=True)
-        scores = self.get_actor_params(grads=True)
+        scores = self._get_and_zero_all_grads()
 
         # Then compute objective gradients for all agents
-        objective_loss_grads = {}
-        for i in self.agent_indices:
-            loss_vals.get(("agents", "loss_objective"))[..., i].sum().backward(
+        objective_loss_grads: dict[tuple[str, str], dict[str, Tensor]] = {}
+        for leader_id, leader_name in enumerate(self.agent_names):
+            loss_vals.get(("agents", "loss_objective"))[..., leader_id].sum().backward(
                 retain_graph=True
             )
-            objective_loss_grads[i] = self.get_actor_params(grads=True)
-
-        # Recursive function to compute elements of the Jacobian (of agent j's loss with
-        # respect to agent j's parameters then agent i's parameters) using the chain
-        # rule – we maintain separate coefficients for the score term and the policy
-        # gradient term to avoid computing full Jacobian matrices
-        def jacobian_terms(i, j):
-            if j in self.followers[i]:
-                score_coefficient = objective_loss_grads[j][i]
-                pg_coefficient = scores[i]
-
-                return (score_coefficient, pg_coefficient)
-
-            else:
-                score_coefficient = {}
-                pg_coefficient = {}
-
-                for l in self.leaders[j]:  # noqa E741
-                    p = jacobian_terms(i, l)
-
-                    # Score coefficient
-                    temp_score_coefficient_p0 = dot_td(
-                        objective_loss_grads[j][l], scores[l]
-                    )
-                    temp_score_coefficient_p1 = dot_td(
-                        objective_loss_grads[j][l], objective_loss_grads[l][l]
-                    )
-                    temp_score_coefficient = {}
-                    for k in p[0]:
-                        temp_score_coefficient[k] = (
-                            temp_score_coefficient_p0 * p[0][k]
-                        ) + (temp_score_coefficient_p1 * p[1][k])
-
-                    # Policy gradient coefficient
-                    temp_pg_coefficient_p0 = dot_td(scores[l], scores[l])
-                    temp_pg_coefficient_p1 = dot_td(
-                        scores[l], objective_loss_grads[l][l]
-                    )
-                    temp_pg_coefficient = {}
-                    for k in p[0]:
-                        temp_pg_coefficient[k] = (temp_pg_coefficient_p0 * p[0][k]) + (
-                            temp_pg_coefficient_p1 * p[1][k]
-                        )
-
-                    if len(score_coefficient) == 0:
-                        score_coefficient = temp_score_coefficient
-                        pg_coefficient = temp_pg_coefficient
-                    else:
-                        for key in temp_score_coefficient:
-                            score_coefficient[key] += temp_score_coefficient[key]
-                            pg_coefficient[key] += temp_pg_coefficient[key]
-
-                return (score_coefficient, pg_coefficient)
+            grads = self._get_and_zero_all_grads()
+            for follower_name, follower_grads in grads.items():
+                objective_loss_grads[leader_name, follower_name] = follower_grads
 
         # TODO This is not very memory-efficient but it does prevent the gradients of
         # the parameters getting messed up between calculating JVPs and assigning
         # gradients
         if self.variant == "spg" or self.variant == "pspg":
-            actor_params = self.get_actor_params()
-            ihvps = {
-                i: {
-                    j: ihvp(
-                        loss_vals.get(("agents", "loss_objective"))[..., j, j],
-                        loss_vals.get(("agents", "loss_objective"))[..., i, i],
-                        actor_params[j],
-                        actor_params[i],
-                        self.ihvp["variant"],
-                        self.ihvp["num_iterations"],
-                        self.ihvp["rank"],
-                        self.ihvp["rho"],
-                    )
-                    for j in self.all_followers[i]
-                }
-                for i in self.agent_indices
-                if len(self.all_followers[i]) > 0
-            }
+            ihvps = self._compute_ihvps(loss_vals)
 
-        # The dictionaries are named after the terms in the paper "Stable Opponent Shaping in Differentiable Games" by Letcher et al.
-        xi = {}
-        H_0_xi = {}
-        chi = {}
-        total_derivatives = {}
+        # The gradient of each parameter with respect to the corresponding agent's loss.
+        # Named $\xi$ in Letcher et al. A mapping from parameter names to tensors.
+        simultaneous_grad: dict[str, Tensor] = {}
 
-        for g in reversed(self.stackelberg_sequence):
-            for i in g:
-                xi.update(objective_loss_grads[i][i])
-                total_derivatives[i] = objective_loss_grads[i][i]
-                for k in total_derivatives[i].keys():
-                    H_0_xi[k] = 0.0
-                    chi[k] = 0.0
+        # The opponent shaping term for each parameter. Named $\chi$ in Letcher et al.
+        # A mapping from parameter names to tensors.
+        opponent_shaping: dict[str, Tensor] = {}
 
-                for j in self.all_followers[i]:
-                    p = jacobian_terms(i, j)
+        # The product of the anti-diagonal of the Hessian matrix with the vector $\xi$. A mapping from parameter names to tensors.
+        hessian_grad_product: dict[str, Tensor] = {}
 
-                    # Compute (an approximation of) the true Stackelberg gradient using an
-                    # inverse Hessian vector product
+        # The total derivatives (i.e., taking into account that we differentiate a multi-variable expression in which some variables are functions of others) for each parameter for each agent. A mapping from agent names to mappings from parameter names to tensors.
+        total_derivatives: dict[str, dict[str, Tensor]] = {}
+
+        # The total derivatives are a combination of an opponent shaping term and a Hessian gradient product term. These terms are computed separately for each agent, then combined. We proceed in reverse order through the agents in the Stackelberg sequence, the idea being that the followers' gradients are computed first and then used to compute the leaders' gradients.
+        for leader_name in reversed(list(self.stackelberg_sequence_flat)):
+
+            # We begin by computing the gradients of the agent's loss with respect to its own parameters
+            simultaneous_grad.update(objective_loss_grads[leader_name, leader_name])
+            total_derivatives[leader_name] = objective_loss_grads[
+                leader_name, leader_name
+            ]
+            param_names = list(total_derivatives[leader_name].keys())
+
+            # Initialise the opponent shaping and Hessian gradient product dictionaries
+            for param_name in param_names:
+                hessian_grad_product[param_name] = 0.0
+                opponent_shaping[param_name] = 0.0
+
+            for follower_name in self.all_followers[leader_name]:
+
+                # Compute the coefficients for the score and policy gradient terms in the Jacobian
+                score_coefficient, pg_coefficient = self._compute_jacobian_terms(
+                    leader_name, follower_name, objective_loss_grads, scores
+                )
+
+                # Compute (an approximation of) the true Stackelberg gradient using
+                # an inverse Hessian vector product
+                if self.variant == "spg" or self.variant == "pspg":
+                    multiplier = ihvps[leader_name, follower_name]
+                # If using other algorithms we effectively assume that the inverse
+                # Hessian is the identity matrix
+                else:
+                    multiplier = objective_loss_grads[leader_name, follower_name]
+
+                # We compute the opponent shaping terms by keeping the score term and the policy gradient terms separate and multiplying by their respective coefficients to avoid computing full Jacobian matrices
+                opponent_shaping_score_term = dict_dot_product(
+                    multiplier, scores[follower_name]
+                )
+                opponent_shaping_pg_term = dict_dot_product(
+                    multiplier, objective_loss_grads[follower_name, follower_name]
+                )
+
+                # We compute the Hessian gradient product terms by keeping the score term and the policy gradient terms separate and multiplying by their respective coefficients to avoid computing full Jacobian matrices
+                hessian_grad_product_pg_term = dict_dot_product(
+                    scores[follower_name], total_derivatives[follower_name]
+                )
+                hessian_grad_product_score_term = dict_dot_product(
+                    objective_loss_grads[leader_name, follower_name],
+                    total_derivatives[follower_name],
+                )
+
+                # We then iterate over parameters, as each requires different coefficients (as calculated above)
+                for param_name in param_names:
+
                     if self.variant == "spg" or self.variant == "pspg":
-                        multiplier = ihvps[i][j]
-                    # If using other algorithms we effectively assume that the inverse Hessian
-                    # is the identity matrix
-                    else:
-                        multiplier = objective_loss_grads[i][j]
-
-                    chi_score_term = dot_td(multiplier, scores[j])
-                    chi_pg_term = dot_td(multiplier, objective_loss_grads[j][j])
-
-                    H_0_xi_pg_term = dot_td(scores[j], total_derivatives[j])
-                    H_0_xi_score_term = dot_td(
-                        objective_loss_grads[i][j], total_derivatives[j]
-                    )
-
-                    for k in total_derivatives[i].keys():
-                        if self.variant == "spg" or self.variant == "pspg":
-                            lr_coefficient = 1.0
-                            H_0_xi_term = 0.0
-                        # For LOLA and POLA we need to multiply the gradients by the
-                        # learning rate of the follower agent
-                        else:
-                            lr_coefficient = self.agent_lr_factors[j].actor * self.lr
-                            if (
-                                self.additional_lola_term
-                                or self.variant == "sos"
-                                or self.variant == "psos"
-                            ):
-                                H_0_xi_term = (
-                                    H_0_xi_pg_term * objective_loss_grads[i][i][k]
-                                ) + (H_0_xi_score_term * scores[i][k])
-
-                        chi_term = (chi_score_term * p[0][k]) + (chi_pg_term * p[1][k])
-
-                        chi[k] += lr_coefficient * chi_term
-                        H_0_xi[k] += lr_coefficient * H_0_xi_term
-
-                        total_derivatives[i][k] -= lr_coefficient * (
-                            chi_term + H_0_xi_term
+                        lr_coefficient = 1.0
+                        hessian_grad_product_term = (
+                            0.0  # TODO (Lewis) Sanity check this
                         )
 
+                    # For LOLA and POLA we need to multiply the gradients by the
+                    # learning rate of the follower agent
+                    else:
+                        lr_coefficient = (
+                            self.agent_lr_factors[follower_name].actor * self.lr
+                        )
+                        if (
+                            self.additional_lola_term
+                            or self.variant == "sos"
+                            or self.variant == "psos"
+                        ):
+                            # Compute the complete Hessian gradient product term
+                            hessian_grad_product_term = (
+                                hessian_grad_product_pg_term
+                                * objective_loss_grads[leader_name, leader_name][
+                                    param_name
+                                ]
+                            ) + (
+                                hessian_grad_product_score_term
+                                * scores[leader_name][param_name]
+                            )
+
+                    # Compute the complete opponent shaping term
+                    opponent_shaping_term = (
+                        opponent_shaping_score_term * score_coefficient[param_name]
+                    ) + (opponent_shaping_pg_term * pg_coefficient[param_name])
+
+                    # We save the overall opponent shaping and Hessian gradient product terms in case we are using SOS or PSOS and need to compute the update using these terms
+                    opponent_shaping[param_name] += (
+                        lr_coefficient * opponent_shaping_term
+                    )
+                    hessian_grad_product[param_name] += (
+                        lr_coefficient * hessian_grad_product_term
+                    )
+
+                    # Finally, we store the total derivative for the agent for this parameter
+                    total_derivatives[leader_name][param_name] -= lr_coefficient * (
+                        opponent_shaping_term + hessian_grad_product_term
+                    )
+
+        # Create the gradient update
         if self.variant == "sos" or self.variant == "psos":
             update = compute_sos_update(
-                xi, H_0_xi, chi, self.sos_a_param, self.sos_b_param
+                simultaneous_grad,
+                hessian_grad_product,
+                opponent_shaping,
+                self.sos_scaling_factor,
+                self.sos_threshold_factor,
             )
         else:
             update = {}
-            for td in total_derivatives:
-                update.update(total_derivatives[td])
+            for total_derivative in total_derivatives:
+                update.update(total_derivatives[total_derivative])
 
-        for param_name, param in self.named_parameters():
-            if param_name[:5] == "actor":
+        # Apply the update to the parameters
+        for actor_params in self.actor_params.values():
+            for param_name, param in actor_params.items():
                 param.grad = update[param_name]
 
+        # Add the additional critic and entropy losses, then backpropagate
         additional_loss = loss_vals["loss_critic"] + loss_vals["loss_entropy"]
         additional_loss.backward()
 
-        return
+    def _get_followers(
+        self,
+    ) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+        """Get dictionaries of the followers of each agent.
+
+        For each agent in the Stackelberg sequence, we get the agents in the group
+        immediately following them, as well as all the agents in the groups following
+        them. This is returned as two dictionaries.
+
+        Returns
+        -------
+        immediate_followers : dict[str, tuple[str, ...]]
+            A dictionary where the keys are agent names and the values are tuples of
+            agent names for the immediate followers of each agent.
+        descendent_followers : dict[str, tuple[str, ...]]
+            A dictionary where the keys are agent names and the values are tuples of
+            agent names for all the followers of each agent (i.e. the immediate
+            followers, as well as all the followers of the immediate followers, and so
+            on).
+        """
+
+        immediate_followers: dict[str, tuple[str, ...]] = {}
+        descendent_followers: dict[str, tuple[str, ...]] = {}
+
+        for group_id in range(len(self.stackelberg_sequence)):
+            if group_id != len(self.stackelberg_sequence) - 1:
+
+                # Flatten the remaining groups
+                remaining_agent_names = []
+                for subsequent_group_id in range(
+                    group_id + 1, len(self.stackelberg_sequence)
+                ):
+                    remaining_agent_names += self.stackelberg_sequence[
+                        subsequent_group_id
+                    ]
+                remaining_agent_names = tuple(remaining_agent_names)
+
+                for follower in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower] = self.stackelberg_sequence[
+                        group_id + 1
+                    ]
+                    descendent_followers[follower] = remaining_agent_names
+
+            else:
+                for follower in self.stackelberg_sequence[group_id]:
+                    immediate_followers[follower] = ()
+                    descendent_followers[follower] = ()
+
+        return immediate_followers, descendent_followers
+
+    def _get_actor_params(self) -> dict[str, dict[str, Parameter]]:
+        """Get the parameters for each agent as dictionaries with the parameter names.
+
+        Returns
+        -------
+        actor_params : dict[str, dict[str, Parameter]]
+            A dictionary whose keys are the agent names and whose values are
+            dictionaries where the keys are the parameter names and the values are the
+            parameters.
+        """
+
+        actor_params: dict[str, dict[str, Parameter]] = {}
+        for agent_name in self.agent_names:
+            filtered_params = self.agents[agent_name].filter_actor_named_parameters(
+                self.named_parameters()
+            )
+            actor_params[agent_name] = {name: param for name, param in filtered_params}
+
+        return actor_params
+
+    @torch.no_grad()
+    def _get_and_zero_all_grads(self) -> dict[str, dict[str, Tensor]]:
+        """Get and zero the gradients for the parameters of all the agents.
+
+        Returns
+        -------
+        grads : dict[str, dict[str, Tensor]]
+            A dictionary where the keys are agent names and the values are dictionaries
+            where the keys are the parameter names and the values are the gradients.
+        """
+
+        grads: dict[str, dict[str, Parameter]] = {}
+        for agent_name, actor_params in self.actor_params.items():
+            actor_grads = {}
+            for param_name, param in actor_params.items():
+                actor_grads[param_name] = param.grad
+                param.grad = torch.zeros_like(param)
+            grads[agent_name] = actor_grads
+
+        return grads
+
+    def _compute_jacobian_terms(
+        self,
+        leader_name: str,
+        follower_name: str,
+        objective_loss_grads: dict[tuple[str, str], dict[str, Tensor]],
+        scores: dict[str, dict[str, Tensor]],
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        r"""Compute the score and policy gradient coefficients for the Jacobian terms.
+
+        Recursive function to compute elements of the Jacobian (of agent 2's loss with
+        respect to agent 2's parameters then agent 1's parameters) using the chain rule
+        -- we maintain separate coefficients for the score term and the policy gradient
+        term to avoid computing full Jacobian matrices.
+
+        Consider a leader agent $g$ and a follower agent $f$. Let $\nabla_j \Ell_i$ be
+        the gradient loss of agent $i$ with respect to the parameters of agent $j$ and
+        $\bar S_i$ be the score for agent $i$, which is the gradient of the log sum
+        probability of the actions with respect to the parameters of agent $i$. This
+        function computes $C_S(g, f)$ and $C_{PG}(g, f)$, the coefficients for the score
+        and policy gradient terms in the Jacobian of agent $f$'s loss with respect to
+        agent $g$'s parameters.
+
+        When $f$ follows $g$ immediately in the Stackelberg sequence, the score
+        coefficient is:
+            $$
+                C_S(g, f) = \nabla_g \Ell_f
+            $$
+        and the policy gradient coefficient is:
+            $$
+                C_{PG}(g, f) = \bar S_g
+            $$
+
+        Otherwise, we recursively compute the Jacobian terms for the leader and
+        immediate leader $g'$ of $f$. Let $Q$ be the set of immediate leaders of $f$.
+        Then the score coefficient is:
+            $$
+                C_S(g, f) = \sum_{g' \in Q} (
+                    (\nabla_{g'} \Ell_f \cdot S_{g'}) C_S(g', f)
+                  + (\nabla_{g'} \Ell_f \cdot \nabla_{g'} \Ell_{g'}) C_{PG}(g', f)
+                )
+            $$
+
+        Parameters
+        ----------
+        leader_name : str
+            The name of the leader agent, which comes before the follower agent in the
+            stackelberg_sequence.
+        follower_name : str
+            The name of the follower agent.
+        objective_loss_grads : dict[tuple[str, str], dict[str, Tensor]]
+            The gradients of the objective loss for each agent with respect to each
+            agent's parameters. The first index is the agent whose loss it is, and the
+            second index is the agent whose parameters it is with respect to.
+        scores : dict[str, dict[str, Tensor]]
+            The scores for each agent.
+
+        Returns
+        -------
+        score_coefficient : dict[str, Tensor]
+            A dictionary of the coefficients for the score term for each of the leader's
+            parameters.
+        pg_coefficient : dict[str, Tensor]
+            A dictionary of the coefficients for the policy gradient term for each of
+            the leader's parameters.
+        """
+
+        # When the follower is an immediate follower of the leader, the score
+        # coefficient is the gradient of the follower's loss with respect to the
+        # leader's parameters, and the policy gradient coefficient is the score of the
+        # leader.
+        if follower_name in self.immediate_followers[leader_name]:
+            score_coefficient = objective_loss_grads[follower_name, leader_name]
+            pg_coefficient = scores[leader_name]
+
+            return score_coefficient, pg_coefficient
+
+        else:
+            score_coefficient = {}
+            pg_coefficient = {}
+
+            for immediate_leader_name in self.immediate_leaders[follower_name]:
+
+                # Recursively compute the Jacobian terms for leader and immediate leader
+                # of the follower
+                leader_score_coefficient, leader_pg_coefficient = (
+                    self._compute_jacobian_terms(
+                        leader_name,
+                        immediate_leader_name,
+                        objective_loss_grads,
+                        scores,
+                    )
+                )
+
+                param_names = list(leader_score_coefficient.keys())
+
+                # Compute the contribution to the score function coefficient
+                score_coefficient_score = dict_dot_product(
+                    objective_loss_grads[follower_name, immediate_leader_name],
+                    scores[immediate_leader_name],
+                )
+                score_coefficient_pg = dict_dot_product(
+                    objective_loss_grads[follower_name, immediate_leader_name],
+                    objective_loss_grads[immediate_leader_name, immediate_leader_name],
+                )
+                for param_name in param_names:
+                    to_add = (
+                        score_coefficient_score * leader_score_coefficient[param_name]
+                    )
+                    to_add += score_coefficient_pg * leader_pg_coefficient[param_name]
+                    dict_update_add(score_coefficient, param_name, to_add)
+
+                # Policy gradient coefficient
+                pg_coefficient_score = dict_dot_product(
+                    scores[immediate_leader_name], scores[immediate_leader_name]
+                )
+                pg_coefficient_pg = dict_dot_product(
+                    scores[immediate_leader_name],
+                    objective_loss_grads[immediate_leader_name, immediate_leader_name],
+                )
+                for param_name in param_names:
+                    to_add = pg_coefficient_score * leader_score_coefficient[param_name]
+                    to_add += pg_coefficient_pg * leader_pg_coefficient[param_name]
+                    dict_update_add(pg_coefficient, param_name, to_add)
+
+            return score_coefficient, pg_coefficient
+
+    def _compute_ihvps(
+        self, loss_vals: TensorDictBase
+    ) -> dict[tuple[str, str], dict[str, Tensor]]:
+        """Compute the inverse Hessian vector products for each agent and follower.
+
+        This is the inverse Hessian of the follower's loss with respect to the
+        follower's parameters multiplied by the gradient of the leader's loss with
+        respect to the follower's parameters.
+
+        Parameters
+        ----------
+        loss_vals : TensorDictBase
+            The loss values.
+
+        Returns
+        -------
+        ihvps : dict[tuple[str, str], dict[str, Tensor]]
+            A dictionary where the keys are the agent and follower names, and the values
+            are dictionaries of the inverse Hessian vector products for each of the
+            follower's parameters.
+        """
+
+        loss_objective = loss_vals.get(("agents", "loss_objective"))
+
+        ihvps = {}
+        for agent_id, agent_name in enumerate(self.agent_names):
+            if len(self.all_followers[agent_name]) == 0:
+                continue
+            for follower_name in self.all_followers[agent_name]:
+                follower_id = self.agent_names.index(follower_name)
+                ihvps[(agent_name, follower_name)] = inverse_hessian_vector_product(
+                    follower_loss=loss_objective[..., follower_id, follower_id],
+                    leader_loss=loss_objective[..., agent_id, agent_id],
+                    follower_params=self.actor_params[follower_name],
+                    leader_params=self.actor_params[agent_name],
+                    variant=self.ihvp_arguments["variant"],
+                    num_iterations=self.ihvp_arguments["num_iterations"],
+                    rank=self.ihvp_arguments["rank"],
+                    rho=self.ihvp_arguments["rho"],
+                )
+
+        return ihvps
 
 
 class ReinforceLossImproved(Objective, ReinforceLoss):
@@ -949,7 +1155,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
         functional: bool = True,
         normalize_advantage: bool = True,
         clip_value: Optional[float] = None,
-    ) -> None:
+    ):
         if actor_network is None:
             raise TypeError("Missing positional argument actor_network.")
         if not functional and delay_value:

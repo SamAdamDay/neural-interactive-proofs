@@ -33,6 +33,13 @@ ACTIVATION_CLASSES = {
 def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
     """Return a new view of a tensor with the batch dimensions flattened.
 
+    Shapes
+    ------
+    x : (B1, B2, ..., Bn, D1, D2, ..., Dm)
+        Where n is the number of batch dimensions `num_batch_dims`.
+    x_flattened : (B, D1, D2, ..., Dm)
+        Where ``B = B1 * B2 * ... * Bn``.
+
     Parameters
     ----------
     x : Tensor
@@ -42,7 +49,7 @@ def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
 
     Returns
     -------
-    Tensor
+    x_flattened : Tensor
         The input tensor with the batch dimensions flattened.
     """
     return x.flatten(0, num_batch_dims - 1)
