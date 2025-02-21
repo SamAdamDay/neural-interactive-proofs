@@ -26,3 +26,4 @@ Developer API
    experiment_settings
    constants
    auxiliary_modules
+   scripts

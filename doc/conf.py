@@ -1,5 +1,8 @@
 """Sphinx configuration file for the Neural Interactive Proofs documentation."""
 
+import sys
+from pathlib import Path
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -43,6 +46,8 @@ html_css_files = ["tabs.css"]
 numpydoc_show_class_members = False
 
 # -- Options for autosummary and autodoc ----------------------------------------------
+
+sys.path.insert(0, str(Path("..", "src").resolve()))
 
 # -- Options for intersphinx -------------------------------------------------
 
