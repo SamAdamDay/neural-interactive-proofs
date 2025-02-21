@@ -492,7 +492,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 
 
 class SpgLoss(ClipPPOLossImproved):
-    """Loss for Stackelberg Policy Gradient :cite:p:`Fiez2020` and several variants.
+    """Loss for Stackelberg Policy Gradient and several variants.
 
     In contrast to other objectives, the `forward` method returns the gains per agent
     and the sum of the log probabilities separately. These must be combined later to
@@ -501,7 +501,7 @@ class SpgLoss(ClipPPOLossImproved):
 
     The following variants are supported:
 
-    - SPG: Standard Stackelberg Policy Gradient.
+    - SPG: Standard Stackelberg Policy Gradient :cite:p:`Fiez2020`.
     - PSPG: SPG with the clipped PPO loss.
     - LOLA: The Learning with Opponent-Learning Awareness algorithm
       :cite:p:`Foerster2018`.
@@ -743,7 +743,9 @@ class SpgLoss(ClipPPOLossImproved):
                     multiplier = objective_loss_grads[leader_name, follower_name]
 
                 # We compute the opponent shaping terms by keeping the score term and the policy gradient terms separate and multiplying by their respective coefficients to avoid computing full Jacobian matrices
-                opponent_shaping_score_term = dict_dot_product(multiplier, scores[follower_name])
+                opponent_shaping_score_term = dict_dot_product(
+                    multiplier, scores[follower_name]
+                )
                 opponent_shaping_pg_term = dict_dot_product(
                     multiplier, objective_loss_grads[follower_name, follower_name]
                 )
@@ -762,7 +764,9 @@ class SpgLoss(ClipPPOLossImproved):
 
                     if self.variant == "spg" or self.variant == "pspg":
                         lr_coefficient = 1.0
-                        hessian_grad_product_term = 0.0 # TODO (Lewis) Sanity check this
+                        hessian_grad_product_term = (
+                            0.0  # TODO (Lewis) Sanity check this
+                        )
 
                     # For LOLA and POLA we need to multiply the gradients by the
                     # learning rate of the follower agent
@@ -781,16 +785,23 @@ class SpgLoss(ClipPPOLossImproved):
                                 * objective_loss_grads[leader_name, leader_name][
                                     param_name
                                 ]
-                            ) + (hessian_grad_product_score_term * scores[leader_name][param_name])
+                            ) + (
+                                hessian_grad_product_score_term
+                                * scores[leader_name][param_name]
+                            )
 
                     # Compute the complete opponent shaping term
-                    opponent_shaping_term = (opponent_shaping_score_term * score_coefficient[param_name]) + (
-                        opponent_shaping_pg_term * pg_coefficient[param_name]
-                    )
+                    opponent_shaping_term = (
+                        opponent_shaping_score_term * score_coefficient[param_name]
+                    ) + (opponent_shaping_pg_term * pg_coefficient[param_name])
 
                     # We save the overall opponent shaping and Hessian gradient product terms in case we are using SOS or PSOS and need to compute the update using these terms
-                    opponent_shaping[param_name] += lr_coefficient * opponent_shaping_term
-                    hessian_grad_product[param_name] += lr_coefficient * hessian_grad_product_term
+                    opponent_shaping[param_name] += (
+                        lr_coefficient * opponent_shaping_term
+                    )
+                    hessian_grad_product[param_name] += (
+                        lr_coefficient * hessian_grad_product_term
+                    )
 
                     # Finally, we store the total derivative for the agent for this parameter
                     total_derivatives[leader_name][param_name] -= lr_coefficient * (
@@ -810,7 +821,7 @@ class SpgLoss(ClipPPOLossImproved):
             update = {}
             for total_derivative in total_derivatives:
                 update.update(total_derivatives[total_derivative])
-        
+
         # Apply the update to the parameters
         for actor_params in self.actor_params.values():
             for param_name, param in actor_params.items():

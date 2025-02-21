@@ -101,28 +101,28 @@ def dict_scalar_multiple(dictionary: dict[Tensor], scalar: float) -> dict[Tensor
 
 
 def compute_sos_update(
-    xi: dict[str, Tensor],
-    H_0_xi: dict[str, Tensor],
-    chi: dict[str, Tensor],
+    simultaneous_grad: dict[str, Tensor],
+    hessian_grad_product: dict[str, Tensor],
+    opponent_shaping: dict[str, Tensor],
     scaling_factor: float,
     threshold_factor: float,
 ) -> dict[str, Tensor]:
-    """Compute the update for the Stable Opponent Shaping (SOS) algorithm.
+    r"""Compute the update for the Stable Opponent Shaping (SOS) algorithm.
 
-    See Algorithm 1 in :cite:t:`Letcher2019`.
+    See Algorithm 1 in :cite:t:`Letcher2019`. Effectively, this update interpolates between the LOLA update (:cite:t:`Foerster2018`) and the LookAhead update (:cite:t:`Zhang2010`) by computing a coefficient p between 0 and 1 where p = 0 corresponds to LookAhead and p = 1 corresponds to LOLA.
 
     Parameters
     ----------
-    xi : dict[str, Tensor]
-        The vanilla individual updates.
-    H_0_xi : dict[str, Tensor]
-        See the original paper for a definition of this term.
-    chi : dict[str, Tensor]
-        See the original paper for a definition of this term.
+    simultaneous_grad : dict[str, Tensor]
+        The vanilla individual updates. Named $\xi$ in Letcher et al.
+    hessian_grad_product : dict[str, Tensor]
+        The product of the anti-diagonal of the Hessian matrix with the vector $\xi$.
+    opponent_shaping : dict[str, Tensor]
+        The opponent shaping term for each parameter. Named $\chi$ in Letcher et al.
     scaling_factor : float
-        A scaling factor (between 0 and 1).
+        A scaling factor (between 0 and 1). Named $a$ in Letcher et al.
     threshold_factor : float
-        A threshold value (between 0 and 1).
+        A threshold value (between 0 and 1). Named $b$ in Letcher et al.
 
     Returns
     -------
@@ -130,27 +130,31 @@ def compute_sos_update(
         The update to be made to the parameters.
     """
 
-    # TODO (Sam): rename these variables to be more descriptive, and add some comments
-    # to explain what's going on
-
+    # First we compute $\xi_0 = (I - \alpha H_o)\xi$, where $\alpha$ is the learning rate (which has already been applied) and $H_o \xi$ is the product of the anti-diagonal of the Hessian matrix with the vector $\xi$.
     xi_0 = {}
-    for k in xi:
-        xi_0[k] = xi[k] - H_0_xi[k]
-    denom = -dict_dot_product(chi, xi_0)
+    for k in simultaneous_grad:
+        xi_0[k] = simultaneous_grad[k] - hessian_grad_product[k]
+
+    # Next, we compute the coefficient p. First, we ensure that the eventual gradient update "points in the same direction" as LookAhead
+    denom = -dict_dot_product(opponent_shaping, xi_0)
     if denom >= 0.0:
         p_1 = 1.0
     else:
         p_1 = min(1.0, -scaling_factor * dict_dot_product(xi_0, xi_0) / denom)
-    xi_norm_squared = dict_dot_product(xi, xi)
+    
+    # After that, we ensure local convergence by scaling up if the magnitude of the simultaneous gradient is small
+    xi_norm_squared = dict_dot_product(simultaneous_grad, simultaneous_grad)
     if xi_norm_squared < threshold_factor * threshold_factor:
         p_2 = xi_norm_squared
     else:
         p_2 = 1.0
-    p = min(p_1, p_2)
-    # Compute xi_p from xi_0
-    for k in xi_0:
-        xi_0[k] -= p * chi[k]
 
+    # The actual coefficient p is the minimum of the two computed coefficients
+    p = min(p_1, p_2)
+
+    # Finally, we compute the gradient update by applying the p coefficient to the opponent shaping term
+    for k in xi_0:
+        xi_0[k] -= p * opponent_shaping[k]
     return xi_0
 
 
