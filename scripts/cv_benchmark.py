@@ -435,85 +435,8 @@ def _evaluate_model(
     return results, num_added
 
 
-def main():
+def main(parser: argparse.ArgumentParser):
     """Run the code validation benchmark."""
-
-    # Create an argument parser
-    parser = argparse.ArgumentParser(description="Run code validation benchmark.")
-
-    # Required arguments
-    parser.add_argument("model", type=str, help="Model to evaluate")
-
-    # Optional arguments
-    # New argument to accept a list of strings
-    parser.add_argument(
-        "--splits",
-        default=["train", "test"],
-        type=str,
-        nargs="+",  # One or more arguments
-        help="The splits to evaluate",
-    )
-    parser.add_argument(
-        "--difficulties",
-        default=["introductory", "interview", "competition"],
-        type=str,
-        nargs="+",  # One or more arguments
-        help="The difficulties to evaluate",
-    )
-    parser.add_argument(
-        "--max_problems",
-        type=int,
-        default=10,
-        help="Max number of problems to test",
-    )
-    parser.add_argument(
-        "--save_after",
-        type=int,
-        default=5,
-        help="Save results after this many problems",
-    )
-    parser.add_argument(
-        "--save_path", type=str, default=SAVE_PATH, help="Path to save the results to"
-    )
-    parser.add_argument(
-        "--temperature", type=float, default=1.0, help="The temperature of the model"
-    )
-    parser.add_argument(
-        "--n_attempts",
-        type=int,
-        default=5,
-        help="Number of attempts that the model should make",
-    )
-    parser.add_argument(
-        "--openrouter_api_key",
-        type=str,
-        default=get_env_var("OPENROUTER_API_KEY"),
-        help="API key for OpenRouter",
-    )
-    parser.add_argument(
-        "--num_alternatives",
-        type=int,
-        default=10,
-        help="Number of alternative tokens to consider at each completion point",
-    )
-
-    # Boolean flags
-    parser.add_argument(
-        "--check_probs",
-        action="store_true",
-        help="Whether to check the output probabilities of the model",
-    )
-    parser.add_argument(
-        "--show_working",
-        action="store_true",
-        help="Whether the model should attempt to work out the answer step by step "
-        "before providing a final response",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Whether to print the results to the console",
-    )
 
     # Parse arguments
     cmd_args = parser.parse_args()
@@ -544,5 +467,82 @@ def main():
     )
 
 
+# Create an argument parser
+parser = argparse.ArgumentParser(description="Run code validation benchmark.")
+
+# Required arguments
+parser.add_argument("model", type=str, help="Model to evaluate")
+
+# Optional arguments
+# New argument to accept a list of strings
+parser.add_argument(
+    "--splits",
+    default=["train", "test"],
+    type=str,
+    nargs="+",  # One or more arguments
+    help="The splits to evaluate",
+)
+parser.add_argument(
+    "--difficulties",
+    default=["introductory", "interview", "competition"],
+    type=str,
+    nargs="+",  # One or more arguments
+    help="The difficulties to evaluate",
+)
+parser.add_argument(
+    "--max_problems",
+    type=int,
+    default=10,
+    help="Max number of problems to test",
+)
+parser.add_argument(
+    "--save_after",
+    type=int,
+    default=5,
+    help="Save results after this many problems",
+)
+parser.add_argument(
+    "--save_path", type=str, default=SAVE_PATH, help="Path to save the results to"
+)
+parser.add_argument(
+    "--temperature", type=float, default=1.0, help="The temperature of the model"
+)
+parser.add_argument(
+    "--n_attempts",
+    type=int,
+    default=5,
+    help="Number of attempts that the model should make",
+)
+parser.add_argument(
+    "--openrouter_api_key",
+    type=str,
+    default=get_env_var("OPENROUTER_API_KEY"),
+    help="API key for OpenRouter",
+)
+parser.add_argument(
+    "--num_alternatives",
+    type=int,
+    default=10,
+    help="Number of alternative tokens to consider at each completion point",
+)
+
+# Boolean flags
+parser.add_argument(
+    "--check_probs",
+    action="store_true",
+    help="Whether to check the output probabilities of the model",
+)
+parser.add_argument(
+    "--show_working",
+    action="store_true",
+    help="Whether the model should attempt to work out the answer step by step "
+    "before providing a final response",
+)
+parser.add_argument(
+    "--verbose",
+    action="store_true",
+    help="Whether to print the results to the console",
+)
+
 if __name__ == "__main__":
-    main()
+    main(parser)

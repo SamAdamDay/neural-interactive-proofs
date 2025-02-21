@@ -38,16 +38,18 @@ parser.add_argument(
     help="The OpenRouter API key to use for generating responses",
 )
 
-# Get the arguments
-cmd_args = parser.parse_args()
+if __name__ == "__main__":
 
-# Create the config
-config = CodeValidationDatasetConfig(
-    split=cmd_args.split,
-    num_data=cmd_args.num_data,
-    save_after=cmd_args.save_after,
-    openrouter_api_key=cmd_args.openrouter_api_key,
-)
+    # Get the arguments
+    cmd_args = parser.parse_args()
 
-# Generate the dataset
-generate_and_save_cv_dataset(config)
+    # Create the config
+    config = CodeValidationDatasetConfig(
+        split=cmd_args.split,
+        num_data=cmd_args.num_data,
+        save_after=cmd_args.save_after,
+        openrouter_api_key=cmd_args.openrouter_api_key,
+    )
+
+    # Generate the dataset
+    generate_and_save_cv_dataset(config)

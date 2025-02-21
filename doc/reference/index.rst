@@ -12,6 +12,7 @@ Public API
    
    running_experiments
    parameters
+   scripts
 
 
 Developer API
@@ -26,4 +27,3 @@ Developer API
    experiment_settings
    constants
    auxiliary_modules
-   scripts

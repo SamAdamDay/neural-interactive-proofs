@@ -5,7 +5,7 @@ The following modules provide support to the main library, or implement addition
 secondary functionality.
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
     nip.rl_objectives

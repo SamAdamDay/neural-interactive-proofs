@@ -53,7 +53,7 @@ Base classes
 Base classes for trainers are found in the following modules:
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    trainer_base
@@ -65,7 +65,7 @@ Available Trainers
 ------------------
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    solo_agent

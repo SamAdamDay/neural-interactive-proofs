@@ -124,40 +124,42 @@ def run(cmd_args: Namespace):
     )
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(
-        description="Run a dummy graph isomorphism test",
-        formatter_class=ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--use_cpu", action="store_true")
-    parser.add_argument("--ignore_cache", action="store_true")
-    parser.add_argument(
-        "--use-wandb",
-        action="store_true",
-        help="Whether to use W&B to log the experiment",
-    )
-    parser.add_argument(
-        "--run-id",
-        type=str,
-        help="The ID of the W&B run. By default, a random ID is auto-generated",
-    )
-    parser.add_argument(
-        "--wandb-project",
-        type=str,
-        help="The name of the W&B project to use",
-        default=get_env_var("WANDB_PROJECT", ""),
-    )
-    parser.add_argument(
-        "--wandb-entity",
-        type=str,
-        help="The name of the W&B entity to use",
-        default=get_env_var("WANDB_ENTITY", ""),
-    )
-    parser.add_argument(
-        "--prepare-experiment",
-        action="store_true",
-        help="Whether to prepare the experiment before running it",
-    )
-    args = parser.parse_args()
+parser = ArgumentParser(
+    description="Run a dummy graph isomorphism test",
+    formatter_class=ArgumentDefaultsHelpFormatter,
+)
+parser.add_argument("--use_cpu", action="store_true")
+parser.add_argument("--ignore_cache", action="store_true")
+parser.add_argument(
+    "--use-wandb",
+    action="store_true",
+    help="Whether to use W&B to log the experiment",
+)
+parser.add_argument(
+    "--run-id",
+    type=str,
+    help="The ID of the W&B run. By default, a random ID is auto-generated",
+)
+parser.add_argument(
+    "--wandb-project",
+    type=str,
+    help="The name of the W&B project to use",
+    default=get_env_var("WANDB_PROJECT", ""),
+)
+parser.add_argument(
+    "--wandb-entity",
+    type=str,
+    help="The name of the W&B entity to use",
+    default=get_env_var("WANDB_ENTITY", ""),
+)
+parser.add_argument(
+    "--prepare-experiment",
+    action="store_true",
+    help="Whether to prepare the experiment before running it",
+)
 
+
+if __name__ == "__main__":
+
+    args = parser.parse_args()
     run(args)

@@ -5,7 +5,6 @@ import os
 import logging
 from datetime import datetime
 
-
 from nip import (
     HyperParameters,
     AgentsParameters,
@@ -291,41 +290,43 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     )
 
 
+experiment = SequentialHyperparameterExperiment(
+    param_grid=param_grid,
+    experiment_fn=experiment_fn,
+    run_id_fn=run_id_fn,
+    run_preparer_fn=run_preparer_fn,
+    experiment_name="EI_VC",
+    arg_parser_description="Run Code Validation experiments with Expert Iteration, "
+    "running from a hyperparameter grid in sequence.",
+    default_wandb_project=get_env_var("WANDB_CV_PROJECT", ""),
+    allow_resuming_wandb_run=True,
+    add_run_infix_argument=False,
+)
+
+experiment.parser.add_argument(
+    "run_infix",
+    type=str,
+    help="Infix to add to the run ID to distinguish between different runs. Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
+    nargs="?",
+    default="",
+)
+
+experiment.parser.add_argument(
+    "--num-rollout-workers",
+    type=int,
+    default=None,
+    help="Number of workers to use for sampling rollouts. Defaults 0 when using dummy API, 8 otherwise.",
+)
+
+experiment.parser.add_argument(
+    "--dummy",
+    action="store_true",
+    dest="use_dummy_api",
+    help="Whether to use the dummy API for the agents. Useful for testing.",
+)
+
+# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+parser = experiment.parser
+
 if __name__ == "__main__":
-
-    experiment = SequentialHyperparameterExperiment(
-        param_grid=param_grid,
-        experiment_fn=experiment_fn,
-        run_id_fn=run_id_fn,
-        run_preparer_fn=run_preparer_fn,
-        experiment_name="EI_VC",
-        arg_parser_description="Run Code Validation experiments with Expert Iteration, "
-        "running from a hyperparameter grid in sequence.",
-        default_wandb_project=get_env_var("WANDB_CV_PROJECT", ""),
-        allow_resuming_wandb_run=True,
-        add_run_infix_argument=False,
-    )
-
-    experiment.parser.add_argument(
-        "run_infix",
-        type=str,
-        help="Infix to add to the run ID to distinguish between different runs. Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
-        nargs="?",
-        default="",
-    )
-
-    experiment.parser.add_argument(
-        "--num-rollout-workers",
-        type=int,
-        default=None,
-        help="Number of workers to use for sampling rollouts. Defaults 0 when using dummy API, 8 otherwise.",
-    )
-
-    experiment.parser.add_argument(
-        "--dummy",
-        action="store_true",
-        dest="use_dummy_api",
-        help="Whether to use the dummy API for the agents. Useful for testing.",
-    )
-
     experiment.run()

@@ -19,13 +19,14 @@ author = "Sam Adam-Day and Lewis Hammond"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "numpydoc",
+    "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
-    # "sphinx.ext.napoleon",
+    "sphinxcontrib.autoprogram",
+    "numpydoc",
     # "autoapi.extension",
 ]
 
@@ -44,10 +45,11 @@ html_css_files = ["tabs.css"]
 # -- Options for NumpyDoc ----------------------------------------------
 
 numpydoc_show_class_members = False
+napoleon_custom_sections = []
 
 # -- Options for autosummary and autodoc ----------------------------------------------
 
-sys.path.insert(0, str(Path("..", "src").resolve()))
+sys.path.insert(0, str(Path("..", "scripts").resolve()))
 
 # -- Options for intersphinx -------------------------------------------------
 

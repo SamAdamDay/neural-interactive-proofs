@@ -150,7 +150,7 @@ Sub-parameter classes are grouped into sub-modules of :mod:`nip.parameters`. Eac
 contains classes for a specific part of the hyper-parameters.
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    protocol
@@ -167,7 +167,7 @@ Bases classes and enum types
 ----------------------------
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    parameters_base
@@ -178,7 +178,7 @@ Handling parameter versions
 ---------------------------
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    version
