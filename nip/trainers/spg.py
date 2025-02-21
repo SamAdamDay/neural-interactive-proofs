@@ -48,8 +48,8 @@ class SpgTrainer(ReinforcementLearningTrainer):
                 "rho": self.hyper_params.spg.ihvp_rho,
             },
             additional_lola_term=self.hyper_params.spg.additional_lola_term,
-            sos_scaling_factor=self.hyper_params.spg.sos_a_param,
-            sos_threshold_factor=self.hyper_params.spg.sos_b_param,
+            sos_scaling_factor=self.hyper_params.spg.sos_scaling_factor,
+            sos_threshold_factor=self.hyper_params.spg.sos_threshold_factor,
             agent_lr_factors={
                 name: self.hyper_params.agents[name].agent_lr_factor
                 for name in self.protocol_handler.agent_names
