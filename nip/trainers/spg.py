@@ -1,4 +1,4 @@
-"""Stackelberg Policy Gradient :cite:p:`Huang2022` RL trainer."""
+"""Stackelberg Policy Gradient :cite:p:`Fiez2020` RL trainer."""
 
 from torchrl.objectives.value import GAE
 from torchrl.objectives import ValueEstimators
@@ -10,7 +10,7 @@ from nip.trainers.registry import register_trainer
 
 @register_trainer("spg")
 class SpgTrainer(ReinforcementLearningTrainer):
-    """Stackelberg Policy Gradient :cite:p:`Huang2022` trainer.
+    """Stackelberg Policy Gradient :cite:p:`Fiez2020` trainer.
 
     Implements an n-player version of Stackelberg Policy Gradient / Opponent-Shaping
 
@@ -34,29 +34,26 @@ class SpgTrainer(ReinforcementLearningTrainer):
         """
 
         # Construct the loss module
-        stackelberg_sequence_int = [
-            tuple(self.agent_names.index(name) for name in group)
-            for group in self.protocol_handler.stackelberg_sequence
-        ]
         loss_module = SpgLoss(
             actor=self.policy_operator,
             critic=self.value_operator,
             variant=self.hyper_params.spg.variant,
-            stackelberg_sequence=stackelberg_sequence_int,
-            names=self.agent_names,
-            ihvp={
+            stackelberg_sequence=self.protocol_handler.stackelberg_sequence,
+            agent_names=self.agent_names,
+            agents=self.scenario_instance.agents,
+            ihvp_arguments={
                 "variant": self.hyper_params.spg.ihvp_variant,
                 "num_iterations": self.hyper_params.spg.ihvp_num_iterations,
                 "rank": self.hyper_params.spg.ihvp_rank,
                 "rho": self.hyper_params.spg.ihvp_rho,
             },
             additional_lola_term=self.hyper_params.spg.additional_lola_term,
-            sos_a_param=self.hyper_params.spg.sos_a_param,
-            sos_b_param=self.hyper_params.spg.sos_b_param,
-            agent_lr_factors=[
-                self.hyper_params.agents[name].agent_lr_factor
+            sos_scaling_factor=self.hyper_params.spg.sos_scaling_factor,
+            sos_threshold_factor=self.hyper_params.spg.sos_threshold_factor,
+            agent_lr_factors={
+                name: self.hyper_params.agents[name].agent_lr_factor
                 for name in self.protocol_handler.agent_names
-            ],
+            },
             lr=self.hyper_params.rl.lr,
             clip_epsilon=self.hyper_params.ppo.clip_epsilon,
             entropy_coef=self.hyper_params.ppo.entropy_eps,
@@ -64,6 +61,7 @@ class SpgTrainer(ReinforcementLearningTrainer):
             functional=self.hyper_params.functionalize_modules,
             loss_critic_type=self.hyper_params.rl.loss_critic_type,
             clip_value=self.clip_value,
+            device=self.device,
         )
         loss_module.set_keys(
             reward=self.train_environment.reward_key,

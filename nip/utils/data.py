@@ -1,6 +1,7 @@
 """Utilities for working with data."""
 
 from typing import Optional, Any, Iterable, Iterator, TypeVar
+from numbers import Number
 
 import torch
 
@@ -316,3 +317,26 @@ def rename_dict_key(
         raise KeyError(f"Key '{old_key}' not found in dictionary.")
 
     dictionary[new_key] = dictionary.pop(old_key)
+
+
+def dict_update_add(dictionary: dict, key: Any, value: Number) -> dict:
+    """Update a dictionary by adding a value to a key.
+
+    If the key is not in the dictionary, it will be updated with the given value.
+
+    Parameters
+    ----------
+    dictionary : dict
+        The dictionary to update.
+    key : Any
+        The key to update.
+    value : Number
+        The value to add to the key.
+    """
+
+    if key in dictionary:
+        dictionary[key] += value
+    else:
+        dictionary[key] = value
+
+    return dictionary

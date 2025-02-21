@@ -218,4 +218,13 @@ def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
         if key in hyper_param_dict and "min_message_rounds" in hyper_param_dict[key]:
             hyper_param_dict[key]["min_message_rounds"] += 1
 
+    # `spg.sos_a_param` was renamed to `spg.sos_scaling_factor` and `spg.sos_b_param`
+    # was renamed to `spg.sos_threshold_factor`
+    if "spg" in hyper_param_dict:
+        spg = hyper_param_dict["spg"]
+        if "sos_a_param" in spg:
+            spg["sos_scaling_factor"] = spg.pop("sos_a_param")
+        if "sos_b_param" in spg:
+            spg["sos_threshold_factor"] = spg.pop("sos_b_param")
+
     return hyper_param_dict
