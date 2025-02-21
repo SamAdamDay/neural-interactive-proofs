@@ -392,13 +392,13 @@ def generate_and_save_cv_dataset(
 
 
 def _generate_buggy_solutions(
-    results: ListProxy[list[str | None]],
+    results: ListProxy,
     datum: list[str, Any],
     model: str,
     system_prompt: str,
     max_modifications: int,
     max_attempts: Optional[int] = None,
-) -> ListProxy[list[str | None]]:
+) -> ListProxy:
     """Generate buggy solutions for a given datum and append them to the result list.
 
     If an exception is raised during the process, a list containing None is appended to
