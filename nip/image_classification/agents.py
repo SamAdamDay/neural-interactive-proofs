@@ -7,11 +7,11 @@ The structure of all agent bodies is the same:
 - An encoder layer, which takes as input the image and the message history and outputs
   the initial pixel-level encodings.
 - A sequence of `num_block_groups` groups of building blocks (e.g. convolutional
-  layers). 
-    + Each layer is followed by a non-linearity and each group by a max pooling layer. 
-    + For each group we halve the output size and double the number of channels. 
+  layers).
+    + Each layer is followed by a non-linearity and each group by a max pooling layer.
+    + For each group we halve the output size and double the number of channels.
     + The number of building blocks in each group is given by the `num_blocks_per_group`
-      parameter. 
+      parameter.
     + The output of the last group is the 'latent pixel-level' representations, which
       provides a representation for each latent pixel.
 - We add a channel to the latent pixel-level representations to represent the most
@@ -25,7 +25,7 @@ Notes
 -----
 In all dimension annotations, "channel" refers to the the message channel dimension,
 which is how different groups of agents can communicate with each other. There is a
-terminology overlap with the channel dimension in images and convolutional layers. Such 
+terminology overlap with the channel dimension in images and convolutional layers. Such
 channels are called "image_channel" or "latent_channel" to avoid confusion.
 """
 

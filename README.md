@@ -16,10 +16,10 @@
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/SamAdamDay/nip-experiments.git
+   git clone https://github.com/SamAdamDay/neural-interactive-proofs.git
    ```
 
-2. Change to the repository directory: `cd nip-experiments`
+2. Change to the repository directory: `cd neural-interactive-proofs`
 
 3. Install the requirements. If you just want to run experiments do:
 
@@ -133,7 +133,7 @@ docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target default --secret id=
 ```
 
 replacing `DOCKER_USER` with your Docker Hub username, and `DOCKER_REPO` and
-`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'nip-experiments/default').
+`DOCKER_TAG` suitable Docker repository and tag names (e.g. 'neural-interactive-proofs/default').
 
 Alternatively, you can build an image with all of the datasets already downloaded. This
 will result in a much larger image, but can make the process of spinning up and running

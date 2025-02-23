@@ -29,13 +29,13 @@ Installation Steps
 
    .. code-block:: bash
 
-      git clone https://github.com/SamAdamDay/nip-experiments.git
+      git clone https://github.com/SamAdamDay/neural-interactive-proofs.git
 
 2. Change to the repository directory:
 
    .. code-block:: bash
 
-      cd nip-experiments
+      cd neural-interactive-proofs
 
 3. Install the requirements:
 

@@ -34,7 +34,7 @@ RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my
     && git config --global user.name "${GIT_NAME}" \
     && git config --global user.email "${GIT_EMAIL}" \
     && wandb login "${WANDB_KEY}" \
-    && git clone "${GIT_REPO_URI}" nip-experiments \
+    && git clone "${GIT_REPO_URI}" neural-interactive-proofs \
     && mkdir -p .ssh \
     && echo "${SSH_PUBKEY}" > .ssh/authorized_keys'
 
@@ -45,10 +45,10 @@ ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/b
 COPY docker/bin/* /usr/local/bin/
 
 # Copy .env file to the project directory
-COPY .env /root/nip-experiments
+COPY .env /root/neural-interactive-proofs
 
 # Move to the repo directory
-WORKDIR /root/nip-experiments
+WORKDIR /root/neural-interactive-proofs
 
 # Download the source code for PyTorch Image Models (timm), so we can use the training
 # scripts
@@ -56,7 +56,7 @@ RUN mkdir -p vendor
 RUN grep timm== requirements.txt \
     | sed -E --expression='s#timm==(.*)#https://github.com/huggingface/pytorch-image-models/archive/refs/tags/v\1.tar.gz#' \
     | xargs wget -qO- \
-    | tar -xzC /root/nip-experiments/vendor
+    | tar -xzC /root/neural-interactive-proofs/vendor
 
 # Install all the required packages
 RUN pip install wheel cython \

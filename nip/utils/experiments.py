@@ -1,7 +1,7 @@
 """Experiment runners.
 
 Contains utilities for running hyperparameter experiments. These can be run either
-sequentially or in parallel using a pool of workers. 
+sequentially or in parallel using a pool of workers.
 
 The workflow is as follows:
 

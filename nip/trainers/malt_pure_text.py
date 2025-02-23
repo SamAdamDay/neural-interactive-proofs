@@ -162,7 +162,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
             PureTextEnvironment,
             PureTextCombinedWhole,
             Optional[NestedArrayDict],
-        ]
+        ],
     ) -> list[NestedArrayDict]:
         """Sample rollouts for a single environment.
 
