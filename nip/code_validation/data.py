@@ -283,10 +283,19 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         def filter_instance(instance: dict[str, str | int]) -> bool:
             """Filter based on the hyper_params."""
 
-            return (
+            if (
                 instance["difficulty"]
-                == self.hyper_params.code_validation.apps_difficulty
-            )
+                != self.hyper_params.code_validation.apps_difficulty
+            ):
+                return False
+
+            if (
+                self.hyper_params.code_validation.apps_exclude_flagged
+                and instance["flags"] != ""
+            ):
+                return False
+
+            return True
 
         def get_non_buggy_solution(
             instance: dict[str, str | int], solution_index: int
