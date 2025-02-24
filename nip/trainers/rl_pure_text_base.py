@@ -680,7 +680,7 @@ class PureTextRlTrainer(Trainer, ABC):
             PureTextEnvironment,
             PureTextCombinedWhole,
             Optional[NestedArrayDict],
-        ]
+        ],
     ) -> list[NestedArrayDict]:
         """Sample rollouts for a single environment.
 
