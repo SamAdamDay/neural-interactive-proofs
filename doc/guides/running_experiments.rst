@@ -163,7 +163,7 @@ The experiment can now be run by calling the script with the following command:
 This will run the experiments sequentially, logging data to :term:`Weights & Biases`
 with run IDs ``test_difficulty_levels_0``, ``test_difficulty_levels_1``, etc.
 
-See the :doc:`documentation for the scrip </reference/generated/scripts/ei_cv>` for more information on how to run it, or run:
+See the :doc:`documentation for the script </reference/generated/scripts/ei_cv>` for more information on how to run it, or run:
 
 .. code-block:: bash
 

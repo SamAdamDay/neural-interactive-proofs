@@ -1,4 +1,4 @@
-"""Script to benchmark code validation models on the buggy-apps dataset."""
+"""Script to benchmark code validation models on the Buggy APPS dataset."""
 
 import re
 import json

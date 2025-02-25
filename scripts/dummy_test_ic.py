@@ -1,4 +1,9 @@
-"""Dummy image classification test script, for debugging purposes."""
+"""Dummy image classification test script, for debugging purposes.
+
+This script runs the image classification scenario with very basic agents, and is intended
+as a way to quickly test that the scenario is working as expected, without having to
+run a full experiment.
+"""
 
 from argparse import Namespace, ArgumentParser, ArgumentDefaultsHelpFormatter
 import os

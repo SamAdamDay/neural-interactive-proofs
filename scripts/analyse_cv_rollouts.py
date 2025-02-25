@@ -1,4 +1,11 @@
-"""Analyse the rollouts of the Code Validation task using language models."""
+"""Analyse the rollouts of the Code Validation task using language models.
+
+This script asks a language model to evaluate the rollouts of the Code Validation task
+with some metric.
+
+Run the script with the ``--help`` flag to see all available arguments and possible
+value.
+"""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import json

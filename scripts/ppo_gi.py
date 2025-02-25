@@ -1,4 +1,13 @@
-"""PPO graph isomorphism experiment using a grid of hyperparameters."""
+"""PPO graph isomorphism experiment using a grid of hyperparameters.
+
+This script runs through a grid of hyperparameters, specified in the ``param_grid``
+dict. If the ``MULTIPROCESS`` variable is set to True, the experiments are run using a
+pool of workers (specified by the ``--num-workers`` command line argument). Otherwise,
+the experiments are run sequentially.
+
+Additional settings, like whether to log to W&B can be set via command line arguments.
+Run the script with the ``--help`` flag to see all available arguments.
+"""
 
 from argparse import Namespace
 import os

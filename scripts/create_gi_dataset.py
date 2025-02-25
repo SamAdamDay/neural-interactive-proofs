@@ -1,4 +1,8 @@
-"""Generate a graph isomorphism dataset."""
+"""Generate a graph isomorphism dataset.
+
+A graph isomorphism dataset consists of pairs of graphs, where each pair is either
+isomorphic or not.
+"""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
