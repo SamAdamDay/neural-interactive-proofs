@@ -8,3 +8,4 @@ Guides
    
    installation
    new-protocol
+   docker
