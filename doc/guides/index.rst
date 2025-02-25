@@ -9,3 +9,4 @@ Guides
    installation
    running_experiments
    new-protocol
+   docker
