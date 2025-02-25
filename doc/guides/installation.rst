@@ -3,7 +3,8 @@ Installation
 
 This guide will help you install the necessary software to run the library. The library
 has been tested on Linux and MacOS, and may work on Windows as well. We also provide a
-Docker file, which can be used to run the library in a container or for development.
+:doc:`Docker file <docker>`, which can be used to run the library in a container or for
+development.
 
 
 Prerequisites
@@ -21,6 +22,8 @@ We recommend using a `virtual environment
 <https://docs.python.org/3/library/venv.html>`_ to install the library, to avoid
 conflicts with other Python packages.
 
+
+.. _installation_steps:
 
 Installation Steps
 ------------------
