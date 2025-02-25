@@ -3,4 +3,5 @@
 .. automodule:: {{ fullname }}
 
 .. autoprogram:: {{ fullname }}:parser
-   :prog: Usage
+   :prog: scripts/{{ fullname }}.py
+   :no_usage_codeblock:

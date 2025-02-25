@@ -1,6 +1,11 @@
 Experiment Scripts
 ==================
 
+The following scripts are available in the ``scripts`` directory. These scripts include
+ones for running experiments with a grid of hyper-parameters, as well as scripts for
+creating datasets and various other tasks.
+
+
 The Graph Isomorphism Task
 ---------------------------
 

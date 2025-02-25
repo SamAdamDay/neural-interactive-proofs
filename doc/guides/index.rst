@@ -7,5 +7,5 @@ Guides
    :caption: Contents:
    
    installation
-   new-protocol
    running_experiments
+   new-protocol

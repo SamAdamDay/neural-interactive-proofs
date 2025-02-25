@@ -45,7 +45,7 @@ html_css_files = ["tabs.css"]
 # -- Options for NumpyDoc ----------------------------------------------
 
 numpydoc_show_class_members = False
-napoleon_custom_sections = []
+napoleon_custom_sections = ["Shapes", "Class Attributes"]
 
 # -- Options for autosummary and autodoc ----------------------------------------------
 

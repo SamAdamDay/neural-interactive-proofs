@@ -1,12 +1,12 @@
 """Generate the validation dataset."""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from nip.constants import OPENROUTER_API_KEY
 
 from nip.code_validation.dataset_generation import (
     generate_and_save_cv_dataset,
     CodeValidationDatasetConfig,
 )
+from nip.utils.env import get_env_var
 
 # Set up the arg parser
 parser = ArgumentParser(
@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     "--openrouter_api_key",
     type=str,
-    default=OPENROUTER_API_KEY,
+    default=get_env_var("OPENROUTER_API_KEY"),
     help="The OpenRouter API key to use for generating responses",
 )
 
