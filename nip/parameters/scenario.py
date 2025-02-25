@@ -37,7 +37,12 @@ class CodeValidationParameters(SubParameters):
     app_solution_number : int
         Each question in the APPS dataset has multiple solutions. This parameter
         specifies which solution to use.
+    apps_exclude_flagged : bool
+        All datapoints in the Buggy APPS dataset have been passed through the OpenAI
+        moderation API, with any flags noted. If this parameter is set to True, flagged
+        datapoints will be excluded from the dataset.
     """
 
     apps_difficulty: Literal["introductory", "interview", "competition"] = "interview"
     apps_solution_number: int = 0
+    apps_exclude_flagged: bool = True

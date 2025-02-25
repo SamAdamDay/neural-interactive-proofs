@@ -674,7 +674,7 @@ class IterationContext:
 
 
 def attach_progress_bar(
-    num_iterations_func: Callable[[Trainer], int]
+    num_iterations_func: Callable[[Trainer], int],
 ) -> Callable[[Callable], Callable]:
     """Decorate a `Trainer` method to attach a progress bar.
 

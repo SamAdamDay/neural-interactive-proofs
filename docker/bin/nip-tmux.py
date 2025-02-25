@@ -7,7 +7,7 @@ import torch
 from libtmux import Server
 from libtmux.constants import PaneDirection
 
-DEFAULT_BASE_DIRECTORY = "/root/nip-experiments"
+DEFAULT_BASE_DIRECTORY = "/root/neural-interactive-proofs"
 
 parser = ArgumentParser(
     description="Create or join a tmux session for running the nip project.",
