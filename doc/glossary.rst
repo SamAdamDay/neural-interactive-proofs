@@ -21,6 +21,19 @@ Glossary
         contains all the components of the experiment. These components are instances of
         the classes defined in the :term:`scenario`.
 
+    graph isomorphism scenario
+        A :term:`scenario` where the task is to determine whether two graphs are
+        isomorphic.
+
+    image classification scenario
+        A :term:`scenario` where the task is to a binary classification of images. This
+        is available with a number of image datasets.
+
+    code validation scenario
+        A :term:`scenario` where the task is to determine whether a given piece of code
+        is a correct solution to a problem statement. Each problem instance is a pair of
+        a problem statement and a solution.
+
     interaction protocol
         The set of rules that govern how agents interact in the environment. This
         includes the names of the agents involved, the communication channels between

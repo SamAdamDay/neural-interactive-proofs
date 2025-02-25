@@ -1,7 +1,16 @@
 """Test solo graph isomorphism agents using a grid of hyperparameters.
 
 A solo agent is one which does not interact with any other agents, but instead tries to
-solve the graph isomorphism problem on its own.
+solve the graph isomorphism problem on its own. Solo agents are trained using supervised
+learning.
+
+This script runs through a grid of hyperparameters, specified in the ``param_grid``
+dict. If the ``MULTIPROCESS`` variable is set to True, the experiments are run using a
+pool of workers (specified by the ``--num-workers`` command line argument). Otherwise,
+the experiments are run sequentially.
+
+Additional settings, like whether to log to W&B can be set via command line arguments.
+Run the script with the ``--help`` flag to see all available arguments.
 """
 
 from argparse import Namespace
@@ -165,20 +174,24 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     )
 
 
-if __name__ == "__main__":
-    if MULTIPROCESS:
-        experiment_class = MultiprocessHyperparameterExperiment
-        extra_args = dict(default_num_workers=4)
-    else:
-        experiment_class = SequentialHyperparameterExperiment
-        extra_args = dict()
+if MULTIPROCESS:
+    experiment_class = MultiprocessHyperparameterExperiment
+    extra_args = dict(default_num_workers=4)
+else:
+    experiment_class = SequentialHyperparameterExperiment
+    extra_args = dict()
 
-    experiment = experiment_class(
-        param_grid=param_grid,
-        experiment_fn=experiment_fn,
-        run_id_fn=run_id_fn,
-        run_preparer_fn=run_preparer_fn,
-        experiment_name="TEST_SOLO_GI_AGENTS",
-        **extra_args,
-    )
+experiment = experiment_class(
+    param_grid=param_grid,
+    experiment_fn=experiment_fn,
+    run_id_fn=run_id_fn,
+    run_preparer_fn=run_preparer_fn,
+    experiment_name="TEST_SOLO_GI_AGENTS",
+    **extra_args,
+)
+
+# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+parser = experiment.parser
+
+if __name__ == "__main__":
     experiment.run()

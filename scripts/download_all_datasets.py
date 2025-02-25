@@ -4,8 +4,12 @@ This is useful to ensure that all datasets are already in the Docker image. This
 can be called from the Dockerfile.
 """
 
+from argparse import ArgumentParser
+
 from nip import HyperParameters, ScenarioType, TrainerType, prepare_experiment
 from nip.image_classification.data import DATASET_WRAPPER_CLASSES
+
+parser = ArgumentParser(description="Download all datasets used in the project")
 
 if __name__ == "__main__":
 

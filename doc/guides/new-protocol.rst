@@ -39,8 +39,8 @@ Here are the main steps to create a new protocol:
    <nip.parameters.types.InteractionProtocolType>`.
 2. (Optional) Create a :class:`SubParameters
    <nip.parameters.parameters_base.SubParameters>` subclass in
-   :doc:`../reference/generated/nip.parameters.protocol` to hold the protocol-specific
-   parameters (see :ref:`creating-new-parameters`).
+   ``nip/parameters/protocol.py`` to hold the protocol-specific parameters (see
+   :ref:`creating-new-parameters`).
 3. Define the implementation of the protocol by subclassing either
    :class:`ProtocolHandler <nip.protocols.protocol_base.ProtocolHandler>` or one of its
    subclasses. See :ref:`protocol-base-classes` for more information. Register the class

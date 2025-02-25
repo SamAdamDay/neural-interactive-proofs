@@ -1,4 +1,11 @@
-"""Script to time the timeable action."""
+"""Script to time the timeable action.
+
+The nip package contains a number of 'timeable' actions, such as running a model with
+a certain input. These actions can be timed to measure their performance. This script
+provides a command-line interface to time these actions.
+
+Run the script with the ``--help`` flag to see all available arguments.
+"""
 
 from argparse import ArgumentParser
 from textwrap import indent

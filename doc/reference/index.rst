@@ -12,6 +12,7 @@ Public API
    
    running_experiments
    parameters
+   scripts
 
 
 Developer API

@@ -1,4 +1,13 @@
-"""PPO image classification experiment using a grid of hyperparameters."""
+"""PPO image classification experiment using a grid of hyperparameters.
+
+This script runs through a grid of hyperparameters, specified in the ``param_grid``
+dict. If the ``MULTIPROCESS`` variable is set to True, the experiments are run using a
+pool of workers (specified by the ``--num-workers`` command line argument). Otherwise,
+the experiments are run sequentially.
+
+Additional settings, like whether to log to W&B can be set via command line arguments.
+Run the script with the ``--help`` flag to see all available arguments.
+"""
 
 from argparse import Namespace
 import os
@@ -309,35 +318,39 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     )
 
 
+if MULTIPROCESS:
+    experiment_class = MultiprocessHyperparameterExperiment
+    extra_args = dict(default_num_workers=4)
+else:
+    experiment_class = SequentialHyperparameterExperiment
+    extra_args = dict()
+
+experiment = experiment_class(
+    param_grid=param_grid,
+    experiment_fn=experiment_fn,
+    run_id_fn=run_id_fn,
+    run_preparer_fn=run_preparer_fn,
+    experiment_name="PPO_IC",
+    **extra_args,
+)
+
+experiment.parser.add_argument(
+    "--dataset-on-device",
+    action="store_true",
+    dest="dataset_on_device",
+    help="Store the whole dataset on the device (needs more GPU memory).",
+)
+
+experiment.parser.add_argument(
+    "--enable-efficient-attention",
+    action="store_true",
+    default=False,
+    help="Enable efficient attention scaled dot product backend (may be buggy).",
+)
+
+# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+parser = experiment.parser
+
 if __name__ == "__main__":
-    if MULTIPROCESS:
-        experiment_class = MultiprocessHyperparameterExperiment
-        extra_args = dict(default_num_workers=4)
-    else:
-        experiment_class = SequentialHyperparameterExperiment
-        extra_args = dict()
-
-    experiment = experiment_class(
-        param_grid=param_grid,
-        experiment_fn=experiment_fn,
-        run_id_fn=run_id_fn,
-        run_preparer_fn=run_preparer_fn,
-        experiment_name="PPO_IC",
-        **extra_args,
-    )
-
-    experiment.parser.add_argument(
-        "--dataset-on-device",
-        action="store_true",
-        dest="dataset_on_device",
-        help="Store the whole dataset on the device (needs more GPU memory).",
-    )
-
-    experiment.parser.add_argument(
-        "--enable-efficient-attention",
-        action="store_true",
-        default=False,
-        help="Enable efficient attention scaled dot product backend (may be buggy).",
-    )
 
     experiment.run()

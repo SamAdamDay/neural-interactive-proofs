@@ -7,5 +7,6 @@ Guides
    :caption: Contents:
    
    installation
+   running_experiments
    new-protocol
    docker

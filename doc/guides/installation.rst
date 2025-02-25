@@ -74,3 +74,9 @@ Installation Steps
 
    Edit the ``.env`` file and fill in the necessary information for your use case. The
    comments in the file should guide you on what to fill in.
+
+
+Next Steps
+----------
+
+See the :doc:`running_experiments` guide for information on how to run experiments.

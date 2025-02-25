@@ -50,7 +50,7 @@ Base classes for all elements that make up a scenario are found in the
 ``nip.scenario_base`` module. This contains the following sub-modules:
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/classes
    :recursive:
 
    nip.scenario_base.data
@@ -68,7 +68,7 @@ Implementations of scenarios are placed in their own modules. The following scen
 are available:
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    nip.graph_isomorphism
@@ -95,7 +95,7 @@ instances are stored in a :class:`nip.factory.ScenarioInstance`
 object, which is passed to the :term:`trainer`.
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/modules
    :recursive:
 
    nip.factory

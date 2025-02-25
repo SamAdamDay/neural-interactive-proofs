@@ -1,4 +1,8 @@
-"""Generate a graph isomorphism dataset."""
+"""Generate a graph isomorphism dataset.
+
+A graph isomorphism dataset consists of pairs of graphs, where each pair is either
+isomorphic or not.
+"""
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
@@ -32,18 +36,20 @@ parser.add_argument(
     help="The batch size to use for generating the graphs",
 )
 
-# Get the arguments
-cmd_args = parser.parse_args()
+if __name__ == "__main__":
 
-# Create the config
-config = GraphIsomorphicDatasetConfig(num_samples=cmd_args.num_graphs)
+    # Get the arguments
+    cmd_args = parser.parse_args()
 
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
+    # Create the config
+    config = GraphIsomorphicDatasetConfig(num_samples=cmd_args.num_graphs)
 
-# Generate the dataset
-generate_gi_dataset(
-    config, cmd_args.name, batch_size=cmd_args.batch_size, device=device
-)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
+    # Generate the dataset
+    generate_gi_dataset(
+        config, cmd_args.name, batch_size=cmd_args.batch_size, device=device
+    )

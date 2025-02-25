@@ -83,14 +83,15 @@ def env_var_default_factory(var_name: str, default=NOT_GIVEN) -> Callable[[], st
 
     Example
     -------
-    ```python
-    import dataclasses
+    .. code-block:: python
 
-    @dataclasses.dataclass
-    class MyParameters:
-        my_var: str = dataclasses.field(
-            default_factory=env_var_default_factory("MY_VAR")
-        )
+        import dataclasses
+
+        @dataclasses.dataclass
+        class MyParameters:
+            my_var: str = dataclasses.field(
+                default_factory=env_var_default_factory("MY_VAR")
+            )
 
     Parameters
     ----------
