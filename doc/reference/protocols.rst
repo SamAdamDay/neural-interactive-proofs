@@ -12,7 +12,7 @@ protocol specifies the following:
 
 - **Agents**. The names of the agents involved.
 - **Channels**. The communication channels between agents.
-- **Turn order**. Which agents are active in each turn.
+- **Order of play**. Which agents are active in each turn.
 - **Rewards**. The reward signal for each agent in each turn.
 
 

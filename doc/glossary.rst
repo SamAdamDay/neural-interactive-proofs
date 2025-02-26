@@ -31,19 +31,18 @@ Glossary
 
     code validation scenario
         A :term:`scenario` where the task is to determine whether a given piece of code
-        is a correct solution to a problem statement. Each problem instance is a pair of
-        a problem statement and a solution.
+        is a correct solution to a problem statement. Each problem instance consists of a problem statement and a candidate solution.
 
     interaction protocol
         The set of rules that govern how agents interact in the environment. This
         includes the names of the agents involved, the communication channels between
-        agents, the turn order and the reward signal for each agent in each turn.
+        agents, the order of play and the reward signal for each agent in each turn.
         Protocols are implemented by subclassing :class:`ProtocolHandler
         <nip.protocols.protocol_base.ProtocolHandler>`. See the guide to 
         :doc:`Creating a new protocol <guides/new-protocol>`.
 
     deterministic interaction protocol
-        An :term:`interaction protocol` where the turn order is fixed and does not vary
+        An :term:`interaction protocol` where the order of play is fixed and does not vary
         between trajectories. Deterministic protocols with a single verifier are
         implemented by subclassing :class:`DeterministicSingleVerifierProtocolHandler
         <nip.protocols.protocol_base.DeterministicSingleVerifierProtocolHandler>`.

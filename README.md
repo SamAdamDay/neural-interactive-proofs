@@ -120,7 +120,7 @@ Make sure all tests pass before committing.
 A docker file is available which allows for iterative development and running
 experiments. To build a new image and use it, follow the proceeding steps.
 
-1. Create GitHub personal access token. Ideally use a fine-grained one which has access
+1. Create GitHub personal access token (PAT). Ideally use a fine-grained one which has access
    only to the contents of this repository.
 
 2. Create a [Weights & Biases](https://wandb.ai) account and generate an [API

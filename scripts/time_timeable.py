@@ -1,4 +1,4 @@
-"""Script to time the timeable action.
+"""Script to time a timeable action.
 
 The nip package contains a number of 'timeable' actions, such as running a model with
 a certain input. These actions can be timed to measure their performance. This script

@@ -60,7 +60,7 @@ Installation Steps
 
       pip install -e .
 
-5. Log in to Weights & Biases:
+5. Log in to :term:`Weights & Biases`:
 
    .. code-block:: bash
 
