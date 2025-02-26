@@ -2,6 +2,12 @@
 
 import sys
 from pathlib import Path
+from string import Template
+
+from sphinx.application import Sphinx
+from sphinx.environment import BuildEnvironment
+
+import markdown
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -65,3 +71,44 @@ intersphinx_mapping = {
 
 # -- Options for sphinxcontrib-bibtex ----------------------------------------------
 bibtex_bibfiles = ["references.bib"]
+
+
+def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
+    """Generate the splash page from the markdown source."""
+
+    with open(app.config.splash_source_filename, "r", encoding="utf-8") as input_file:
+        text = input_file.read()
+    content = markdown.markdown(text, extensions=["extra"])
+
+    # Try to extract the title from the markdown; default to a generic title
+    for line in text.split("\n"):
+        stripped_line = line.strip()
+        if stripped_line.startswith("# "):
+            title = stripped_line[2:]
+            break
+    else:
+        title = "Neural Interactive Proofs"
+
+    # Load the template and substitute the title and content
+    with open(app.config.splash_template_path, "r", encoding="utf-8") as template_file:
+        html_template = Template(template_file.read())
+    html = html_template.substitute(title=title, content=content)
+
+    # Write the output
+    with open(
+        Path(app.outdir, app.config.splash_output_filename), "w", encoding="utf-8"
+    ) as output_file:
+        output_file.write(html)
+
+    return []
+
+
+def setup(app: Sphinx) -> None:
+    """Set up the Sphinx application, registering the splash page generator."""
+    app.connect("env-updated", generate_splash_page)
+
+    app.add_config_value(
+        "splash_template_path", Path("_templates", "splash", "template.html"), ""
+    )
+    app.add_config_value("splash_source_filename", "splash.md", "")
+    app.add_config_value("splash_output_filename", "splash.html", "")
