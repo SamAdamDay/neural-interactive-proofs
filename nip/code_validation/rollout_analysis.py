@@ -66,7 +66,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
         if hyper_params.interaction_protocol == "merlin_arthur":
             raise NotImplementedError(
-                "Rollout analysers are not implemented for the Merlin-Arthur protocol."
+                "Rollout analysers are not implemented for the Merlin-Arthur Classifier (MAC) protocol."
             )
 
         # Make sure the environment variables are loaded, so that we can access the

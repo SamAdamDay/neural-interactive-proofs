@@ -1,7 +1,7 @@
-"""Script for running Expert Iteration with the code validation task.
+"""Script for running Expert Iteration (EI) with the code validation task.
 
 This script runs through a grid of hyperparameters, specified in the ``param_grid``
-dict, and runs Expert Iteration experiments for the code validation task for each.
+dict, and runs EI experiments for the code validation task for each.
 
 Additional settings, like whether to log to W&B, the number of rollout workers to use,
 and whether to use the dummy API, can be set via command line arguments. Run the script

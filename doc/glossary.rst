@@ -9,7 +9,7 @@ Glossary
         of a classification task in which we want to train agents. The main components
         of a scenario are the dataset, the environment and the agents.
         
-        An example of such a task is the code validation problem, where a problem
+        An example of such a task is the :term:`code validation scenario`, where a problem
         statement together with a purported solution is given, and the task is to
         determine whether the solution is correct.
 
@@ -61,8 +61,7 @@ Glossary
     experiment settings
         An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>`
         object, which contains various settings for the experiment not relevant to
-        reproducibility (e.g. the GPU device number and whether to use Weights &
-        Biases).
+        reproducibility (e.g. the GPU device number and whether to use :term:`Weights & Biases`).
 
     trainer
         The class that performs the optimisation steps on the agents, using the

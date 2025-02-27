@@ -102,7 +102,7 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
 
 @register_protocol_handler("adp")
 class AdpProtocol(NipProtocol):
-    """Implementation of the Abstract Decision Problem protocol :cite:p:`Anil2021`.
+    """Implementation of the Abstract Decision Problem (ADP) protocol :cite:p:`Anil2021`.
 
     Parameters
     ----------
@@ -240,7 +240,7 @@ class DebateProtocol(NipProtocol):
 
 @register_protocol_handler("merlin_arthur")
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
-    """Implementation of the Merlin-Arthur protocol :cite:p:`Waeldchen2022`.
+    """Implementation of the Merlin-Arthur Classifier (MAC) protocol :cite:p:`Waeldchen2022`.
 
     The protocol consists of two provers and a verifier. One of the two provers sends a
     message to the verifier, who then makes a decision. Which prover sends the message

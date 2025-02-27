@@ -507,7 +507,7 @@ class NipCodeValidationProtocol(CodeValidationProtocolHandler, NipProtocol):
 
 @register_protocol_handler("adp", "code_validation")
 class AdpCodeValidationProtocol(CodeValidationProtocolHandler, AdpProtocol):
-    """The abstract decision problem protocol for code validation."""
+    """The abstract decision problem (ADP) protocol for code validation."""
 
     prover_stance_can_be_randomized = True
 
@@ -558,7 +558,7 @@ class DebateCodeValidationProtocol(CodeValidationProtocolHandler, DebateProtocol
 class MerlinArthurCodeValidationProtocol(
     CodeValidationProtocolHandler, MerlinArthurProtocol
 ):
-    """The Merlin-Arthur protocol for code validation."""
+    """The Merlin-Arthur Classifier (MAC) protocol for code validation."""
 
     agent_specs = {
         "verifier": CodeValidationAgentSpec("Verifier"),

@@ -1,6 +1,6 @@
-"""Expert Iteration (EI) trainer for text-based environments which only use APIs.
+"""Expert Iteration (EI) trainer for text-based environments that only use APIs.
 
-See :cite:t:`Anthony2017` for more information on Expert Iteration.
+See :cite:t:`Anthony2017` for more information on EI.
 """
 
 import numpy as np
@@ -12,9 +12,9 @@ from nip.utils.nested_array_dict import NestedArrayDict
 
 @register_trainer("pure_text_ei")
 class PureTextEiTrainer(PureTextRlTrainer):
-    """Expert Iteration (EI) trainer for text-based environments which only use APIs.
+    """Expert Iteration (EI) trainer for text-based environments that only use APIs.
 
-    See :cite:t:`Anthony2017` for more information on Expert Iteration.
+    See :cite:t:`Anthony2017` for more information on EI.
 
     Parameters
     ----------

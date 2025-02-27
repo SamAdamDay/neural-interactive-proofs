@@ -57,7 +57,7 @@ Preparing Experiments
 If you are running multiple experiments (e.g. with a hyper-parameter sweep), it can be
 convenient to do some preparation in advance, such as downloading datasets. This is
 especially important if experiments are run in parallel, as downloading the same dataset
-multiple times can be slow, wasteful and potentially lead to errors.
+multiple times can be slow, wasteful, and potentially lead to errors.
 
 The :func:`prepare_experiment() <nip.run.prepare_experiment>` function is designed to
 help with this. It takes a :class:`HyperParameters <nip.parameters.HyperParameters>`

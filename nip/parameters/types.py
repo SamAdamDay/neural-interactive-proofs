@@ -68,9 +68,7 @@ pure_text_ei
     through text-based APIs (i.e. we don't run them locally, so everything can be
     represented as text).
 pure_text_malt
-     Multi-Agent LLM Training :cite:p:`Motwani2024` for text-based tasks, where agents
-     are run through text-based APIs (i.e. we don't run them locally, so everything can
-     be represented as text).
+     Multi-Agent LLM Training (MALT) :cite:p:`Motwani2024` for text-based tasks, where agents are run through text-based APIs (i.e. we don't run them locally, so everything can be represented as text).
 """
 
 TestSchemeType = Literal["none", "all", "last", "first_and_last"]
@@ -124,15 +122,15 @@ InteractionProtocolType: TypeAlias = Literal[
 Possible Values
 ---------------
 nip
-    The full Prover-Verifier Game protocol.
+    The Neural Interactive Proof (NIP) protocol that we introduce.
 adp
-    The Abstract Decision Problem protocol.
+    The Abstract Decision Problem (ADP) protocol.
 debate
     The Debate protocol.
 merlin_arthur
-    The Merlin-Arthur classifier protocol.
+    The Merlin-Arthur Classifier (MAC) protocol.
 mnip
-    The Prover-Verifier Game protocol with two provers.
+    The Neural Interactive Proof protocol with multiple (in this case, two) provers (MNIP).
 solo_verifier
     A protocol consisting of a single verifier, which makes a decision without
     interacting with a prover.

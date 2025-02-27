@@ -12,7 +12,7 @@ Running an experiment involves the following two steps:
    :class:`HyperParameters <nip.parameters.HyperParameters>` object.
 
 For example, here's how to run a basic code validation experiment with the NIP protocol,
-expert iteration trainer, and default hyper-parameters:
+expert iteration (EI) trainer, and default hyper-parameters:
 
 .. code-block:: python
 
@@ -106,7 +106,7 @@ list of arguments.
 Experiment Scripts
 ------------------
 
-The package comes with a suite of scripts to facilitate running experiments. In these
+The library comes with a suite of scripts to facilitate running experiments. In these
 scripts, the hyper-parameters are specified in a grid, which allows you to run multiple
 experiments with different hyper-parameters either in parallel or sequentially. The
 scripts also allow configuring logging to :term:`Weights & Biases`.
@@ -132,7 +132,7 @@ API reference :doc:`/reference/scripts` for a complete list of scripts.
      - Do supervised training of a single agent on the :term:`image classification
        <image classification scenario>` task.
    * - :doc:`ei_cv.py </reference/generated/scripts/ei_cv>`
-     - Run an expert iteration experiment with the :term:`code validation <code
+     - Run an expert iteration (EI) experiment with the :term:`code validation <code
        validation scenario>` task.
 
 Let's consider the :doc:`ei_cv.py </reference/generated/scripts/ei_cv>` script. This

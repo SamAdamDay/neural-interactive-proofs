@@ -15,7 +15,7 @@ The main components of a scenario are:
 - **Environment**. The environment in which the agents interact. Crucially, this
   specifies the message space in which agents exchange messages.
 - **Agents**. The agents that interact in the environment. These should be trainable
-  models which take as input a task instance and the sequence of messages exchanged so
+  models that take as input a task instance and the sequence of messages exchanged so
   far, and output a message to send to the other agent, and potentially a decision.
 
 

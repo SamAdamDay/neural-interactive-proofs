@@ -1,4 +1,4 @@
-"""Base classes for RL trainers for text-based environments which only use APIs."""
+"""Base classes for RL trainers for text-based environments that only use APIs."""
 
 from abc import ABC, abstractmethod
 from typing import Optional, Literal, Iterable, Iterator
@@ -63,7 +63,7 @@ from nip.constants import (
 
 
 class PureTextRlTrainer(Trainer, ABC):
-    """Base class for RL trainers for text-based environments which only use APIs.
+    """Base class for RL trainers for text-based environments that only use APIs.
 
     Parameters
     ----------
