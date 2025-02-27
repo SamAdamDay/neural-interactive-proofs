@@ -22,18 +22,18 @@ The main components of a scenario are:
 .. _tensordict-or-pure-text-scenario:
 
 TensorDict or Pure Text Scenario?
----------------------------------
+----------------------------------------
 
 There are two types of scenario depending on how the agent models are implemented.
 
-1. **TensorDict-based scenarios**. These scenarios are those where the agents are
+1. **:term:`TensorDict`-based scenarios**. These scenarios are those where the agents are
    locally run neural networks, so we need to pass around PyTorch tensors. The data
    structures used are based on PyTorch's :external+tensordict:class:`TensorDict
    <tensordict.TensorDict>` objects. The environment and agents are based on
    :torchrl:doc:`TorchRL <torchrl:index>` components.
 2. **Pure text scenarios**. These scenarios are those where the agents are text-based
    models accessed by an API. In this case we need to pass around strings, rather than
-   tensors. The data structures used are similar to TensorDicts, but contain nested
+   tensors. The data structures used are similar to :term:`TensorDict`s, but contain nested
    dictionaries of Numpy string arrays, as implemented in the :class:`NestedArrayDict
    <nip.utils.nested_array_dict.NestedArrayDict>` class.
 

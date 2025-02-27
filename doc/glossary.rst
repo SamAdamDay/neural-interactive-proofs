@@ -61,7 +61,7 @@ Glossary
     experiment settings
         An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>`
         object, which contains various settings for the experiment not relevant to
-        reproducibility (e.g. the GPU device number and whether to use :term:`Weights & Biases`).
+        reproducibility (e.g. the GPU device number and whether to use Weights & Biases).
 
     trainer
         The class that performs the optimisation steps on the agents, using the
@@ -71,7 +71,3 @@ Glossary
     TensorDict
         A nested dictionary of PyTorch tensors. :tensordict:doc:`Read the documentation
         <tensordict:index>`.
-
-    Weights & Biases
-        A tool for tracking and visualising machine learning experiments. See `the
-        Weights & Biases website <https://wandb.ai/site>`_.

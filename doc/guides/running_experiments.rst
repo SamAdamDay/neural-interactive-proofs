@@ -90,9 +90,9 @@ not (in theory) affect the results of the experiment. The most important ones ar
    * - ``device``
      - The device to run the experiment on, if run locally.
    * - ``use_wandb``
-     - Whether to log the experiment to :term:`Weights & Biases`.
+     - Whether to log the experiment to Weights & Biases.
    * - ``wandb_project``
-     - The :term:`Weights & Biases` project to log the experiment to, if different from the
+     - The Weights & Biases project to log the experiment to, if different from the
        default.
    * - ``run_id``
      - The ID of the run to log the experiment to.
@@ -109,7 +109,7 @@ Experiment Scripts
 The library comes with a suite of scripts to facilitate running experiments. In these
 scripts, the hyper-parameters are specified in a grid, which allows you to run multiple
 experiments with different hyper-parameters either in parallel or sequentially. The
-scripts also allow configuring logging to :term:`Weights & Biases`.
+scripts also allow configuring logging to Weights & Biases.
 
 The following are the available scripts for running hyper-parameter sweeps. See also the
 API reference :doc:`/reference/scripts` for a complete list of scripts.
@@ -160,7 +160,7 @@ The experiment (which we'll call ``test_difficulty_levels``) can now be run by c
 
     python scripts/ei_cv.py --use_wandb test_difficulty_levels
 
-This will run the experiments sequentially, logging data to :term:`Weights & Biases`
+This will run the experiments sequentially, logging data to Weights & Biases
 with run IDs ``test_difficulty_levels_0``, ``test_difficulty_levels_1``, etc.
 
 See the :doc:`documentation for the script </reference/generated/scripts/ei_cv>` for more information on how to run it, or run:

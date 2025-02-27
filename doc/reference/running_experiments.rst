@@ -17,7 +17,7 @@ basic workflow is as follows:
    quirks prevent this).
 2. Call :func:`run_experiment() <nip.run.run_experiment>` with the hyper-parameters
    object and other configuration options. These options specify things like the device
-   to run on, and whether to save the results to :term:`Weights & Biases`. These
+   to run on, and whether to save the results to Weights & Biases. These
    additional options should not affect the experiment's outcome (in theory).
 
 The :func:`run_experiment() <nip.run.run_experiment>` function takes care of setting up

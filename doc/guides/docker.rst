@@ -19,10 +19,10 @@ particular, you need the following:
   Ideally, use a fine-grained one that has (read-write) access only to the contents of
   this repository.
 - An SSH public key. This allows you to access the Docker container via SSH.
-- A :term:`Weights & Biases` API key. This is used to log experiment data.
+- A Weights & Biases API key. This is used to log experiment data.
 - A name (probably your full name) and email address for signing git commits.
 
-If you want to push the image to Docker Hub, you will also need a Docker Hub account.
+If you want to push the image to `Docker Hub <https://hub.docker.com/>`_, you will also need a Docker Hub account.
 
 
 Building and Pushing the Image

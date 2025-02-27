@@ -85,7 +85,7 @@ Converting to and from Nested Dicts
 -----------------------------------
 
 A :class:`HyperParameters` object can be converted to a nested dictionary. Example uses
-of this are attaching the hyper-parameters to a :term:`Weights & Biases` run, and
+of this are attaching the hyper-parameters to a Weights & Biases run, and
 serialising the parameters to store them in a JSON file. To convert
 :class:`HyperParameters` object to a dict, use the :func:`to_dict
 <nip.parameters.HyperParameters.to_dict>` method (which is also available for

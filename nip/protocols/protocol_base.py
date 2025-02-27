@@ -30,7 +30,7 @@ class ProtocolHandler(ABC):
     To implement a new protocol, subclass this class and implement the following
     properties and methods:
 
-    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``agent_names`` (property): The names of the agents in the protocol.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
     - ``max_verifier_questions`` (property): The maximum number of questions the
@@ -64,7 +64,7 @@ class ProtocolHandler(ABC):
     @property
     @abstractmethod
     def agent_names(self) -> list[str]:
-        """The names of the agents in the protocol in turn order."""
+        """The names of the agents in the protocol."""
 
     @cached_property
     def prover_names(self) -> list[str]:
@@ -454,7 +454,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     To implement a new protocol, subclass this class and implement the following
     properties and methods, all of which come from the `ProtocolHandler` class:
 
-    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``agent_names`` (property): The names of the agents in the protocol.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
     - ``max_verifier_questions`` (property): The maximum number of questions the
@@ -765,7 +765,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     To implement a new protocol, subclass this class and implement the following
     properties and methods:
 
-    - ``agent_names`` (property): The names of the agents in the protocol in turn order.
+    - ``agent_names`` (property): The names of the agents in the protocol.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
     - ``max_verifier_questions`` (property): The maximum number of questions the
