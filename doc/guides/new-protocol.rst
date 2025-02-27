@@ -47,8 +47,8 @@ Here are the main steps to create a new protocol:
     with the :func:`register_protocol_handler
     <nip.protocols.registry.register_protocol_handler>` decorator.
 4. (Optional) If you would like to use your protocol in the code validation task (or, analogously, in other tasks using LLM agents):
-   a. Add a subclass of your protocol handler to :mod:`nip.code_validation.protocols` to specify aspects of the protocol that are specific to the code validation task.
-   b. Add system prompts for each agent in the protocol for the code validation task. See :ref:`creating-code-validation-prompts` for more information.
+    a. Add a subclass of your protocol handler to :mod:`nip.code_validation.protocols` to specify aspects of the protocol that are specific to the code validation task.
+    b. Add system prompts for each agent in the protocol for the code validation task. See :ref:`creating-code-validation-prompts` for more information.
 
 .. _protocol-base-classes:
 
