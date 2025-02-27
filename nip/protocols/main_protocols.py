@@ -64,7 +64,7 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
 
     @property
     def max_verifier_questions(self) -> int:
-        """The maximum number of questions the verifier can make to the other agents."""
+        """The maximum number of questions the verifier can make to each prover."""
         if self.hyper_params.protocol_common.verifier_first:
             return ceil(self.max_message_rounds / 2)
         else:

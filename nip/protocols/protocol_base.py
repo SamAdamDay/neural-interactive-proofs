@@ -33,8 +33,8 @@ class ProtocolHandler(ABC):
     - ``agent_names`` (property): The names of the agents in the protocol in turn order.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
-    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
-      take.
+    - ``max_verifier_questions`` (property): The maximum number of questions the
+      verifier can make to each prover.
     - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
     - ``agent_channel_visibility`` (property): A specification of which agents can see
@@ -143,7 +143,7 @@ class ProtocolHandler(ABC):
     @property
     @abstractmethod
     def max_verifier_questions(self) -> int:
-        """The maximum number of questions the verifier can make to the other agents."""
+        """The maximum number of questions the verifier can make to each prover."""
 
     @property
     @abstractmethod
@@ -457,8 +457,8 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     - ``agent_names`` (property): The names of the agents in the protocol in turn order.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
-    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
-      take.
+    - ``max_verifier_questions`` (property): The maximum number of questions the
+      verifier can make to each prover.
     - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
     - ``agent_channel_visibility`` (property): A specification of which agents can see
@@ -768,8 +768,8 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     - ``agent_names`` (property): The names of the agents in the protocol in turn order.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
     - ``min_message_rounds`` (property): The minimum number of rounds in the protocol.
-    - ``max_verifier_questions`` (property): The maximum number of turns the verifier can
-      take.
+    - ``max_verifier_questions`` (property): The maximum number of questions the
+      verifier can make to each prover.
     - ``message_channel_names`` (property): The names of the message channels in the
       protocol.
     - ``agent_channel_visibility`` (property): A specification of which agents can see

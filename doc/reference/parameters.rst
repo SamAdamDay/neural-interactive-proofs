@@ -94,7 +94,7 @@ sub-parameters). This performs the following special operations:
 - Some parameter values are not serialisable to JSON (e.g. :class:`AgentUpdateSchedule
   <nip.parameters.update_schedule.AgentUpdateSchedule>`). These are converted to special
   dictionaries that can be converted back to the original object later.
-- Random agents get the special key ``is_random`` added to their dictionary. This is a
+- Agents get the special key ``is_random`` added to their dictionary. This is a
   convenient way to see just from the dict if the agent selects their actions uniformly
   at random.
 

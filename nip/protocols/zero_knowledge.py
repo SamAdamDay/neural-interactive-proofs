@@ -92,7 +92,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
 
     @property
     def max_verifier_questions(self) -> int:
-        """The maximum number of verifier turns in the protocol."""
+        """The maximum number of questions the verifier can make to each prover."""
         return self.base_protocol.max_verifier_questions
 
     @property
