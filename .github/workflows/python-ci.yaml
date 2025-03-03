@@ -16,31 +16,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
-    - name: Install prerequisites
-      run: |
-        sudo apt update
-        sudo apt install g++ python-dev-is-python3
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install wheel
-        pip install -r requirements_dev.txt
-    - name: Install the package locally
-      run: |
-        pip install .
-    - name: Test with pytest
-      run: |
-        python -m pytest
-    - name: Check formatting with black
-      run: |
-        # stop the build if there are black formatting errors
-        black --check .
-    - name: Check linting with ruff
-      run: |
-        # stop the build if there are ruff linting errors
-        ruff check .
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.11"
+      - name: Setup NIP
+        uses: actions/setup-nip@v1
+      - name: Test with pytest
+        run: |
+          python -m pytest
+      - name: Check formatting with black
+        run: |
+          # stop the build if there are black formatting errors
+          black --check .
+      - name: Check linting with ruff
+        run: |
+          # stop the build if there are ruff linting errors
+          ruff check .
