@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup NIP
-        uses: actions/setup-nip@v1
+        uses: ./.github/actions/setup-nip@v1
       - name: Build with Sphinx
         run: |
           sphinx-build -b html docs docs/_build
