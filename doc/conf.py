@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+root_dir = Path(__file__).parent.parent
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -49,7 +51,8 @@ napoleon_custom_sections = ["Shapes", "Class Attributes"]
 
 # -- Options for autosummary and autodoc ----------------------------------------------
 
-sys.path.insert(0, str(Path("..", "scripts").resolve()))
+sys.path.insert(0, str(root_dir.joinpath("scripts")))
+sys.path.insert(0, str(root_dir))
 
 # -- Options for intersphinx -------------------------------------------------
 
