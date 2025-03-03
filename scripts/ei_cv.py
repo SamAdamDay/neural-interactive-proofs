@@ -1,5 +1,7 @@
 """Script for running Expert Iteration with the code validation task."""
 
+# python scripts/ei_cv.py --use-wandb malt_test_6
+
 from argparse import Namespace
 import os
 import logging
@@ -34,16 +36,17 @@ from pvg.constants import WANDB_CV_PROJECT
 param_grid = dict(
     interaction_protocol=["pvg"],
     dataset_name=["lrhammond/buggy-apps"],
+    trainer=["pure_text_malt"],
     apps_difficulty=["interview"],
-    num_iterations=[8],
-    rollouts_per_iteration=[200],
+    num_iterations=[2],
+    rollouts_per_iteration=[20],
     verifier_model=["gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
     verifier_guess_replacement_proportion=[0.0],
     verifier_guess_replacement_annealing=["linear"],
     verifier_guess_replacement_annealing_rate=[0.1],
-    prover_model=["gpt-4o-2024-08-06"],
+    prover_model=["gpt-4o-mini-2024-07-18"],
     prover_temperature=[None],
     prover_top_p=[None],
     freeze_prover=[False],
@@ -142,7 +145,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     return HyperParameters(
         scenario="code_validation",
-        trainer="pure_text_ei",
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         rl=RlTrainerParameters(
             rollouts_per_iteration=combo["rollouts_per_iteration"],
