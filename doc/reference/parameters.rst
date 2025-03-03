@@ -7,8 +7,8 @@ Experiment Hyper-Parameters (``nip.parameters``)
 Overview
 --------
 
-The hyper-parameters object is the main API for the package. Hyper-parameters determine
-everything about how the experiment is run: the task, trainer, dataset and all
+The hyper-parameters object is the main API for the library. Hyper-parameters determine
+everything about how an experiment is run: the task, trainer, dataset and all
 parameters. An experiment should be completely reproducible from its hyper-parameters,
 up to hardware quirks and model API non-reproducibility.
 
@@ -30,7 +30,7 @@ dictionary, it will be converted to the appropriate :class:`SubParameters
 Examples
 --------
 
-1. Create a parameters object, using default values for ppo parameters, and others
+1. Create a parameters object, using default values for PPO parameters, and others
 
    .. code-block:: python
 
@@ -67,7 +67,7 @@ Examples
          },
       )
 
-Specifying agent parameters
+Specifying Agent Parameters
 ---------------------------
 
 The number and names of the agents in the experiment vary depending on the protocol.
@@ -81,11 +81,11 @@ This is mostly useful in tests, where we want to use basic parameters for all ag
 but don't want to specify the names of all agents.
 
 
-Converting to and from nested dicts
+Converting to and from Nested Dicts
 -----------------------------------
 
 A :class:`HyperParameters` object can be converted to a nested dictionary. Example uses
-of this are attaching the hyper-parameters to a :term:`Weights & Biases` run, and
+of this are attaching the hyper-parameters to a Weights & Biases run, and
 serialising the parameters to store them in a JSON file. To convert
 :class:`HyperParameters` object to a dict, use the :func:`to_dict
 <nip.parameters.HyperParameters.to_dict>` method (which is also available for
@@ -105,7 +105,7 @@ reconstruct the original object, including all sub-parameters.
 
 .. _creating-new-parameters:
 
-Creating new parameters
+Creating New Parameters
 -----------------------
 
 New parameters can be added by adding elements to the :class:`HyperParameters` class or
@@ -127,7 +127,7 @@ following example:
        my_param: int = 10
 
 
-Main hyper-parameters class
+Main Hyper-Parameters Class
 ---------------------------
 
 .. autoclass:: HyperParameters
@@ -143,7 +143,7 @@ Main hyper-parameters class
       ~HyperParameters.to_dict
 
 
-Modules for sub-parameters
+Modules for Sub-Parameters
 --------------------------
 
 Sub-parameter classes are grouped into sub-modules of :mod:`nip.parameters`. Each module
@@ -163,7 +163,7 @@ contains classes for a specific part of the hyper-parameters.
    update_schedule
 
 
-Bases classes and enum types
+Bases Classes and Enum Types
 ----------------------------
 
 .. autosummary::
@@ -174,7 +174,7 @@ Bases classes and enum types
    types
 
 
-Handling parameter versions
+Handling Parameter Versions
 ---------------------------
 
 .. autosummary::
@@ -184,7 +184,7 @@ Handling parameter versions
    version
 
 
-Registering parameter classes
+Registering Parameter Classes
 -----------------------------
 
 .. autofunction:: register_parameter_class

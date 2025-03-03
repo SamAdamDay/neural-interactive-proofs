@@ -77,7 +77,7 @@ class ExperimentSettings:
         in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
-        GPU with `non_blocking=True`. This can speed up training. When the device if the
+        GPU with `non_blocking=True`. This can speed up training. When the device is the
         CPU this setting doesn't do anything and is set to False.
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but

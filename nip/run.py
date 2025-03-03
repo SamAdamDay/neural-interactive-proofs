@@ -235,7 +235,7 @@ def prepare_experiment(
 ) -> PreparedExperimentInfo:
     """Prepare for running an experiment.
 
-    This is useful e.g. for downloading data before running an experiment. Without this,
+    This is useful, e.g., for downloading data before running an experiment. Without this,
     if running multiple experiments in parallel, the initial runs will all start
     downloading data at the same time, which can cause problems.
 

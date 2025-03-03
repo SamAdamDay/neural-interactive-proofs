@@ -23,7 +23,7 @@ Trainers are responsible for optimising the agents in an experiment. A trainer
 
 3. An `ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object, which
    contains various settings for the experiment not relevant to reproducibility (e.g.
-   the GPU device number and whether to use :term:`Weights & Biases`).
+   the GPU device number and whether to use Weights & Biases).
 
 When called, the trainer performs some number of optimisation steps on the agents, using
 the environment to generate the training data.
@@ -39,7 +39,7 @@ that interact with text-based models through an API. The former kind use data st
 based on PyTorch's :external+tensordict:class:`TensorDict <tensordict.TensorDict>`
 objects, while the latter use a similar, custom data structure containing nested
 dictionaries of Numpy string arrays (:class:`NestedArrayDict
-<nip.utils.nested_array_dict.NestedArrayDict>`). TensorDict-based trainers use the
+<nip.utils.nested_array_dict.NestedArrayDict>`). :term:`TensorDict`-based trainers use the
 :torchrl:doc:`TorchRL Library <torchrl:index>`.
 
 Which of these two types is appropriate depends on the type of agents in the experiment.

@@ -481,6 +481,8 @@ def _try_generate_buggy_solutions(
     logger = getLogger(__name__)
 
     load_env_once()
+
+    # We use OpenRouter to allow for the easy generation of modified solutions using different models
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
     logger.debug(f"Problem: {datum['problem_id']}")
@@ -653,9 +655,8 @@ def _get_openrouter_response(
 
     responses = []
 
-    # Crazily, the openrouter API doesn't support multiple completions in a single
-    # request, so we have to make multiple requests.
-    if "openai" not in model or "o1" in model or force_multiple_generations:
+    # The OpenRouter API doesn't support multiple completions in a single request, so we have to make multiple requests.
+    if "openai" not in model or force_multiple_generations:
         completions = []
         for _ in range(num_responses):
             response = requests.post(

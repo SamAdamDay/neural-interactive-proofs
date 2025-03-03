@@ -17,7 +17,7 @@ basic workflow is as follows:
    quirks prevent this).
 2. Call :func:`run_experiment() <nip.run.run_experiment>` with the hyper-parameters
    object and other configuration options. These options specify things like the device
-   to run on, and whether to save the results to :term:`Weights & Biases`. These
+   to run on, and whether to save the results to Weights & Biases. These
    additional options should not affect the experiment's outcome (in theory).
 
 The :func:`run_experiment() <nip.run.run_experiment>` function takes care of setting up
@@ -57,7 +57,7 @@ Preparing Experiments
 If you are running multiple experiments (e.g. with a hyper-parameter sweep), it can be
 convenient to do some preparation in advance, such as downloading datasets. This is
 especially important if experiments are run in parallel, as downloading the same dataset
-multiple times can be slow, wasteful and potentially lead to errors.
+multiple times can be slow, wasteful, and potentially lead to errors.
 
 The :func:`prepare_experiment() <nip.run.prepare_experiment>` function is designed to
 help with this. It takes a :class:`HyperParameters <nip.parameters.HyperParameters>`

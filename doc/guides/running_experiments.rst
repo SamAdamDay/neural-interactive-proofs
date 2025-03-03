@@ -12,7 +12,7 @@ Running an experiment involves the following two steps:
    :class:`HyperParameters <nip.parameters.HyperParameters>` object.
 
 For example, here's how to run a basic code validation experiment with the NIP protocol,
-expert iteration trainer and default hyper-parameters:
+expert iteration (EI) trainer, and default hyper-parameters:
 
 .. code-block:: python
 
@@ -79,7 +79,7 @@ Additional Experiment Settings
 ------------------------------
 
 The :func:`run_experiment <nip.run.run_experiment>` function has several optional
-arguments that allow you to customize the experiment. These are setting which should
+arguments that allow you to customize the experiment. These are settings that should
 not (in theory) affect the results of the experiment. The most important ones are:
 
 .. list-table::
@@ -106,10 +106,10 @@ list of arguments.
 Experiment Scripts
 ------------------
 
-The package comes with a suite of scripts to facilitate running experiments. In these
+The library comes with a suite of scripts to facilitate running experiments. In these
 scripts, the hyper-parameters are specified in a grid, which allows you to run multiple
 experiments with different hyper-parameters either in parallel or sequentially. The
-scripts also allow configuring logging to :term:`Weights & Biases`.
+scripts also allow configuring logging to Weights & Biases.
 
 The following are the available scripts for running hyper-parameter sweeps. See also the
 API reference :doc:`/reference/scripts` for a complete list of scripts.
@@ -132,7 +132,7 @@ API reference :doc:`/reference/scripts` for a complete list of scripts.
      - Do supervised training of a single agent on the :term:`image classification
        <image classification scenario>` task.
    * - :doc:`ei_cv.py </reference/generated/scripts/ei_cv>`
-     - Run an expert iteration experiment with the :term:`code validation <code
+     - Run an expert iteration (EI) experiment with the :term:`code validation <code
        validation scenario>` task.
 
 Let's consider the :doc:`ei_cv.py </reference/generated/scripts/ei_cv>` script. This
@@ -141,7 +141,7 @@ hyper-parameters and the values are lists of values for those hyper-parameters. 
 script will run an experiment for each combination of hyper-parameters in the grid.
 
 For example, the following grid will run 4 experiments, running the NIP and Debate
-protocols with the 'introductory' and 'interview' level code validation datasets:
+protocols with the "introductory" and "interview" level code validation datasets:
 
 .. code-block:: python
 
@@ -154,13 +154,13 @@ protocols with the 'introductory' and 'interview' level code validation datasets
       ...
     )
 
-The experiment can now be run by calling the script with the following command:
+The experiment (which we'll call ``test_difficulty_levels``) can now be run by calling the script with the following command:
 
 .. code-block:: bash
 
     python scripts/ei_cv.py --use_wandb test_difficulty_levels
 
-This will run the experiments sequentially, logging data to :term:`Weights & Biases`
+This will run the experiments sequentially, logging data to Weights & Biases
 with run IDs ``test_difficulty_levels_0``, ``test_difficulty_levels_1``, etc.
 
 See the :doc:`documentation for the script </reference/generated/scripts/ei_cv>` for more information on how to run it, or run:

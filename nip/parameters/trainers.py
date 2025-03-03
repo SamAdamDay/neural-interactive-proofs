@@ -297,7 +297,7 @@ class TextRlParameters(SubParameters):
 class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 
-    See :cite:t:`Anthony2017` for more information on Expert Iteration.
+    See :cite:t:`Anthony2017` for more information on EI.
 
     Parameters
     ----------

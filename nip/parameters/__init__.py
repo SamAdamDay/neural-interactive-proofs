@@ -188,11 +188,10 @@ class HyperParameters(BaseHyperParameters):
         Parameters for running agents in isolation. Used when the trainer is
         "solo_agent" or when `pretrain_agents` is `True`.
     pure_text_ei : PureTextEiParameters, optional
-        Parameters for the expert iteration trainer which works with agents that call a
+        Parameters for the expert iteration (EI) trainer which works with agents that call a
         text-based API.
     pure_text_malt : PureTextMaltParameters, optional
-        Parameters for the multi-agent LLM training trainer which works with agents that
-        call a text-based API.
+        Parameters for the multi-agent LLM training (MALT) trainer which works with agents that call a text-based API.
     image_classification : ImageClassificationParameters, optional
         Parameters for the image classification task.
     code_validation : CodeValidationParameters, optional

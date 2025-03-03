@@ -12,7 +12,7 @@ protocol specifies the following:
 
 - **Agents**. The names of the agents involved.
 - **Channels**. The communication channels between agents.
-- **Turn order**. Which agents are active in each turn.
+- **Order of play**. Which agents are active in each turn.
 - **Rewards**. The reward signal for each agent in each turn.
 
 
@@ -22,7 +22,7 @@ Creating a New Protocol
 See :doc:`../guides/new-protocol` for a guide on how to create a new protocol.
 
 
-Base classes
+Base Classes
 ------------
 
 .. autosummary::
@@ -34,7 +34,7 @@ Base classes
    protocol_base.DeterministicSingleVerifierProtocolHandler
 
 
-Built-in Protocols
+Built-In Protocols
 ------------------
 
 .. autosummary::
@@ -55,7 +55,7 @@ Built-in Protocols
 Zero-Knowledge Protocols
 ------------------------
 
-All protocols can be converted to zero-knowledge protocols by settings the
+All protocols can be converted to zero-knowledge protocols by setting the
 ``protocol_common.zero_knowledge`` :term:`hyper-parameter <hyper-parameters>` to
 ``True``. The way this is implemented is that a :class:`ZeroKnowledgeProtocol
 <zero_knowledge.ZeroKnowledgeProtocol>` meta-handler is used as the protocol handler for
@@ -81,7 +81,7 @@ configuration is required:
 
 The first item is done by creating and registering a
 :class:`nip.code_validation.protocols.CodeValidationProtocolHandler` class, which
-subclasses the desired protocol handler, and provides an
+subclasses the desired protocol handler, and provides a
 :class:`nip.code_validation.protocols.CodeValidationAgentSpec` specification for each
 agent. The second is done by creating files of the form
 ``nip/code_validation/prompt_templates/system_prompts/{protocol_name}/{agent_name}.txt``.

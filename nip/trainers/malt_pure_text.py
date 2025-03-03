@@ -1,4 +1,4 @@
-"""Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
+"""Multi-Agent LLM Training (MALT) for text-based environments that only use APIs.
 
 In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per timestep
 from the agents. This means that for each datapoint we have a tree of responses. For
@@ -32,7 +32,7 @@ from nip.utils.maths import mean_for_unique_keys
 
 @register_trainer("pure_text_malt")
 class PureTextMaltTrainer(PureTextRlTrainer):
-    """Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
+    """Multi-Agent LLM Training (MALT) for text-based environments that only use APIs.
 
     In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per
     timestep from the agents. This means that for each datapoint we have a tree of

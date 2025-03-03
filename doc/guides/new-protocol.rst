@@ -1,5 +1,5 @@
 #######################
-Creating a new protocol
+Creating a New Protocol
 #######################
 
 .. currentmodule:: nip.protocols.protocol_base
@@ -12,17 +12,17 @@ protocol specifies the following:
 
 - **Agents**. The names of the agents involved.
 - **Channels**. The communication channels between agents.
-- **Turn order**. Which agents are active in each turn.
+- **Order of play**. Which agents are active in each turn.
 - **Rewards**. The reward signal for each agent in each turn.
 
 When creating a new protocol, key questions to answer include:
 
 1. How many agents are involved, and what are their names? How many verifiers are there?
 2. What are the communication channels between agents?
-3. What is the turn order for the agents?
+3. What is the order of play for the agents?
 4. How are rewards computed for each agent in each turn?
 5. Is the protocol :term:`deterministic <deterministic interaction protocol>`? In other
-   words, is the turn order fixed, or can it vary between trajectories?
+   words, is the order of play fixed, or can it vary between trajectories?
 
 
 Feel free to jump to :ref:`new-protocol-example` if you prefer learning by example.
@@ -30,7 +30,7 @@ Feel free to jump to :ref:`new-protocol-example` if you prefer learning by examp
 
 .. _new-protocol-main-steps:
 
-Main steps
+Main Steps
 ==========
 
 Here are the main steps to create a new protocol:
@@ -39,26 +39,28 @@ Here are the main steps to create a new protocol:
    <nip.parameters.types.InteractionProtocolType>`.
 2. (Optional) Create a :class:`SubParameters
    <nip.parameters.parameters_base.SubParameters>` subclass in
-   ``nip/parameters/protocol.py`` to hold the protocol-specific parameters (see
-   :ref:`creating-new-parameters`).
+   ``nip/parameters/protocol.py`` to hold the protocol-specific parameters
+   (see:ref:`creating-new-parameters`).
 3. Define the implementation of the protocol by subclassing either
    :class:`ProtocolHandler <nip.protocols.protocol_base.ProtocolHandler>` or one of its
    subclasses. See :ref:`protocol-base-classes` for more information. Register the class
    with the :func:`register_protocol_handler
    <nip.protocols.registry.register_protocol_handler>` decorator.
-4. Add a subclass of your protocol handler to :mod:`nip.code_validation.protocols` to
-   specify aspects of the protocol that are specific to the code validation task.
-5. Add system prompts for each agent in the protocol for the code validation task. See
-   :ref:`creating-code-validation-prompts` for more information.
+4. (Optional) If you would like to use your protocol in the code validation task (or,
+   analogously, in other tasks using LLM agents):
 
+   a. Add a subclass of your protocol handler to :mod:`nip.code_validation.protocols`
+      to specify aspects of the protocol that are specific to the code validation task.
+   b. Add system prompts for each agent in the protocol for the code validation task.
+      See :ref:`creating-code-validation-prompts` for more information.
 
 .. _protocol-base-classes:
 
-Base classes
+Base Classes
 ============
 
 There are three base classes for protocol handlers, each more specialised than the
-previous. Since more specialised classes implement more functionality, you should choose
+previous one. Since more specialised classes implement more functionality, you should choose
 the most specialised class that fits your needs. Note that any implementation by a more
 specialised class can be overridden, if required.
 
@@ -73,11 +75,11 @@ specialised class can be overridden, if required.
    signals and rewards, given the agents' actions.
 3. :class:`DeterministicSingleVerifierProtocolHandler
    <nip.protocols.protocol_base.DeterministicSingleVerifierProtocolHandler>`: Use this
-   if the protocol has a single verifier and the turn order is fixed.
+   if the protocol has a single verifier and the order of play is fixed.
 
 
-Properties which all protocols need to define
-=============================================
+Properties That All Protocols Need to Define
+============================================
 
 The following are the properties that all protocols need to define, regardless of the
 base protocol type. Note that these properties can either be fixed class attributes, or
@@ -96,7 +98,7 @@ protocol-specific parameters.
    ProtocolHandler.agent_channel_visibility
 
 
-Methods to define
+Methods to Define
 =================
 
 Which methods each protocol needs to define depends on the base class. 
@@ -122,8 +124,7 @@ seed) and how to step the protocol. These are done by defining the following met
 --------------------------------------------------------------------------------------------------
 
 When we assume that there is only one verifier, there is a default behaviour for the
-protocol step function for NIP protocols. Therefore, you only need to specify when each
-agent is active. This is done by defining the following methods:
+protocol step function. Therefore, you only need to specify when each agent is active. This is done by defining the following methods:
 
 .. autosummary::
 
@@ -135,7 +136,7 @@ agent is active. This is done by defining the following methods:
 ----------------------------------------------------------------------------------------------------------------------------
 
 Again there is a default behaviour for the protocol step function. Moreover, because the
-turn order is fixed, we don't need to use the per-trajectory seed to determine which
+order of play is fixed, we don't need to use the per-trajectory seed to determine which
 agents are active. Therefore, you only need to define the following method:
 
 .. autosummary::
@@ -143,13 +144,13 @@ agents are active. Therefore, you only need to define the following method:
    DeterministicSingleVerifierProtocolHandler.is_agent_active
 
 
-Specifying additional details for the code validation task
+Specifying Additional Details for the Code Validation Task
 ==========================================================
 
 In order for the protocol to work in the code validation task, a few extra details need
 to be provided. This is done as follows:
 
-1. In :mod:`nip.code_validation.protocols`, create a new class which subclasses
+1. In :mod:`nip.code_validation.protocols`, create a new class that subclasses
    :class:`CodeValidationProtocolHandler
    <nip.code_validation.protocols.CodeValidationProtocolHandler>` and your
    :class:`ProtocolHandler` subclass.
@@ -159,7 +160,7 @@ to be provided. This is done as follows:
    a class attribute or a :external+python:class:`property`-decorated method.
 3. (Optional) Override the :func:`modify_system_prompt_variables
    <nip.code_validation.protocols.CodeValidationProtocolHandler.modify_system_prompt_variables>`
-   method. This allows you for example to add additional variables for the agent system
+   method. This allows you, for example, to add additional variables for the agent system
    prompts.
 4. Register the class with the :func:`register_protocol_handler
    <nip.protocols.registry.register_protocol_handler>` decorator, using the optional
@@ -174,10 +175,10 @@ to be provided. This is done as follows:
 
 .. _creating-code-validation-prompts:
 
-Creating code validation prompt templates
-=========================================
+Creating Code Validation Prompt Templates
+-----------------------------------------
 
-In order to run the protocol for the code validation task, you need to create system
+In order to run the protocol for the code validation task, you also need to create system
 prompt templates for each agent in the protocol. These are located in
 ``nip/code_validation/prompt_templates/system_prompts/{protocol_name}/{agent_name}.txt``.
 
@@ -192,18 +193,18 @@ have access to the following variables:
    * - ``$question``
      - The problem statement.
    * - ``$solution``
-     - The solution to the problem.
+     - The candidate solution to the problem.
    * - ``$max_response_words``
      - The maximum number of words that the agent can use in a response.
    * - ``$max_questions``
      - The maximum number of questions that the verifier can ask.
    * - ``$agent_stance_string``
-     - The stance that the agent should take towards the solution. This is either
-       "accept" or "reject". This is used when an agent's stance can be randomised
+     - The stance that the prover(s) should take towards the solution. This is either
+       "accept" or "reject". This is used when the prover(s)'s stance can be randomised
        (mostly for debugging purposes).
 
 
-Zero-knowledge protocols
+Zero-Knowledge Protocols
 ========================
 
 All protocols can be converted to zero-knowledge protocols without any additional work.
@@ -211,7 +212,7 @@ This is done by setting the ``protocol_common.zero_knowledge`` :term:`hyper-para
 to ``True``. See :ref:`zero-knowledge-protocols-reference` for more information.
 
 
-Testing protocols
+Testing Protocols
 =================
 
 All protocols listed in :const:`InteractionProtocolType
@@ -228,14 +229,14 @@ complex logic. These tests should be placed in the ``tests/test_protocols.py`` f
 Example
 =======
 
-Let's create a protocol called "adp_scratch_pad" which works as follows:
+Let's create a protocol called "adp_scratch_pad" that works as follows:
 
 - There are two agents, called "verifier" and "prover".
-- The turn order proceeds as follows:
+- The order of play proceeds as follows:
 
   1. The prover sends a message to the verifier.
   2. If the protocol parameter ``verifier_scratch_pad`` is set to ``True``, the
-     verifier can send itself a message.
+     verifier can send *itself* a message.
   3. The verifier makes a decision.
 
 - The verifier is rewarded for making the correct decision, and the prover when the
@@ -244,18 +245,19 @@ Let's create a protocol called "adp_scratch_pad" which works as follows:
 Let's follow the steps outlined in :ref:`new-protocol-main-steps`.
 
 
-1. Adding the protocol to ``InteractionProtocolType``
+1. Adding the Protocol to ``InteractionProtocolType``
 -----------------------------------------------------
 
 In the file ``nip/parameters/types.py``, modify the ``InteractionProtocolType``
 attribute by adding ``"adp_scratch_pad"`` to the ``Literal`` type.
 
 .. code-block:: python
+    :caption: ``nip/parameters/types.py``
 
     InteractionProtocolType: TypeAlias = Literal[..., "adp_scratch_pad"]
 
 
-2. Creating a protocol-specific parameters class
+2. Creating a Protocol-Specific Parameters Class
 ------------------------------------------------
 
 In ``nip/parameters/protocol.py``, add the following to define the protocol-specific
@@ -263,8 +265,6 @@ sub-parameter:
 
 .. code-block:: python
     :caption: ``nip/parameters/protocol.py``
-
-    ...
 
     @register_parameter_class
     @dataclass
@@ -274,7 +274,7 @@ sub-parameter:
         Parameters
         ----------
         verifier_scratch_pad : bool
-            Whether the verifier can send itself in the third round.
+            Whether the verifier can send itself a message in the second round.
         """
 
         verifier_scratch_pad: bool = True
@@ -291,24 +291,26 @@ new parameter class and add it to the ``HyperParameters`` class.
     ...
 
     class HyperParameters:
+
         ...
+
         adp_scratch_pad: Optional[AdpScratchPadParameters | dict] = None
 
 
-3. Defining the protocol handler
+3. Defining the Protocol Handler
 --------------------------------
 
-Note that this protocol has only one verifier, and is deterministic, as the turn order
+Note that this protocol has only one verifier, and is deterministic, as the order of play
 is fixed. Therefore, we can subclass
 :class:`DeterministicSingleVerifierProtocolHandler`.
 
 Also, the rewards for the prover and verifier are the default for NIP protocols, so we
 don't need to implement a custom protocol step function.
 
-Therefore, all we need to do is define is, the agent names, the channels, and when
+Therefore, all we need to do is define the agent names, the channels, and when
 agents are active.
 
-We add the protocol handler to the the :mod:`nip.protocols` module. Let's create a new
+We add the protocol handler to the :mod:`nip.protocols` module. Let's create a new
 file called ``custom_protocols.py`` in the ``nip/protocols`` directory. In this file,
 we define the new protocol handler.
 
@@ -368,18 +370,16 @@ alternative implementation would have ``channel_names`` and ``agent_channel_visi
 as properties, so that they can be set in the protocol-specific parameters.
 
 
-4. Specifying additional details for the code validation task
+4. Specifying Additional Details for the Code Validation Task
 -------------------------------------------------------------
 
 The code validation task requires additional details to be specified, which is done by
-creating and registering a code-validation-specific protocol handler.
-
-This defines the following:
+creating and registering a code-validation-specific protocol handler. This defines the following:
 
 - The human-readable names of the agents, which will be used to name the agents in the
   chat histories.
-- The header which the verifier will use to send a message to itself. This is used to
-  extract the message portion from the response generated by the verifier model
+- The header that the verifier will use to send a message to itself. This is used to
+  extract the message portion from the response generated by the verifier model.
 - The extra message to be displayed in the system prompt templates when the verifier
   uses a scratch pad.
 
@@ -420,7 +420,7 @@ This defines the following:
                 )
                 
 
-5. Creating system prompt templates
+5. Creating System Prompt Templates
 -----------------------------------
 
 Finally, we need to create system prompt templates for the verifier and prover. These

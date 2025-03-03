@@ -708,7 +708,7 @@ class SpgLoss(ClipPPOLossImproved):
         # The product of the anti-diagonal of the Hessian matrix with the vector $\xi$. A mapping from parameter names to tensors.
         hessian_grad_product: dict[str, Tensor] = {}
 
-        # The total derivatives (i.e., taking into account that we differentiate a multi-variable expression in which some variables are functions of others) for each parameter for each agent. A mapping from agent names to mappings from parameter names to tensors.
+        # The total derivatives (i.e. taking into account that we differentiate a multi-variable expression in which some variables are functions of others) for each parameter for each agent. A mapping from agent names to mappings from parameter names to tensors.
         total_derivatives: dict[str, dict[str, Tensor]] = {}
 
         # The total derivatives are a combination of an opponent shaping term and a Hessian gradient product term. These terms are computed separately for each agent, then combined. We proceed in reverse order through the agents in the Stackelberg sequence, the idea being that the followers' gradients are computed first and then used to compute the leaders' gradients.
