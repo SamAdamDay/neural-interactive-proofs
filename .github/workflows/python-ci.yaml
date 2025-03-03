@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup NIP
-        uses: ./.github/actions/setup-nip@v1
+        uses: ./.github/actions/setup-nip
       - name: Test with pytest
         run: |
           python -m pytest
