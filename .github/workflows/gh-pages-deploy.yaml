@@ -34,11 +34,11 @@ jobs:
         uses: ./.github/actions/setup-nip
       - name: Build with Sphinx
         run: |
-          sphinx-build -b html docs docs/_build
+          sphinx-build -b html doc doc/_build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_build
+          path: doc/_build
 
   deploy:
 
