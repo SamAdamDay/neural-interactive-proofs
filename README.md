@@ -1,13 +1,11 @@
 # Neural Interactive Proofs Experiments
 
-<center>
-
-[arXiv](https://arxiv.org/abs/2412.08897) |
-[OpenReview](https://openreview.net/forum?id=R2834dhBlo) |
-[Website](https://samadamday.github.io/neural-interactive-proofs/splash.html) |
-[Documentation](https://samadamday.github.io/neural-interactive-proofs)
-
-</center>
+<p align="center">
+    <a href="https://arxiv.org/abs/2412.08897">arXiv</a> |
+    <a href="https://openreview.net/forum?id=R2834dhBlo">OpenReview</a> |
+    <a href="https://samadamday.github.io/neural-interactive-proofs/splash.html">Website</a> |
+    <a href="https://samadamday.github.io/neural-interactive-proofs">Documentation</a>
+</p>
 
 This repository houses the code used to run the experiments for the ICLR 2025 paper
 '[Neural Interactive Proofs](https://arxiv.org/abs/2412.08897)' by Lewis Hammond and Sam
