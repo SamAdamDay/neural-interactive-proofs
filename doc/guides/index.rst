@@ -8,5 +8,6 @@ Guides
    
    installation
    running_experiments
+   contributing
    new-protocol
    docker
