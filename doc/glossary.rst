@@ -69,5 +69,5 @@ Glossary
         subclassing :class:`Trainer <nip.trainers.trainer_base.Trainer>`.
 
     TensorDict
-        A nested dictionary of PyTorch tensors. :tensordict:doc:`Read the documentation
-        <tensordict:index>`.
+        A nested dictionary of PyTorch tensors. :external+tensordict:doc:`Read the
+        documentation <tensordict:index>`.
