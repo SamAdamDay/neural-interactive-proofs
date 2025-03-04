@@ -276,7 +276,7 @@ class _RuntimeModule(object):
 
            :param docstring: Optional. The module's docstring.
 
-           :param \*\*d: All the keyword args, mapped from name->value.
+           :param **d: All the keyword args, mapped from name->value.
 
            Example: ``RuntimeModule.from_objects('name', 'doc', a=1, b=2)``'''
         module = types.ModuleType(name, docstring)
