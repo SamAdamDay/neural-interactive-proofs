@@ -1,0 +1,27 @@
+# Workflow to check that the docs build without errors or warnings
+
+name: Docs build
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.11"
+      - name: Setup NIP
+        uses: ./.github/actions/setup-nip
+      - name: Try to build the docs
+        run: |
+          sphinx-build --builder html --fresh-env --nitpicky --verbose --fail-on-warning docs docs/_build
