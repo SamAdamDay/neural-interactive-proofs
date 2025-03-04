@@ -40,7 +40,7 @@ based on PyTorch's :external+tensordict:class:`TensorDict <tensordict.TensorDict
 objects, while the latter use a similar, custom data structure containing nested
 dictionaries of Numpy string arrays (:class:`NestedArrayDict
 <nip.utils.nested_array_dict.NestedArrayDict>`). :term:`TensorDict`-based trainers use the
-:torchrl:doc:`TorchRL Library <torchrl:index>`.
+:external+torchrl:doc:`TorchRL Library <torchrl:index>`.
 
 Which of these two types is appropriate depends on the type of agents in the experiment.
 The environment, datasets and agents must be the appropriate type for the trainer. See
