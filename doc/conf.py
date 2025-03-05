@@ -10,8 +10,8 @@ from sphinx.environment import BuildEnvironment
 
 import markdown
 
-root_dir = Path(__file__).parent.parent
-docs_dir = root_dir / "doc"
+_root_dir = Path(__file__).parent.parent
+_docs_dir = Path(__file__).parent
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -27,9 +27,9 @@ author = "Sam Adam-Day and Lewis Hammond"
 
 # -- Path setup ----------------------------------------------------------------
 
-sys.path.insert(0, str(root_dir / "scripts"))
-sys.path.insert(0, str(root_dir))
-sys.path.insert(0, str(root_dir / "doc" / "extensions"))
+sys.path.insert(0, str(_root_dir / "scripts"))
+sys.path.insert(0, str(_root_dir))
+sys.path.insert(0, str(_root_dir / "doc" / "extensions"))
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -48,6 +48,8 @@ extensions = [
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+root_doc = "docs/index"
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -84,9 +86,8 @@ bibtex_bibfiles = ["references.bib"]
 def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
     """Generate the splash page from the markdown source."""
 
-    with open(
-        docs_dir / app.config.splash_source_path, "r", encoding="utf-8"
-    ) as input_file:
+    source_path = _docs_dir.joinpath(app.config.splash_source_path).resolve()
+    with open(source_path, "r", encoding="utf-8") as input_file:
         text = input_file.read()
     content = markdown.markdown(text, extensions=["extra"])
 
@@ -100,16 +101,14 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
         title = "Neural Interactive Proofs"
 
     # Load the template and substitute the title and content
-    with open(
-        docs_dir / app.config.splash_template_path, "r", encoding="utf-8"
-    ) as template_file:
+    template_path = _docs_dir.joinpath(app.config.splash_template_path).resolve()
+    with open(template_path, "r", encoding="utf-8") as template_file:
         html_template = Template(template_file.read())
     html = html_template.substitute(title=title, content=content)
 
     # Write the output
-    with open(
-        Path(app.outdir) / app.config.splash_output_path, "w", encoding="utf-8"
-    ) as output_file:
+    output_path = Path(app.outdir, app.config.splash_output_path).resolve()
+    with open(output_path, "w", encoding="utf-8") as output_file:
         output_file.write(html)
 
     return []
@@ -149,8 +148,8 @@ def setup(app: Sphinx) -> None:
     # Add the splash page generation to the build process
     app.connect("env-updated", generate_splash_page)
     app.add_config_value("splash_template_path", "_templates/splash/template.html", "")
-    app.add_config_value("splash_source_path", "splash.md", "")
-    app.add_config_value("splash_output_path", "splash.html", "")
+    app.add_config_value("splash_source_path", "index.md", "")
+    app.add_config_value("splash_output_path", "index.html", "")
 
     # Add the skip function to the autodoc-skip-member event
     app.connect("autodoc-skip-member", skip)

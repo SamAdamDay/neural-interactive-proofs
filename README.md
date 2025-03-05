@@ -3,16 +3,17 @@
 <p align="center">
     <a href="https://arxiv.org/abs/2412.08897">arXiv</a> |
     <a href="https://openreview.net/forum?id=R2834dhBlo">OpenReview</a> |
-    <a href="https://samadamday.github.io/neural-interactive-proofs/splash.html">Website</a> |
-    <a href="https://samadamday.github.io/neural-interactive-proofs">Documentation</a>
+    <a href="https://neural-interactive-proofs.com">Website</a> |
+    <a href="https://neural-interactive-proofs.com/docs">Documentation</a>
 </p>
 
 This repository houses the code used to run the experiments for the ICLR 2025 paper
 '[Neural Interactive Proofs](https://arxiv.org/abs/2412.08897)' by Lewis Hammond and Sam
 Adam-Day.
 
-The codebase is designed to be easy to use and extend. Read the [documentation](https://samadamday.github.io/neural-interactive-proofs)
-for guides and the API reference.
+The codebase is designed to be easy to use and extend. Read the
+[documentation](https://neural-interactive-proofs.com/docs) for guides and the API
+reference.
 
 
 ## Requirements
@@ -28,7 +29,7 @@ for guides and the API reference.
 
 ## Installation
 
-See [the installation docs](https://samadamday.github.io/neural-interactive-proofs/guides/installation.html) 
+See [the installation docs](https://neural-interactive-proofs.com/docs/guides/installation.html) 
 for a more detailed installation guide.
 
 1. Clone the repository:
@@ -66,7 +67,7 @@ for a more detailed installation guide.
 
 ## Running an experiment
 
-See [the guide to running experiments](https://samadamday.github.io/neural-interactive-proofs/guides/running_experiments.html) 
+See [the guide to running experiments](https://neural-interactive-proofs.com/docs/guides/running_experiments.html) 
 for a more information.
 
 The `HyperParameters` class contains all experiment parameters needed for a reproducible
@@ -93,7 +94,8 @@ run_experiment(hyper_params)
 
 ## Contributing
 
-We welcome issues and pull requests! See the [guide to contributing](https://samadamday.github.io/neural-interactive-proofs/guides/contributing.html)
+We welcome issues and pull requests! See the 
+[guide to contributing](https://neural-interactive-proofs.com/docs/guides/contributing.html)
 for more information.
 
 
