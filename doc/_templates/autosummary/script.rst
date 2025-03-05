@@ -1,4 +1,4 @@
-{{ fullname + ".py" | escape | underline}}
+{{ (fullname + ".py") | escape | underline}}
 
 .. automodule:: {{ fullname }}
 

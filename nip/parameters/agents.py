@@ -1,9 +1,9 @@
 """Parameters which specify agent configurations.
 
-An agent is a neural network, and it is specified by a `AgentParameters` object. Each
-scenario has a different `AgentParameters` subclass.
+An agent is a neural network, and it is specified by a ``AgentParameters`` object. Each
+scenario has a different ``AgentParameters`` subclass.
 
-The `AgentsParameters` object is a dictionary of agent names and their corresponding
+The ``AgentsParameters`` object is a dictionary of agent names and their corresponding
 `AgentParameters` objects.
 """
 
@@ -66,7 +66,8 @@ class AgentParameters(SubParameters, ABC):
         hand-specified (non-learned) algorithm designed to maximise reward. This
         algorithm can be different depending on the environment. This is useful to test
         if the other agents can learn to work with a fixed optimum agent. It usually
-        makes sense to set `agent_lr_factor` to {"actor": 0, "critic": 0} in this case.
+        makes sense to set ``agent_lr_factor`` to {"actor": 0, "critic": 0} in this
+        case.
     normalize_message_history : bool
         Whether to normalise the message history before passing it through the GNN
         encoder. Message histories are normalised to have zero mean and unit variance
@@ -78,8 +79,8 @@ class AgentParameters(SubParameters, ABC):
     load_checkpoint_and_parameters : bool
         Whether to load the agent model checkpoint and parameters from W&B. In this
         case, all agent parameters are replaced by the parameters from the checkpoint.
-        Otherwise, the model is randomly initialised. If `True`, the `checkpoint_run_id`
-        parameter must be set.
+        Otherwise, the model is randomly initialised. If ``True``, the
+        ``checkpoint_run_id`` parameter must be set.
     checkpoint_entity : str, optional
         The entity of the W&B run to load the checkpoint from. If not provided, the
         default is used.
@@ -88,7 +89,7 @@ class AgentParameters(SubParameters, ABC):
         default is used.
     checkpoint_run_id: str, optional
         The ID of the W&B run to load the checkpoint from. Must be provided if
-        `load_checkpoint` is `True`.
+        ``load_checkpoint`` is ``True``.
     checkpoint_version: str
         The version of the checkpoint to load. If not provided, the latest version is
         used.
@@ -134,7 +135,7 @@ class AgentParameters(SubParameters, ABC):
     def to_dict(self) -> dict:
         """Convert the parameters object to a dictionary.
 
-        Adds the `is_random` parameter to the dictionary. This is not a field of the
+        Adds the ``is_random`` parameter to the dictionary. This is not a field of the
         parameters object, but we want to include it in the dictionary for logging.
 
         Returns
@@ -183,7 +184,7 @@ class AgentParameters(SubParameters, ABC):
         ----------
         wandb_config : dict
             The W&B config dictionary for this agent (e.g.
-            `wandb_run.config["agents"][agent_name]`).
+            ``wandb_run.config["agents"][agent_name]``).
         """
         for field in dataclasses.fields(self):
             if field.name in self.LOAD_PRESERVED_PARAMETERS:
@@ -363,11 +364,11 @@ class ImageClassificationAgentParameters(AgentParameters):
         The stride of the building blocks in the agents's CNN.
     pretrained_embeddings_model : str or None
         If not None, specifies a pretrained model to load. This is usually either of the
-        form "{hf_user}/{model_name}_{dataset}", where `hf_user` is a HuggingFace Hub
+        form "{hf_user}/{model_name}_{dataset}", where ``hf_user`` is a HuggingFace Hub
         username, or "{model_name}", which resolves to
         "{HF_PRETRAINED_MODELS_USER}/{model_name}_{hyper_params.dataset}", where
-        `HF_PRETRAINED_MODELS_USER` is defined in the `constants` module. The last-layer
-        embeddings will be included in the model architecture.
+        ``HF_PRETRAINED_MODELS_USER`` is defined in the ``constants`` module. The
+        last-layer embeddings will be included in the model architecture.
     pretrained_embedding_channels : int
         The number of channels used to represent the pretrained embeddings. The
         pretrained embeddings are resized to this number of channels by using a 1x1
@@ -464,15 +465,16 @@ class PureTextAgentParameters(AgentParameters):
         The group of agents which share the same model. When two agents share this
         value, they will use the same model inference. For fine-tuning, this model is
         trained on a copy of the rollouts and rewards for each agent in the group. When
-        this is `None`, the agent is in a group whose name is the same as the agent's
+        this is ``None``, the agent is in a group whose name is the same as the agent's
         name.
     temperature : float | None
-        The temperature to use when sampling from the model. If `None`, the model uses
-        the default temperature. Only one of `temperature` and `top_p` should be set.
+        The temperature to use when sampling from the model. If ``None``, the model uses
+        the default temperature. Only one of ``temperature`` and ``top_p`` should be
+        set.
     top_p : float | None
         The top-p value to use when sampling from the model. A value 0.1 means only the
-        top 10% of tokens are considered when sampling. If `None`, the model uses the
-        default top-p value. Only one of `temperature` and `top_p` should be set.
+        top 10% of tokens are considered when sampling. If ``None``, the model uses the
+        default top-p value. Only one of ``temperature`` and ``top_p`` should be set.
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
@@ -483,7 +485,7 @@ class PureTextAgentParameters(AgentParameters):
         most this many words.
     max_tokens_per_message : int | None
         The maximum number of tokens which the model is allowed to generate in a single
-        message. If `None`, this is calculated based on the `max_response_words`.
+        message. If ``None``, this is calculated based on the ``max_response_words``.
     num_invalid_generation_retries : int
         The number of times to retry generating a message if the model returns an
         invalid response.
@@ -538,14 +540,15 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
         The group of agents which share the same model. When two agents share this
         value, they will use the same model inference. For fine-tuning, this model is
         trained on a copy of the rollouts and rewards for each agent in the group. When
-        this is `None`, the agent is in a group on its own.
+        this is ``None``, the agent is in a group on its own.
     temperature : float | None
-        The temperature to use when sampling from the model. If `None`, the model uses
-        the default temperature. Only one of `temperature` and `top_p` should be set.
+        The temperature to use when sampling from the model. If ``None``, the model uses
+        the default temperature. Only one of ``temperature`` and ``top_p`` should be
+        set.
     top_p : float | None
         The top-p value to use when sampling from the model. A value 0.1 means only the
-        top 10% of tokens are considered when sampling. If `None`, the model uses the
-        default top-p value. Only one of `temperature` and `top_p` should be set.
+        top 10% of tokens are considered when sampling. If ``None``, the model uses the
+        default top-p value. Only one of ``temperature`` and ``top_p`` should be set.
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
@@ -556,7 +559,7 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
         most this many words.
     max_tokens_per_message : int | None
         The maximum number of tokens which the model is allowed to generate in a single
-        message. If `None`, this is calculated based on the `max_response_words`.
+        message. If ``None``, this is calculated based on the ``max_response_words``.
     num_invalid_generation_retries : int
         The number of times to retry generating a message if the model returns an
         invalid response.
@@ -567,7 +570,7 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
 class AgentsParameters(dict[str, AgentParameters], ParameterValue):
     """Parameters which specify the agents in the experiment.
 
-    A subclass of `dict` which contains the parameters for each agent in the experiment.
+    A subclass of ``dict`` which contains the parameters for each agent in the experiment.
 
     The keys are the names of the agents, and the values are the parameters for each
     agent.

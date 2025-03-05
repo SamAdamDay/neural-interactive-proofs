@@ -219,7 +219,7 @@ class NestedArrayDict:
         Returns
         -------
         zero_dict : NestedArrayDict
-            The NestedArrayDict with the same structure as `other`, but with zero
+            The NestedArrayDict with the same structure as ``other``, but with zero
             arrays.
         """
         zero_dict = NestedArrayDict(batch_size=other.batch_size)
@@ -420,7 +420,7 @@ class NestedArrayDict:
             path to the data in the nested dictionary.
         batch_size : tuple[int, ...]
             The batch size of the NestedDict, which must be the initial segment of the
-            shape of the each array. If `()`, the arrays are scalars.
+            shape of the each array. If ``()``, the arrays are scalars.
 
         Returns
         -------
@@ -450,7 +450,7 @@ class NestedArrayDict:
             must be strings.
         batch_size : tuple[int, ...]
             The batch size of the NestedDict, which must be the initial segment of the
-            shape of the each array. If `()`, the arrays are scalars.
+            shape of the each array. If ``()``, the arrays are scalars.
 
         Returns
         -------

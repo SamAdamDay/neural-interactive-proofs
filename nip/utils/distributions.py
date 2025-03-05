@@ -19,7 +19,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
     Allows specifying the parameters of the categorical distributions either as logits
     or as probabilities.
 
-    The `log_prob` method is reimplemented with the following changes:
+    The ``log_prob`` method is reimplemented with the following changes:
 
     - The log-probability can be stored in a different key (specified by the
       "log_prob_key" parameter)
@@ -30,7 +30,7 @@ class CompositeCategoricalDistribution(CompositeDistribution):
     Parameter names must be strings ending in "_logits" or "_probs". However, the
     suffix-stripped can be changed by passing a key transform function or a lookup
     table. For example, to specify the parameters of a categorical distribution over key
-    `("agents", "action")` using logits, you can pass the following:
+    ``("agents", "action")`` using logits, you can pass the following:
 
     >>> CompositeCategoricalDistribution(
     ...     action_logits=...,
@@ -101,10 +101,10 @@ class CompositeCategoricalDistribution(CompositeDistribution):
     def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
         """Compute the log probability of a sample for the composite distribution.
 
-        Adapted from `tensordict.nn.distributions.CompositeDistribution.log_prob`.
+        Adapted from ``tensordict.nn.distributions.CompositeDistribution.log_prob``.
 
         The shape of the log-probability tensor is the batch size of the inner-most
-        tensordict in which is lives. E.g. for the key `("agents", "sample_log_prob")`
+        tensordict in which is lives. E.g. for the key ``("agents", "sample_log_prob")``
         this will be the batch size of the "agents" sub-tensordict.
 
         Parameters

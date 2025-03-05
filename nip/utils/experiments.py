@@ -7,8 +7,8 @@ The workflow is as follows:
 
 1. Call the constructor with the hyperparameter grid and the experiment function.
 2. (Optional) Add any additional arguments to the arg parser using
-   `experiment.parser.add_argument`.
-3. Call `experiment.run()` to run the experiment.
+   ``experiment.parser.add_argument``.
+3. Call ``experiment.run()`` to run the experiment.
 
 See the docstrings of the classes for more details.
 """
@@ -384,8 +384,8 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
 
     1. Call the constructor with the hyperparameter grid and the experiment function.
     2. (Optional) Add any additional arguments to the arg parser using
-       `self.parser.add_argument`.
-    3. Call `self.run()` to run the experiment.
+       ``self.parser.add_argument``.
+    3. Call ``self.run()`` to run the experiment.
 
     Parameters
     ----------
@@ -393,22 +393,30 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         A dictionary mapping hyperparameter names to lists of values to try.
     experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
-        experiment. The arguments are specified in the `ExperimentFunctionArguments`
+        experiment. The arguments are specified in the ``ExperimentFunctionArguments``
         dataclass.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
         the combination index. It should take the form:
+
+        .. code-block:: python
+
             run_id_fn(combo_index, cmd_args)
-        where `combo_index` is the index of the combination in the ParameterGrid and
-        `cmd_args` is the command line arguments.
+
+        where ``combo_index`` is the index of the combination in the ParameterGrid and
+        ``cmd_args`` is the command line arguments.
     run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
-        for it. It should return a `PreparedExperimentInfo` instance. This is optional.
-        It should take the form:
+        for it. It should return a ``PreparedExperimentInfo`` instance. This is
+        optional. It should take the form:
+
+        .. code-block:: python
+
             run_preparer_fn(combo, cmd_args)
-        where `combo` is a single combination of hyperparameters and `cmd_args` is the
-        command line arguments.
+
+        where ``combo`` is a single combination of hyperparameters and ``cmd_args`` is
+        the command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
     arg_parser_description : str, default="Run hyperparameter experiments sequentially"
@@ -588,8 +596,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
     1. Call the constructor with the hyperparameter grid and the experiment function.
     2. (Optional) Add any additional arguments to the arg parser using
-       `self.parser.add_argument`.
-    3. Call `self.run()` to run the experiment.
+       ``self.parser.add_argument``.
+    3. Call ``self.run()`` to run the experiment.
 
     Parameters
     ----------
@@ -597,22 +605,30 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         A dictionary mapping hyperparameter names to lists of values to try.
     experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
-        experiment. The arguments are specified in the `ExperimentFunctionArguments`
+        experiment. The arguments are specified in the ``ExperimentFunctionArguments``
         dataclass.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
         the combination index. It should take the form:
+
+        .. code-block:: python
+
             run_id_fn(combo_index, cmd_args)
-        where `combo_index` is the index of the combination in the ParameterGrid and
-        `cmd_args` is the command line arguments.
+
+        where ``combo_index`` is the index of the combination in the ParameterGrid and
+        ``cmd_args`` is the command line arguments.
     run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
-        for it. It should return a `PreparedExperimentInfo` instance. This is optional.
-        It should take the form:
+        for it. It should return a ``PreparedExperimentInfo`` instance. This is
+        optional. It should take the form:
+
+        .. code-block:: python
+
             run_preparer_fn(combo, cmd_args)
-        where `combo` is a single combination of hyperparameters and `cmd_args` is the
-        command line arguments.
+
+        where ``combo`` is a single combination of hyperparameters and ``cmd_args`` is
+        the command line arguments.
     experiment_name : str, default="EXPERIMENT"
         The name of the experiment.
     arg_parser_description : str, default="Run hyperparameter experiments in parallel"
@@ -709,9 +725,9 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             the global progress bar is only updated after each experiment is finished.
         tqdm_func : Callable
             The tqdm function to use in the experiment to create new progress bars. This
-            argument is provided by `tqdm_multiprocess`.
+            argument is provided by ``tqdm_multiprocess``.
         global_tqdm : tqdm
-            The global progress bar. This argument is provided by `tqdm_multiprocess`.
+            The global progress bar. This argument is provided by ``tqdm_multiprocess``.
         """
         info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 

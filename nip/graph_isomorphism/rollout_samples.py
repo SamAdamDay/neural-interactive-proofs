@@ -32,10 +32,10 @@ class GraphIsomorphismRolloutSamples(RolloutSamples):
             A function which takes a networkx graph and returns a dictionary of node
             positions. Best to use a function from networkx.layout, possibly partially
             applied with some arguments. If None, uses networkx.spring_layout with
-            `k=4/sqrt(n)`, where `n` is the number of nodes in the graph.
+            ``k=4/sqrt(n)``, where ``n`` is the number of nodes in the graph.
         graph_layout_seed : int, default=None
             The seed to use for the graph layout function. If None, the random number
-            generator is the `RandomState` instance used by `numpy.random`.
+            generator is the ``RandomState`` instance used by ``numpy.random``.
         colour_sequence : str, default="Dark24"
             The name of the colour sequence to use to colour the nodes. Must be one of
             the colour sequences from plotly.express.colors.qualitative.

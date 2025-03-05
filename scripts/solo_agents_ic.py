@@ -216,7 +216,7 @@ experiment.parser.add_argument(
     help="Store the whole dataset on the device (needs more GPU memory).",
 )
 
-# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+# Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
 parser = experiment.parser
 
 if __name__ == "__main__":

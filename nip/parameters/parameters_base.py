@@ -18,7 +18,7 @@ class ParameterValue(ABC):
         The original parameter value must be able to be reconstructed from the
         dictionary using the from_dict method.
 
-        The dictionary may contain a `_type` key, which is used to specify the exact
+        The dictionary may contain a ``_type`` key, which is used to specify the exact
         class of the parameter value.
         """
 
@@ -38,8 +38,8 @@ class ParameterValue(ABC):
         Parameters
         ----------
         param_dict : dict
-            A dictionary of parameters, which may have come from a `to_dict` method.
-            This dictionary may contain a `_type` key, which is used to determine the
+            A dictionary of parameters, which may have come from a ``to_dict`` method.
+            This dictionary may contain a ``_type`` key, which is used to determine the
             class of the parameter.
 
         Returns
@@ -109,7 +109,7 @@ class BaseHyperParameters(ParameterValue, ABC):
             The parameters object.
         """
 
-        # Remove the `_type` key from the dictionary, checking that it is the correct
+        # Remove the ``_type`` key from the dictionary, checking that it is the correct
         # type
         param_class_name = params_dict.pop("_type", None)
         if param_class_name is not None:
@@ -132,7 +132,7 @@ class BaseHyperParameters(ParameterValue, ABC):
                 if key in {field.name for field in dataclasses.fields(cls)}
             }
 
-        # Call `from_dict` on all fields that are ParameterValues
+        # Call ``from_dict`` on all fields that are ParameterValues
         for param in dataclasses.fields(cls):
 
             param_value = params_dict.get(param.name, None)
@@ -141,7 +141,7 @@ class BaseHyperParameters(ParameterValue, ABC):
             if not isinstance(param_value, dict) or param_value is None:
                 continue
 
-            # Make sure the field is a Union and contains a `ParameterValue` subclass
+            # Make sure the field is a Union and contains a ``ParameterValue`` subclass
             origin_type = typing.get_origin(param.type)
             if origin_type is not Union and origin_type is not UnionType:
                 continue
@@ -170,7 +170,7 @@ class BaseHyperParameters(ParameterValue, ABC):
                         f"not a subclass of {type(param_base_class).__name__!r}"
                     )
 
-            # Replace the dictionary with the `ParameterValue` subclass
+            # Replace the dictionary with the ``ParameterValue`` subclass
             params_dict[param.name] = param_class.from_dict(
                 param_value, ignore_extra_keys=ignore_extra_keys
             )

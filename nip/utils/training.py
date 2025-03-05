@@ -8,11 +8,11 @@ from torch.optim import Optimizer
 class ParamGroupFreezer:
     """A class for freezing groups of parameters during training.
 
-    The `param_group_groups` collects the optimizer's parameter groups into named
+    The ``param_group_groups`` collects the optimizer's parameter groups into named
     collections. Each collection can be frozen and unfrozen at any point.
 
     Freezing is achieved by setting removing the parameter groups from the optimizer and
-    optionally setting the `requires_grad` attribute to False.
+    optionally setting the ``requires_grad`` attribute to False.
 
     Parameters
     ----------
@@ -21,10 +21,10 @@ class ParamGroupFreezer:
     param_group_collections : dict[str, Iterable[dict[str, Any]]]
         A dictionary whose keys name collections of parameter groups which can be frozen
         during training. The values are lists of dictionaries which define the parameter
-        groups (as stored in `optimizer.param_groups`). The keys of the dictionaries are
-        "params" and "lr".
+        groups (as stored in ``optimizer.param_groups``). The keys of the dictionaries
+        are "params" and "lr".
     use_required_grad : bool, default=True
-        Whether to set the `requires_grad` to False when freezing the parameters.
+        Whether to set the ``requires_grad`` to False when freezing the parameters.
     """
 
     def __init__(

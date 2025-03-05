@@ -17,8 +17,8 @@ def forgetful_cycle(iterable: Iterable[T]) -> Iterator[T]:
     """Return an iterator that cycles through an iterable without saving copies.
 
     This iterator will keep yielding items from the iterable in order, and will start
-    over once the iterable is exhausted. However, unlike the `itertools.cycle` function,
-    it does not save copies of the items in the iterable.
+    over once the iterable is exhausted. However, unlike the ``itertools.cycle``
+    function, it does not save copies of the items in the iterable.
 
     Parameters
     ----------
@@ -74,7 +74,7 @@ class VariableDataCycler:
     device : TorchDevice, optional
         The device to move the data to. If None, the data will not be moved.
     non_blocking : bool, default=False
-        Whether to move the data to the device with `non_blocking=True`.
+        Whether to move the data to the device with ``non_blocking=True``.
     default_batch_size : int, optional
         The default batch size to use when getting a batch and iterating over the
         instance. If None, the batch size must be manually specified when getting a
@@ -308,7 +308,8 @@ def rename_dict_key(
     Raises
     ------
     KeyError
-        If the old key is not found in the dictionary and `allow_non_existant` is False.
+        If the old key is not found in the dictionary and ``allow_non_existant`` is
+        False.
     """
 
     if old_key not in dictionary:

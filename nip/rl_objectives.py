@@ -44,7 +44,7 @@ class Objective(LossModule, ABC):
     The implementation is a bit of a hack. We change the _AcceptedKeys class dynamically
     to allow for multiple action keys.
 
-    See `torchrl.objectives.LossModule` for more details
+    See :external+torchrl:class:`torchrl.objectives.LossModule` for more details
     """
 
     action_keys: Iterable[NestedKey] = ("action",)
@@ -102,7 +102,7 @@ class Objective(LossModule, ABC):
         of action keys. These are not validated against the set of accepted keys for
         this class. Instead, each is added to the set of accepted keys.
 
-        All other keyword arguments should match `self._AcceptedKeys`.
+        All other keyword arguments should match ``self._AcceptedKeys``.
 
         Parameters
         ----------
@@ -128,9 +128,9 @@ class Objective(LossModule, ABC):
                         f"key {key}"
                     )
 
-            # Add the new accepted keys class to self. We can't use the `bases` keyword
-            # argument because of the way torchrl checks membership of the class (using
-            # the `__dict__` attribute).
+            # Add the new accepted keys class to self. We can't use the ``bases``
+            # keyword argument because of the way torchrl checks membership of the class
+            # (using the ``__dict__`` attribute).
             dataclass_fields = []
             for base_field in fields(self._BaseAcceptedKeys):
                 dataclass_fields.append(
@@ -279,7 +279,7 @@ class Objective(LossModule, ABC):
 class PPOLossImproved(Objective, PPOLoss, ABC):
     """Base PPO loss class which allows multiple actions keys and normalises advantages.
 
-    See `torchrl.objectives.PPOLoss` for more details
+    See :external+torchrl:class:`torchrl.objectives.PPOLoss` for more details
     """
 
     def _set_entropy_and_critic_losses(
@@ -337,7 +337,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
     def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         """Get the critic loss without the clip fraction.
 
-        TorchRL's `loss_critic` method returns a tuple with the critic loss and the
+        TorchRL's ``loss_critic`` method returns a tuple with the critic loss and the
         clip fraction. This method returns only the critic loss.
         """
         return self.loss_critic(tensordict)[0]
@@ -346,7 +346,7 @@ class PPOLossImproved(Objective, PPOLoss, ABC):
 class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
     """Clipped PPO loss which allows multiple actions keys and normalises advantages.
 
-    See `torchrl.objectives.ClipPPOLoss` for more details.
+    See :external+torchrl:class:`torchrl.objectives.ClipPPOLoss` for more details.
     """
 
     def _set_ess(self, num_batch_dims: int, td_out: TensorDictBase, log_weight: Tensor):
@@ -433,7 +433,7 @@ class ClipPPOLossImproved(PPOLossImproved, ClipPPOLoss):
 class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
     """KL penalty PPO loss which allows multiple actions keys and normalises advantages.
 
-    See `torchrl.objectives.KLPENPPOLoss` for more details
+    See :external+torchrl:class:`torchrl.objectives.KLPENPPOLoss` for more details
     """
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
@@ -494,7 +494,7 @@ class KLPENPPOLossImproved(PPOLossImproved, KLPENPPOLoss):
 class SpgLoss(ClipPPOLossImproved):
     """Loss for Stackelberg Policy Gradient and several variants.
 
-    In contrast to other objectives, the `forward` method returns the gains per agent
+    In contrast to other objectives, the ``forward`` method returns the gains per agent
     and the sum of the log probabilities separately. These must be combined later to
     compute the true loss. This is because we need to compute the gradients of these
     separately.
@@ -946,23 +946,27 @@ class SpgLoss(ClipPPOLossImproved):
 
         When $f$ follows $g$ immediately in the Stackelberg sequence, the score
         coefficient is:
-            $$
-                C_S(g, f) = \nabla_g \Ell_f
-            $$
+
+        .. math::
+
+            C_S(g, f) = \nabla_g \Ell_f
+
         and the policy gradient coefficient is:
-            $$
-                C_{PG}(g, f) = \bar S_g
-            $$
+
+        .. math::
+
+            C_{PG}(g, f) = \bar S_g
 
         Otherwise, we recursively compute the Jacobian terms for the leader and
         immediate leader $g'$ of $f$. Let $Q$ be the set of immediate leaders of $f$.
         Then the score coefficient is:
-            $$
-                C_S(g, f) = \sum_{g' \in Q} (
-                    (\nabla_{g'} \Ell_f \cdot S_{g'}) C_S(g', f)
-                  + (\nabla_{g'} \Ell_f \cdot \nabla_{g'} \Ell_{g'}) C_{PG}(g', f)
-                )
-            $$
+
+        .. math::
+
+            C_S(g, f) = \sum_{g' \in Q} (
+                (\nabla_{g'} \Ell_f \cdot S_{g'}) C_S(g', f)
+                + (\nabla_{g'} \Ell_f \cdot \nabla_{g'} \Ell_{g'}) C_{PG}(g', f)
+            )
 
         Parameters
         ----------
@@ -1101,7 +1105,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
     The __init__ method is copied from the original ReinforceLoss class with some
     tweaks.
 
-    See `torchrl.objectives.ReinforceLoss` for more details
+    See :external+torchrl:class:`torchrl.objectives.ReinforceLoss` for more details
 
     Parameters
     ----------
@@ -1302,7 +1306,7 @@ class ReinforceLossImproved(Objective, ReinforceLoss):
     def _loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         """Get the critic loss without the clip fraction.
 
-        TorchRL's `loss_critic` method returns a tuple with the critic loss and the
+        TorchRL's ``loss_critic`` method returns a tuple with the critic loss and the
         clip fraction. This method returns only the critic loss.
         """
         return self.loss_critic(tensordict)[0]
