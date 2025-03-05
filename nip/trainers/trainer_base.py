@@ -244,7 +244,8 @@ class Trainer(ABC):
         version : str, default="latest"
             The version of the checkpoint to load. If "latest", the latest checkpoint is
             loaded. Otherwise, the version should be a string representing the version
-            of the checkpoint to load from W&B. This must be "latest" if `from_base_run`
+            of the checkpoint to load from W&B. This must be "latest" if
+            ``from_base_run``
             is False.
 
         Raises
@@ -491,7 +492,7 @@ class Trainer(ABC):
         """Get the total number of iterations that the trainer will run for.
 
         This is the sum of the number of iterations declared by methods decorated with
-        `attach_progress_bar`.
+        ``attach_progress_bar``.
 
         Returns
         -------
@@ -633,7 +634,7 @@ class TensorDictTrainer(Trainer, ABC):
 class IterationContext:
     """Context manager for methods that run for a certain number of iterations.
 
-    This context manager should be used in conjunction with the `attach_progress_bar`
+    This context manager should be used in conjunction with the ``attach_progress_bar``
     decorator. It manages the progress bar and ensures that the correct number of
     iterations are run.
 
@@ -676,19 +677,20 @@ class IterationContext:
 def attach_progress_bar(
     num_iterations_func: Callable[[Trainer], int],
 ) -> Callable[[Callable], Callable]:
-    """Decorate a `Trainer` method to attach a progress bar.
+    """Decorate a ``Trainer`` method to attach a progress bar.
 
-    Decorate a method of a `Trainer` subclass with this decorator to have it run with a
+    Decorate a method of a ``Trainer`` subclass with this decorator to have it run with
+    a
     progress bar and declare the number of iterations that it runs for.
 
     The supplied function should take a Trainer instance as input and return the number
     of iterations.
 
-    The intention is that once a `Trainer` subclass is instantiated, the number of
-    iterations can be determined using `num_iterations_func`.
+    The intention is that once a ``Trainer`` subclass is instantiated, the number of
+    iterations can be determined using ``num_iterations_func``.
 
-    This decorator wraps the decorated method in an `IterationContext` and assigns the
-    `iteration_context` keyword argument to this context. This allows the method to
+    This decorator wraps the decorated method in an ``IterationContext`` and assigns the
+    ``iteration_context`` keyword argument to this context. This allows the method to
     interact with the progress bar and access the number of iterations.
 
     Note

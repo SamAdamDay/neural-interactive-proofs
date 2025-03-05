@@ -1,0 +1,13 @@
+name: Set up NIP
+description: Install the requirements and the nip package
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      run: |
+        pip install -r requirements_dev.txt
+      shell: bash
+    - name: Install the package locally
+      run: |
+        pip install .
+      shell: bash

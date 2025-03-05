@@ -19,7 +19,8 @@ from nip.constants import HF_BUGGY_APPS_REPO
 from nip.code_validation.dataset_generation import _get_openrouter_response
 
 MODELS = [
-    "openai/gpt-3.5-turbo" "openai/gpt-4o-mini",
+    "openai/gpt-3.5-turbo",
+    "openai/gpt-4o-mini",
     "meta-llama/llama-3.1-8b-instruct",
     "deepseek/deepseek-coder",
     "mistralai/codestral-mamba",
@@ -234,6 +235,7 @@ def _evaluate_model(
 ):
     """Evaluate a model on the buggy-apps dataset."""
 
+    # We use OpenRouter to allow for the easy benchmarking of different models
     if api_key is None:
         api_key = get_env_var("OPENROUTER_API_KEY")
 

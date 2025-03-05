@@ -1,9 +1,9 @@
-"""Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
+"""Multi-Agent LLM Training (MALT) for text-based environments that only use APIs.
 
 In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per timestep
 from the agents. This means that for each datapoint we have a tree of responses. For
-each agent `A`, at each decision point for `A` we look at the expected reward for `A`
-for each of the responses. We threshold this expected reward to get a binary
+each agent ``A``, at each decision point for ``A`` we look at the expected reward for
+`A` for each of the responses. We threshold this expected reward to get a binary
 classification label for each response. We select good-bad pairs of these, and train
 using Direct Preference Optimization :cite:`Rafailov2023`.
 """
@@ -32,14 +32,14 @@ from nip.utils.maths import mean_for_unique_keys
 
 @register_trainer("pure_text_malt")
 class PureTextMaltTrainer(PureTextRlTrainer):
-    """Multi-Agent LLM Training (MALT) for text-based environments which only use APIs.
+    """Multi-Agent LLM Training (MALT) for text-based environments that only use APIs.
 
     In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per
     timestep from the agents. This means that for each datapoint we have a tree of
-    responses. For each agent `A`, at each decision point for `A` we look at the
-    expected reward for `A` for each of the responses. We threshold this expected reward
-    to get a binary classification label for each response. We select good-bad pairs of
-    these, and train using Direct Preference Optimization :cite:`Rafailov2023`.
+    responses. For each agent ``A``, at each decision point for ``A`` we look at the
+    expected reward for ``A`` for each of the responses. We threshold this expected
+    reward to get a binary classification label for each response. We select good-bad
+    pairs of these, and train using Direct Preference Optimization :cite:`Rafailov2023`.
 
     Parameters
     ----------
@@ -181,21 +181,21 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         1. We compute the expected reward for each agent at each node of the tree by
         summing up the total reward for all descendants, proceeding from the leaves to
         the root, and dividing by the number of branches passing through the node. This
-        is stored in the `("agents", "expected_reward")` field of the rollouts.
+        is stored in the ``("agents", "expected_reward")`` field of the rollouts.
 
         2. The expected reward is thresholded using an estimate of the reward mid-points
         to get a binary classification label for each response, into 'positive' and
-        'negative' examples. This is stored in `("agents", "is_positive_example")`.
+        'negative' examples. This is stored in ``("agents", "is_positive_example")``.
 
         3. We look at each node and check if in its children there is a positive and a
-        negative example. If so, we set the `("agents", "has_positive_and_negative")`
+        negative example. If so, we set the ``("agents", "has_positive_and_negative")``
         field to True. In this case, we randomly sample a positive and a negative
-        example from the children and set the `("agents", "sampled_positive_example")`
-        and `("agents", "sampled_negative_example")` fields to the corresponding node
+        example from the children and set the ``("agents", "sampled_positive_example")``
+        and ``("agents", "sampled_negative_example")`` fields to the corresponding node
         IDs. Otherwise these fields are set to -1.
 
         4. Each node in the response tree gets a unique ID, stored in
-        `_node_id` which has shape `(max_message_rounds, )`. This allows
+        ``_node_id`` which has shape ``(max_message_rounds, )``. This allows
         reconstructing the tree of responses later, if required, because if the same
         node ID appears in two different rollouts, then those points in the message
         history are the same.
@@ -506,7 +506,7 @@ def _generate_response_tree(
     This generates a tree of partial rollouts, where the children of each node are the
     one-step continuations of the node formed by generating multiple different responses
     for each active agent at that time step. At each step we sample
-    `hyper_params.pure_text_malt.num_responses_per_timestep` responses.
+    ``hyper_params.pure_text_malt.num_responses_per_timestep`` responses.
 
     The output tree is stratified by the level in the tree, with the root node (empty
     partial rollout) at the first level. Note that in general, the tree will not be
@@ -622,22 +622,23 @@ def _compute_tree_expected_reward(
     """Compute the expected reward for each agent at each node of the tree.
 
     The expected reward in the average reward that an agent receives over all branches
-    passing through a node. This is stored in the `("agents", "expected_reward")` field
-    of the rollouts, which are modified in-place.
+    passing through a node. This is stored in the ``("agents", "expected_reward")``
+    field of the rollouts, which are modified in-place.
 
     This is computed by summing up the total reward for all descendants, proceeding from
     the leaves to the root, and dividing by the number of branches passing through the
     node.
 
     We also threshold the expected reward to get a binary classification label for each
-    response. This is stored in the `("agents", "is_positive_example")` field.
+    response. This is stored in the ``("agents", "is_positive_example")`` field.
 
     Parameters
     ----------
     partial_rollouts_by_level : list[list[_PartialRolloutNode]]
         The tree of responses, stratified by level. These are modified in-place, where
-        we add `("agents", "expected_reward")` and `("agents", "is_positive_example")`
-        fields containing the expected reward for each agent at each node.
+        we add ``("agents", "expected_reward")`` and ``("agents",
+        "is_positive_example")`` fields containing the expected reward for each agent at
+        each node.
     hyper_params : HyperParameters
         The parameters of the experiment.
     protocol_handler : ProtocolHandler
@@ -660,7 +661,7 @@ def _compute_tree_expected_reward(
     ):
 
         # The last state in the partial trajectory. Note that the partial trajectory has
-        # length `level`
+        # length ``level``
         last_env_state = partial_rollout.trajectory_env_states[-1]
 
         # For leaf nodes, the number of branches passing through the node is 1. For
@@ -708,18 +709,18 @@ def _sample_positive_and_negative_examples(
     """Sample positive and negative examples for each node in the tree of responses.
 
     We look at each node and check if in its children there is a positive and a negative
-    example. If so, we set the `("agents", "has_positive_and_negative")` field to True.
-    In this case, we randomly sample a positive and a negative example from the children
-    and set the `("agents", "sampled_positive_example")` and `("agents",
-    "sampled_negative_example")` fields to the corresponding node IDs. Otherwise these
+    example. If so, we set the ``("agents", "has_positive_and_negative")`` field to
+    True. In this case, we randomly sample a positive and a negative example from the
+    children and set the ``("agents", "sampled_positive_example")`` and ``("agents",
+    "sampled_negative_example")`` fields to the corresponding node IDs. Otherwise these
     fields are set to -1.
 
     Parameters
     ----------
     partial_rollouts_by_level : list[list[_PartialRolloutNode]]
         The tree of responses, stratified by level. These are modified in-place, where
-        we add `("agents", "has_positive_and_negative")`, `("agents",
-        "sampled_positive_example")`, and `("agents", "sampled_negative_example")`
+        we add ``("agents", "has_positive_and_negative")``, ``("agents",
+        "sampled_positive_example")``, and ``("agents", "sampled_negative_example")``
         fields to the rollouts.
     hyper_params : HyperParameters
         The parameters of the experiment.

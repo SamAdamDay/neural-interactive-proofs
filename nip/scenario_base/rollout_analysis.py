@@ -72,7 +72,7 @@ class RolloutAnalyser(ABC):
         -------
         evaluations : dict[tuple[str, str], Any]
             The evaluations. A dictionary indexed by agent name and channel name, where
-            `evaluations[agent_name, channel_name]` is the evaluations.
+            ``evaluations[agent_name, channel_name]`` is the evaluations.
         """
 
 
@@ -137,6 +137,7 @@ class PureTextRolloutAnalyser(RolloutAnalyser, ABC):
         -------
         evaluations : dict[tuple[str, str], ma.MaskedArray]
             The evaluations. A dictionary indexed by agent name and channel name, where
-            `evaluations[agent_name, channel_name]` is an array of evaluations of shape
+            ``evaluations[agent_name, channel_name]`` is an array of evaluations of
+            shape
             (...)
         """

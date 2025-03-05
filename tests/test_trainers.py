@@ -47,7 +47,7 @@ def _optimizer_has_parameter(
     has_parameter : bool
         Whether the optimizer has the parameter.
     group : dict, optional
-        The group that the parameter is in. Only returned if `return_group` is True.
+        The group that the parameter is in. Only returned if ``return_group`` is True.
     """
     for param_group in optimizer.param_groups:
         for optimizer_param in param_group["params"]:
@@ -367,8 +367,8 @@ def test_gi_ppo_train_optimizer_groups(lr_spec: dict, expected_lrs: dict):
 def test_loss_parameters_in_optimizer(param_spec):
     """Make sure that all the loss parameters are in the optimizer.
 
-    This test does less than `test_gi_ppo_train_optimizer_groups`, which also makes sure
-    that learning rates are correct, but it is applied to more param combinations.
+    This test does less than ``test_gi_ppo_train_optimizer_groups``, which also makes
+    sure that learning rates are correct, but it is applied to more param combinations.
     """
 
     # Construct basic agent parameters for each scenario

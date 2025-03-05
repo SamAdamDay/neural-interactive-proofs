@@ -2,6 +2,7 @@
 
 from abc import ABC
 from itertools import cycle
+from typing import ClassVar
 
 import torch
 
@@ -12,7 +13,6 @@ from nip.parameters import (
     HyperParameters,
     SoloAgentParameters,
     ScenarioType,
-    TrainerType,
 )
 from nip.experiment_settings import ExperimentSettings
 from nip.scenario_base import TensorDictDataLoader
@@ -38,19 +38,19 @@ class ModelTimeable(Timeable, ABC):
     num_batches : int, default=100
         The number of batches to run the model on.
 
-    Class Attributes
-    ----------------
-    scenario : ScenarioType
+    Attributes
+    ----------
+    scenario : ClassVar[ScenarioType]
         The scenario which defines the model architecture and datasets.
-    dataset : str
+    dataset : ClassVar[str]
         The name of the dataset to use.
-    agent_name : str
+    agent_name : ClassVar[str]
         The name of the agent to use for the model.
     """
 
-    scenario: ScenarioType
-    dataset: str
-    agent_name: str
+    scenario: ClassVar[ScenarioType]
+    dataset: ClassVar[str]
+    agent_name: ClassVar[str]
 
     def __init__(
         self,

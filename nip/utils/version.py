@@ -102,7 +102,7 @@ def compare_versions(
     treated as "1.5.x" and "1" is treated as "1.x.x". This means that "1.5" is less than
     "1.6.3" but matches "1.5.3".
 
-    Versions can be specified as strings, tuples of integers or `None`. If `None` is
+    Versions can be specified as strings, tuples of integers or ``None``. If ``None`` is
     passed, it is treated as older than any other version.
 
     Parameters

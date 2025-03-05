@@ -66,7 +66,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
         if hyper_params.interaction_protocol == "merlin_arthur":
             raise NotImplementedError(
-                "Rollout analysers are not implemented for the Merlin-Arthur protocol."
+                "Rollout analysers are not implemented for the Merlin-Arthur Classifier (MAC) protocol."
             )
 
         # Make sure the environment variables are loaded, so that we can access the
@@ -155,7 +155,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         -------
         evaluations : dict[tuple[str, str], ma.MaskedArray]
             The evaluations. A dictionary indexed by agent name and channel name, where
-            `evaluations[agent_name, channel_name]` is a 0-1 array of evaluations of
+            ``evaluations[agent_name, channel_name]`` is a 0-1 array of evaluations of
             shape (...)
         """
 

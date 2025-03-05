@@ -107,8 +107,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
-    # update_spec can be `None`, `(num_verifier_iterations, num_prover_iterations)` or
-    # `(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)`.
+    # update_spec can be ``None``, ``(num_verifier_iterations, num_prover_iterations)``
+    # or ``(num_verifier_iterations, num_prover0_iterations, num_prover1_iterations)``.
     update_spec=[None],
     max_train_size=[None],
     seed=[8144, 820, 4173, 3992],
@@ -121,7 +121,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     Parameters
     ----------
     combo : dict
-        The hyperparameter combination to use (from the `param_grid` grid).
+        The hyperparameter combination to use (from the ``param_grid`` grid).
     cmd_args : Namespace
         The command line arguments.
 
@@ -374,7 +374,7 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     Parameters
     ----------
     combo : dict
-        The hyperparameter combination to use (from the `param_grid` grid).
+        The hyperparameter combination to use (from the ``param_grid`` grid).
     cmd_args : Namespace
         The command line arguments.
 
@@ -420,7 +420,7 @@ experiment.parser.add_argument(
     help="Enable efficient attention scaled dot product backend (may be buggy).",
 )
 
-# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+# Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
 parser = experiment.parser
 
 if __name__ == "__main__":

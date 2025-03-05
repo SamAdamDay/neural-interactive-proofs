@@ -52,7 +52,7 @@ def check_correctness(
 ):
     """Check correctness of code solution with a global timeout.
     The global timeout is to catch some extreme/rare cases not handled by the timeouts
-    inside `run_test`"""
+    inside ``run_test``"""
 
     # warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*getargspec.*")
 

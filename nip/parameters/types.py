@@ -14,8 +14,6 @@ ScenarioType: TypeAlias = Literal[
 SpgVariantType: TypeAlias = Literal["spg", "pspg", "lola", "pola", "sos", "psos"]
 """Type for SPG variants.
 
-Possible Values
----------------
 spg
     Stackelberg Policy Gradient  :cite:p:`Fiez2020`.
 pspg
@@ -34,8 +32,6 @@ psos
 IhvpVariantType: TypeAlias = Literal["conj_grad", "neumann", "nystrom"]
 """Type for the variants of the inverse Hessian-vector product computation.
 
-Possible Values
----------------
 conj_grad
     Use the conjugate gradient method.
 neumann
@@ -53,8 +49,6 @@ TrainerType: TypeAlias = Literal[
 ]
 """Type for the RL trainer to use.
 
-Possible Values
----------------
 vanilla_ppo
     The Proximal Policy Optimization trainer, with each agent training independently.
 solo_agent
@@ -68,9 +62,7 @@ pure_text_ei
     through text-based APIs (i.e. we don't run them locally, so everything can be
     represented as text).
 pure_text_malt
-     Multi-Agent LLM Training :cite:p:`Motwani2024` for text-based tasks, where agents
-     are run through text-based APIs (i.e. we don't run them locally, so everything can
-     be represented as text).
+     Multi-Agent LLM Training (MALT) :cite:p:`Motwani2024` for text-based tasks, where agents are run through text-based APIs (i.e. we don't run them locally, so everything can be represented as text).
 """
 
 TestSchemeType = Literal["none", "all", "last", "first_and_last"]
@@ -83,8 +75,6 @@ PpoLossType: TypeAlias = Literal["clip", "kl_penalty"]
 BinarificationMethodType: TypeAlias = Literal["select_two", "merge", "random"]
 """Type for ways of turning a multi-class classification task into a binary one.
 
-Possible Values
----------------
 select_two
     Select two classes from the original dataset to use for the binary classification
     task.
@@ -98,10 +88,8 @@ ActivationType: TypeAlias = Literal["relu", "tanh", "sigmoid"]
 """Type for the activation function to use.
 
 To add a new activation function, add it to this type, and add the corresponding
-function to `ACTIVATION_CLASSES` in `nip.utils.torch_modules`.
+function to ``ACTIVATION_CLASSES`` in ``nip.utils.torch_modules``.
 
-Possible Values
----------------
 relu
     Rectified Linear Unit.
 tanh
@@ -121,18 +109,16 @@ InteractionProtocolType: TypeAlias = Literal[
 ]
 """Type for the interaction protocol to use in the environment.
 
-Possible Values
----------------
 nip
-    The full Prover-Verifier Game protocol.
+    The Neural Interactive Proof (NIP) protocol that we introduce.
 adp
-    The Abstract Decision Problem protocol.
+    The Abstract Decision Problem (ADP) protocol.
 debate
     The Debate protocol.
 merlin_arthur
-    The Merlin-Arthur classifier protocol.
+    The Merlin-Arthur Classifier (MAC) protocol.
 mnip
-    The Prover-Verifier Game protocol with two provers.
+    The Neural Interactive Proof protocol with multiple (in this case, two) provers (MNIP).
 solo_verifier
     A protocol consisting of a single verifier, which makes a decision without
     interacting with a prover.
@@ -143,8 +129,6 @@ multi_channel_test
 ImageBuildingBlockType: TypeAlias = Literal["conv2d", "residual_basic"]
 """Type for the type of building block to use in the image classification network.
 
-Possible Values
----------------
 conv2d
     A standard 2D convolutional layer.
 residual_basic
@@ -154,8 +138,6 @@ residual_basic
 MessageRegressionMethodType: TypeAlias = Literal["mlp", "cnn"]
 """Type for the method to use to do regression analysis on the messages.
 
-Possible Values
----------------
 mlp
     Use a multi-layer perceptron to do the regression.
 cnn

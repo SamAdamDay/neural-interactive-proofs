@@ -108,8 +108,8 @@ class Environment(ABC):
     def frames_per_batch(self) -> int:
         """The number of frames to sample per training iteration.
 
-        This can be set directly with `rl.frames_per_batch`, or it can be determined by
-        `rl.rollouts_per_iteration` and `steps_per_env_per_iteration`.
+        This can be set directly with ``rl.frames_per_batch``, or it can be determined
+        by ``rl.rollouts_per_iteration`` and ``steps_per_env_per_iteration``.
         """
         if self.hyper_params.rl.frames_per_batch is not None:
             return self.hyper_params.rl.frames_per_batch
@@ -213,15 +213,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     To implement a new environment, subclass this class and implement the following
     attribute and methods:
 
-    - `_message_history_shape`: The shape of the message history and 'x' tensors.
-    - `_get_observation_spec`: The specification of the agent observations.
-    - `_get_action_spec`: The specification of the agent actions.
-    - `_get_state_spec` (optional): The specification of the states space.
-    - `_get_reward_spec` (optional): The specification of the agent rewards.
-    - `_get_done_spec` (optional): The specification of the agent done signals.
-    - `_step`: Perform a step in the environment.
-    - `_compute_message_history`: Compute the new message history and next message.
-    - `_masked_reset`: Reset the environment for a subset of the episodes.
+    - ``_message_history_shape``: The shape of the message history and 'x' tensors.
+    - ``_get_observation_spec``: The specification of the agent observations.
+    - ``_get_action_spec``: The specification of the agent actions.
+    - ``_get_state_spec`` (optional): The specification of the states space.
+    - ``_get_reward_spec`` (optional): The specification of the agent rewards.
+    - ``_get_done_spec`` (optional): The specification of the agent done signals.
+    - ``_step``: Perform a step in the environment.
+    - ``_compute_message_history``: Compute the new message history and next message.
+    - ``_masked_reset``: Reset the environment for a subset of the episodes.
 
     Parameters
     ----------
@@ -252,7 +252,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
     ):
         super().__init__(device=settings.device)
 
-        # Call the `EnvBase` constructor
+        # Call the ``EnvBase`` constructor
         super(nn.Module, self).__init__(
             hyper_params=hyper_params,
             settings=settings,
@@ -261,7 +261,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             train=train,
         )
 
-        # Call the batch size property of `Environment` to set the batch size
+        # Call the batch size property of ``Environment`` to set the batch size
         self.batch_size = super(nn.Module, self).batch_size
 
         # Create environment specs
@@ -317,17 +317,19 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
         The observation space has the following elements:
 
-        - `round`: The current round of the interaction.
-        - `decision_restriction`: The restriction on what the verifier can decide.
-            * 0: The verifier can decide anything.
-            * 1: The verifier can only decide to continue interacting.
-            * 2: The verifier can only make a guess.
-        - `x`: The message history.
-        - `seed`: A shared seed for the environment.
-        - `message`: The next message.
-        - `pretrained_embeddings`: The pretrained embeddings, if any. This is a nested
+        - ``round``: The current round of the interaction.
+        - ``decision_restriction``: The restriction on what the verifier can decide.
+
+          - 0: The verifier can decide anything.
+          - 1: The verifier can only decide to continue interacting.
+          - 2: The verifier can only make a guess.
+
+        - ``x``: The message history.
+        - ``seed``: A shared seed for the environment.
+        - ``message``: The next message.
+        - ``pretrained_embeddings``: The pretrained embeddings, if any. This is a nested
           specification, where the sub-keys are the pretrained model names.
-        - `linear_message_history`: The linear message history, if it is included.
+        - ``linear_message_history``: The linear message history, if it is included.
 
         Returns
         -------
@@ -523,7 +525,8 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The done specification.
         """
         return CompositeSpec(
-            # TODO: This leads to issues because TorchRL calls `any` on the done signal
+            # TODO: This leads to issues because TorchRL calls ``any`` on the done
+            # signal
             agents=CompositeSpec(
                 done=BinaryDiscreteTensorSpec(
                     self.num_agents,
@@ -645,7 +648,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         This is a generic method for updating one-hot encoded next message and message
         history tensors given a choice of message for each agent.
 
-        Used in the `_step` method of the environment.
+        Used in the ``_step`` method of the environment.
 
         Parameters
         ----------
@@ -864,9 +867,9 @@ class PureTextEnvironment(Environment, ABC):
     def max_prompt_messages(self) -> int:
         """The maximum number messages which can be sent in a prompt to an agent.
 
-        The prompt for the agent is constructed from the message history, but may be longer
-        than the number of rounds because messages can be split by channel, and system
-        messages can be included.
+        The prompt for the agent is constructed from the message history, but may be
+        longer than the number of rounds because messages can be split by channel, and
+        system messages can be included.
 
         This gives a rough upper bound on the number of messages which can be sent in a
         prompt. Hopefully this is enough to cover all cases.
@@ -1093,7 +1096,7 @@ class PureTextEnvironment(Environment, ABC):
         """Reset the pure text environment.
 
         This method resets the environment for the episodes which are done. It samples a
-        new batch of data for these episodes and calls `_masked_reset` to reset the
+        new batch of data for these episodes and calls ``_masked_reset`` to reset the
         episodes.
 
         Parameters
@@ -1246,9 +1249,9 @@ class PureTextEnvironment(Environment, ABC):
     ) -> String[NDArray, "message field"]:
         """Convert a prompt in the form of a list of dictionaries to a numpy array.
 
-        Each element of the list is a dictionary with keys defined in `PromptMessage`.
+        Each element of the list is a dictionary with keys defined in ``PromptMessage``.
         We convert this to a numpy array with columns corresponding to the keys in
-        `PromptMessage`.
+        ``PromptMessage``.
 
         Parameters
         ----------
@@ -1342,7 +1345,7 @@ class PureTextEnvironment(Environment, ABC):
         ----------
         env_state : NestedArrayDict
             The current observation, state and done signal.
-        mask : NDArray[np.bool_]
+        mask : ndarray[Any, dtype[bool]]
             A boolean mask of the episodes to reset.
         data_batch : NestedArrayDict
             The data batch to insert into the episodes.

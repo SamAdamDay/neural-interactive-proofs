@@ -3,9 +3,9 @@
 A protocol is implemented by a protocol handler, which specifies the agents present, how
 they interact, and how the environment is updated.
 
-Every protocol handler is a subclass of `ProtocolHandler` and registers itself with the
-use of the `register_protocol_handler` decorator. The `build_protocol_handler` factory
-function can then be used to build a protocol handler from parameters.
+Every protocol handler is a subclass of ``ProtocolHandler`` and registers itself with
+the use of the ``register_protocol_handler`` decorator. The ``build_protocol_handler``
+factory function can then be used to build a protocol handler from parameters.
 
 The following protocols are implemented:
 
@@ -64,7 +64,7 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
 
     @property
     def max_verifier_questions(self) -> int:
-        """The maximum number of questions the verifier can make to the other agents."""
+        """The maximum number of questions the verifier can make to each prover."""
         if self.hyper_params.protocol_common.verifier_first:
             return ceil(self.max_message_rounds / 2)
         else:
@@ -102,7 +102,7 @@ class NipProtocol(DeterministicSingleVerifierProtocolHandler):
 
 @register_protocol_handler("adp")
 class AdpProtocol(NipProtocol):
-    """Implementation of the Abstract Decision Problem protocol :cite:p:`Anil2021`.
+    """Implementation of the Abstract Decision Problem (ADP) protocol :cite:p:`Anil2021`.
 
     Parameters
     ----------
@@ -150,7 +150,7 @@ class DebateProtocol(NipProtocol):
         In sequential MNIP with verifier first, the order is:
 
         - Verifier in both channels
-        - First prover (determined by `prover0_first`) in their respective channel
+        - First prover (determined by ``prover0_first``) in their respective channel
         - Second prover in their respective channel
 
         In simultaneous MNIP with verifier first, the order is:
@@ -240,7 +240,7 @@ class DebateProtocol(NipProtocol):
 
 @register_protocol_handler("merlin_arthur")
 class MerlinArthurProtocol(SingleVerifierProtocolHandler):
-    """Implementation of the Merlin-Arthur protocol :cite:p:`Waeldchen2022`.
+    """Implementation of the Merlin-Arthur Classifier (MAC) protocol :cite:p:`Waeldchen2022`.
 
     The protocol consists of two provers and a verifier. One of the two provers sends a
     message to the verifier, who then makes a decision. Which prover sends the message
@@ -343,7 +343,7 @@ class MnipProtocol(NipProtocol):
         In sequential MNIP with verifier first, the order is:
 
         - Verifier in both channels
-        - First prover (determined by `prover0_first`) in their respective channel
+        - First prover (determined by ``prover0_first``) in their respective channel
         - Second prover in their respective channel
 
         In simultaneous MNIP with verifier first, the order is:
@@ -433,7 +433,7 @@ class MnipProtocol(NipProtocol):
         Both provers receive the same reward, which is the 1 if the verifier accepts and
         0 otherwise.
 
-        The `reward` tensor is updated in place, adding in the rewards for the agents
+        The ``reward`` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
 
         Parameters
@@ -446,8 +446,8 @@ class MnipProtocol(NipProtocol):
             The currently computed reward, which should include the reward for the
             verifier.
         env_td : TensorDictBase | NestedArrayDict
-            The current observation and state. If a `NestedArrayDict`, it is converted
-            to a `TensorDictBase`.
+            The current observation and state. If a ``NestedArrayDict``, it is converted
+            to a ``TensorDictBase``.
         """
 
         if self.hyper_params.protocol_common.shared_reward:

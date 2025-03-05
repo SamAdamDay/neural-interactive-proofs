@@ -9,7 +9,7 @@ Glossary
         of a classification task in which we want to train agents. The main components
         of a scenario are the dataset, the environment and the agents.
         
-        An example of such a task is the code validation problem, where a problem
+        An example of such a task is the :term:`code validation scenario`, where a problem
         statement together with a purported solution is given, and the task is to
         determine whether the solution is correct.
 
@@ -31,19 +31,18 @@ Glossary
 
     code validation scenario
         A :term:`scenario` where the task is to determine whether a given piece of code
-        is a correct solution to a problem statement. Each problem instance is a pair of
-        a problem statement and a solution.
+        is a correct solution to a problem statement. Each problem instance consists of a problem statement and a candidate solution.
 
     interaction protocol
         The set of rules that govern how agents interact in the environment. This
         includes the names of the agents involved, the communication channels between
-        agents, the turn order and the reward signal for each agent in each turn.
+        agents, the order of play and the reward signal for each agent in each turn.
         Protocols are implemented by subclassing :class:`ProtocolHandler
         <nip.protocols.protocol_base.ProtocolHandler>`. See the guide to 
         :doc:`Creating a new protocol <guides/new-protocol>`.
 
     deterministic interaction protocol
-        An :term:`interaction protocol` where the turn order is fixed and does not vary
+        An :term:`interaction protocol` where the order of play is fixed and does not vary
         between trajectories. Deterministic protocols with a single verifier are
         implemented by subclassing :class:`DeterministicSingleVerifierProtocolHandler
         <nip.protocols.protocol_base.DeterministicSingleVerifierProtocolHandler>`.
@@ -62,8 +61,7 @@ Glossary
     experiment settings
         An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>`
         object, which contains various settings for the experiment not relevant to
-        reproducibility (e.g. the GPU device number and whether to use Weights &
-        Biases).
+        reproducibility (e.g. the GPU device number and whether to use Weights & Biases).
 
     trainer
         The class that performs the optimisation steps on the agents, using the
@@ -71,9 +69,5 @@ Glossary
         subclassing :class:`Trainer <nip.trainers.trainer_base.Trainer>`.
 
     TensorDict
-        A nested dictionary of PyTorch tensors. :tensordict:doc:`Read the documentation
-        <tensordict:index>`.
-
-    Weights & Biases
-        A tool for tracking and visualising machine learning experiments. See `the
-        Weights & Biases website <https://wandb.ai/site>`_.
+        A nested dictionary of PyTorch tensors. :external+tensordict:doc:`Read the
+        documentation <index>`.

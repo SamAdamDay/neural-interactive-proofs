@@ -3,11 +3,14 @@
 import sys
 from pathlib import Path
 from string import Template
+from typing import Literal, Any
 
 from sphinx.application import Sphinx
 from sphinx.environment import BuildEnvironment
 
 import markdown
+
+root_dir = Path(__file__).parent.parent
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -21,6 +24,12 @@ project = "Neural Interactive Proofs"
 copyright = "2025, Sam Adam-Day and Lewis Hammond"
 author = "Sam Adam-Day and Lewis Hammond"
 
+# -- Path setup ----------------------------------------------------------------
+
+sys.path.insert(0, str(root_dir / "scripts"))
+sys.path.insert(0, str(root_dir))
+sys.path.insert(0, str(root_dir / "doc" / "extensions"))
+
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
@@ -32,8 +41,8 @@ extensions = [
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
-    "numpydoc",
-    # "autoapi.extension",
+    "sphinx_math_dollar",
+    "sphinx.ext.mathjax",
 ]
 
 templates_path = ["_templates"]
@@ -48,14 +57,11 @@ html_static_path = ["_static"]
 html_css_files = ["tabs.css"]
 
 
-# -- Options for NumpyDoc ----------------------------------------------
+# -- Options for Napoleon ----------------------------------------------
 
-numpydoc_show_class_members = False
-napoleon_custom_sections = ["Shapes", "Class Attributes"]
+napoleon_custom_sections = ["Shapes"]
+napoleon_use_rtype = False
 
-# -- Options for autosummary and autodoc ----------------------------------------------
-
-sys.path.insert(0, str(Path("..", "scripts").resolve()))
 
 # -- Options for intersphinx -------------------------------------------------
 
@@ -65,6 +71,7 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "matplotlib": ("https://matplotlib.org/stable", None),
     "torch": ("https://pytorch.org/docs/stable", None),
+    "torchvision": ("https://pytorch.org/vision/stable", None),
     "tensordict": ("https://pytorch.org/tensordict/stable", None),
     "torchrl": ("https://pytorch.org/rl/stable", None),
 }
@@ -102,13 +109,44 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
 
     return []
 
+def skip(
+    app: Sphinx,
+    what: Literal["module", "class", "exception", "function", "method", "attribute"],
+    name: str,
+    obj: Any,
+    would_skip: bool,
+    options: dict[str, bool],
+) -> bool:
+    """Skip certain methods and attributes from the documentation."""
+
+    # We only want to include methods that are part of the nip library
+    if what == "method":
+        return (
+            would_skip
+            or not hasattr(obj, "__module__")
+            or obj.__module__ is None
+            or not obj.__module__.startswith("nip")
+        )
+
+    # We exclude all private attributes. Ideally we'd like to exclude attributes not
+    # defined in the the nip library, but this is not possible with the current
+    # implementation of autodoc-skip-member
+    elif what == "attribute":
+        return would_skip or name.startswith("_")
+
+    return would_skip
+
 
 def setup(app: Sphinx) -> None:
-    """Set up the Sphinx application, registering the splash page generator."""
-    app.connect("env-updated", generate_splash_page)
+    """Set up the Sphinx application."""
 
+    # Add the splash page generation to the build process
+    app.connect("env-updated", generate_splash_page)
     app.add_config_value(
         "splash_template_path", Path("_templates", "splash", "template.html"), ""
     )
     app.add_config_value("splash_source_filename", "splash.md", "")
     app.add_config_value("splash_output_filename", "splash.html", "")
+
+    # Add the skip function to the autodoc-skip-member event
+    app.connect("autodoc-skip-member", skip)

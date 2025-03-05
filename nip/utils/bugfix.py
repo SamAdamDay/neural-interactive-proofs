@@ -19,42 +19,47 @@ def reward2go(
     gamma,
     time_dim: int = -2,
 ):
-    """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
+    """Compute the discounted cumulative sum of rewards for multiple trajectories.
 
     THIS IS THE FIXED VERSION OF THE FUNCTION. The original version had a bug where the
     reward-to-go was reshaped rather than transposed.
 
-    Args:
-        reward (torch.Tensor): A tensor containing the rewards
-            received at each time step over multiple trajectories.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
-        gamma (float, optional): The discount factor to use for computing the
-            discounted cumulative sum of rewards. Defaults to 1.0.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+    Parameters
+    ----------
+    reward : torch.Tensor
+        A tensor containing the rewards received at each time step over multiple
+        trajectories.
+    done : torch.Tensor
+        Boolean flag for end of episode. Differs from truncated, where the episode did
+        not end but was interrupted.
+    gamma : float, optional
+        The discount factor to use for computing the discounted cumulative sum of
+        rewards. Defaults to 1.0.
+    time_dim : int, optional
+        Dimension where the time is unrolled. Defaults to -2.
 
     Returns
     -------
-        torch.Tensor: A tensor of shape [B, T] containing the discounted cumulative
-            sum of rewards (reward-to-go) at each time step.
+    torch.Tensor
+        A tensor of shape [B, T] containing the discounted cumulative sum of rewards
+        (reward-to-go) at each time step.
 
     Examples
     --------
-        >>> reward = torch.ones(1, 10)
-        >>> done = torch.zeros(1, 10, dtype=torch.bool)
-        >>> done[:, [3, 7]] = True
-        >>> reward2go(reward, done, 0.99, time_dim=-1)
-        tensor([[3.9404],
-                [2.9701],
-                [1.9900],
-                [1.0000],
-                [3.9404],
-                [2.9701],
-                [1.9900],
-                [1.0000],
-                [1.9900],
-                [1.0000]])
-
+    >>> reward = torch.ones(1, 10)
+    >>> done = torch.zeros(1, 10, dtype=torch.bool)
+    >>> done[:, [3, 7]] = True
+    >>> reward2go(reward, done, 0.99, time_dim=-1)
+    tensor([[3.9404],
+            [2.9701],
+            [1.9900],
+            [1.0000],
+            [3.9404],
+            [2.9701],
+            [1.9900],
+            [1.0000],
+            [1.9900],
+            [1.0000]])
     """
     shape = reward.shape
     if shape != done.shape:
@@ -86,10 +91,12 @@ def reward2go(
 class Reward2GoTransform(Reward2GoTransformBuggy):
     """Calculates the reward to go based on the episode reward and a discount factor.
 
-    This is a fixed version of the `Reward2GoTransform` class from torchrl. The original
-    version had a bug where the reward-to-go was reshaped rather than transposed.
+    This is a fixed version of the ``Reward2GoTransform`` class from torchrl. The
+    original version had a bug where the reward-to-go was reshaped rather than
+    transposed.
 
-    See `torchrl.envs.transforms.Reward2GoTransform` for more information.
+    See :external+torchrl:class:`torchrl.envs.transforms.Reward2GoTransform` for more
+    information.
     """
 
     def _inv_apply_transform(

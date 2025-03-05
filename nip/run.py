@@ -65,7 +65,7 @@ def run_experiment(
     ----------
     hyper_params : HyperParameters
         The parameters of the experiment. Note that the actual parameters used in the
-        experiment may differ from `hyper_params` if a base run is used.
+        experiment may differ from ``hyper_params`` if a base run is used.
     device : TorchDevice, default="cpu"
         The device to use for training.
     logger : logging.Logger | logging.LoggerAdapter, optional
@@ -105,10 +105,11 @@ def run_experiment(
         in parallel.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
-        GPU with `non_blocking=True`. This can speed up training.
+        GPU with ``non_blocking=True``. This can speed up training.
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but
-        requires that the dataset fits on the device. This makes `pin_memory` redundant.
+        requires that the dataset fits on the device. This makes ``pin_memory``
+        redundant.
     enable_efficient_attention: bool, default=False
         Whether to enable the ' Memory-Efficient Attention' backend for the scaled
         dot-product attention. There may be a bug in this implementation which causes
@@ -214,7 +215,7 @@ def run_experiment(
 
 @dataclass
 class PreparedExperimentInfo:
-    """Information about an experiment prepared using `prepare_experiment`.
+    """Information about an experiment prepared using ``prepare_experiment``.
 
     Parameters
     ----------
@@ -235,7 +236,7 @@ def prepare_experiment(
 ) -> PreparedExperimentInfo:
     """Prepare for running an experiment.
 
-    This is useful e.g. for downloading data before running an experiment. Without this,
+    This is useful, e.g., for downloading data before running an experiment. Without this,
     if running multiple experiments in parallel, the initial runs will all start
     downloading data at the same time, which can cause problems.
 

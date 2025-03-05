@@ -77,11 +77,12 @@ class ExperimentSettings:
         in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
-        GPU with `non_blocking=True`. This can speed up training. When the device if the
-        CPU this setting doesn't do anything and is set to False.
+        GPU with ``non_blocking=True``. This can speed up training. When the device is
+        the CPU this setting doesn't do anything and is set to False.
     dataset_on_device : bool, default=False
         Whether store the whole dataset on the device. This can speed up training but
-        requires that the dataset fits on the device. This makes `pin_memory` redundant.
+        requires that the dataset fits on the device. This makes ``pin_memory``
+        redundant.
     enable_efficient_attention: bool, default=False
         Whether to enable the 'Memory-Efficient Attention' backend for the scaled
         dot-product attention. There may be a bug in this implementation which causes

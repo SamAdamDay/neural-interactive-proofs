@@ -22,21 +22,21 @@ class RlTrainerParameters(SubParameters):
     Parameters
     ----------
     frames_per_batch : int | None
-        The number of frames to sample per training iteration. If `None` we set the
-        number of frames so that `rollouts_per_iteration` rollouts are sampled per
+        The number of frames to sample per training iteration. If ``None`` we set the
+        number of frames so that ``rollouts_per_iteration`` rollouts are sampled per
         iteration.
     rollouts_per_iteration : int | None
-        If `frames_per_batch` is `None`, we use this parameter to determine the number
-        of rollouts to sample per iteration. `frames_per_batch` is then set to
-        `rollouts_per_iteration * steps_per_env_per_iteration`. If `None`, this defaults
-        to the dataset size, so that every training datapoint appears exactly once in
-        each iteration.
+        If ``frames_per_batch`` is ``None``, we use this parameter to determine the
+        number of rollouts to sample per iteration. ``frames_per_batch`` is then set to
+        ``rollouts_per_iteration * steps_per_env_per_iteration``. If ``None``, this
+        defaults to the dataset size, so that every training datapoint appears exactly
+        once in each iteration.
     steps_per_env_per_iteration : int | None
         Each batch is divided into a number of environments which run trajectories for
         this many steps. Note that when a trajectory ends, a new one is started
-        immediately. This must be a factor of `frames_per_batch`, since the number of
-        environments is `frames_per_batch / steps_per_env_per_iteration`. If `None`,
-        this defaults to `max_message_rounds`.
+        immediately. This must be a factor of ``frames_per_batch``, since the number of
+        environments is ``frames_per_batch / steps_per_env_per_iteration``. If ``None``,
+        this defaults to ``max_message_rounds``.
     num_iterations : int
         The number of sampling and training iterations. `num_iterations *
         frames_per_batch` is the total number of frames sampled during training.
@@ -47,7 +47,7 @@ class RlTrainerParameters(SubParameters):
     lr : float
         The learning rate.
     anneal_lr : bool
-        Whether to (linearly) anneal the learning rate over time. Defaults to `False`.
+        Whether to (linearly) anneal the learning rate over time. Defaults to ``False``.
     max_grad_norm : float
         The maximum norm of the gradients during optimization.
     loss_critic_type : str
@@ -75,7 +75,7 @@ class RlTrainerParameters(SubParameters):
         Whether the actor and critic share the same body, when using a critic.
     num_test_iterations : int
         The number of iterations to run the test for. In each iteration we sample
-        `frames_per_batch` frames, as in training.
+        ``frames_per_batch`` frames, as in training.
     """
 
     # Sampling
@@ -115,7 +115,8 @@ class CommonPpoParameters(SubParameters):
     Parameters
     ----------
     loss_type : PpoLossType
-        The type of PPO loss function to use. See `PpoLossType` for options.
+        The type of PPO loss function to use. See :const:`PpoLossType
+        <nip.parameters.types.PpoLossType>` for options.
     clip_epsilon : float
         The PPO clip range when using the clipped PPO loss.
     kl_target : float
@@ -163,10 +164,12 @@ class SpgParameters(SubParameters):
         The variant of SPG to use.
     stackelberg_sequence : tuple[tuple[str, ...]], optional
         The sequence of agents to use in the Stackelberg game. The leaders first then
-        their respective followers, and so forth. If `None`, the sequence is determined
-        automatically based on the protocol.
+        their respective followers, and so forth. If ``None``, the sequence is
+        determined automatically based on the protocol.
     additional_lola_term : bool
-        Whether to add an additional term to the SPG loss to make it equivalent to the later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to the original version.
+        Whether to add an additional term to the SPG loss to make it equivalent to the
+        later version of LOLA (first introduced implicitly in LOLA-DICE) as opposed to
+        the original version.
     sos_scaling_factor: float
         The SOS scaling factor (between 0 and 1), used with Stable Opponent Shaping.
     sos_threshold_factor: float
@@ -223,7 +226,8 @@ class SoloAgentParameters(SubParameters):
     learning_rate : float
         The learning rate.
     body_lr_factor_override : bool
-        If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
+        If true, this overrides the learning rate factor for the body (for both the
+        actor and critic), effectively setting it to 1.
     """
 
     num_epochs: int = 100
@@ -243,7 +247,7 @@ class TextRlParameters(SubParameters):
     ----------
     fine_tune_on_all_previous_rollouts : bool
         Whether to fine-tune the agents on the rollouts from all iterations so far. If
-        `False`, only the rollouts from the current iteration are used.
+        ``False``, only the rollouts from the current iteration are used.
     verifier_guess_replacement_proportion : float
         When fine-tuning on the rollouts, replace the verifier's guess with the true
         label for this proportion of the rollouts. This only changes the last message of
@@ -254,9 +258,9 @@ class TextRlParameters(SubParameters):
 
         - "none": No annealing.
         - "linear": Linear annealing with rate
-          `verifier_guess_replacement_annealing_rate`.
+          ``verifier_guess_replacement_annealing_rate``.
         - "exponential": Exponential annealing with base
-          `1-verifier_guess_replacement_annealing_rate`.
+          ``1-verifier_guess_replacement_annealing_rate``.
 
     verifier_guess_replacement_annealing_rate : float
         The rate of annealing for the proportion of rollouts where the verifier's guess
@@ -268,13 +272,14 @@ class TextRlParameters(SubParameters):
     transcript_format : Literal["json", "yaml"]
         The format to save the transcripts in.
     test_scheme : TestSchemeType
-        When to run the test loop during training. See `TestSchemeType` for options.
+        When to run the test loop during training. See :const:`TestSchemeType
+        <nip.parameters.types.TestSchemeType>` for options.
     test_on_whole_dataset : bool
         Whether to run the test loop on the whole dataset or only on a single
         iteration-worth of rollouts.
     test_every_iteration : bool
-        Whether to run the test loop after every iteration. If `False`, the test loop is
-        only run after training is complete.
+        Whether to run the test loop after every iteration. If ``False``, the test loop
+        is only run after training is complete.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
@@ -297,7 +302,7 @@ class TextRlParameters(SubParameters):
 class PureTextEiParameters(SubParameters):
     """Additional parameters for the Expert Iteration (EI) trainer.
 
-    See :cite:t:`Anthony2017` for more information on Expert Iteration.
+    See :cite:t:`Anthony2017` for more information on EI.
 
     Parameters
     ----------
@@ -317,7 +322,7 @@ class PureTextEiParameters(SubParameters):
         computed as this factor times the number of rollouts.
     weighting_minimum : float | None
         When using the weighted sampling method, all rewards below this value are
-        assigned this value before being used as weights. If `None`, no minimum is
+        assigned this value before being used as weights. If ``None``, no minimum is
         applied.
     weighting_use_replacement : bool
         Whether to sample with replacement when using the weighted sampling method.
@@ -344,7 +349,7 @@ class PureTextMaltParameters(SubParameters):
     ----------
     num_responses_per_timestep : int
         The number of responses to sample from the agents at each timestep. This yields
-        a tree of size at most `num_responses_per_timestep ** max_message_rounds`.
+        a tree of size at most ``num_responses_per_timestep ** max_message_rounds``.
     """
 
     num_responses_per_timestep: int = 2

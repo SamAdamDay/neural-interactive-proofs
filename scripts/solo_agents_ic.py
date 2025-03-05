@@ -1,8 +1,8 @@
 """Test solo image classification agents using a grid of hyperparameters.
 
-A solo agent is one which does not interact with any other agents, but instead tries to
+A solo agent is one that does not interact with any other agents, but instead tries to
 solve the image classification problem on its own. Solo agents are trained using
-supervised learning.
+supervised learning instead of RL.
 
 This script runs through a grid of hyperparameters, specified in the ``param_grid``
 dict. If the ``MULTIPROCESS`` variable is set to True, the experiments are run using a
@@ -216,7 +216,7 @@ experiment.parser.add_argument(
     help="Store the whole dataset on the device (needs more GPU memory).",
 )
 
-# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+# Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
 parser = experiment.parser
 
 if __name__ == "__main__":

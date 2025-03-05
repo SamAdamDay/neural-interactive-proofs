@@ -26,7 +26,7 @@ class GenerationError(Exception, ABC):
         Returns
         -------
         GenerationError
-            A copy of the error with the number of retries set to `num_retries`.
+            A copy of the error with the number of retries set to ``num_retries``.
         """
 
         kwargs = {
@@ -46,7 +46,7 @@ class ContentFilterError(GenerationError):
 
 
 class ContentIsNoneError(GenerationError):
-    """Raised when the content of the generated message is `None`."""
+    """Raised when the content of the generated message is ``None``."""
 
 
 class UnknownFinishReasonError(GenerationError):
