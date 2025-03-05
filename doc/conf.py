@@ -2,11 +2,16 @@
 
 import sys
 from pathlib import Path
+from string import Template
 from typing import Literal, Any
 
 from sphinx.application import Sphinx
+from sphinx.environment import BuildEnvironment
 
-root_dir = Path(__file__).parent.parent
+import markdown
+
+_root_dir = Path(__file__).parent.parent
+_docs_dir = Path(__file__).parent
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -22,9 +27,9 @@ author = "Sam Adam-Day and Lewis Hammond"
 
 # -- Path setup ----------------------------------------------------------------
 
-sys.path.insert(0, str(root_dir / "scripts"))
-sys.path.insert(0, str(root_dir))
-sys.path.insert(0, str(root_dir / "doc" / "extensions"))
+sys.path.insert(0, str(_root_dir / "scripts"))
+sys.path.insert(0, str(_root_dir))
+sys.path.insert(0, str(_root_dir / "doc" / "extensions"))
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -44,6 +49,8 @@ extensions = [
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+root_doc = "docs/index"
+
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -58,7 +65,6 @@ html_css_files = ["tabs.css"]
 napoleon_custom_sections = ["Shapes"]
 napoleon_use_rtype = False
 
-# -- Options for autosummary and autodoc ----------------------------------------------
 
 # -- Options for intersphinx -------------------------------------------------
 
@@ -76,7 +82,36 @@ intersphinx_mapping = {
 # -- Options for sphinxcontrib-bibtex ----------------------------------------------
 bibtex_bibfiles = ["references.bib"]
 
-# -- Filter to exclude certain methods from the documentation ----------------------
+
+def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
+    """Generate the splash page from the markdown source."""
+
+    source_path = _docs_dir.joinpath(app.config.splash_source_path).resolve()
+    with open(source_path, "r", encoding="utf-8") as input_file:
+        text = input_file.read()
+    content = markdown.markdown(text, extensions=["extra"])
+
+    # Try to extract the title from the markdown; default to a generic title
+    for line in text.split("\n"):
+        stripped_line = line.strip()
+        if stripped_line.startswith("# "):
+            title = stripped_line[2:]
+            break
+    else:
+        title = "Neural Interactive Proofs"
+
+    # Load the template and substitute the title and content
+    template_path = _docs_dir.joinpath(app.config.splash_template_path).resolve()
+    with open(template_path, "r", encoding="utf-8") as template_file:
+        html_template = Template(template_file.read())
+    html = html_template.substitute(title=title, content=content)
+
+    # Write the output
+    output_path = Path(app.outdir, app.config.splash_output_path).resolve()
+    with open(output_path, "w", encoding="utf-8") as output_file:
+        output_file.write(html)
+
+    return []
 
 
 def skip(
@@ -107,7 +142,14 @@ def skip(
     return would_skip
 
 
-def setup(app: Sphinx):
+def setup(app: Sphinx) -> None:
     """Set up the Sphinx application."""
 
+    # Add the splash page generation to the build process
+    app.connect("env-updated", generate_splash_page)
+    app.add_config_value("splash_template_path", "_templates/splash/template.html", "")
+    app.add_config_value("splash_source_path", "index.md", "")
+    app.add_config_value("splash_output_path", "index.html", "")
+
+    # Add the skip function to the autodoc-skip-member event
     app.connect("autodoc-skip-member", skip)

@@ -25,7 +25,7 @@ all the experiment components, running the experiment, and saving the results. I
 designed to be as simple as possible, while still allowing for a wide range of
 experiments.
 
-See :doc:`/guides/running_experiments` for a more detailed guide on running experiments.
+See :doc:`../guides/running_experiments` for a more detailed guide on running experiments.
 
 
 Example
