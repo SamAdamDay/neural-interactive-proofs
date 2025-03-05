@@ -36,7 +36,7 @@ def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
     Shapes
     ------
     x : (B1, B2, ..., Bn, D1, D2, ..., Dm)
-        Where n is the number of batch dimensions `num_batch_dims`.
+        Where n is the number of batch dimensions ``num_batch_dims``.
     x_flattened : (B, D1, D2, ..., Dm)
         Where ``B = B1 * B2 * ... * Bn``.
 
@@ -96,7 +96,7 @@ class SimulateBatchDimsMixin:
     by flattening the batch dimensions and then unflattening them after applying the
     module.
 
-    Classes that use this mixin should implement the `feature_dims` property.
+    Classes that use this mixin should implement the ``feature_dims`` property.
     """
 
     @property
@@ -135,7 +135,7 @@ class SimulateBatchDimsMixin:
 class BatchNorm1dSimulateBatchDims(SimulateBatchDimsMixin, nn.BatchNorm1d):
     """Batch normalization layer with arbitrary batch dimensions.
 
-    See `torch.nn.BatchNorm1d` for documentation.
+    See :external+torch:class:`torch.nn.BatchNorm1d` for documentation.
 
     Assumes an input of shape (... features).
     """
@@ -146,7 +146,7 @@ class BatchNorm1dSimulateBatchDims(SimulateBatchDimsMixin, nn.BatchNorm1d):
 class UpsampleSimulateBatchDims(SimulateBatchDimsMixin, nn.Upsample):
     """Upsample layer with arbitrary batch dimensions.
 
-    See `torch.nn.Upsample` for documentation.
+    See :external+torch:class:`torch.nn.Upsample` for documentation.
 
     Assumes an input of shape (... channels height width).
     """
@@ -157,7 +157,7 @@ class UpsampleSimulateBatchDims(SimulateBatchDimsMixin, nn.Upsample):
 class Conv2dSimulateBatchDims(SimulateBatchDimsMixin, nn.Conv2d):
     """2D convolutional layer with arbitrary batch dimensions.
 
-    See `torch.nn.Conv2d` for documentation.
+    See :external+torch:class:`torch.nn.Conv2d` for documentation.
 
     Assumes an input of shape (... channels height width).
     """
@@ -168,7 +168,7 @@ class Conv2dSimulateBatchDims(SimulateBatchDimsMixin, nn.Conv2d):
 class MaxPool2dSimulateBatchDims(SimulateBatchDimsMixin, nn.MaxPool2d):
     """2D max pool layer with arbitrary batch dimensions.
 
-    See `torch.nn.MaxPool2d` for documentation.
+    See :external+torch:class:`torch.nn.MaxPool2d` for documentation.
 
     Assumes an input of shape (... channels height width).
     """
@@ -179,7 +179,10 @@ class MaxPool2dSimulateBatchDims(SimulateBatchDimsMixin, nn.MaxPool2d):
 class ResNetBasicBlockSimulateBatchDims(SimulateBatchDimsMixin, BasicResNetBlock):
     """ResNet basic block with arbitrary batch dimensions.
 
-    See `torchvision.models.resnet.BasicBlock` for documentation.
+    This is a subclass of the ``BasicBlock`` module from torchvision's ResNet
+    implementation: :external+torchvision:doc:`models/resnet`. The ``BasicBlock`` module
+    is not documented, but you can see the source code `here
+    <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_.
 
     Assumes an input of shape (... channels height width).
     """
@@ -192,7 +195,10 @@ class ResNetBottleneckBlockSimulateBatchDims(
 ):
     """ResNet bottleneck block with arbitrary batch dimensions.
 
-    See `torchvision.models.resnet.Bottleneck` for documentation.
+    This is a subclass of the ``Bottleneck`` module from torchvision's ResNet
+    implementation: :external+torchvision:doc:`models/resnet`. The ``Bottleneck`` module
+    is not documented, but you can see the source code `here
+    <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_.
 
     Assumes an input of shape (... channels height width).
     """
@@ -278,7 +284,7 @@ class PairedGaussianNoise(nn.Module):
     pair_dim : int, default=0
         The graph pair dimension.
     train_sigma : bool, default=False
-        Whether the `sigma` parameter should be trained or not.
+        Whether the ``sigma`` parameter should be trained or not.
 
     Notes
     -----
@@ -316,7 +322,7 @@ class PairedGaussianNoise(nn.Module):
             The input tensor with Gaussian noise added.
         """
         if self.training and self.sigma != 0:
-            # If we're not training sigma, we need to detach `x` when computing the
+            # If we're not training sigma, we need to detach ``x`` when computing the
             # scale so that the gradient doesn't propagate to sigma
             if self.train_sigma:
                 scale = self.sigma * x.detach()
@@ -338,9 +344,9 @@ class PairedGaussianNoise(nn.Module):
         Parameters
         ----------
         *args
-            Arguments to pass to the `to` method of the superclass.
+            Arguments to pass to the ``to`` method of the superclass.
         **kwargs
-            Keyword arguments to pass to the `to` method of the superclass.
+            Keyword arguments to pass to the ``to`` method of the superclass.
 
         Returns
         -------
@@ -396,18 +402,17 @@ class PairInvariantizer(nn.Module):
 
 
 class GIN(TensorDictModuleBase):
-    r"""A graph isomorphism network (GIN) layer.
+    r"""A graph isomorphism network (GIN) layer :cite:`Xu2018`.
 
     This is a message-passing layer that aggregates the features of the neighbours as
     follows:
-    $$
-        x_i' = MLP((1 + \epsilon) x_i + \sum_{j \in \mathcal{N}(i)} x_j)
-    $$
+
+    .. math::
+
+        x_i' = \text{MLP}((1 + \epsilon) x_i + \sum_{j \in \mathcal{N}(i)} x_j)
+
     where $x_i$ is the feature vector of node $i$, $\mathcal{N}(i)$ is the set of
     neighbours of node $i$, and $\epsilon$ is a (possibly learnable) parameter.
-
-    From the paper "How Powerful are Graph Neural Networks?" by Keyulu Xu et al.
-    (https://arxiv.org/abs/1810.00826).
 
     The difference between this implementation and the one in PyTorch Geometric is that
     this one takes as input a TensorDict with dense representations of the graphs and
@@ -430,17 +435,18 @@ class GIN(TensorDictModuleBase):
     node_mask_key : NestedKey, default="node_mask"
         The key of the node mask in the input TensorDict.
     vmap_compatible : bool, default=False
-        Whether the module is compatible with `vmap` or not. If `True`, the node mask
-        is only applied after the MLP, which is less efficient but allows for the use
-        of `vmap`.
+        Whether the module is compatible with ``vmap`` or not. If ``True``, the node
+        mask is only applied after the MLP, which is less efficient but allows for the
+        use of ``vmap``.
 
     Shapes
     ------
     Takes as input a TensorDict with the following keys:
-    * `x` - Float["... max_nodes feature"] - The features of the nodes.
-    * `adjacency` - Float["... max_nodes max_nodes"] - The adjacency matrix of the
+
+    - ``x`` - Float["... max_nodes feature"] - The features of the nodes.
+    - ``adjacency`` - Float["... max_nodes max_nodes"] - The adjacency matrix of the
       graph.
-    * `node_mask` - Bool["... max_nodes"] - A mask indicating which nodes exist
+    - ``node_mask`` - Bool["... max_nodes"] - A mask indicating which nodes exist
     """
 
     @property
@@ -751,7 +757,7 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
 
     The input is assumed to have some number of batch dimensions followed some number of
     structure dimensions, followed by the round dimension (these two are reversed when
-    `round_dim_last` is False). The 'structure' dimensions are those that specify the
+    ``round_dim_last`` is False). The 'structure' dimensions are those that specify the
     structure of a data point, e.g. the height and width of an image. The input is
     assumed to be one-hot encoded across all the structure dimensions for each round
     where a message has been exchanged.
@@ -760,9 +766,9 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
     ------
     Takes as input a TensorDict with key:
 
-    - `x` with shape one of:
-        - Float["... structure_dim_1 ... structure_dim_k round"]
-        - Float["... round structure_dim_1 ... structure_dim_k"]
+    - ``x`` with shape one of:
+      - ``Float["... structure_dim_1 ... structure_dim_k round"]``
+      - ``Float["... round structure_dim_1 ... structure_dim_k"]``
 
     Parameters
     ----------
@@ -809,21 +815,21 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         self._cached_structure_shape: Optional[torch.Size] = None
 
     def _get_mean_and_std(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Get the mean and standard deviation for the structure shape of `x`.
+        r"""Get the mean and standard deviation for the structure shape of ``x``.
 
         These are computed based only on the shape of the structure dimensions, so they
         can be cached and reused for tensors with the same structure shape.
 
-        Let `n` be the total size of the structure dimensions and `m` be the maximum
+        Let ``n`` be the total size of the structure dimensions and ``m`` be the maximum
         number of message rounds. Then the mean and standard deviation are computed as
         follows:
 
-        ```latex
+        .. math::
+
             \text{mean} = \frac 1 {n m} (m - 1, m - 2, \ldots, 0) \\
             \text{std} = \frac 1 {n m} \sqrt{ 
                 ((m - 1) (n m - m + 1), (m - 2) (n m - m + 2), \ldots, 0)
             }
-        ```
 
         Parameters
         ----------
@@ -833,10 +839,10 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         Returns
         -------
         mean : Tensor
-            The mean for message histories with the structure shape of `x`.
+            The mean for message histories with the structure shape of ``x``.
         std : Tensor
             The standard deviation for message histories with the structure shape of 
-            `x`.
+            ``x``.
         """
         # Get the shape of the structure dimensions
         if self.round_dim_last:
@@ -908,7 +914,7 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
 
         x = tensordict[self.message_in_key]
 
-        # Get the mean and standard deviation for the structure shape of `x`
+        # Get the mean and standard deviation for the structure shape of ``x``
         mean, std = self._get_mean_and_std(x)
 
         # Normalize the message history
@@ -923,9 +929,9 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
         Parameters
         ----------
         *args
-            Positional arguments to pass to the `to`
+            Positional arguments to pass to the ``to``
         **kwargs
-            Keyword arguments to pass to the `to`
+            Keyword arguments to pass to the ``to``
 
         Returns
         -------
@@ -1052,7 +1058,7 @@ class TensorDictPrint(TensorDictModuleBase):
 class FastForwardableBatchSampler(BatchSampler):
     """A batch sampler which can skip an initial number of items.
 
-    See the docs for PyTorch's `BatchSampler` for details.
+    See the docs for PyTorch's ``BatchSampler`` for details.
 
     Parameters
     ----------
@@ -1078,7 +1084,7 @@ class FastForwardableBatchSampler(BatchSampler):
         self.initial_skip = initial_skip
 
     def __iter__(self) -> Iterator[list[int]]:
-        # Adapted from `torch.utils.data.sampler.BatchSampler.__iter__`.
+        # Adapted from ``torch.utils.data.sampler.BatchSampler.__iter__``.
         if self.drop_last:
             sampler_iter = iter(self.sampler)
             for _ in range(self.initial_skip):

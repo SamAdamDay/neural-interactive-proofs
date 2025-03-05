@@ -6,14 +6,16 @@ The structure of all agent bodies is the same:
 
 - An encoder layer, which takes as input the image and the message history and outputs
   the initial pixel-level encodings.
-- A sequence of `num_block_groups` groups of building blocks (e.g. convolutional
+- A sequence of ``num_block_groups`` groups of building blocks (e.g. convolutional
   layers).
-    + Each layer is followed by a non-linearity and each group by a max pooling layer.
-    + For each group we halve the output size and double the number of channels.
-    + The number of building blocks in each group is given by the `num_blocks_per_group`
-      parameter.
-    + The output of the last group is the 'latent pixel-level' representations, which
-      provides a representation for each latent pixel.
+
+  + Each layer is followed by a non-linearity and each group by a max pooling layer.
+  + For each group we halve the output size and double the number of channels.
+  + The number of building blocks in each group is given by the ``num_blocks_per_group``
+    parameter.
+  + The output of the last group is the 'latent pixel-level' representations, which
+    provides a representation for each latent pixel.
+
 - We add a channel to the latent pixel-level representations to represent the most
   recent message.
 - A global pooling layer, which pools the latent pixel-level representations to obtain
@@ -481,7 +483,7 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
             - "latent_pixel_level_repr" : (... latent_channels latent_height
             latent_width)
 
-        where `latent_channels = initial_channels * 2**num_block_groups`
+        where ``latent_channels = initial_channels * 2**num_block_groups``
 
         Returns
         -------
@@ -953,7 +955,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         num_layers : int
             The number of hidden layers in the MLP.
         flatten_output : bool, default=True
-            Whether to flatten the output dimension to `latent_height * latent_width`.
+            Whether to flatten the output dimension to ``latent_height * latent_width``.
         out_key : str, default="latent_pixel_mlp_output"
             The tensordict key to use for the output of the MLP.
 

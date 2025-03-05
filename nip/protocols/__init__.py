@@ -3,9 +3,9 @@
 A protocol is implemented by a protocol handler, which specifies the agents present, how
 they interact, and how the environment is updated.
 
-Every protocol handler is a subclass of `ProtocolHandler` and registers itself with the
-use of the `register_protocol_handler` decorator. The `build_protocol_handler` factory
-function can then be used to build a protocol handler from parameters.
+Every protocol handler is a subclass of ``ProtocolHandler`` and registers itself with
+the use of the ``register_protocol_handler`` decorator. The ``build_protocol_handler``
+factory function can then be used to build a protocol handler from parameters.
 """
 
 from .protocol_base import (

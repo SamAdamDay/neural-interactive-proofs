@@ -70,4 +70,4 @@ Glossary
 
     TensorDict
         A nested dictionary of PyTorch tensors. :external+tensordict:doc:`Read the
-        documentation <tensordict:index>`.
+        documentation <index>`.

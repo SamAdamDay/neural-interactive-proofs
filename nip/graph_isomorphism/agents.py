@@ -428,7 +428,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         """Build the encoder layer which translates the GNN output to transformer input.
 
         This is a simple linear layer, where the number of input features is normally
-        `d_gnn` + 3, where the extra features encode which graph-level representation
+        ``d_gnn + 3``, where the extra features encode which graph-level representation
         the token is, if any and whether a node is in the most recent message from the
         other agent. When we are using a linear message space, the number of input
         features is increased by the number of rounds times the number of message
@@ -540,7 +540,7 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         """Build the encoder layer which translates to the representation space.
 
         This is a simple linear layer ensures that the number of output features is
-        `hyper_params.d_representation`.
+        ``hyper_params.d_representation``.
 
         Parameters
         ----------
@@ -836,8 +836,8 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         """Run the body part of the manual architecture.
 
         The verifier symmetrises the message history so that the information in round
-        `2i` is the same as the information in round `2i + 1`, while the prover ignores
-        the message history completely.
+        ``2i`` is the same as the information in round ``2i + 1``, while the prover
+        ignores the message history completely.
 
         The message history is then run through a linear layer to make it the right
         size, then run through a GNN to get the node-level representations. The
@@ -1645,21 +1645,23 @@ class GraphIsomorphismRandomAgentPolicyHead(
     Shapes
     ------
     Input:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
-        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-          representations.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
+    - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+      representations.
 
     Output:
-        - "node_selected_logits" (... channel position 2*max_nodes): A logit for each
-          node, indicating the probability that this node should be sent as a message to
-          the verifier.
-        - "decision_logits" (... 3): A logit for each of the three options: guess that
-          the graphs are isomorphic, guess that the graphs are not isomorphic, or
-          continue exchanging messages.
-        - "linear_message_selected_logits" (... channel position d_linear_message_space)
-          (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message to the verifier.
+
+    - "node_selected_logits" (... channel position 2*max_nodes): A logit for each node,
+      indicating the probability that this node should be sent as a message to the
+      verifier.
+    - "decision_logits" (... 3): A logit for each of the three options: guess that the
+      graphs are isomorphic, guess that the graphs are not isomorphic, or continue
+      exchanging messages.
+    - "linear_message_selected_logits" (... channel position d_linear_message_space)
+      (optional): A logit for each linear message, indicating the probability that this
+      linear message should be sent as a message to the verifier.
     """
 
     agent_level_in_keys = ("graph_level_repr", "node_level_repr")
@@ -1714,9 +1716,9 @@ class GraphIsomorphismRandomAgentPolicyHead(
               the graphs are not isomorphic. Set to zeros when the decider is not
               present.
             - "linear_message_selected_logits" (... channel position
-              d_linear_message_space)
-            (optional): A logit for each linear message, indicating the probability that
-            this linear message should be sent as a message to the verifier.
+              d_linear_message_space) (optional): A logit for each linear message,
+              indicating the probability that this linear message should be sent as a
+              message to the verifier.
         """
 
         max_num_nodes = body_output["node_level_repr"].shape[-2]
@@ -2466,7 +2468,7 @@ class GraphIsomorphismAgent(Agent):
             The base learning rate for the trainer.
         named_parameters : Iterable[tuple[str, TorchParameter]], optional
             The named parameters of the loss module, usually obtained by
-            `loss_module.named_parameters()`. If not given, the parameters of all the
+            ``loss_module.named_parameters()``. If not given, the parameters of all the
             agent parts are used.
         body_lr_factor_override : bool
             If true, this overrides the learning rate factor for the body (for both the
@@ -2476,7 +2478,7 @@ class GraphIsomorphismAgent(Agent):
         -------
         param_dict : Iterable[dict[str, Any]]
             The Torch parameters of the agent, and their learning rates. This is an
-            iterable of dictionaries with the keys `hyper_params` and `lr`.
+            iterable of dictionaries with the keys ``hyper_params`` and ``lr``.
         """
 
         # Check for mistakes

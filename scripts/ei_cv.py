@@ -75,7 +75,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     Parameters
     ----------
     combo : dict
-        The hyperparameter combination to use (from the `param_grid` grid).
+        The hyperparameter combination to use (from the ``param_grid`` grid).
     cmd_args : Namespace
         The command line arguments.
 
@@ -283,7 +283,7 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     Parameters
     ----------
     combo : dict
-        The hyperparameter combination to use (from the `param_grid` grid).
+        The hyperparameter combination to use (from the ``param_grid`` grid).
     cmd_args : Namespace
         The command line arguments.
 
@@ -333,7 +333,7 @@ experiment.parser.add_argument(
     help="Whether to use the dummy API for the agents. Useful for testing.",
 )
 
-# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+# Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
 parser = experiment.parser
 
 if __name__ == "__main__":

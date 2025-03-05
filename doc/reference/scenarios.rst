@@ -30,12 +30,12 @@ There are two types of scenario depending on how the agent models are implemente
    locally run neural networks, so we need to pass around PyTorch tensors. The data
    structures used are based on PyTorch's :external+tensordict:class:`TensorDict
    <tensordict.TensorDict>` objects. The environment and agents are based on
-   :external+torchrl:doc:`TorchRL <torchrl:index>` components.
+   :external+torchrl:doc:`TorchRL <index>` components.
 2. **Pure text scenarios**. These scenarios are those where the agents are text-based
    models accessed by an API. In this case we need to pass around strings, rather than
-   tensors. The data structures used are similar to :term:`TensorDict`s, but contain nested
-   dictionaries of Numpy string arrays, as implemented in the :class:`NestedArrayDict
-   <nip.utils.nested_array_dict.NestedArrayDict>` class.
+   tensors. The data structures used are similar to :term:`TensorDict`, but contain 
+   nested dictionaries of Numpy string arrays, as implemented in the
+   :class:`NestedArrayDict <nip.utils.nested_array_dict.NestedArrayDict>` class.
 
 The :term:`trainer` used must be compatible with the scenario type. See
 :ref:`tensordict-or-pure-text-trainer` for more information.
@@ -81,7 +81,7 @@ Scenario Hyper-Parameters
 
 Each scenario may have its own :term:`hyper-parameters`, which are sub-parameter objects
 living in the main :class:`HyperParameters <nip.parameters.HyperParameters>` object. See
-:doc:`generated/nip.parameters.scenario` for more information.
+:mod:`nip.parameters.scenario` for more information.
 
 
 How scenarios get instantiated (``nip.factory``)

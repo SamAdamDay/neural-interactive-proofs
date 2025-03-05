@@ -5,14 +5,14 @@ However, sometimes we want to access hyper-parameter dictionaries that were crea
 an older version of the package. For example, we may want resume an old run, or re-run
 it with additional tests or logging.
 
-The `converge_hyper_param_dict` function is used to transform an old hyper-parameter
+The ``converge_hyper_param_dict`` function is used to transform an old hyper-parameter
 dictionary to one which is compatible with the current version of the package. This is
 based on the version number of the package that was used to create the hyper-parameter
-dictionary, stored in the `_package_version` field of the dictionary.
+dictionary, stored in the ``_package_version`` field of the dictionary.
 
 The way this works is by stepping through the versions of the package, applying
 conversion functions to the dictionary as needed. These conversion functions are stored
-in this module, registered with the `register_conversion_function` decorator.
+in this module, registered with the ``register_conversion_function`` decorator.
 
 Each time a new version of the package is released, a new conversion function should be
 added to this module.
@@ -69,12 +69,12 @@ def convert_hyper_param_dict(hyper_param_dict: dict) -> dict:
     This function is used to transform an old hyper-parameter dictionary to one which is
     compatible with the current version of the package. This is based on the version
     number of the package that was used to create the hyper-parameter dictionary, stored
-    in the `_package_version` field of the dictionary.
+    in the ``_package_version`` field of the dictionary.
 
     The way this works is by stepping through the versions of the package, applying
     conversion functions to the dictionary as needed. These conversion functions are
-    stored in the `nip.parameters.version` module, registered with the
-    `register_conversion_function` decorator.
+    stored in the ``nip.parameters.version`` module, registered with the
+    ``register_conversion_function`` decorator.
 
     Parameters
     ----------
@@ -152,8 +152,8 @@ def register_conversion_function(
     elements of the version, e.g. "1.5" for version 1.5.x or "1" for version 1.x.x. In
     this case, it applies to any version which matches the pattern.
 
-    The `from_version` parameter may be `None`. This deals with the case where the
-    hyper-parameter dictionary does not have a `_package_version` field. This is the
+    The ``from_version`` parameter may be ``None``. This deals with the case where the
+    hyper-parameter dictionary does not have a ``_package_version`` field. This is the
     case for runs created prior to the introduction of this field.
 
     Parameters
@@ -218,8 +218,8 @@ def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
         if key in hyper_param_dict and "min_message_rounds" in hyper_param_dict[key]:
             hyper_param_dict[key]["min_message_rounds"] += 1
 
-    # `spg.sos_a_param` was renamed to `spg.sos_scaling_factor` and `spg.sos_b_param`
-    # was renamed to `spg.sos_threshold_factor`
+    # ``spg.sos_a_param`` was renamed to ``spg.sos_scaling_factor`` and
+    # ``spg.sos_b_param`` was renamed to ``spg.sos_threshold_factor``
     if "spg" in hyper_param_dict:
         spg = hyper_param_dict["spg"]
         if "sos_a_param" in spg:

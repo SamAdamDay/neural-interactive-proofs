@@ -107,11 +107,11 @@ class TensorDictDataset(Dataset, ABC):
 
     To subclass, implement the following methods:
 
-    - `raw_dir` (property): The path to the directory containing the raw data.
-    - `processed_dir` (property): The path to the directory containing the processed
+    - ``raw_dir`` (property): The path to the directory containing the raw data.
+    - ``processed_dir`` (property): The path to the directory containing the processed
       data.
-    - `_build_tensor_dict`: Build the tensordict from the raw data.
-    - `_download` (optional): Download the raw data.
+    - ``_build_tensor_dict``: Build the tensordict from the raw data.
+    - ``_download`` (optional): Download the raw data.
 
     Parameters
     ----------

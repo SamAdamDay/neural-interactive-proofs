@@ -35,7 +35,7 @@ class RolloutSamples(ABC):
     """A collection of rollout samples loaded from W&B.
 
     Since this class has some cleanup, it should be used as a context manager, or else
-    the `finish` method should be called manually (see examples).
+    the ``finish`` method should be called manually (see examples).
 
     Parameters
     ----------
@@ -53,13 +53,15 @@ class RolloutSamples(ABC):
 
     Examples
     --------
-    Using the `RolloutSamples` class as a context manager: >>> with
+    Using the ``RolloutSamples`` class as a context manager: >>> with
     RolloutSamples(run_id, iteration) as rollout_samples: ...
     rollout_samples.visualise()
 
-    Or manually calling the `finish` method: >>> rollout_samples =
-    RolloutSamples(run_id, iteration) >>> rollout_samples.visualise() >>>
-    rollout_samples.finish()
+    Or manually calling the ``finish`` method:
+
+    >>> rollout_samples = RolloutSamples(run_id, iteration)
+    >>> rollout_samples.visualise()
+    >>> rollout_samples.finish()
     """
 
     def __init__(

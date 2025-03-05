@@ -96,7 +96,7 @@ ActivationType: TypeAlias = Literal["relu", "tanh", "sigmoid"]
 """Type for the activation function to use.
 
 To add a new activation function, add it to this type, and add the corresponding
-function to `ACTIVATION_CLASSES` in `nip.utils.torch_modules`.
+function to ``ACTIVATION_CLASSES`` in ``nip.utils.torch_modules``.
 
 Possible Values
 ---------------

@@ -1,18 +1,18 @@
 """Functions for generating a dataset of pairs of graphs with WL scores.
 
-The main function is `generate_gi_dataset`, which generates a dataset of pairs of
+The main function is ``generate_gi_dataset``, which generates a dataset of pairs of
 graphs with WL scores.
 
 Graphs are generated using the Erdős-Rényi model. The dataset is generated in three
 steps:
 
-1. Generate `prop_non_isomorphic` non-isomorphic graphs. The pairs are divided equally
+1. Generate ``prop_non_isomorphic`` non-isomorphic graphs. The pairs are divided equally
    between the different graph sizes and edge probabilities. The number of graphs with a
    score of 1, 2 and greater than 2 are divided according to the proportions
-   `non_iso_prop_score_1` and `non_iso_prop_score_2`.
-2. Generate `(1 - prop_non_isomorphic) * iso_prop_from_non_iso` isomorphic graphs, by
+   ``non_iso_prop_score_1`` and ``non_iso_prop_score_2``.
+2. Generate ``(1 - prop_non_isomorphic) * iso_prop_from_non_iso`` isomorphic graphs, by
    sampling from the non-isomorphic graph pairs and shuffling the nodes.
-3. Generate the remaining `(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)`
+3. Generate the remaining ``(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)``
    isomorphic graphs, by generating new graphs and shuffling the nodes.
 """
 
@@ -49,13 +49,13 @@ class GraphIsomorphicDatasetConfig:
     Graphs are generated using the Erdős-Rényi model. The dataset is generated in three
     steps:
 
-    1. Generate `prop_non_isomorphic` non-isomorphic graphs. The pairs are divided
+    1. Generate ``prop_non_isomorphic`` non-isomorphic graphs. The pairs are divided
        equally between the different graph sizes and edge probabilities. The number of
        graphs with a score of 1, 2 and greater than 2 are divided according to the
-       proportions `non_iso_prop_score_1` and `non_iso_prop_score_2`.
-    2. Generate `(1 - prop_non_isomorphic) * iso_prop_from_non_iso` isomorphic graphs,
+       proportions ``non_iso_prop_score_1`` and ``non_iso_prop_score_2``.
+    2. Generate ``(1 - prop_non_isomorphic) * iso_prop_from_non_iso`` isomorphic graphs,
        by sampling from the non-isomorphic graph pairs and shuffling the nodes.
-    3. Generate the remaining `(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)`
+    3. Generate the remaining ``(1 - prop_non_isomorphic) * (1 - iso_prop_from_non_iso)``
        isomorphic graphs, by generating new graphs and shuffling the nodes.
 
     Parameters
@@ -117,7 +117,7 @@ def wl_score(
         The size of the hash table used to store the hashes of the graphs.
     device : TorchDevice, optional
         The device to use for the computation. If not given, defaults to the device of
-        `adjacency_a`.
+        ``adjacency_a``.
 
     Returns
     -------
@@ -489,7 +489,7 @@ def generate_gi_dataset(
     1. Generate non-isomorphic graphs. The pairs are divided equally between the
        different graph sizes and edge probabilities. The number of graphs with a score
        of 1, 2 and greater than 2 are divided according to the proportions
-       `non_iso_prop_score_1` and `non_iso_prop_score_2`.
+       ``non_iso_prop_score_1`` and ``non_iso_prop_score_2``.
     2. Generate isomorphic graphs by sampling from the non-isomorphic graph pairs and
        shuffling the nodes.
     3. Generate new isomorphic graphs.
@@ -500,7 +500,7 @@ def generate_gi_dataset(
         The configuration for the dataset.
     name : str
         The the dataset to save. This will be the name of the directory in which the
-        dataset is saved, under `nip.constants.GI_DATA_DIR`.
+        dataset is saved, under ``nip.constants.GI_DATA_DIR``.
     batch_size : int, default=1000000
         The batch size to use when generating the graphs.
     split_name : str, default="train"

@@ -12,8 +12,8 @@ Trainers are responsible for optimising the agents in an experiment. A trainer
 
 1. The hyper-parameter of the experiment (a :class:`HyperParameters
    <nip.parameters.HyperParameters>` object).
-2. A `ScenarioInstance <nip.factory.ScenarioInstance>` object, which contains all the
-   components of the experiment. The most important components are:
+2. A :class:`ScenarioInstance <nip.factory.ScenarioInstance>` object, which contains all
+   the components of the experiment. The most important components are:
 
     - The datasets.
     - The interaction protocol handler (:class:`ProtocolHandler
@@ -21,7 +21,7 @@ Trainers are responsible for optimising the agents in an experiment. A trainer
     - The agents.
     - The environment.
 
-3. An `ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object, which
+3. An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object, which
    contains various settings for the experiment not relevant to reproducibility (e.g.
    the GPU device number and whether to use Weights & Biases).
 
@@ -38,9 +38,9 @@ There are two types of trainers: those that deal directly with neural networks a
 that interact with text-based models through an API. The former kind use data structures
 based on PyTorch's :external+tensordict:class:`TensorDict <tensordict.TensorDict>`
 objects, while the latter use a similar, custom data structure containing nested
-dictionaries of Numpy string arrays (:class:`NestedArrayDict
-<nip.utils.nested_array_dict.NestedArrayDict>`). :term:`TensorDict`-based trainers use the
-:external+torchrl:doc:`TorchRL Library <torchrl:index>`.
+dictionaries of Numpy string arrays 
+(:class:`NestedArrayDict <nip.utils.nested_array_dict.NestedArrayDict>`).
+:term:`TensorDict`-based trainers use the :external+torchrl:doc:`TorchRL Library <index>`.
 
 Which of these two types is appropriate depends on the type of agents in the experiment.
 The environment, datasets and agents must be the appropriate type for the trainer. See

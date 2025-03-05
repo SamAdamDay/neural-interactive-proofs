@@ -34,8 +34,8 @@ def get_base_wandb_run_and_new_hyper_params(
 ) -> tuple[Optional[WandbRun], HyperParameters]:
     """Get the base W&B run and create a new hyper-parameters object.
 
-    Depending on the `base_run_type` in the `hyper_params`, this function either returns
-    `None` and the original `hyper_params` or the base W&B run and a new
+    Depending on the ``base_run_type`` in the ``hyper_params``, this function either
+    returns ``None`` and the original ``hyper_params`` or the base W&B run and a new
     hyper-parameters object with (some of) the hyper-parameters of the base run.
 
     Parameters
@@ -46,12 +46,12 @@ def get_base_wandb_run_and_new_hyper_params(
     Returns
     -------
     wandb_run : WandbRun or None
-        The base W&B run object, specified by `hyper_params`. This is an already
-        finished run loaded using the W&B API. If `base_run_type` is "none", this is
-        `None`, because we are not basing the current experiment on a previous run.
+        The base W&B run object, specified by ``hyper_params``. This is an already
+        finished run loaded using the W&B API. If ``base_run_type`` is "none", this is
+        ``None``, because we are not basing the current experiment on a previous run.
     new_hyper_params : HyperParameters
-        The new hyper-parameters object, based on the base run. If `base_run_type` is
-        "none", this is the original `hyper_params` object.
+        The new hyper-parameters object, based on the base run. If ``base_run_type`` is
+        "none", this is the original ``hyper_params`` object.
     """
 
     base_run_type = hyper_params.base_run.base_run_type
@@ -60,7 +60,9 @@ def get_base_wandb_run_and_new_hyper_params(
         return None, hyper_params
 
     if hyper_params.base_run.run_id is None:
-        raise ValueError("If `base_run_type` is not 'none', `run_id` must be provided.")
+        raise ValueError(
+            "If ``base_run_type`` is not 'none', ``run_id`` must be provided."
+        )
 
     wandb_api = wandb.Api()
 
@@ -84,7 +86,7 @@ def get_base_wandb_run_and_new_hyper_params(
     ):
         """Revert hyper-param values which should be preserved, recursively.
 
-        Modifies `new_hyper_params` in place, using the values from `hyper_params`
+        Modifies ``new_hyper_params`` in place, using the values from ``hyper_params``
         """
 
         for field in dataclasses.fields(hyper_params):
@@ -95,8 +97,8 @@ def get_base_wandb_run_and_new_hyper_params(
             if get_origin(field.type) is Annotated:
 
                 # When the type is annotated, check through the annotations for a
-                # `BaseRunPreserve` instance. If one is found, and the current base run
-                # type is in its list of base run types, we revert the value in the
+                # ``BaseRunPreserve`` instance. If one is found, and the current base
+                # run type is in its list of base run types, we revert the value in the
                 # original hyper-params
                 preserve_annotation_found = False
                 for annotation in field.type.__metadata__:
@@ -126,7 +128,7 @@ def get_base_wandb_run_and_new_hyper_params(
                 if not isclass(sub_type) or type(sub_type) is GenericAlias:
                     continue
 
-                # If any the union element subclasses `SubParameters`, this means the
+                # If any the union element subclasses ``SubParameters``, this means the
                 # current field is a gives sub-hyper-parameters, so recurse down
                 if issubclass(sub_type, SubParameters):
                     revert_preserved_hyper_params(
@@ -135,8 +137,8 @@ def get_base_wandb_run_and_new_hyper_params(
                     )
                     break
 
-                # `AgentsParameters` is a special case: it is a dictionary of
-                # `SubParameters` objects. We recurse into each key
+                # ``AgentsParameters`` is a special case: it is a dictionary of
+                # ``SubParameters`` objects. We recurse into each key
                 if issubclass(sub_type, AgentsParameters):
 
                     for agent_name in new_hyper_params_value.keys():

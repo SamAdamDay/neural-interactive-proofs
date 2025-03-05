@@ -33,7 +33,7 @@ class CommonProtocolParameters(SubParameters):
         The reward given to the verifier if it does not make a guess in a round.
     shared_reward : bool
         Whether to use a shared reward function, where the prover gets the same reward
-        as the verifier. This overrides `prover_reward`.
+        as the verifier. This overrides ``prover_reward``.
     force_guess: GuessType, optional
         The guess to force the verifier to make. If not provided, the verifier makes a
         guess using its policy.

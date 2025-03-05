@@ -1,6 +1,6 @@
 """Implementation of the runtime modules from PyExt.
 
-This is copied from the PyExt project, but we replace `inspect.getargspec` with
+This is copied from the PyExt project, but we replace ``inspect.getargspec`` with
 `inspect.getfullargspec` because the former is not available in Python 3.11.
 
 
@@ -193,7 +193,7 @@ class overload(object):
         '''Overload a function based on the specified argument types.
 
            :param argtypes: The argument types. If None is given, get the argument types from the function annotations(Python 3 only)
-           :param kw: Can only contain 1 argument, `is_cls`. If True, the function is assumed to be part of a class.
+           :param kw: Can only contain 1 argument, ``is_cls``. If True, the function is assumed to be part of a class.
 
            Example::
 
@@ -270,7 +270,7 @@ class _RuntimeModule(object):
     @staticmethod
     @overload.argc(2)
     def from_objects(name, docstring, **d):
-        '''Create a module at runtime from `d`.
+        '''Create a module at runtime from ``d``.
 
            :param name: The module name.
 
@@ -291,7 +291,7 @@ class _RuntimeModule(object):
     @staticmethod
     @overload.argc(3)
     def from_string(name, docstring, s):
-        '''Create a module at runtime from `s``.
+        '''Create a module at runtime from ``s```.
 
            :param name: The module name.
 

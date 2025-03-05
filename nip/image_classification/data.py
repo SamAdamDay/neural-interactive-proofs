@@ -1,15 +1,13 @@
 """Data classes for the image classification task.
 
-Contains the `ImageClassificationDataset` class, which is a dataset for the image
+Contains the ``ImageClassificationDataset`` class, which is a dataset for the image
 classification task. The dataset is a binary classification problem, where the classes
 are selected from a torchvision dataset. The dataset is binarified using one of the
 following methods:
 
-- `"merge"`: The classes are shuffled and merged into two
-  classes.
-- `"select_two"`: Two classes are selected from the original
-    dataset.
-- `"random"`: The classes are selected at random.
+- "merge": The classes are shuffled and merged into two classes.
+- "select_two": Two classes are selected from the original dataset.
+- "random": The classes are selected at random.
 """
 
 import os
@@ -192,7 +190,7 @@ class ImageClassificationDataset(TensorDictDataset):
     """A dataset for the image classification task.
 
     Uses a torchvision dataset, and removes all the classes apart from two (determined
-    by `hyper_params.image_classification.selected_classes`).
+    by ``hyper_params.image_classification.selected_classes``).
 
     Shapes
     ------
@@ -253,7 +251,8 @@ class ImageClassificationDataset(TensorDictDataset):
         images, labels = next(iter(full_dataset_loader))
 
         # Keep track of the indices of the original dataset from which the final dataset
-        # is produced. This is needed to reconstruct the dataset with `to_torch_dataset`
+        # is produced. This is needed to reconstruct the dataset with
+        # ``to_torch_dataset``.
         rearrange_index = torch.arange(len(labels))
 
         # The generator used to turn the dataset into a binary classification problem
