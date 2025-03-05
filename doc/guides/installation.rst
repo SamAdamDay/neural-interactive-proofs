@@ -34,6 +34,8 @@ Installation Steps
 
       git clone https://github.com/SamAdamDay/neural-interactive-proofs.git
 
+   Alternatively, you may wish to fork the repository and clone your fork.
+
 2. Change to the repository directory:
 
    .. code-block:: bash
