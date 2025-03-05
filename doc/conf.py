@@ -11,6 +11,7 @@ from sphinx.environment import BuildEnvironment
 import markdown
 
 root_dir = Path(__file__).parent.parent
+docs_dir = root_dir / "doc"
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -83,7 +84,9 @@ bibtex_bibfiles = ["references.bib"]
 def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
     """Generate the splash page from the markdown source."""
 
-    with open(app.config.splash_source_filename, "r", encoding="utf-8") as input_file:
+    with open(
+        docs_dir / app.config.splash_source_path, "r", encoding="utf-8"
+    ) as input_file:
         text = input_file.read()
     content = markdown.markdown(text, extensions=["extra"])
 
@@ -97,13 +100,15 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
         title = "Neural Interactive Proofs"
 
     # Load the template and substitute the title and content
-    with open(app.config.splash_template_path, "r", encoding="utf-8") as template_file:
+    with open(
+        docs_dir / app.config.splash_template_path, "r", encoding="utf-8"
+    ) as template_file:
         html_template = Template(template_file.read())
     html = html_template.substitute(title=title, content=content)
 
     # Write the output
     with open(
-        Path(app.outdir, app.config.splash_output_filename), "w", encoding="utf-8"
+        Path(app.outdir) / app.config.splash_output_path, "w", encoding="utf-8"
     ) as output_file:
         output_file.write(html)
 
@@ -143,11 +148,9 @@ def setup(app: Sphinx) -> None:
 
     # Add the splash page generation to the build process
     app.connect("env-updated", generate_splash_page)
-    app.add_config_value(
-        "splash_template_path", Path("_templates", "splash", "template.html"), ""
-    )
-    app.add_config_value("splash_source_filename", "splash.md", "")
-    app.add_config_value("splash_output_filename", "splash.html", "")
+    app.add_config_value("splash_template_path", "_templates/splash/template.html", "")
+    app.add_config_value("splash_source_path", "splash.md", "")
+    app.add_config_value("splash_output_path", "splash.html", "")
 
     # Add the skip function to the autodoc-skip-member event
     app.connect("autodoc-skip-member", skip)
