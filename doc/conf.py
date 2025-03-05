@@ -10,8 +10,13 @@ from sphinx.environment import BuildEnvironment
 
 import markdown
 
-_root_dir = Path(__file__).parent.parent
-_docs_dir = Path(__file__).parent
+_root_path = Path(__file__).parent.parent
+_docs_path = Path(__file__).parent
+
+_templates_dir_name = "_templates"
+_templates_path = _docs_path / _templates_dir_name
+
+_footer_links_path = _templates_path / "theme" / "footer-links.html"
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -27,9 +32,9 @@ author = "Sam Adam-Day and Lewis Hammond"
 
 # -- Path setup ----------------------------------------------------------------
 
-sys.path.insert(0, str(_root_dir / "scripts"))
-sys.path.insert(0, str(_root_dir))
-sys.path.insert(0, str(_root_dir / "doc" / "extensions"))
+sys.path.insert(0, str(_root_path / "scripts"))
+sys.path.insert(0, str(_root_path))
+sys.path.insert(0, str(_root_path / "doc" / "extensions"))
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -46,7 +51,7 @@ extensions = [
     "sphinx.ext.mathjax",
 ]
 
-templates_path = ["_templates"]
+templates_path = [_templates_dir_name]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 root_doc = "docs/index"
@@ -55,9 +60,14 @@ root_doc = "docs/index"
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
+with open(_footer_links_path, "r") as footer_links_file:
+    _footer_links = footer_links_file.read()
+
 html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
-html_css_files = ["tabs.css"]
+html_css_files = ["tabs.css", "extra.css"]
+html_theme_options = {"extra_footer": _footer_links}
+html_favicon = "_static/favicon.ico"
 
 
 # -- Options for Napoleon ----------------------------------------------
@@ -86,7 +96,7 @@ bibtex_bibfiles = ["references.bib"]
 def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
     """Generate the splash page from the markdown source."""
 
-    source_path = _docs_dir.joinpath(app.config.splash_source_path).resolve()
+    source_path = _docs_path.joinpath(app.config.splash_source_path).resolve()
     with open(source_path, "r", encoding="utf-8") as input_file:
         text = input_file.read()
     content = markdown.markdown(text, extensions=["extra"])
@@ -101,7 +111,7 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
         title = "Neural Interactive Proofs"
 
     # Load the template and substitute the title and content
-    template_path = _docs_dir.joinpath(app.config.splash_template_path).resolve()
+    template_path = _docs_path.joinpath(app.config.splash_template_path).resolve()
     with open(template_path, "r", encoding="utf-8") as template_file:
         html_template = Template(template_file.read())
     html = html_template.substitute(title=title, content=content)
