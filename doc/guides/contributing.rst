@@ -26,8 +26,8 @@ Style Guide
 - The code is formatted using `black <https://black.readthedocs.io/en/stable/>`_.
 - The line length is 88 (see `rationale
   <https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#line-length>`_).
-- Docstrings are formatted using `Numpydoc style
-  https://numpydoc.readthedocs.io/en/latest/format.html`_.
+- Docstrings are formatted using 
+  `Numpydoc style <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
 - Please add type hints to all functions.
 
 
@@ -75,7 +75,7 @@ Development Workflow
 1. Make sure you have submitted an issue on GitHub first if the change is significant
    (will take more than 30 minutes to implement). 
 
-2. Follow the :doc:`instructions to install the library <installation>`_, making sure
+2. Follow the :doc:`instructions to install the library <installation>`, making sure
    you do the following:
 
    - Fork the repository on GitHub before cloning.
@@ -115,7 +115,7 @@ Development Workflow
 
    .. code-block:: bash
 
-      sphinx-build doc doc/_build/ -j auto
+      sphinx-build --builder html --fresh-env --verbose --fail-on-warning --jobs auto doc doc/_build
 
    If there are errors, fix them before proceeding.
 
