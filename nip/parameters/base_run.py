@@ -24,7 +24,7 @@ class BaseRunParameters(SubParameters):
         How to base the current experiment on a previous W&B run.
     run_id : str, optional
         The run ID of the run to base the current experiment on. This must be provided
-        if `base_run_type` is not `BaseRunType.NONE`.
+        if ``base_run_type`` is not ``BaseRunType.NONE``.
     wandb_project : str
         The W&B project of the run to base the current experiment on. If not provided,
         the default project is used.
@@ -32,10 +32,10 @@ class BaseRunParameters(SubParameters):
         The W&B entity of the run to base the current experiment on. If not provided,
         the default entity is used.
     rerun_tests_force_test_during_training_state, bool
-        When `base_run_type` is set to "rerun_tests", if True this forces the existence
+        When ``base_run_type`` is set to "rerun_tests", if True this forces the existence
         of a "test_during_training" state, even when it was not present during training.
         Older runs did not have this state, so without this option it would be
-        impossible to redo a run testing every iteration. If `test_every_iteration` is
+        impossible to redo a run testing every iteration. If ``test_every_iteration`` is
         not True, this option has no effect, so it's safe to leave it as True.
     """
 

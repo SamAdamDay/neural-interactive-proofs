@@ -67,7 +67,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
                     permutation = random_number_generator.permutation(len(rollouts))
                     permuted_rollouts = rollouts[permutation]
 
-                    # Choose the first `replace_size` rollouts to replace the verifier
+                    # Choose the first ``replace_size`` rollouts to replace the verifier
                     # guess with the true label, and from the rest, select the rollouts
                     # to fine-tune on based on the reward.
                     guess_replaced_rollouts[agent_name] = permuted_rollouts[

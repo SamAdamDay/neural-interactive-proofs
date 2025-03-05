@@ -102,7 +102,7 @@ class PureTextRlTrainer(Trainer, ABC):
         if not hasattr(self, "_state"):
             self._state = self.State()
 
-        # Get the state of the agents to fill out the `shared_model_groups` field
+        # Get the state of the agents to fill out the ``shared_model_groups`` field
         for group_name, shared_model_group in self.shared_model_groups.items():
             self._state.shared_model_groups[group_name] = shared_model_group.get_state()
 
@@ -577,8 +577,8 @@ class PureTextRlTrainer(Trainer, ABC):
     ) -> NestedArrayDict:
         """Sample rollouts in the environment.
 
-        We sample `environment.num_envs` rollouts from the environment. A rollout is a
-        sequence of length `max_message_rounds` of states in the environment. The
+        We sample ``environment.num_envs`` rollouts from the environment. A rollout is a
+        sequence of length ``max_message_rounds`` of states in the environment. The
         sampled rollout nested array dict thus has shape (num_envs, max_message_rounds).
 
         Parameters
@@ -1147,7 +1147,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
             The nested array dict also contains keys which specify the datapoint for
             each rollout, as extracted by
-            `environment.get_datapoint_from_env_state_as_dict`.
+            ``environment.get_datapoint_from_env_state_as_dict``.
 
         environment : PureTextEnvironment
             The environment the rollouts were sampled in.
@@ -1163,14 +1163,14 @@ class PureTextRlTrainer(Trainer, ABC):
             The processed transcripts. This is a list of transcripts, where each
             transcript is dictionary containing meta data and a "transcript" key. The
             value at "transcript" is a list of dictionaries whose keys are
-            `f"{active_agent_name}@{channel_name}"` and values are the messages in each
-            channel.
+            ``f"{active_agent_name}@{channel_name}"`` and values are the messages in
+            each channel.
         prompts : list[list[dict[str, list[PromptMessage]]]]
             The prompts used to generate the messages at each timestep. This is a list
             containing for each batch item a list of dictionaries, one for each round.
             Each dictionary has the agent names as keys and the prompts used by the
             agents the as values. The prompts are a list of dictionaries, whose type is
-            specified by the `PromptMessage` class.
+            specified by the ``PromptMessage`` class.
         """
 
         message_history = rollouts["message_history"]

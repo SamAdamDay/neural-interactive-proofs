@@ -5,7 +5,8 @@ of the environment state, and the heads use this representation to compute the a
 policy, value function, etc.
 
 All modules are TensorDictModules, which means they take and return TensorDicts. Input
-and output keys are specified in the module's `input_keys` and `output_keys` attributes.
+and output keys are specified in the module's ``input_keys`` and ``output_keys``
+attributes.
 """
 
 from abc import ABC, abstractmethod
@@ -135,7 +136,8 @@ class AgentPart(ABC):
     def in_keys(self) -> set[NestedKey]:
         """The keys required by the module.
 
-        Computed by taking the union of `agent_level_in_keys` and `env_level_in_keys`.
+        Computed by taking the union of ``agent_level_in_keys`` and
+        ``env_level_in_keys``.
 
         Returns
         -------
@@ -152,7 +154,8 @@ class AgentPart(ABC):
     def out_keys(self) -> set[NestedKey]:
         """The keys produced by the module.
 
-        Computed by taking the union of `agent_level_out_keys` and `env_level_out_keys`.
+        Computed by taking the union of ``agent_level_out_keys`` and
+        ``env_level_out_keys``.
 
         Returns
         -------
@@ -309,7 +312,7 @@ class TensorDictAgentPartMixin(AgentPart, TensorDictModuleBase, ABC):
     def _init_weights(self):
         """Initialise the module weights.
 
-        Should be called at the end of `__init__`
+        Should be called at the end of ``__init__``
         """
         if self.agent_params.use_orthogonal_initialisation:
             apply_orthogonal_initialisation(
@@ -581,10 +584,10 @@ class PureTextSharedModelGroup(ABC):
             dictionary of arrays, which are timesteps selected from the rollouts.
         positive_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the preferred response for each of the timesteps in
-            `timesteps_per_agent`.
+            ``timesteps_per_agent``.
         negative_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the non-preferred response for each of the timesteps in
-            `timesteps_per_agent`.
+            ``timesteps_per_agent``.
         """
 
     @abstractmethod
@@ -653,7 +656,7 @@ class RandomWholeAgent(WholeAgent, ABC):
 class AgentBody(AgentPart, ABC):
     """Base class for all agent bodies, which compute representations for heads.
 
-    Representations should have dimension `hyper_params.d_representation`.
+    Representations should have dimension ``hyper_params.d_representation``.
     """
 
 
@@ -737,9 +740,9 @@ class CombinedAgentPart(ABC):
     def in_keys(self) -> set[NestedKey]:
         """The keys required by the module.
 
-        Computed by taking the union of the `agent_level_in_keys` and
-        `env_level_in_keys` of all the parts, and then removing the keys in
-        `excluded_in_keys` and adding the keys in `additional_in_keys`.
+        Computed by taking the union of the ``agent_level_in_keys`` and
+        ``env_level_in_keys`` of all the parts, and then removing the keys in
+        ``excluded_in_keys`` and adding the keys in ``additional_in_keys``.
 
         Returns
         -------
@@ -766,9 +769,9 @@ class CombinedAgentPart(ABC):
     def out_keys(self) -> set[NestedKey]:
         """The keys produced by the module.
 
-        Computed by taking the union of the `agent_level_out_keys` and
-        `env_level_out_keys` of all the parts, and then removing the keys in
-        `excluded_out_keys` and adding the keys in `additional_out_keys`.
+        Computed by taking the union of the ``agent_level_out_keys`` and
+        ``env_level_out_keys`` of all the parts, and then removing the keys in
+        ``excluded_out_keys`` and adding the keys in ``additional_out_keys``.
 
         Returns
         -------
@@ -1044,7 +1047,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         """Expand an agent's logits from its visible message channels to all.
 
         Agents only output messages for the channels they can see. This function expands
-        the output to all channels, by filling in `fill_value` for the logits in the
+        the output to all channels, by filling in ``fill_value`` for the logits in the
         channels the agent cannot see.
 
         Parameters
@@ -1063,7 +1066,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         Returns
         -------
         expanded_logits : Tensor
-            The output expanded to all channels. This has the same shape as `logits`,
+            The output expanded to all channels. This has the same shape as ``logits``,
             except that the channel dimension is the full set of message channels.
         """
 
@@ -1091,7 +1094,7 @@ class CombinedPolicyHead(CombinedTensorDictAgentPart, ABC):
         if logits.shape[channel_dim] == self.protocol_handler.num_message_channels:
             return logits
 
-        # Create a tensor filled with `fill_value` of the correct shape
+        # Create a tensor filled with ``fill_value`` of the correct shape
         full_shape = list(logits.shape)
         full_shape[channel_dim] = self.protocol_handler.num_message_channels
         expanded_logits = torch.full(
@@ -1201,7 +1204,7 @@ class CombinedValueHead(CombinedTensorDictAgentPart, ABC):
 class Agent(ABC):
     """A base class for holding all the parts of an agent for an experiment.
 
-    Subclasses should define the `message_logits_key` class variable, which is the key
+    Subclasses should define the ``message_logits_key`` class variable, which is the key
     in the output of the policy head which contains the logits for the message.
 
     Parameters
@@ -1356,9 +1359,9 @@ class Agent(ABC):
     ):
         """Filter the parameters and set their learning rate, and append them to a list.
 
-        Normally appends a dictionary with the keys `hyper_params` and `lr`, consisting of the
-        filtered parameters and their learning rate. If the learning rate is 0, the
-        parameters are frozen instead.
+        Normally appends a dictionary with the keys ``hyper_params`` and ``lr``,
+        consisting of the filtered parameters and their learning rate. If the learning
+        rate is 0, the parameters are frozen instead.
 
         Parameters
         ----------
@@ -1445,7 +1448,7 @@ class Agent(ABC):
             The base learning rate for the trainer.
         named_parameters : Iterable[tuple[str, TorchParameter]], optional
             The named parameters of the loss module, usually obtained by
-            `loss_module.named_parameters()`. If not given, the parameters of all the
+            ``loss_module.named_parameters()``. If not given, the parameters of all the
             agent parts are used.
         body_lr_factor_override : bool
             If true, this overrides the learning rate factor for the body (for both the actor and critic), effectively setting it to 1.
@@ -1454,7 +1457,7 @@ class Agent(ABC):
         -------
         param_dict : Iterable[dict[str, Any]]
             The Torch parameters of the agent, and their learning rates. This is an
-            iterable of dictionaries with the keys `hyper_params` and `lr`.
+            iterable of dictionaries with the keys ``hyper_params`` and ``lr``.
         """
 
         # Check for mistakes
@@ -1550,7 +1553,7 @@ class Agent(ABC):
         """Filter the actor parameters from an iterable of named parameters.
 
         This is useful for extracting the agent's actor parameters from an iterable of
-        named parameters obtained by calling `named_parameters()` on a loss module.
+        named parameters obtained by calling ``named_parameters()`` on a loss module.
 
         Parameters
         ----------

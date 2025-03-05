@@ -199,16 +199,18 @@ def compute_nystrom_ihvp(
     respect to the follower's parameters. See :cite:t:`Hataya2023` for more details.
 
     The function computes:
-        $$
-            (H_k + \rho I) \frac{\partial g}{\partial \theta}
-        $$
+
+    .. math::
+
+        (H_k + \rho I) \frac{\partial g}{\partial \theta}
+
     where:
-        - $f$ is the follower's loss
-        - $g$ is the leader's loss
-        - $\theta$ are the follower's parameters
-        - $\phi$ are the leader's parameters
-        - $H_k$ is the $k$-rank approximation of the Hessian of $f$ with respect to
-          $\theta$
+
+    - $f$ is the follower's loss
+    - $g$ is the leader's loss
+    - $\theta$ are the follower's parameters
+    - $\phi$ are the leader's parameters
+    - $H_k$ is the $k$-rank approximation of the Hessian of $f$ with respect to $\theta$
 
     Parameters
     ----------
@@ -253,13 +255,13 @@ def compute_nystrom_ihvp(
     )
     follower_grads = torch.cat([grad.reshape(-1) for grad in follower_grads])
 
-    # Randomly sample `rank` parameters to compute the rank approximation
+    # Randomly sample ``rank`` parameters to compute the rank approximation
     num_follower_params = sum(param.numel() for param in follower_param_values)
     follower_param_indices = torch.randperm(
         num_follower_params, device=device, generator=generator
     )[:rank]
 
-    # Compute `rank` rows of the Hessian
+    # Compute ``rank`` rows of the Hessian
     hessian_rows = []
     for i in follower_param_indices:
         hessian_rows.append(
@@ -399,8 +401,7 @@ def inverse_hessian_vector_product(
 
 
 def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
-    """
-    Compute the entropy of a set of logits.
+    """Compute the entropy of a set of logits.
 
     Parameters
     ----------
@@ -417,18 +418,19 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     return -torch.sum(probs * log_probs, dim=-1)
 
 
-def logit_or_2(
+def logit_or_dual(
     a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]
 ) -> Float[Tensor, "... logits"]:
-    """
-    Compute the logit OR operation for two input tensors using the log-sum-exp trick.
+    r"""Compute the logit OR operation for two input tensors with the log-sum-exp trick.
 
     The logit OR operation is defined as:
 
-        max_logit + log1p(exp(min_logit - max_logit))
+    .. math::
 
-    where max_logit is the element-wise maximum of the inputs,
-    and min_logit is the element-wise minimum of the inputs.
+        \max(a, b) + \log(1 + \exp(\min(a, b) - \max(a, b)))
+
+    where $\max(a, b)$ is the element-wise maximum of the inputs, and $\min(a, b)$ is
+    the element-wise minimum of the inputs.
 
     Parameters
     ----------
@@ -448,18 +450,31 @@ def logit_or_2(
     return max_logit + torch.log1p(torch.exp(min_logit - max_logit))
 
 
-def logit_or_n(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
-    """
-    Compute the logit of the OR of n events given their logits.
+def logit_or(logits: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
+    r"""Compute the logit of the OR of n events given their logits.
 
-    Args:
-    logits (torch.Tensor): A tensor of logit values.
-    dim (int, optional): The dimension along which to apply the OR operation.
-                         If None, the operation is applied to all elements.
+    The logit OR operation is defined as:
+
+    .. math::
+
+        \max_d(\ell) + \log(1 + \exp(\min_d(\ell) - \max_d(\ell)))
+
+    where $\max(\ell)$ is the element-wise maximum of the logits along the specified
+    dimension, and $\min(\ell)$ is the element-wise minimum of the logits along the
+    specified dimension.
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        A tensor of logit values.
+    dim : int, optional
+        The dimension along which to apply the OR operation. If None, the operation is
+        applied to all elements.
 
     Returns
     -------
-    torch.Tensor: The logit of the OR of input events along the specified dimension.
+    torch.Tensor:
+        The logit of the OR of input events along the specified dimension.
     """
     if dim is None:
         max_logit = torch.max(logits)
@@ -475,7 +490,7 @@ def mean_episode_reward(
 ) -> float:
     """Compute the mean total episode reward for a batch of concatenated episodes.
 
-    The `done_mask` tensor specifies episode boundaries. The mean total reward per
+    The ``done_mask`` tensor specifies episode boundaries. The mean total reward per
     episode is computed by summing the rewards within each episode and dividing by the
     number of episodes.
 
@@ -533,7 +548,7 @@ def aggregate_mean_grouped_by_class(
 ) -> Float[Tensor | np.ndarray, "class"]:
     """Compute the mean of values grouped by class.
 
-    `values` is a 1D tensor of values to aggregate, and `classes` is a 1D tensor of
+    ``values`` is a 1D tensor of values to aggregate, and ``classes`` is a 1D tensor of
     class labels for each value. The function computes the mean of the values for each
     class.
 
@@ -542,16 +557,16 @@ def aggregate_mean_grouped_by_class(
 
     Parameters
     ----------
-    values : Float[Tensor | np.ndarray, "batch"]
+    values : Float[Tensor | numpy.ndarray, "batch"]
         The values to aggregate.
-    classes : Int[Tensor | np.ndarray, "batch"]
+    classes : Int[Tensor | numpy.ndarray, "batch"]
         The class labels for each value.
     num_classes : int, optional
         The number of classes. If not provided, it is inferred from the class labels.
 
     Returns
     -------
-    mean_values : Float[Tensor | np.ndarray, "class"]
+    mean_values : Float[Tensor | numpy.ndarray, "class"]
         The mean of the values for each class. If either of the arguments is a numpy
         array, this will be one too.
     """
@@ -598,9 +613,11 @@ def minstd_generate_pseudo_random_sequence(
     The MINSTD algorithm is a simple linear congruential generator (LCG) that is defined
     by the following recurrence relation:
 
+    .. math::
+
         x_{n+1} = (48271 * x_n) % 2147483647
 
-    where x_0 is the seed value.
+    where $x_0$ is the seed value.
 
     Parameters
     ----------
@@ -613,9 +630,9 @@ def minstd_generate_pseudo_random_sequence(
     Returns
     -------
     pseudo_random_sequence : Int[Tensor, "... length"]
-        The pseudo-random sequence of numbers (x_1, \ldots, x_{length}) generated using
-        the MINSTD algorithm. An extra dimension is added to the output tensor to
-        represent the sequence length.
+        The pseudo-random sequence of numbers $(x_1, \ldots, x_{\text{length}})$
+        generated using the MINSTD algorithm. An extra dimension is added to the output
+        tensor to represent the sequence length.
     """
 
     pseudo_random_sequence = torch.empty(
@@ -660,23 +677,23 @@ def mean_for_unique_keys(
 ) -> np.ndarray:
     """Compute the mean of values grouped by unique keys.
 
-    The two input arrays `data` and `key` should have the same shape. It is assumed that
-    when two elements of `key` are equal, the corresponding elements of `data` should be
-    equal. The function selects the unique keys from `key` and computes the mean of the
-    corresponding values in `data`.
+    The two input arrays ``data`` and ``key`` should have the same shape. It is assumed
+    that when two elements of ``key`` are equal, the corresponding elements of ``data``
+    should be equal. The function selects the unique keys from ``key`` and computes the
+    mean of the corresponding values in ``data``.
 
     Parameters
     ----------
-    data : np.ndarray
+    data : numpy.ndarray
         The values to aggregate.
-    key : np.ndarray
-        The keys for each value. Must be broadcastable with `data`.
+    key : numpy.ndarray
+        The keys for each value. Must be broadcastable with ``data``.
     axis : int, default=0
         The axis along which to compute the mean.
 
     Returns
     -------
-    mean_values : np.ndarray
+    mean_values : numpy.ndarray
         The mean of the values for each unique key.
     """
 

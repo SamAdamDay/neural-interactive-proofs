@@ -2,11 +2,11 @@
 
 This is where the logic for creating the agents and environments lives.
 
-The `ScenarioInstance` class holds the components of a scenario, which serves to
+The ``ScenarioInstance`` class holds the components of a scenario, which serves to
 abstract away the details of the particular experiment being run.
 
-Scenarios register their components using the `register_scenario_class` registry, and
-the factory `build_scenario_instance` function builds the correct components based on
+Scenarios register their components using the ``register_scenario_class`` registry, and
+the factory ``build_scenario_instance`` function builds the correct components based on
 the parameters.
 """
 
@@ -84,8 +84,8 @@ class _ParameterSelector:
             The class to store.
         filter : dict[str, str], default={}
             The set of addresses and values to match the parameter value.
-            `filter[address] = value` means that the parameter value at `address` must
-            be `value`. All must match for the class to be retrieved. An empty
+            ``filter[address] = value`` means that the parameter value at ``address``
+            must be ``value``. All must match for the class to be retrieved. An empty
             dictionary will always match.
         """
 
@@ -142,9 +142,9 @@ def register_scenario_class(
         The base class of the component being registered.
     filter : dict[str, str], default={}
         The filter to use to select when to use the class based on the parameters. This
-        is a set of addresses and values to match the parameter value. `filter[address]
-        = value` means that the parameter value at `address` must be `value`. All must
-        match for the class to be retrieved. An empty dictionary will always match.
+        is a set of addresses and values to match the parameter value. ``filter[address]
+        = value`` means that the parameter value at ``address`` must be ``value``. All
+        must match for the class to be retrieved. An empty dictionary will always match.
     """
 
     def decorator(cls: type[T]) -> type[T]:
@@ -222,7 +222,7 @@ def build_scenario_instance(
 ) -> ScenarioInstance:
     """Build a scenario instance from parameters.
 
-    The `ScenarioInstance` class holds the components of a scenario, which serves to
+    The ``ScenarioInstance`` class holds the components of a scenario, which serves to
     abstract away the details of the particular experiment being run.
 
     Parameters
@@ -316,7 +316,7 @@ def build_scenario_instance(
 
             agent_params: PureTextAgentParameters = hyper_params.agents[agent_name]
 
-            # If the `shared_model_group` is None, the group name is the agent name
+            # If the ``shared_model_group`` is None, the group name is the agent name
             if agent_params.shared_model_group is None:
                 group_name = agent_name
             else:
@@ -531,7 +531,7 @@ def _add_pretrained_embeddings_to_datasets(
     """Add embeddings to the datasets from pretrained models.
 
     Agent parts can request embeddings from pretrained models using the
-    `required_pretrained_models` attribute.
+    ``required_pretrained_models`` attribute.
 
     This function collects the names of the pretrained models required by the agents,
     and for each one, if the embeddings are not already cached, it generates them and

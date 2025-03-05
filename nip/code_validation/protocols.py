@@ -45,13 +45,13 @@ class CodeValidationAgentSpec:
         In multi-channel protocols, the completion from the model should contain
         messages for all channels in which the agent is active. Each message is prefaced
         by a header that specifies the channel. This dictionary maps channel names to
-        headers. This can be `None` if the agent is active in only one channel.
+        headers. This can be ``None`` if the agent is active in only one channel.
     channel_order : list[str | set[str]], optional
         When making a request to the model, in each round the channels are ordered
         according to this list. It is a list of either channel names or sets of channel
         names. If a set of channel names is given, the channels are ordered randomly
         within that set. It is recommended to put the channels in which the agent is
-        active last. If `None`, the order is determined by the protocol handler.
+        active last. If ``None``, the order is determined by the protocol handler.
     anonymous : bool, optional
         Whether the agent is anonymous. If True, the agent's name will not be used in
         prompts. Default is False.
@@ -111,7 +111,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         -------
         dict
             A dictionary mapping variable names to values. To add new variables, return
-            `current_variables` with the new variables added.
+            ``current_variables`` with the new variables added.
         """
 
         return current_variables
@@ -447,7 +447,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         This modifies the default implementation to allow following the prover's stance
         when the stance can be randomized.
 
-        The `reward` tensor is updated in place, adding in the rewards for the agents
+        The ``reward`` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
 
         Parameters

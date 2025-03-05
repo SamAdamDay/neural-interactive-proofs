@@ -109,7 +109,7 @@ def save_model_state_dicts(
 
     The model will be saved in a directory named with a hash of the current time.
 
-    Various metadata will be saved in a file named `metadata.json` in the model
+    Various metadata will be saved in a file named ``metadata.json`` in the model
     directory.
 
     Parameters

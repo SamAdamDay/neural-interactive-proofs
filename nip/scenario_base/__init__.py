@@ -9,7 +9,7 @@ Contains base classes for:
 - Building agents
 - Holding the components of a scenario
 
-Scenarios should subclass the `ScenarioInstance` class, and its `build` factory class
+Scenarios should subclass the ``ScenarioInstance`` class, and its ``build`` factory class
 method is used to build the agents using the given parameters.
 """
 

@@ -190,7 +190,7 @@ experiment = experiment_class(
     **extra_args,
 )
 
-# Set the `parser` module attribute to enable the script auto-documented by Sphinx
+# Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
 parser = experiment.parser
 
 if __name__ == "__main__":

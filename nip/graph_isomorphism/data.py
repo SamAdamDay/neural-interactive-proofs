@@ -100,7 +100,7 @@ class GraphIsomorphismDataset(TensorDictDataset):
             )
             batch = graph_indices[node_mask]
 
-            # Shift the edge indices up according to `slices`
+            # Shift the edge indices up according to ``slices``
             num_edges_per_graph = (
                 data_dict[f"slices_{graph_index}"][1:]
                 - data_dict[f"slices_{graph_index}"][:-1]

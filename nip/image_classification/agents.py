@@ -6,14 +6,16 @@ The structure of all agent bodies is the same:
 
 - An encoder layer, which takes as input the image and the message history and outputs
   the initial pixel-level encodings.
-- A sequence of `num_block_groups` groups of building blocks (e.g. convolutional
+- A sequence of ``num_block_groups`` groups of building blocks (e.g. convolutional
   layers).
-    + Each layer is followed by a non-linearity and each group by a max pooling layer.
-    + For each group we halve the output size and double the number of channels.
-    + The number of building blocks in each group is given by the `num_blocks_per_group`
-      parameter.
-    + The output of the last group is the 'latent pixel-level' representations, which
-      provides a representation for each latent pixel.
+
+  + Each layer is followed by a non-linearity and each group by a max pooling layer.
+  + For each group we halve the output size and double the number of channels.
+  + The number of building blocks in each group is given by the ``num_blocks_per_group``
+    parameter.
+  + The output of the last group is the 'latent pixel-level' representations, which
+    provides a representation for each latent pixel.
+
 - We add a channel to the latent pixel-level representations to represent the most
   recent message.
 - A global pooling layer, which pools the latent pixel-level representations to obtain
@@ -166,22 +168,22 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... round channel position latent_height latent_width): The message
-          history
-        - "image" (... image_channel height width): The image
-        - "message" (... channel position latent_height latent_width), optional: The
-          most recent message
-        - "ignore_message" (...), optional: Whether to ignore the message
-        - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
-          optional: The embeddings of a pretrained model, if using.
-        - "linear_message_history" : (... round channel position linear_message),
-          optional: The linear message history, if using
+
+    - "x" (... round channel position latent_height latent_width): The message history
+    - "image" (... image_channel height width): The image
+    - "message" (... channel position latent_height latent_width), optional: The most
+      recent message
+    - "ignore_message" (...), optional: Whether to ignore the message
+    - ("pretrained_embeddings", model_name) (... embedding_width embedding_height),
+      optional: The embeddings of a pretrained model, if using.
+    - "linear_message_history" : (... round channel position linear_message),  optional:
+      The linear message history, if using
 
     Output:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
-          The output latent-pixel-level representations.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "latent_pixel_level_repr" (... latent_height latent_width d_representation): The
+      output latent-pixel-level representations.
 
     Parameters
     ----------
@@ -287,10 +289,12 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x" : (... round channel position latent_height latent_width)
+
+        - "x" : (... round channel position latent_height latent_width)
 
         Output:
-            - "x_upsampled" : (... round channel position height width)
+
+        - "x_upsampled" : (... round channel position height width)
 
         Returns
         -------
@@ -316,12 +320,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "pretrained_embeddings" : (... embedding_channel embedding_height
-              embedding_width) : The embeddings of the pretrained model
+
+        - "pretrained_embeddings" : (... embedding_channel embedding_height
+          embedding_width) : The embeddings of the pretrained model
 
         Output:
-            - "pretrained_embeddings_scaled" : (... embedding_channel height width) :
-              The scaled embeddings
+
+        - "pretrained_embeddings_scaled" : (... embedding_channel height width) : The
+          scaled embeddings
 
         Returns
         -------
@@ -395,13 +401,15 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "x_upsampled" : (... round channel position height width)
-            - "image" : (... image_channel height width)
-            - "pretrained_embeddings_scaled" : (... embedding_channels height width),
-              optional
+
+        - "x_upsampled" : (... round channel position height width)
+        - "image" : (... image_channel height width)
+        - "pretrained_embeddings_scaled" : (... embedding_channels height width),
+          optional
 
         Output:
-            - "latent_pixel_level_repr" : (... initial_num_channels height width)
+
+        - "latent_pixel_level_repr" : (... initial_num_channels height width)
 
         Returns
         -------
@@ -475,13 +483,14 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... initial_channels height width)
+
+        - "latent_pixel_level_repr" : (... initial_channels height width)
 
         Output:
-            - "latent_pixel_level_repr" : (... latent_channels latent_height
-            latent_width)
 
-        where `latent_channels = initial_channels * 2**num_block_groups`
+        - "latent_pixel_level_repr" : (... latent_channels latent_height latent_width)
+
+        where ``latent_channels = initial_channels * 2**num_block_groups``
 
         Returns
         -------
@@ -575,11 +584,12 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... latent_channels+1 latent_height
-            latent_width)
+
+        - "latent_pixel_level_repr" : (... latent_channels+1 latent_height latent_width)
 
         Output:
-            - "image_level_repr" : (... latent_channels+1)
+
+        - "image_level_repr" : (... latent_channels+1)
 
         Returns
         -------
@@ -607,18 +617,17 @@ class ImageClassificationAgentBody(ImageClassificationAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "image_level_repr" : (...
-              latent_channels+num_message_channels*message_size)
-            - "latent_pixel_level_repr" : (...
-              latent_channels+num_message_channels*message_size latent_height
-              latent_width)
-            - "linear_message_history" : (... round channel position linear_message),
-              optional
+
+        - "image_level_repr" : (... latent_channels+num_message_channels*message_size)
+        - "latent_pixel_level_repr" : (...
+          latent_channels+num_message_channels*message_size latent_height latent_width)
+        - "linear_message_history" : (... round channel position linear_message),
+          optional
 
         Output:
-            - "image_level_repr" : (... d_representation)
-            - "latent_pixel_level_repr" : (... latent_height latent_width
-              d_representation)
+
+        - "image_level_repr" : (... d_representation)
+        - "latent_pixel_level_repr" : (... latent_height latent_width d_representation)
 
         Returns
         -------
@@ -854,17 +863,18 @@ class ImageClassificationDummyAgentBody(
     Shapes
     ------
     Input:
-        - "x" (... max_message_rounds latent_height latent_width): The message history
-        - "image" (... image_channel height width): The image
-        - "message" (... channel position latent_height latent_width), optional: The
-          most recent message
-        - "ignore_message" (...), optional: Whether to ignore the message
+
+    - "x" (... max_message_rounds latent_height latent_width): The message history
+    - "image" (... image_channel height width): The image
+    - "message" (... channel position latent_height latent_width), optional: The most
+      recent message
+    - "ignore_message" (...), optional: Whether to ignore the message
 
     Output:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
-          The output latent-pixel-level representations.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "latent_pixel_level_repr" (... latent_height latent_width d_representation): The
+      output latent-pixel-level representations.
 
     """
 
@@ -937,10 +947,12 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         Shapes
         ------
         Input:
-            - "latent_pixel_level_repr" : (... latent_height latent_width d_in)
+
+        - "latent_pixel_level_repr" : (... latent_height latent_width d_in)
 
         Output:
-            - latent_pixel_mlp_output : (... latent_height*latent_width d_out)
+
+        - latent_pixel_mlp_output : (... latent_height*latent_width d_out)
 
         Parameters
         ----------
@@ -953,7 +965,7 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         num_layers : int
             The number of hidden layers in the MLP.
         flatten_output : bool, default=True
-            Whether to flatten the output dimension to `latent_height * latent_width`.
+            Whether to flatten the output dimension to ``latent_height * latent_width``.
         out_key : str, default="latent_pixel_mlp_output"
             The tensordict key to use for the output of the MLP.
 
@@ -1006,10 +1018,12 @@ class ImageClassificationAgentHead(ImageClassificationAgentPart, AgentHead, ABC)
         Shapes
         ------
         Input:
-            - image_level_repr : (... d_in)
+
+        - image_level_repr : (... d_in)
 
         Output:
-            - image_level_mlp_output : (... d_out)
+
+        - image_level_mlp_output : (... d_out)
 
         Parameters
         ----------
@@ -1136,23 +1150,23 @@ class ImageClassificationAgentPolicyHead(ImageClassificationAgentHead, AgentPoli
     Shapes
     ------
     Input:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
-          The output latent-pixel-level representations.
-        - "round" (optional) (...): The round number.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "latent_pixel_level_repr" (... latent_height latent_width d_representation): The
+      output latent-pixel-level representations.
+    - "round" (optional) (...): The round number.
 
     Output:
-        - "latent_pixel_selected_logits" (... channel position
-          latent_height*latent_width): A logit for each latent pixel, indicating the
-          probability that this latent pixel should be sent as a message to the
-          verifier.
-        - "decision_logits" (... 3): A logit for each of the three options: guess a
-          classification one way or the other, or continue exchanging messages. Set to
-          zeros when the decider is not present.
-        - "linear_message_selected_logits" (... channel position d_linear_message_space)
-          (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message to the verifier.
+
+    - "latent_pixel_selected_logits" (... channel position latent_height*latent_width):
+      A logit for each latent pixel, indicating the probability that this latent pixel
+      should be sent as a message to the verifier.
+    - "decision_logits" (... 3): A logit for each of the three options: guess a
+      classification one way or the other, or continue exchanging messages. Set to zeros
+      when the decider is not present.
+    - "linear_message_selected_logits" (... channel position d_linear_message_space)
+      (optional): A logit for each linear message, indicating the probability that this
+      linear message should be sent as a message to the verifier.
 
     Parameters
     ----------
@@ -1376,21 +1390,22 @@ class ImageClassificationRandomAgentPolicyHead(
     Shapes
     ------
     Input:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
-          The output latent-pixel-level representations.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "latent_pixel_level_repr" (... latent_height latent_width d_representation): The
+      output latent-pixel-level representations.
 
     Output:
-        - "latent_pixel_selected_logits" (... channel position latent_height*latent_width): A
-          logit for each latent pixel, indicating the probability that this latent pixel
-          should be sent as a message to the verifier.
-        - "decision_logits" (... 3): A logit for each of the three options: guess a
-          classification one way or the other, or continue exchanging messages. Set to
-          zeros when the decider is not present.
-        - "linear_message_selected_logits" (... channel position d_linear_message_space)
-          (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message to the verifier.
+
+    - "latent_pixel_selected_logits" (... channel position latent_height*latent_width):
+      A logit for each latent pixel, indicating the probability that this latent pixel
+      should be sent as a message to the verifier.
+    - "decision_logits" (... 3): A logit for each of the three options: guess a
+      classification one way or the other, or continue exchanging messages. Set to zeros
+      when the decider is not present.
+    - "linear_message_selected_logits" (... channel position d_linear_message_space)
+      (optional): A logit for each linear message, indicating the probability that this
+      linear message should be sent as a message to the verifier.
     """
 
     agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
@@ -1465,12 +1480,13 @@ class ImageClassificationAgentValueHead(ImageClassificationAgentHead, AgentValue
     Shapes
     ------
     Input:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "round" (optional) (...): The round number.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "round" (optional) (...): The round number.
 
     Output:
-        - "value" (...): The estimated value for each batch item
+
+    - "value" (...): The estimated value for each batch item
 
     Parameters
     ----------
@@ -1577,13 +1593,14 @@ class ImageClassificationConstantAgentValueHead(
     Shapes
     ------
     Input:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
-        - "latent_pixel_level_repr" (... latent_height latent_width d_representation):
-          The output latent-pixel-level representations.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
+    - "latent_pixel_level_repr" (... latent_height latent_width d_representation): The
+      output latent-pixel-level representations.
 
     Output:
-        - "value" (...): The 'value' for each batch item, which is a constant zero.
+
+    - "value" (...): The 'value' for each batch item, which is a constant zero.
     """
 
     agent_level_in_keys = ("image_level_repr", "latent_pixel_level_repr")
@@ -1628,12 +1645,13 @@ class ImageClassificationSoloAgentHead(ImageClassificationAgentHead, SoloAgentHe
     Shapes
     ------
     Input:
-        - "image_level_repr" (... d_representation): The output image-level
-          representations.
+
+    - "image_level_repr" (... d_representation): The output image-level representations.
 
     Output:
-        - "decision_logits" (... 2): A logit for each of the two options: guess that the
-          graphs are isomorphic, or guess that the graphs are not isomorphic.
+
+    - "decision_logits" (... 2): A logit for each of the two options: guess that the
+      graphs are isomorphic, or guess that the graphs are not isomorphic.
     """
 
     agent_level_in_keys = ("image_level_repr",)
@@ -1699,20 +1717,21 @@ class ImageClassificationCombinedBody(CombinedBody):
     Shapes
     ------
     Input:
-        - "round" (...): The round number.
-        - "x" (... round channel position latent_height latent_width): The message
-          history
-        - "image" (... image_channel height width): The image
-        - "message" (... channel position latent_height latent_width), optional: The
-          most recent message.
-        - "linear_message_history" : (... round channel position linear_message),
-          optional: The linear message history, if using.
+
+    - "round" (...): The round number.
+    - "x" (... round channel position latent_height latent_width): The message history
+    - "image" (... image_channel height width): The image
+    - "message" (... channel position latent_height latent_width), optional: The most
+      recent message.
+    - "linear_message_history" : (... round channel position linear_message), optional:
+      The linear message history, if using.
 
     Output:
-        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
-          d_representation): The output latent-pixel-level representations.
-        - ("agents", "image_level_repr") (... agents d_representation): The output
-          image-level representations.
+
+    - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+      d_representation): The output latent-pixel-level representations.
+    - ("agents", "image_level_repr") (... agents d_representation): The output
+      image-level representations.
 
     Parameters
     ----------
@@ -1825,27 +1844,28 @@ class ImageClassificationCombinedPolicyHead(CombinedPolicyHead):
     Shapes
     ------
     Input:
-        - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
-          d_representation): The output latent-pixel-level representations.
-        - ("agents", "image_level_repr") (... agents d_representation): The output
-          image-level representations.
-        - "decision_restriction" (...): The restriction on what decisions are allowed.
+
+    - "round" (...): The round number.
+    - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+      d_representation): The output latent-pixel-level representations.
+    - ("agents", "image_level_repr") (... agents d_representation): The output
+      image-level representations.
+    - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "latent_pixel_selected_logits") (... agents channel position
-          latent_height*latent_width): A logit for each latent pixel, indicating the
-          probability that this latent pixel should be sent as a message to the
-          verifier.
-        - ("agents", "main_message_logits") (... agents channel position logit): The
-          same as "latent_pixel_selected_logits".
-        - ("agents", "decision_logits") (... agents 3): A logit for each of the three
-          options: guess a classification one way or the other, or continue exchanging
-          messages. Set to zeros when the decider is not present.
-        - ("agents", "linear_message_selected_logits") (... agents channel position
-          d_linear_message_space) (optional): A logit for each linear message,
-          indicating the probability that this linear message should be sent as a
-          message to the verifier.
+
+    - ("agents", "latent_pixel_selected_logits") (... agents channel position
+      latent_height*latent_width): A logit for each latent pixel, indicating the
+      probability that this latent pixel should be sent as a message to the verifier.
+    - ("agents", "main_message_logits") (... agents channel position logit): The same as
+      "latent_pixel_selected_logits".
+    - ("agents", "decision_logits") (... agents 3): A logit for each of the three
+      options: guess a classification one way or the other, or continue exchanging
+      messages. Set to zeros when the decider is not present.
+    - ("agents", "linear_message_selected_logits") (... agents channel position
+      d_linear_message_space) (optional): A logit for each linear message, indicating
+      the probability that this linear message should be sent as a message to the
+      verifier.
 
     Parameters
     ----------
@@ -1961,14 +1981,16 @@ class ImageClassificationCombinedValueHead(CombinedValueHead):
     Shapes
     ------
     Input:
-        - "round" (...): The round number.
-        - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
-          d_representation): The output latent-pixel-level representations.
-        - ("agents", "image_level_repr") (... agents d_representation): The output
-          image-level representations.
+
+    - "round" (...): The round number.
+    - ("agents", "latent_pixel_level_repr") (... agents latent_height latent_width
+      d_representation): The output latent-pixel-level representations.
+    - ("agents", "image_level_repr") (... agents d_representation): The output
+      image-level representations.
 
     Output:
-        - ("agents", "value") (... agents): The estimated value for each batch item
+
+    - ("agents", "value") (... agents): The estimated value for each batch item
 
     Parameters
     ----------

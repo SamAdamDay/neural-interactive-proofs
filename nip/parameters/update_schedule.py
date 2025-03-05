@@ -104,8 +104,8 @@ class ConstantUpdateSchedule(AgentUpdateSchedule):
 class ContiguousPeriodicUpdateSchedule(AgentUpdateSchedule):
     """A periodic schedule where the agent is updated between start and stop iterations.
 
-    The updates are scheduled in a cycle of length `period`. The agent is updated from
-    the `start` iteration to the `stop` iteration in each cycle.
+    The updates are scheduled in a cycle of length ``period``. The agent is updated from
+    the ``start`` iteration to the ``stop`` iteration in each cycle.
 
     Parameters
     ----------
@@ -133,11 +133,12 @@ class AlternatingPeriodicUpdateSchedule(ContiguousPeriodicUpdateSchedule):
     This schedule is to be used in pairs, where one agent is updated in the first part
     of the cycle and the other agent is updated in the second part of the cycle.
 
-    The first agent is updated for the first `first_agent_num_iterations` iterations of
-    each cycle. The second agent is updated for the remaining iterations of the cycle.
+    The first agent is updated for the first ``first_agent_num_iterations`` iterations
+    of each cycle. The second agent is updated for the remaining iterations of the
+    cycle.
 
-    The first agent should have a schedule with `first_agent=True`, and the second agent
-    should have a schedule with `first_agent=False`.
+    The first agent should have a schedule with ``first_agent=True``, and the second
+    agent should have a schedule with ``first_agent=False``.
 
     Parameters
     ----------

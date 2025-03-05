@@ -3,7 +3,6 @@ black==24.4.2
 flake8==7.1.0
 HolisticTraceAnalysis==0.2.0
 libtmux==0.37.0
-numpydoc==1.8.0
 pre-commit==3.7.1
 pytest==8.2.2
 ruff==0.6.9

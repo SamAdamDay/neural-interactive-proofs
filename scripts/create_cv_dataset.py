@@ -37,12 +37,6 @@ parser.add_argument(
     default=10,
     help="The number of problems added after which to save (and possibly push) the dataset",
 )
-parser.add_argument(
-    "--openrouter_api_key",
-    type=str,
-    default=get_env_var("OPENROUTER_API_KEY"),
-    help="The OpenRouter API key to use for generating responses",
-)
 
 if __name__ == "__main__":
 
@@ -54,7 +48,7 @@ if __name__ == "__main__":
         split=cmd_args.split,
         num_data=cmd_args.num_data,
         save_after=cmd_args.save_after,
-        openrouter_api_key=cmd_args.openrouter_api_key,
+        openrouter_api_key=get_env_var("OPENROUTER_API_KEY"),
     )
 
     # Generate the dataset

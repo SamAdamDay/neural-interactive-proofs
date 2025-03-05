@@ -117,7 +117,7 @@ class ProtocolHandler(ABC):
 
         This function first tries to get the stackelberg sequence from the
         hyper-parameters. If it is not present, it returns the default stackelberg
-        sequence specified by the `default_stackelberg_sequence` property.
+        sequence specified by the ``default_stackelberg_sequence`` property.
 
         Returns
         -------
@@ -179,8 +179,8 @@ class ProtocolHandler(ABC):
         Returns
         -------
         agent_channel_visibility : list[tuple[str, str]]
-            A list of tuples of the form `(agent_name, channel_name)`. A tuple indicates
-            that the agent can see the channel.
+            A list of tuples of the form ``(agent_name, channel_name)``. A tuple
+            indicates that the agent can see the channel.
         """
 
     @cached_property
@@ -191,7 +191,7 @@ class ProtocolHandler(ABC):
         -------
         agent_channel_visibility : Bool[Tensor, "agent channel"]
             The agent-channel visibility mask, where `agent_channel_visibility[agent,
-            channel]` is `True` if the agent can see the channel.
+            channel]`` is ``True` if the agent can see the channel.
         """
 
         agent_channel_visibility_mask = torch.zeros(
@@ -258,8 +258,8 @@ class ProtocolHandler(ABC):
         Returns
         -------
         active_agents : Bool[Tensor, "... agent channel"]
-            The boolean mask. `active_agents[*batch, agent, channel]` is `True` if the
-            agent sends a message in the channel in round `round[*batch]`.
+            The boolean mask. ``active_agents[*batch, agent, channel]`` is ``True`` if
+            the agent sends a message in the channel in round ``round[*batch]``.
         """
 
     @abstractmethod
@@ -359,13 +359,13 @@ class ProtocolHandler(ABC):
 
         Computes the done signals and reward.
 
-        Used in the `_step` method of the environment.
+        Used in the ``_step`` method of the environment.
 
         Parameters
         ----------
         env_td : TensorDictBase | NestedArrayDict
-            The current observation and state. If a `NestedArrayDict`, it is converted
-            to a `TensorDictBase`.
+            The current observation and state. If a ``NestedArrayDict``, it is converted
+            to a ``TensorDictBase``.
 
         Returns
         -------
@@ -374,7 +374,7 @@ class ProtocolHandler(ABC):
             agents have made a decision.
         agent_done : Bool[Tensor, "... agent"]
             A boolean mask indicating whether each agent is done, because they have made
-            a decision. This is the same as `shared_done` for agents which don't make
+            a decision. This is the same as ``shared_done`` for agents which don't make
             decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
@@ -425,7 +425,7 @@ class ProtocolHandler(ABC):
         decision : Int[Tensor, "..."]
             The decision output of the agent.
         follow_force_guess : bool, default=True
-            Whether to follow the `force_guess` parameter, which forces the agent to
+            Whether to follow the ``force_guess`` parameter, which forces the agent to
             make a certain decision.
         """
 
@@ -452,7 +452,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     through the protocol and computing rewards.
 
     To implement a new protocol, subclass this class and implement the following
-    properties and methods, all of which come from the `ProtocolHandler` class:
+    properties and methods, all of which come from the ``ProtocolHandler`` class:
 
     - ``agent_names`` (property): The names of the agents in the protocol.
     - ``max_message_rounds`` (property): The maximum number of rounds in the protocol.
@@ -540,13 +540,13 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         Computes the done signals and reward.
 
-        Used in the `_step` method of the environment.
+        Used in the ``_step`` method of the environment.
 
         Parameters
         ----------
         env_td : TensorDictBase | NestedArrayDict
-            The current observation and state. If a `NestedArrayDict`, it is converted
-            to a `TensorDictBase`. Has keys:
+            The current observation and state. If a ``NestedArrayDict``, it is converted
+            to a ``TensorDictBase``. Has keys:
 
             - "y" (... 1): The target value.
             - "round" (...): The current round.
@@ -564,7 +564,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             agents have made a decision.
         agent_done : Bool[Tensor, "... agent"]
             A boolean mask indicating whether each agent is done, because they have made
-            a decision. This is the same as `shared_done` for agents which don't make
+            a decision. This is the same as ``shared_done`` for agents which don't make
             decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
@@ -596,7 +596,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             decision=decision[..., self.verifier_index],
         )
 
-        # When the verifier has made a decision, the shared done is set to `True`.
+        # When the verifier has made a decision, the shared done is set to ``True``.
         shared_done = shared_done | verifier_decision_made
 
         # Compute the reward for the verifier when they make a guess
@@ -656,7 +656,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         Returns
         -------
         reward_mid_point : float
-            An estimate of the expected reward for `agent_name` if all agents play
+            An estimate of the expected reward for ``agent_name`` if all agents play
             randomly.
         """
 
@@ -709,7 +709,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         Implement a custom method for protocols with more than two provers, or for
         protocols with different reward schemes.
 
-        The `reward` tensor is updated in place, adding in the rewards for the agents
+        The ``reward`` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
 
         Parameters
@@ -722,8 +722,8 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             The currently computed reward, which should include the reward for the
             verifier.
         env_td : TensorDictBase | NestedArrayDict
-            The current observation and state. If a `NestedArrayDict`, it is converted
-            to a `TensorDictBase`.
+            The current observation and state. If a ``NestedArrayDict``, it is converted
+            to a ``TensorDictBase``.
         """
 
         if len(self.prover_names) > 2:
@@ -815,7 +815,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
     ) -> bool:
         """Specify whether an agent can be active in a given round and channel.
 
-        For deterministic protocols, this is the same as `is_agent_active`.
+        For deterministic protocols, this is the same as ``is_agent_active``.
 
         Returns
         -------
@@ -835,8 +835,8 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
         -------
         active_agents_by_round : list[dict[str, list[str]]]
             The agent names active in each round and channel.
-            `agent_turn_names[round_id][channel_name]` is a list of the agent names
-            active in round `round_id` and channel `channel_name`.
+            ``agent_turn_names[round_id][channel_name]`` is a list of the agent names
+            active in round ``round_id`` and channel ``channel_name``.
         """
 
         active_agents_by_round = []
@@ -897,13 +897,13 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             The round of the protocol.
         seed : Int[Tensor, "..."] | None
             The per-environment seed. This is ignored for deterministic protocols, so it
-            can be `None`.
+            can be ``None``.
 
         Returns
         -------
         active_agents : Bool[Tensor, "... agent channel"]
-            The boolean mask. `active_agents[*batch, agent, channel]` is `True` if the
-            agent sends a message in the channel in round `round[*batch]`.
+            The boolean mask. ``active_agents[*batch, agent, channel]`` is ``True`` if
+            the agent sends a message in the channel in round ``round[*batch]``.
         """
 
         return self.active_agents_mask[round_id, :, :]
@@ -922,7 +922,7 @@ class DeterministicSingleVerifierProtocolHandler(SingleVerifierProtocolHandler, 
             The batch of rounds.
         seed : Int[Tensor, "..."] | None
             The per-environment seed. This is ignored for deterministic protocols, so it
-            can be `None`.
+            can be ``None``.
 
         Returns
         -------
