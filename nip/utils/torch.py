@@ -33,24 +33,19 @@ ACTIVATION_CLASSES = {
 def flatten_batch_dims(x: Tensor, num_batch_dims: int) -> Tensor:
     """Return a new view of a tensor with the batch dimensions flattened.
 
-    Shapes
-    ------
-    x : (B1, B2, ..., Bn, D1, D2, ..., Dm)
-        Where n is the number of batch dimensions ``num_batch_dims``.
-    x_flattened : (B, D1, D2, ..., Dm)
-        Where ``B = B1 * B2 * ... * Bn``.
-
     Parameters
     ----------
     x : Tensor
-        The input tensor.
+        The input tensor. Has shape ``(B1, B2, ..., Bn, D1, D2, ..., Dm)``, where n is
+        the number of batch dimensions ``num_batch_dims``.
     num_batch_dims : int
         The number of batch dimensions to flatten.
 
     Returns
     -------
     x_flattened : Tensor
-        The input tensor with the batch dimensions flattened.
+        The input tensor with the batch dimensions flattened. Has shape
+        ``(B, D1, D2, ..., Dm)``, where ``B = B1 * B2 * ... * Bn``.
     """
     return x.flatten(0, num_batch_dims - 1)
 
@@ -443,10 +438,10 @@ class GIN(TensorDictModuleBase):
     ------
     Takes as input a TensorDict with the following keys:
 
-    - ``x`` - Float["... max_nodes feature"] - The features of the nodes.
-    - ``adjacency`` - Float["... max_nodes max_nodes"] - The adjacency matrix of the
+    - "x" - Float["... max_nodes feature"] - The features of the nodes.
+    - "adjacency" - Float["... max_nodes max_nodes"] - The adjacency matrix of the
       graph.
-    - ``node_mask`` - Bool["... max_nodes"] - A mask indicating which nodes exist
+    - "node_mask" - Bool["... max_nodes"] - A mask indicating which nodes exist
     """
 
     @property
@@ -766,7 +761,7 @@ class NormalizeOneHotMessageHistory(TensorDictModuleBase):
     ------
     Takes as input a TensorDict with key:
 
-    - ``x`` with shape one of:
+    - "x" with shape one of:
       - ``Float["... structure_dim_1 ... structure_dim_k round"]``
       - ``Float["... round structure_dim_1 ... structure_dim_k"]``
 

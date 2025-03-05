@@ -241,23 +241,25 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
     Shapes
     ------
     Input:
-        - "x" (... round channel position pair node): The graph node features (message
-          history)
-        - "adjacency" (... pair node node): The graph adjacency matrices
-        - "message" (... channel position pair node), optional: The most recent message
-          from the other agent
-        - "node_mask" (... pair node): Which nodes actually exist
-        - "ignore_message" (...), optional: Whether to ignore any values in "message".
-          For example, in the first round the there is no message, and the "message"
-          field is set to a dummy value.
-        - "linear_message_history" : (... round channel position linear_message),
-          optional: The linear message history, if using
+
+    - "x" (... round channel position pair node): The graph node features (message
+      history)
+    - "adjacency" (... pair node node): The graph adjacency matrices
+    - "message" (... channel position pair node), optional: The most recent message from
+      the other agent
+    - "node_mask" (... pair node): Which nodes actually exist
+    - "ignore_message" (...), optional: Whether to ignore any values in "message". For
+      example, in the first round the there is no message, and the "message" field is
+      set to a dummy value.
+    - "linear_message_history" : (... round channel position linear_message), optional:
+      The linear message history, if using
 
     Output:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
-        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-          representations.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
+    - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+      representations.
 
     Parameters
     ----------
@@ -358,11 +360,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "gnn_repr" (... stream pair node feature): The input graph node features
-            - "adjacency" (... stream pair node node): The graph adjacency matrices
+
+        - "gnn_repr" (... stream pair node feature): The input graph node features
+        - "adjacency" (... stream pair node node): The graph adjacency matrices
 
         Output:
-            - "gnn_repr" (... stream pair node feature): The output graph node features
+
+        - "gnn_repr" (... stream pair node feature): The output graph node features
 
         Returns
         -------
@@ -496,11 +500,13 @@ class GraphIsomorphismAgentBody(GraphIsomorphismAgentPart, AgentBody):
         Shapes
         ------
         Input:
-            - "gnn_repr" (... pair node feature*stream): The input graph node features
+
+        - "gnn_repr" (... pair node feature*stream): The input graph node features
 
         Output:
-            - "pooled_gnn_output" (... pair feature*stream): The output graph-level
-              representation
+
+        - "pooled_gnn_output" (... pair feature*stream): The output graph-level
+          representation
 
         Returns
         -------
@@ -1042,10 +1048,12 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - "node_level_repr": (... 2 max_nodes d_in)
+
+        - "node_level_repr": (... 2 max_nodes d_in)
 
         Output:
-            - "node_level_mlp_output": (... 2 max_nodes d_out)
+
+        - "node_level_mlp_output": (... 2 max_nodes d_out)
 
         Parameters
         ----------
@@ -1103,10 +1111,12 @@ class GraphIsomorphismAgentHead(GraphIsomorphismAgentPart, AgentHead, ABC):
         Shapes
         ------
         Input:
-            - "graph_level_repr": (... 2 d_in)
+
+        - "graph_level_repr": (... 2 d_in)
 
         Output:
-            - "graph_level_mlp_output": (... d_out)
+
+        - "graph_level_mlp_output": (... d_out)
 
         Parameters
         ----------
@@ -1238,22 +1248,23 @@ class GraphIsomorphismAgentPolicyHead(GraphIsomorphismAgentHead, AgentPolicyHead
     Shapes
     ------
     Input:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
-        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-          representations.
-        - "round" (optional) (...): The current round number.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
+    - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+      representations.
+    - "round" (optional) (...): The current round number.
 
     Output:
-        - "node_selected_logits" (... channel position 2*max_nodes): A logit for each
-          node, indicating the probability that this node should be sent as a message.
-        - "decision_logits" (optional) (... 3): A logit for each of the three options:
-          guess that the graphs are isomorphic,  guess that the graphs are not
-          isomorphic, or continue exchanging messages. Set to zeros when the decider is
-          not present.
-        - "linear_message_selected_logits" (... channel position linear_message)
-          (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message.
+
+    - "node_selected_logits" (... channel position 2*max_nodes): A logit for each node,
+      indicating the probability that this node should be sent as a message.
+    - "decision_logits" (optional) (... 3): A logit for each of the three options: guess
+      that the graphs are isomorphic,  guess that the graphs are not isomorphic, or
+      continue exchanging messages. Set to zeros when the decider is not present.
+    - "linear_message_selected_logits" (... channel position linear_message) (optional):
+      A logit for each linear message, indicating the probability that this linear
+      message should be sent as a message.
 
     Parameters
     ----------
@@ -1774,12 +1785,14 @@ class GraphIsomorphismAgentValueHead(GraphIsomorphismAgentHead, AgentValueHead):
     Shapes
     ------
     Input:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
-        - "round" (optional) (...): The current round number.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
+    - "round" (optional) (...): The current round number.
 
     Output:
-        - "value" (...): The estimated value for each batch item
+
+    - "value" (...): The estimated value for each batch item
 
     Parameters
     ----------
@@ -1905,13 +1918,15 @@ class GraphIsomorphismConstantAgentValueHead(
     Shapes
     ------
     Input:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
-        - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
-          representations.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
+    - "node_level_repr" (... 2 max_nodes d_representation): The output node-level
+      representations.
 
     Output:
-        - "value" (...): The 'value' for each batch item, which is a constant zero.
+
+    - "value" (...): The 'value' for each batch item, which is a constant zero.
     """
 
     agent_level_in_keys = ("graph_level_repr", "node_level_repr")
@@ -1968,12 +1983,14 @@ class GraphIsomorphismSoloAgentHead(GraphIsomorphismAgentHead, SoloAgentHead):
     Shapes
     ------
     Input:
-        - "graph_level_repr" (... 2 d_representation): The output graph-level
-          representations.
+
+    - "graph_level_repr" (... 2 d_representation): The output graph-level
+      representations.
 
     Output:
-        - "decision_logits" (... 2): A logit for each of the two options: guess that the
-          graphs are isomorphic, or guess that the graphs are not isomorphic.
+
+    - "decision_logits" (... 2): A logit for each of the two options: guess that the
+      graphs are isomorphic, or guess that the graphs are not isomorphic.
 
     Parameters
     ----------
@@ -2059,20 +2076,22 @@ class GraphIsomorphismCombinedBody(CombinedBody):
     Shapes
     ------
     Input:
-        - "round" (...): The current round number.
-        - "x" (... round channel position pair node): The graph node features (message
-          history)
-        - "adjacency" (... pair node node): The adjacency matrices.
-        - "message" (... channel position pair node), optional: The most recent message.
-        - "node_mask" (... pair node): Which nodes actually exist.
-        - "linear_message_history" : (... round channel position linear_message),
-          optional: The linear message history, if using.
+
+    - "round" (...): The current round number.
+    - "x" (... round channel position pair node): The graph node features (message
+      history)
+    - "adjacency" (... pair node node): The adjacency matrices.
+    - "message" (... channel position pair node), optional: The most recent message.
+    - "node_mask" (... pair node): Which nodes actually exist.
+    - "linear_message_history" : (... round channel position linear_message), optional:
+      The linear message history, if using.
 
     Output:
-        - ("agents", "node_level_repr") (... agent pair max_nodes d_representation): The
-          output node-level representations.
-        - ("agents", "graph_level_repr") (... agent pair d_representation): The output
-          graph-level representations.
+
+    - ("agents", "node_level_repr") (... agent pair max_nodes d_representation): The
+      output node-level representations.
+    - ("agents", "graph_level_repr") (... agent pair d_representation): The output
+      graph-level representations.
 
     Parameters
     ----------
@@ -2186,31 +2205,33 @@ class GraphIsomorphismCombinedPolicyHead(CombinedPolicyHead):
     Shapes
     ------
     Input:
-        - ("agents", "node_level_repr") (... agent pair node feature): The output
-          node-level representations.
-        - ("agents", "graph_level_repr") (... agent pair feature): The output
-          graph-level representations.
-        - "round" (...): The current round number.
-        - "node_mask" (... pair node): Which nodes actually exist.
-        - "message" (... channel position pair node): The most recent message.
-        - "ignore_message" (...): Whether to ignore the message
-        - "decision_restriction" (...): The restriction on what decisions are allowed.
+
+    - ("agents", "node_level_repr") (... agent pair node feature): The output node-level
+      representations.
+    - ("agents", "graph_level_repr") (... agent pair feature): The output graph-level
+      representations.
+    - "round" (...): The current round number.
+    - "node_mask" (... pair node): Which nodes actually exist.
+    - "message" (... channel position pair node): The most recent message.
+    - "ignore_message" (...): Whether to ignore the message
+    - "decision_restriction" (...): The restriction on what decisions are allowed.
 
     Output:
-        - ("agents", "node_selected_logits") (... agent channel position 2*max_nodes): A
-          logit for each node, indicating the probability that this node should be sent
-          as a message to the verifier.
-        - ("agents", "main_message_logits") (... agents channel position logit): The
-          same as "node_selected_logits".
-        - ("agents", "decision_logits") (... agent 3): A logit for each of the three
-          options: guess that the graphs are isomorphic, guess that the graphs are not
-          isomorphic, or continue exchanging messages. d_linear_message_space)
-          (optional): A logit for each linear message, indicating the probability that
-          this linear message should be sent as a message to the verifier.
-        - ("agents", "linear_message_selected_logits") (... agent channel position
-          d_linear_message_space) (optional): A logit for each linear message,
-          indicating the probability that this linear message should be sent as a
-          message to the verifier.
+
+    - ("agents", "node_selected_logits") (... agent channel position 2*max_nodes): A
+      logit for each node, indicating the probability that this node should be sent as a
+      message to the verifier.
+    - ("agents", "main_message_logits") (... agents channel position logit): The same as
+      "node_selected_logits".
+    - ("agents", "decision_logits") (... agent 3): A logit for each of the three
+      options: guess that the graphs are isomorphic, guess that the graphs are not
+      isomorphic, or continue exchanging messages. d_linear_message_space) (optional): A
+      logit for each linear message, indicating the probability that this linear message
+      should be sent as a message to the verifier.
+    - ("agents", "linear_message_selected_logits") (... agent channel position
+      d_linear_message_space) (optional): A logit for each linear message, indicating
+      the probability that this linear message should be sent as a message to the
+      verifier.
 
 
     Parameters
@@ -2363,12 +2384,14 @@ class GraphIsomorphismCombinedValueHead(CombinedValueHead):
     Shapes
     ------
     Input:
-        - ("agents", "graph_level_repr") (... agent d_representation): The output
-          graph-level representations.
-        - "round" (...): The current round number.
+
+    - ("agents", "graph_level_repr") (... agent d_representation): The output
+      graph-level representations.
+    - "round" (...): The current round number.
 
     Output:
-        - ("agents", "value") (... agent): The estimated value for each batch item
+
+    - ("agents", "value") (... agent): The estimated value for each batch item
 
     Parameters
     ----------

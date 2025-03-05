@@ -195,10 +195,11 @@ class ImageClassificationDataset(TensorDictDataset):
     Shapes
     ------
     The dataset is a TensorDict with the following keys:
-        - "image" (dataset_size num_channels height width): The images in the dataset.
-        - "x" (dataset_size max_message_rounds height width): The pixel features, which
-          are all zeros.
-        - "y" (dataset_size): The labels of the images.
+
+    - "image" (dataset_size num_channels height width): The images in the dataset.
+    - "x" (dataset_size max_message_rounds height width): The pixel features, which are
+      all zeros.
+    - "y" (dataset_size): The labels of the images.
     """
 
     instance_keys = ("image", "x")

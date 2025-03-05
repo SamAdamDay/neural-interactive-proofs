@@ -3,6 +3,7 @@
 from abc import ABC
 from dataclasses import fields
 from math import ceil
+from typing import ClassVar
 
 import torch
 
@@ -10,7 +11,6 @@ from nip.parameters import (
     HyperParameters,
     SoloAgentParameters,
     ScenarioType,
-    TrainerType,
     RlTrainerParameters,
     NipProtocolParameters,
 )
@@ -51,19 +51,19 @@ class RunTimeable(TrainingTimeable, ABC):
     pretrain : bool, default=False
         When running an RL experiment, whether to pretrain the model.
 
-    Class Attributes
-    ----------------
-    scenario : ScenarioType
-        Which scenario to use.
-    trainer : TrainerType
-        The trainer to use.
-    dataset : str
+    Attributes
+    ----------
+    scenario : ClassVar[ScenarioType]
+        The scenario which defines the model architecture and datasets.
+    dataset : ClassVar[str]
         The name of the dataset to use.
+    agent_name : ClassVar[str]
+        The name of the agent to use for the model.
     """
 
-    scenario: ScenarioType
-    trainer: TrainerType
-    dataset: str
+    scenario: ClassVar[ScenarioType]
+    dataset: ClassVar[str]
+    agent_name: ClassVar[str]
 
     def __init__(
         self,

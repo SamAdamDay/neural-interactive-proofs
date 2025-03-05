@@ -30,14 +30,13 @@ sys.path.insert(0, str(root_dir / "doc" / "extensions"))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    # "sphinx.ext.napoleon",
+    "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
-    "numpydoc",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
 ]
@@ -54,11 +53,10 @@ html_static_path = ["_static"]
 html_css_files = ["tabs.css"]
 
 
-# -- Options for NumpyDoc ----------------------------------------------
+# -- Options for Napoleon ----------------------------------------------
 
-numpydoc_show_class_members = False
-numpydoc_show_inherited_class_members = False
-napoleon_custom_sections = ["Shapes", "Class Attributes"]
+napoleon_custom_sections = ["Shapes"]
+napoleon_use_rtype = False
 
 # -- Options for autosummary and autodoc ----------------------------------------------
 
