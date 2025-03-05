@@ -109,6 +109,7 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
 
     return []
 
+
 def skip(
     app: Sphinx,
     what: Literal["module", "class", "exception", "function", "method", "attribute"],
