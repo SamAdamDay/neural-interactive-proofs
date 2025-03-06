@@ -3,6 +3,7 @@
 from abc import ABC
 from dataclasses import fields
 from math import ceil
+from typing import ClassVar
 
 import torch
 
@@ -10,7 +11,6 @@ from nip.parameters import (
     HyperParameters,
     SoloAgentParameters,
     ScenarioType,
-    TrainerType,
     RlTrainerParameters,
     NipProtocolParameters,
 )
@@ -21,15 +21,16 @@ from nip.timing.timeables import TrainingTimeable, register_timeable
 class RunTimeable(TrainingTimeable, ABC):
     """Base class for a timeable that performs a complete experiment run.
 
-    Other than the arguments to the constructor, all other experiment hyper_params are their
-    defaults.
+    Other than the arguments to the constructor, all other experiment hyper_params are
+    their defaults.
 
     The schedule is as follows:
 
-    1. For the first `wait` steps of training, do nothing.
-    2. For each of the `repeat` cycles:
-        a. For the first `warmup` steps of the cycle, run the profiler but don't record.
-        b. For the next `active` steps of the cycle, run the profiler and record.
+    1. For the first ``wait`` steps of training, do nothing.
+    2. For each of the ``repeat`` cycles:
+        a. For the first ``warmup`` steps of the cycle, run the profiler but don't
+           record.
+        b. For the next ``active`` steps of the cycle, run the profiler and record.
 
     To subclass, define the class attributes below.
 
@@ -50,19 +51,19 @@ class RunTimeable(TrainingTimeable, ABC):
     pretrain : bool, default=False
         When running an RL experiment, whether to pretrain the model.
 
-    Class Attributes
-    ----------------
-    scenario : ScenarioType
-        Which scenario to use.
-    trainer : TrainerType
-        The trainer to use.
-    dataset : str
+    Attributes
+    ----------
+    scenario : ClassVar[ScenarioType]
+        The scenario which defines the model architecture and datasets.
+    dataset : ClassVar[str]
         The name of the dataset to use.
+    agent_name : ClassVar[str]
+        The name of the agent to use for the model.
     """
 
-    scenario: ScenarioType
-    trainer: TrainerType
-    dataset: str
+    scenario: ClassVar[ScenarioType]
+    dataset: ClassVar[str]
+    agent_name: ClassVar[str]
 
     def __init__(
         self,

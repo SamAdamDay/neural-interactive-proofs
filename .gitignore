@@ -164,6 +164,6 @@ experiment_checkpoints/*
 playground/cache/*
 
 
-# Gernerated and built docs
-doc/reference/generated
+# Generated and built docs
+doc/docs/reference/generated
 doc/_build

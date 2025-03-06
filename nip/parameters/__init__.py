@@ -3,11 +3,11 @@
 An experiment should be completely reproducible from its hyper-parameters (up to
 hardware quirks and model API non-reproducibility).
 
-The parameters are initialised by constructing a `HyperParameters` object. This object
+The parameters are initialised by constructing a ``HyperParameters`` object. This object
 completely defines the experiment, and is passed around to all experiment components.
 
 Some experiment parameters are sub-parameters, which are defined in separate classes.
-When the `HyperParameters` object is initialised, these sub-parameters may be
+When the ``HyperParameters`` object is initialised, these sub-parameters may be
 initialised as well, according to the values of the main parameters.
 
 When creating sub-parameters, you can either pass then as an object of the appropriate
@@ -16,7 +16,8 @@ symbol inspection (e.g. in VS Code) to have easy access to the parameter names a
 descriptions. If you pass a dictionary, it will be converted to the appropriate
 sub-parameter class.
 
-The parameters object can be converted to a dictionary using `HyperParameters.to_dict`.
+The parameters object can be converted to a dictionary using
+``HyperParameters.to_dict``.
 
 Examples
 --------
@@ -147,12 +148,12 @@ class HyperParameters(BaseHyperParameters):
         features which we don't currently use, and comes with a big speed cost.
         Disabling it also prevents batch norm from tracking running statistics in eval
         mode, which might have a small effect on performance (unknown). Furthermore,
-        disabling this prevents freezing parameters using `requires_grad` when doing a
+        disabling this prevents freezing parameters using ``requires_grad`` when doing a
         non-constant agent update schedule. Otherwise we get "RuntimeError: LSE is not
         correctly aligned".
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
-        This pretrains the bodies of the agents using the parameters in `solo_agent`.
+        This pretrains the bodies of the agents using the parameters in ``solo_agent``.
     test_size : float
         The proportion of the dataset to use for testing.
     d_representation : int
@@ -169,7 +170,8 @@ class HyperParameters(BaseHyperParameters):
         to cooperate.
     d_linear_message_space : int
         The dimension of the linear message space (i.e. the number of possible messages
-        which can sent). This is only used if `include_linear_message_space` is `True`.
+        which can sent). This is only used if ``include_linear_message_space`` is
+        ``True``.
     agents : AgentsParameters | dict[str, AgentParameters], optional
         Parameters for the agents. The keys are the names of the agents, and the values
         are the parameters for each agent. If not provided, the default parameters are
@@ -186,7 +188,7 @@ class HyperParameters(BaseHyperParameters):
         Parameters for the REINFORCE trainer.
     solo_agent : SoloAgentParameters, optional
         Parameters for running agents in isolation. Used when the trainer is
-        "solo_agent" or when `pretrain_agents` is `True`.
+        "solo_agent" or when ``pretrain_agents`` is ``True``.
     pure_text_ei : PureTextEiParameters, optional
         Parameters for the expert iteration (EI) trainer which works with agents that call a
         text-based API.
@@ -308,7 +310,7 @@ class HyperParameters(BaseHyperParameters):
         random_agent_params_class: type[RandomAgentParameters],
         zero_knowledge: bool,
     ) -> AgentsParameters:
-        """Process agent parameters passed to `HyperParameters`.
+        """Process agent parameters passed to ``HyperParameters``.
 
         Fills in missing agent parameters with the default parameters for the scenario.
         Also validates the agent parameters.

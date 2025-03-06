@@ -119,10 +119,12 @@ class TrainingTimeable(Timeable, ABC):
 
     The schedule is as follows:
 
-    1. For the first `wait` steps of training, do nothing.
-    2. For each of the `repeat` cycles:
-        a. For the first `warmup` steps of the cycle, run the profiler but don't record.
-        b. For the next `active` steps of the cycle, run the profiler and record.
+    1. For the first ``wait`` steps of training, do nothing.
+    2. For each of the ``repeat`` cycles:
+
+       a. For the first ``warmup`` steps of the cycle, run the profiler but don't
+          record.
+       b. For the next ``active`` steps of the cycle, run the profiler and record.
 
     Parameters
     ----------

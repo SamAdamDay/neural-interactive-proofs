@@ -51,7 +51,6 @@ from nip.parameters import (
     HyperParameters,
     CodeValidationAgentParameters,
     RandomAgentParameters,
-    ScenarioType,
 )
 from nip.experiment_settings import ExperimentSettings
 from nip.factory import register_scenario_class
@@ -115,7 +114,7 @@ class _ParsedChatCompletion:
         The warning message from the generation, if any. One of:
 
         - "max_tokens": If the generation was stopped because the maximum number of
-            tokens was reached.
+          tokens was reached.
         - "invalid_response": If the generation could not be parsed.
     """
 
@@ -172,7 +171,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
     @property
     def agent_spec(self) -> CodeValidationAgentSpec:
-        """The `CodeValidationAgentSpec` for the agent."""
+        """The ``CodeValidationAgentSpec`` for the agent."""
         return self.protocol_handler.agent_specs[self.agent_name]
 
     @property
@@ -254,7 +253,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             Whether to replace the verifier's guess with the true label. If this is set
             to True, and the agent is a verifier, the verifier's guess will be replaced
             with either 'Decision: accept' or 'Decision: reject' based on the true
-            label. Only makes sense when `ensure_last_message_is_assistant` is set to
+            label. Only makes sense when ``ensure_last_message_is_assistant`` is set to
             True.
 
         Returns
@@ -466,7 +465,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         Returns
         -------
         parsed_chat_completion : _ParsedChatCompletion
-            The parsed chat completion output. See the `_ParsedChatCompletion` class
+            The parsed chat completion output. See the ``_ParsedChatCompletion`` class
             for details.
 
         Raises
@@ -615,14 +614,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             The per-environment seed.
         y : int, optional
             The true label (0 for incorrect, 1 for correct). Only used if
-            `replace_last_message_with_true_label` is set to True.
+            ``replace_last_message_with_true_label`` is set to True.
         ensure_last_message_is_assistant : bool, default=False
             Whether to ensure the last message is from the assistant, by removing
             messages from the user.
         replace_last_message_with_true_label : bool, default=False
             Whether to replace the last message with 'Decision: accept' or 'Decision:
-            reject' based on the true label. If this is set to True, `y` must be
-            provided. Only used if `ensure_last_message_is_assistant` is set to True.
+            reject' based on the true label. If this is set to True, ``y`` must be
+            provided. Only used if ``ensure_last_message_is_assistant`` is set to True.
 
         Returns
         -------
@@ -632,7 +631,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         Raises
         ------
         AgentNotActiveInChannelError
-            If `ensure_last_message_is_assistant` is set to True and the agent is not
+            If ``ensure_last_message_is_assistant`` is set to True and the agent is not
             active in the channel (i.e. there would be no messages in the chat history).
         """
 
@@ -1006,10 +1005,10 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             dictionary of arrays, which are timesteps selected from the rollouts.
         positive_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the preferred response for each of the timesteps in
-            `timesteps_per_agent`.
+            ``timesteps_per_agent``.
         negative_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the non-preferred response for each of the timesteps in
-            `timesteps_per_agent`.
+            ``timesteps_per_agent``.
         job_name : str, optional
             A name for the job, to make it more easily identifiable.
         """
@@ -1420,7 +1419,7 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
         """Expand an agent's output from its visible message channels to all.
 
         Agents only output to the channels they can see. This function expands the
-        output to all channels, by filling in `fill_value` for the logits in the
+        output to all channels, by filling in ``fill_value`` for the logits in the
         channels the agent cannot see.
 
         Parameters
@@ -1439,7 +1438,7 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
         Returns
         -------
         expanded_output : NDArray
-            The output expanded to all channels. This has the same shape as `output`,
+            The output expanded to all channels. This has the same shape as ``output``,
             except that the channel dimension is the full set of message channels.
         """
 
@@ -1467,7 +1466,7 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
         if output.shape[channel_dim] == self.protocol_handler.num_message_channels:
             return output
 
-        # Create a tensor filled with `fill_value` of the correct shape
+        # Create a tensor filled with ``fill_value`` of the correct shape
         full_shape = list(output.shape)
         full_shape[channel_dim] = self.protocol_handler.num_message_channels
         expanded_output = np.full(full_shape, fill_value, dtype=output.dtype)

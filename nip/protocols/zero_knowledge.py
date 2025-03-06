@@ -31,7 +31,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     Introduces a second verifier and a simulator. The simulator tries to mimic the
     interaction between the second verifier and the prover(s), and the second verifier
     tries to prevent this. The prover(s) tries to make sure the simulator can succeed
-    (which implies that it is not `leaking` knowledge).
+    (which implies that it is not 'leaking' knowledge).
 
     Parameters
     ----------
@@ -378,13 +378,14 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     ]:
         """Take a step in the interaction protocol.
 
-        Computes the done signals and reward. Used in the `_step` method of the environment.
+        Computes the done signals and reward. Used in the ``_step`` method of the
+        environment.
 
         Parameters
         ----------
         env_td : TensorDictBase | NestedArrayDict
-            The current observation and state. If a `NestedArrayDict`, it is converted
-            to a `TensorDictBase`. Has keys:
+            The current observation and state. If a ``NestedArrayDict``, it is converted
+            to a ``TensorDictBase``. Has keys:
 
             - "y" (... 1): The target value.
             - "round" (...): The current round.
@@ -406,7 +407,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
             agents have made a decision.
         agent_done : Bool[Tensor, "... agent"]
             A boolean mask indicating whether each agent is done, because they have made
-            a decision. This can only be `True` for agents that can make decisions.
+            a decision. This can only be ``True`` for agents that can make decisions.
         terminated : Bool[Tensor, "..."]
             A boolean mask indicating whether the episode has been terminated because
             the max number of rounds has been reached and the verifier has not guessed.

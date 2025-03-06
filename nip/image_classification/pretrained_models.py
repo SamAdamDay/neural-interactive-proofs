@@ -64,7 +64,7 @@ class Resnet18PretrainedModel(PretrainedImageModel, ABC):
         Whether the model can be used for datasets other than the one it was trained on
     """
 
-    dataset: str
+    dataset: str = "NOT_SET"
     allow_other_datasets: bool = False
 
     base_model_name = "resnet18"

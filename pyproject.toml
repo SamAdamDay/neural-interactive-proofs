@@ -8,7 +8,7 @@ version = "1.0.0"
 requires-python = ">= 3.11"
 
 [tool.black]
-extend-exclude = "nip/utils/runtime_module.py"
+extend-exclude = "nip/utils/runtime_module.py|doc/extensions"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -41,7 +41,8 @@ exclude = [
     "venv",
     "playground",
     "nip/utils/runtime_module.py",
-    "nip/utils/apps_metric.py"
+    "nip/utils/apps_metric.py",
+    "doc/extensions",
 ]
 
 # Same as Black.
