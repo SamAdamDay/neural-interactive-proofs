@@ -51,6 +51,7 @@ Contents
    
    guides/index
    reference/index
+   changelog
    glossary
    bibliography
 
