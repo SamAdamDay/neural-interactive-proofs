@@ -9,7 +9,7 @@ Issues and Pull Requests
 ------------------------
 
 If you find a bug or have a feature request, please open an issue on GitHub. If you
-would like to contribute a small fix (less than 30 minutes work), feel free to open a
+would like to contribute a small fix (less than 30 minutes' work), feel free to open a
 pull request directly. For larger changes, please open an issue first to discuss the
 change.
 
@@ -58,7 +58,7 @@ New features should be documented in the appropriate place in the documentation,
 in the ``doc`` directory.
 
 
-Pre-commit Hooks
+Pre-Commit Hooks
 ----------------
 
 We use `pre-commit <https://pre-commit.com/>`_ to run checks on the code before

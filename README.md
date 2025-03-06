@@ -11,7 +11,7 @@ This repository houses the code used to run the experiments for the ICLR 2025 pa
 '[Neural Interactive Proofs](https://arxiv.org/abs/2412.08897)' by Lewis Hammond and Sam
 Adam-Day.
 
-The codebase is designed to be easy to use and extend. Read the
+The codebase is designed to be easy to use and extend. For example, it supports the addition of new protocols, new training algorithms, and new domains of evaluation. Read the
 [documentation](https://neural-interactive-proofs.com/docs) for guides and the API
 reference.
 
@@ -59,7 +59,7 @@ for a more detailed installation guide.
 
 5. Log in to Weights & Biases: `wandb login`
 
-6. Copy the template secrets file: `cp .env.template .env`.
+6. Copy the template secrets file: `cp .env.template .env`
 
    Edit the ``.env`` file and fill in the necessary information for your use case. The
    comments in the file should guide you on what to fill in.
@@ -103,12 +103,12 @@ for more information.
 
 ```bibtex
 @inproceedings{neural_interactive_proofs,
-    author = {Lewis Hammond and Sam Adam-Day},
-    title = {Neural Interactive Proofs},
-    booktitle = {The Thirteenth International Conference on Learning Representations (ICLR)},
-    year = {2025},
-    eprint={2412.08897},
-    archivePrefix={arXiv},
-    primaryClass={cs.AI},
+    author        = {Lewis Hammond and Sam Adam-Day},
+    title         = {Neural Interactive Proofs},
+    booktitle     = {The Thirteenth International Conference on Learning Representations (ICLR)},
+    year          = {2025},
+    eprint        = {2412.08897},
+    archivePrefix = {arXiv},
+    primaryClass  = {cs.AI},
 }
 ```
