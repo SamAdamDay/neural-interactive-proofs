@@ -49,6 +49,7 @@ extensions = [
     "sphinxcontrib.autoprogram",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
+    "sphinx.ext.todo",
 ]
 
 templates_path = [_templates_dir_name]
