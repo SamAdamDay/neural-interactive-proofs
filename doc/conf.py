@@ -187,7 +187,7 @@ def setup(app: Sphinx) -> None:
     # Add the CHANGELOG.rst generation to the build process
     app.add_config_value("changelog_path", "CHANGELOG.md", "")
     app.add_config_value("changelog_output_path", "docs/changelog.rst", "")
-    app.connect("env-updated", generate_changelog)
+    app.connect("config-inited", generate_changelog)
 
     # Add the skip function to the autodoc-skip-member event
     app.connect("autodoc-skip-member", skip)
