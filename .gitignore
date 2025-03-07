@@ -167,3 +167,4 @@ playground/cache/*
 # Generated and built docs
 doc/docs/reference/generated
 doc/_build
+doc/docs/changelog.rst

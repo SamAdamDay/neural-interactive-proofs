@@ -10,6 +10,8 @@ from sphinx.environment import BuildEnvironment
 
 import markdown
 
+import pypandoc
+
 _root_path = Path(__file__).parent.parent
 _docs_path = Path(__file__).parent
 
@@ -124,6 +126,27 @@ def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
     return []
 
 
+def generate_changelog(app: Sphinx, env: BuildEnvironment) -> list[str]:
+    """Convert the CHANGELOG.md file to a RST file."""
+
+    # Convert the markdown to RST
+    source_path = _root_path.joinpath(app.config.changelog_path).resolve()
+    changelog_rst = pypandoc.convert_file(str(source_path), "rst", format="md")
+
+    # Write the output if it has changed
+    output_path = _docs_path.joinpath(app.config.changelog_output_path).resolve()
+    try:
+        with open(output_path, "r", encoding="utf-8") as output_file:
+            current_changelog_rst = output_file.read()
+    except FileNotFoundError:
+        current_changelog_rst = ""
+    if changelog_rst != current_changelog_rst:
+        with open(output_path, "w", encoding="utf-8") as output_file:
+            output_file.write(changelog_rst)
+
+    return []
+
+
 def skip(
     app: Sphinx,
     what: Literal["module", "class", "exception", "function", "method", "attribute"],
@@ -156,10 +179,15 @@ def setup(app: Sphinx) -> None:
     """Set up the Sphinx application."""
 
     # Add the splash page generation to the build process
-    app.connect("env-updated", generate_splash_page)
     app.add_config_value("splash_template_path", "_templates/splash/template.html", "")
     app.add_config_value("splash_source_path", "index.md", "")
     app.add_config_value("splash_output_path", "index.html", "")
+    app.connect("env-updated", generate_splash_page)
+
+    # Add the CHANGELOG.rst generation to the build process
+    app.add_config_value("changelog_path", "CHANGELOG.md", "")
+    app.add_config_value("changelog_output_path", "docs/changelog.rst", "")
+    app.connect("config-inited", generate_changelog)
 
     # Add the skip function to the autodoc-skip-member event
     app.connect("autodoc-skip-member", skip)
