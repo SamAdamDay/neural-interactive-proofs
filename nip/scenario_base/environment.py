@@ -525,7 +525,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The done specification.
         """
         return CompositeSpec(
-            # TODO: This leads to issues because TorchRL calls ``any`` on the done
+            # TODO: This may lead to issues because TorchRL calls ``any`` on the done
             # signal
             agents=CompositeSpec(
                 done=BinaryDiscreteTensorSpec(
