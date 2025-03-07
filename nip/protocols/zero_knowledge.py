@@ -351,7 +351,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
     ) -> Bool[Tensor, "..."]:
         """Get a boolean mask indicating whether the verifier can make a decision.
 
-        This is the case only when the base verifier can make a decision. TODO
+        This is the case only when the base verifier can make a decision.
 
         Parameters
         ----------
@@ -548,14 +548,7 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         """Get the simulator reward.
 
         The simulator reward is the cosine similarity between the adversarial verifier
-        and simulator logits, multiplied by a coefficient. At the moment we sum the
-        similarities for the message logits and decision logits (because decisions are
-        not necessarily allowed in every round, unlike messages, but we may want to do
-        something else here). Moreover, this does not currently take into account the
-        possibility that the adversarial verifier has guessed (and therefore ended the
-        trajectory) before the non-adversarial verifier, which means that for some
-        timesteps we will be comparing logits that don't correspond to any action that
-        makes any difference. #TODO
+        and simulator logits, multiplied by a coefficient.
 
         Note
         ----
@@ -578,6 +571,16 @@ class ZeroKnowledgeProtocol(ProtocolHandler):
         -------
         simulator_reward : Float[Tensor, "..."]
             The simulator reward.
+
+        Todo
+        ----
+        At the moment we sum the similarities for the message logits and decision logits
+        (because decisions are not necessarily allowed in every round, unlike messages,
+        but we may want to do something else here). Moreover, this does not currently
+        take into account the possibility that the adversarial verifier has guessed (and
+        therefore ended the trajectory) before the non-adversarial verifier, which means
+        that for some timesteps we will be comparing logits that don't correspond to any
+        action that makes any difference.
         """
 
         num_base_channels = self.base_protocol.num_message_channels

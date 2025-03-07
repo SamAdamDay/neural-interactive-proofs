@@ -363,7 +363,7 @@ def inverse_hessian_vector_product(
         The computed IHVP.
     """
 
-    if variant == "conj_grad":  # TODO not yet implemented
+    if variant == "conj_grad":
         ihvp = compute_conjugate_gradient_ihvp(
             follower_loss,
             leader_loss,
@@ -372,7 +372,7 @@ def inverse_hessian_vector_product(
             num_iterations,
             lr=1.0,
         )
-    elif variant == "neumann":  # TODO not yet implemented
+    elif variant == "neumann":
         ihvp = compute_neumann_ihvp(
             follower_loss,
             leader_loss,
@@ -392,6 +392,8 @@ def inverse_hessian_vector_product(
             retain_graph=retain_graph,
             generator=generator,
         )
+    else:
+        raise ValueError(f"Invalid IHVP variant: {variant!r}")
 
     # Zero the gradients of the parameters
     _zero_grad(follower_params)

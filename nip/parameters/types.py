@@ -33,9 +33,9 @@ IhvpVariantType: TypeAlias = Literal["conj_grad", "neumann", "nystrom"]
 """Type for the variants of the inverse Hessian-vector product computation.
 
 conj_grad
-    Use the conjugate gradient method.
+    Use the conjugate gradient method (not currently implemented).
 neumann
-    Use the Neumann series method.
+    Use the Neumann series method (not currently implemented).
 nystrom
     Use the Nyström method.
 """
