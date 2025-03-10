@@ -23,6 +23,6 @@ current codebase. If the older run differs by a `MINOR` version, its hyper-param
 are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 
 
-## [1.0.0] - 2025-03-??
+## [1.0.0] - 2025-03-10
 
 First public release
