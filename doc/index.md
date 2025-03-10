@@ -15,13 +15,13 @@ In our [new paper](https://openreview.net/forum?id=R2834dhBlo), we study how a t
 
 ```bibtex
 @inproceedings{neural_interactive_proofs,
-    author = {Lewis Hammond and Sam Adam-Day},
-    title = {Neural Interactive Proofs},
-    booktitle = {The Thirteenth International Conference on Learning Representations (ICLR)},
-    year = {2025},
-    eprint={2412.08897},
-    archivePrefix={arXiv},
-    primaryClass={cs.AI},
+    author        = {Lewis Hammond and Sam Adam-Day},
+    title         = {Neural Interactive Proofs},
+    booktitle     = {The Thirteenth International Conference on Learning Representations (ICLR)},
+    year          = {2025},
+    eprint        = {2412.08897},
+    archivePrefix = {arXiv},
+    primaryClass  = {cs.AI},
 }
 ```
 
@@ -56,7 +56,7 @@ Model     | Provers | Verifiers | Rounds | Complexity | Zero-knowledge
 ----------|---------|-----------|--------|------------|---------------
 `adp`     | 1       | 1         | 2      | NP         | ❌
 `debate`  | 2       | 1         | $T$    | PSPACE     | ❌
-`mac`     | 2       | 1         | 2      | ?          | ❌
+`mac`     | 2       | 1         | 2      | MA         | ❌
 `nip`     | 1       | 1         | $T$    | PSPACE     | ❌
 `mnip`    | 2       | 1         | $T$    | NEXP       | ❌
 `zk-nip`  | 1       | 3         | $T$    | PSPACE     | ✅
