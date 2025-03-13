@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from string import Template
 from typing import Literal, Any
+import importlib
+import inspect
 
 from sphinx.application import Sphinx
 from sphinx.environment import BuildEnvironment
@@ -19,6 +21,8 @@ _templates_dir_name = "_templates"
 _templates_path = _docs_path / _templates_dir_name
 
 _footer_links_path = _templates_path / "theme" / "footer-links.html"
+
+_github_tree_url = "https://github.com/SamAdamDay/neural-interactive-proofs/tree/main"
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -52,6 +56,7 @@ extensions = [
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
+    "sphinx.ext.linkcode",
 ]
 
 templates_path = [_templates_dir_name]
@@ -174,6 +179,73 @@ def skip(
         return would_skip or name.startswith("_")
 
     return would_skip
+
+
+def linkcode_resolve(
+    domain: str, info: dict[Literal["module", "fullname"], str]
+) -> str | None:
+    """Resolve a link to the source code for a Python object.
+
+    Parameters
+    ----------
+    domain : str
+        The domain of the object. This should be "py", because we only document Python
+        objects.
+    info : dict[Literal["module", "fullname"], str]
+        Information about the object to link to. This should contain the module name and
+        the full name of the object.
+
+    Returns
+    -------
+    link : str or None
+        The URL to the source code for the object, or None if the source code cannot be
+        found.
+
+    Note
+    ----
+    This function is based on the responses to `this GitHub issue
+    <https://github.com/readthedocs/sphinx-autoapi/issues/202>`_.
+    """
+
+    if domain != "py":
+        raise NotImplementedError(
+            f"Source code linking for domain {domain!r} not implemented"
+        )
+
+    if info["module"] == "":
+        return None
+
+    module = importlib.import_module(info["module"])
+
+    if "." in info["fullname"]:
+        object_name, attribute_name = info["fullname"].split(".")
+        obj = getattr(module, object_name)
+        try:
+            obj = getattr(obj, attribute_name)
+        except AttributeError:
+            return None
+    else:
+        obj = getattr(module, info["fullname"])
+
+    # Unwrap any decorators before getting the source code
+    obj = inspect.unwrap(obj)
+
+    # Get the relative path to the source file
+    try:
+        absolute_file_path = inspect.getsourcefile(obj)
+    except TypeError:
+        return None
+    if absolute_file_path is None or absolute_file_path == "<string>":
+        return None
+    relative_file_path = Path(absolute_file_path).relative_to(_root_path)
+
+    lines, starting_line_number = inspect.getsourcelines(obj)
+    end_line_number = starting_line_number + len(lines) - 1
+
+    return (
+        f"{_github_tree_url}/{relative_file_path}"
+        f"#L{starting_line_number}-L{end_line_number}"
+    )
 
 
 def setup(app: Sphinx) -> None:
