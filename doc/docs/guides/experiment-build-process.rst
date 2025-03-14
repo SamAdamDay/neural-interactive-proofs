@@ -74,10 +74,10 @@ We assume that code of the following form has been executed:
          ``agent_params.checkpoint_run_id``. Otherwise, we let the agent's weights be
          initialised randomly.
 
-   #. If set in the hyper-parameters, pretrained embeddings for each agent are into the
-      datasets. This is done by initialising the appropriate :class:`PretrainedModel
-      <nip.scenario_base.pretrained_models.PretrainedModel>` class, and generating
-      embeddings.
+   #. If set in the hyper-parameters, pretrained embeddings for each agent are loaded
+      into the datasets. This is done by initialising the appropriate
+      :class:`PretrainedModel <nip.scenario_base.pretrained_models.PretrainedModel>`
+      class, and generating embeddings.
 
    #. If the trainer and scenario are pure-text based (see
       :ref:`tensordict-or-pure-text-trainer` and

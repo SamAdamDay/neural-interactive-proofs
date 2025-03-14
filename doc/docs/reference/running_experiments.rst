@@ -26,7 +26,7 @@ designed to be as simple as possible, while still allowing for a wide range of
 experiments.
 
 See :doc:`../guides/running_experiments` for a more detailed guide on running
-experiments and :doc:`../guides/rexperiment-build-process` for an overview of how the
+experiments and :doc:`../guides/experiment-build-process` for an overview of how the
 experiment components are built by the :func:`run_experiment() <nip.run.run_experiment>`
 function.
 

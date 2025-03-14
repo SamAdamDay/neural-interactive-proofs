@@ -2,8 +2,6 @@
 Creating a New Trainer
 ######################
 
-.. currentmodule:: nip.trainers
-
 In this guide, we will walk through the process of creating a new RL :term:`trainer`.
 
 A trainer takes a :term:`scenario instance`, consisting of the environment, agents,
@@ -41,6 +39,8 @@ Which Parts of this Guide to Read
    base class to subclass.
 3. Read the description of the base class you've chosen in the
    :ref:`trainer-base-classes` section.
+4. Read subsections of the :ref:`trainer-experiment-components` section that are
+   relevant to your base class.
 
 
 .. _new-trainer-main-steps:
@@ -251,8 +251,8 @@ follows.
    <nip.trainers.rl_pure_text_base.PureTextRlTrainer._sample_rollouts>` method will also
    affect the test loop.
 4. **Create fine-tune jobs for each agent**. This stage creates API jobs for each group
-   of agents which share a model (see :ref:`sharing-weights-between-agents`). This stage
-   must be implemented by the subclass, which is done by defining the
+   of agents which share a model (see :ref:`agents-pure-text-trainers`). This stage must
+   be implemented by the subclass, which is done by defining the
    :func:`_stage_create_fine_tune_jobs
    <nip.trainers.rl_pure_text_base.PureTextRlTrainer._stage_create_fine_tune_jobs>`
    method. This method takes as input the rollouts sampled in the first stage and calls
@@ -303,3 +303,191 @@ description.
 
 The following assumes we are working in a method of a trainer class, so ``self``
 refers to the trainer instance.
+
+
+Datasets
+--------
+
+The train and test datasets are instances of :class:`Dataset
+<nip.scenario_base.data.Dataset>` (or a subclass specific to the current
+:term:`scenario`), and are available as ``self.scenario_instance.train_dataset`` and
+``self.scenario_instance.test_dataset``.
+
+If your trainer is TensorDict-based (i.e. subclasses :class:`TensorDictRlTrainer
+<nip.trainers.rl_tensordict_base.TensorDictRlTrainer>` or :class:`TensorDictTrainer
+<nip.trainers.trainer_base.TensorDictTrainer>`), the datasets are instances of
+:class:`TensorDictDataset <nip.scenario_base.data.TensorDictDataset>`. If your trainer
+is pure-text-based (i.e. subclasses :class:`PureTextRlTrainer
+<nip.trainers.rl_pure_text_base.PureTextRlTrainer>`), the datasets are instances of
+:class:`NestedArrayDictDataset <nip.scenario_base.data.NestedArrayDictDataset>`.
+
+
+Environments
+------------
+
+.. currentmodule:: nip.scenario_base.environment
+
+Reinforcement learning environments are instances of the :class:`Environment
+<nip.scenario_base.environment.Environment>` class. They specify things like the action
+and state specs, and handle updating the environment state and rewards based on actions
+made by the agents.
+
+There is an environment instance for each dataset (because observations come by sampling
+from the dataset), and they are available as ``self.scenario_instance.train_enviroment``
+and ``self.scenario_instance.test_enviroment``.
+
+The key methods and properties of the environment are:
+
+.. autosummary::
+    
+    Environment.reset
+    Environment.step
+    Environment.observation_spec
+    Environment.action_spec
+    Environment.state_spec
+    Environment.reward_spec
+    Environment.done_spec
+    Environment.steps_per_env_per_iteration
+    Environment.frames_per_batch
+    Environment.num_envs
+    Environment.batch_size
+
+Depending on the type of trainer, the environments may be instances of
+:class:`TensorDictEnvironment <nip.scenario_base.environment.TensorDictEnvironment>` or
+:class:`PureTextEnvironment <nip.scenario_base.environment.PureTextEnvironment>`.
+
+
+Agents (TensorDict-Based Trainers)
+----------------------------------
+
+In TensorDict-based trainers, each agent is composed of one or more bodies and one or
+more heads.
+
+- Bodies (:class:`AgentBody <nip.scenario_base.agents.AgentBody>`) are responsible for
+  processing the environment observations and producing the agent's internal state.
+  Agents typically have one body, shared between all heads. However, if
+  ``hyper_params.rl.shared_body`` is ``False``, we use a separate body for each head.
+- Heads (:class:`AgentHead <nip.scenario_base.agents.AgentHead>`) are responsible for
+  producing the agent's actions and values.
+
+  - Policy heads (:class:`PolicyHead <nip.scenario_base.agents.PolicyHead>`) produce
+    probability distributions over actions.
+  - Value heads (:class:`ValueHead <nip.scenario_base.agents.ValueHead>`) produce value
+    estimates.
+  - Solo agent heads (:class:`SoloAgentHead <nip.scenario_base.agents.SoloAgentHead>`)
+    output predictions for the true labels of the data, and are used when the agents are
+    trained in isolation using supervised learning (rather than reinforcement learning).
+
+- All agent parts are subclasses of :class:`AgentPart
+  <nip.scenario_base.agents.AgentPart>`.
+- The parts of TensorDict-based agents also subclass the
+  :class:`TensorDictAgentPartMixin <nip.scenario_base.agents.TensorDictAgentPartMixin>`
+  mixin class.
+
+All agent parts are collected together in an :class:`Agent
+<nip.scenario_base.agents.Agent>` dataclass. These are available in the
+``self.scenario_instance.agents`` dictionary, indexed by agent name.
+
+Agent parts of the same type are combined together across agents. This allows dealing
+with 'combined agents' which can be treated as a single actor in reinforcement learning,
+and working easily with the :external+torchrl:doc:`TorchRL <index>` library. These
+combined parts are stored in ``self.scenario_instance``, and are available as follows.
+
+.. currentmodule:: nip.scenario_instance
+
+.. autosummary::
+
+   ScenarioInstance.combined_body
+   ScenarioInstance.combined_policy_body
+   ScenarioInstance.combined_value_body
+   ScenarioInstance.combined_policy_head
+   ScenarioInstance.combined_value_head
+
+
+.. _agents-pure-text-trainers:
+
+Agents (Pure-Text-Based Trainers)
+---------------------------------
+
+In pure-text-based trainers, agents are not composed of parts, but are whole entities
+which can be sampled and trained using an API. The agents are instances of the
+:class:`PureTextWholeAgent <nip.scenario_base.agents.PureTextWholeAgent>` class. To
+maintain compatibility with TensorDict-based agents, the :class:`PureTextWholeAgent
+<nip.scenario_base.agents.PureTextWholeAgent>` is also stored in an :class:`Agent
+<nip.scenario_base.agents.Agent>` dataclass, in the ``whole`` attribute. The dataclass
+instances are stored in the ``self.scenario_instance.agents`` dictionary, indexed by
+agent name.
+
+Some agents may share an underlying model, where the system prompt is used to condition
+the underlying model to act as each distinct agent. To facilitate training these agents,
+we use the 'shared model group' abstraction. A :class:`PureTextSharedModelGroup
+<nip.scenario_base.agents.PureTextSharedModelGroup>` contains a collection of
+:class:`PureTextWholeAgent <nip.scenario_base.agents.PureTextWholeAgent>` instances which
+share an underlying model. Trainers therefore only need to call each share model group's fine-tune methods, rather than having to worry about which agents share the same model. 
+
+The following methods allow fine-tuning the underlying model of a shared model group.
+
+.. currentmodule:: nip.scenario_base.agents
+
+.. autosummary::
+
+    PureTextSharedModelGroup.create_supervised_fine_tune_job
+    PureTextSharedModelGroup.create_dpo_fine_tune_job
+    PureTextSharedModelGroup.get_fine_tune_job_status
+    PureTextSharedModelGroup.get_fine_tune_job_error_repr
+    PureTextSharedModelGroup.switch_to_next_model
+
+:class:`PureTextSharedModelGroup <nip.scenario_base.agents.PureTextSharedModelGroup>`
+instances maintain a state in the ``state`` attribute, which can be used to store and
+retrieve checkpoints. This state is a :class:`PureTextSharedModelGroupState
+<nip.scenario_base.agents.PureTextSharedModelGroupState>` dataclass. The state of each
+agent is stored in trainer experiment state. See :ref:`trainer-experiment-state` below
+for more information.
+
+
+Protocol Handler
+----------------
+
+.. currentmodule:: nip.protocols.protocol_base
+
+The protocol handler implements the :term:`interaction protocol` for the experiment. It
+is an instance of the :class:`ProtocolHandler
+<nip.protocols.protocol_base.ProtocolHandler>` class, and is available as
+``self.protocol_handler``.
+
+The protocol handler is mainly used by the environment to implement the step function,
+but the following properties can be useful. For a full list of properties and methods,
+see the :class:`ProtocolHandler <nip.protocols.protocol_base.ProtocolHandler>` class.
+
+.. autosummary::
+    
+    ProtocolHandler.agent_names
+    ProtocolHandler.prover_names
+    ProtocolHandler.verifier_names
+    ProtocolHandler.max_message_rounds
+    ProtocolHandler.min_message_rounds
+    ProtocolHandler.message_channel_names
+    ProtocolHandler.agent_channel_visibility
+
+
+.. _trainer-experiment-state:
+
+Experiment State
+----------------
+
+The experiment state is currently only used by pure text trainers (which subclass
+:class:`PureTextRlTrainer <nip.trainers.rl_pure_text_base.PureTextRlTrainer>`). It is a
+dataclass specified by the :class:`Trainer.State
+<nip.trainers.trainer_base.Trainer.State>` child class (or a subclass specific to the
+current scenario), and is available as ``self.state``.
+
+For pure-text trainers, the :class:`PureTextRlTrainer.State
+<nip.trainers.trainer_base.PureTextRlTrainer.State>` dataclass is specified as follows.
+
+.. autoclass:: nip.trainers.rl_pure_text_base.PureTextRlTrainer.State
+
+The experiment state is saved after each stage of the training loop. If the experiment
+stopped partway through training, it can be resumed later by setting the ``run_id``
+argument of the :func:`run <nip.experiment.run>` function to the ID of the previous run.
+This will automatically load the experiment state from the previous run, either locally
+or from Weights & Biases.
