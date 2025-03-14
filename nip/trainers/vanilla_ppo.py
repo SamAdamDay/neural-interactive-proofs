@@ -4,13 +4,12 @@ from torchrl.objectives.value import GAE
 from torchrl.objectives import ValueEstimators
 
 from nip.rl_objectives import ClipPPOLossImproved, KLPENPPOLossImproved
-from nip.trainers.rl_tensordict_base import ReinforcementLearningTrainer
+from nip.trainers.rl_tensordict_base import TensorDictRlTrainer
 from nip.trainers.registry import register_trainer
-from nip.parameters import TrainerType, PpoLossType
 
 
 @register_trainer("vanilla_ppo")
-class VanillaPpoTrainer(ReinforcementLearningTrainer):
+class VanillaPpoTrainer(TensorDictRlTrainer):
     """Vanilla Proximal Policy Optimization trainer.
 
     Implements a multi-agent PPO algorithm, specifically IPPO, since the value estimator

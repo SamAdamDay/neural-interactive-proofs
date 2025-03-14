@@ -53,6 +53,7 @@ extensions = [
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
+    "sphinxcontrib.mermaid",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",

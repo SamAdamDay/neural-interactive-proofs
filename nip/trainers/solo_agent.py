@@ -5,8 +5,7 @@ This is useful for ensuring that the agents are able to learn the task in isolat
 
 import logging
 from contextlib import ExitStack
-
-import numpy as np
+from typing import ClassVar, Literal
 
 import torch
 import torch.nn.functional as F
@@ -24,7 +23,7 @@ from nip.trainers.trainer_base import (
     IterationContext,
 )
 from nip.trainers.registry import register_trainer
-from nip.parameters import AgentsParameters, TrainerType
+from nip.parameters import AgentsParameters
 from nip.utils.maths import set_seed
 
 
@@ -41,6 +40,8 @@ class SoloAgentTrainer(TensorDictTrainer):
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
     """
+
+    trainer_type: ClassVar[Literal["rl", "solo_agent"]] = "rl"
 
     def train(self, as_pretraining: bool = False):
         """Train the agents.
