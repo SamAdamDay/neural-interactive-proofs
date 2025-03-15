@@ -41,7 +41,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
-    trainer_type: ClassVar[Literal["rl", "solo_agent"]] = "rl"
+    trainer_type: ClassVar[Literal["rl", "solo_agent"]] = "solo_agent"
 
     def train(self, as_pretraining: bool = False):
         """Train the agents.
