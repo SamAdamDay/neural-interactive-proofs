@@ -22,7 +22,7 @@ The main components of a scenario are:
 .. _tensordict-or-pure-text-scenario:
 
 TensorDict or Pure Text Scenario?
-----------------------------------------
+---------------------------------
 
 There are two types of scenario depending on how the agent models are implemented.
 
@@ -91,11 +91,12 @@ Every scenario implementation registers its derived classes with
 :func:`nip.factory.register_scenario_class`. When the experiment gets run the
 :func:`nip.factory.build_scenario_instance` function is called, which creates instances
 of the classes defined in the scenario, according to some initialisation logic. These
-instances are stored in a :class:`nip.factory.ScenarioInstance`
+instances are stored in a :class:`nip.scenario_instance.ScenarioInstance`
 object, which is passed to the :term:`trainer`.
 
 .. autosummary::
    :toctree: generated/modules
    :recursive:
 
+   nip.scenario_instance
    nip.factory

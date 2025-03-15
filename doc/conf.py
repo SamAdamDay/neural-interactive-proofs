@@ -21,6 +21,8 @@ _templates_dir_name = "_templates"
 _templates_path = _docs_path / _templates_dir_name
 
 _footer_links_path = _templates_path / "theme" / "footer-links.html"
+_mermaid_init_js_path = _templates_path / "mermaid" / "init.js"
+_mermaid_theme_css_path = _templates_path / "mermaid" / "theme.css"
 
 _github_tree_url = "https://github.com/SamAdamDay/neural-interactive-proofs/tree/main"
 
@@ -53,6 +55,7 @@ extensions = [
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
+    "sphinxcontrib.mermaid",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
@@ -99,6 +102,19 @@ intersphinx_mapping = {
 
 # -- Options for sphinxcontrib-bibtex ----------------------------------------------
 bibtex_bibfiles = ["references.bib"]
+
+
+# -- Options for sphinxcontrib-mermaid ----------------------------------------------
+
+mermaid_version = "11.2.0"
+mermaid_include_elk = "0.1.4"
+
+with open(_mermaid_init_js_path, "r") as mermaid_init_js_file:
+    _mermaid_init_js_template = Template(mermaid_init_js_file.read())
+    mermaid_init_js = _mermaid_init_js_template.substitute(
+        mermaid_version=mermaid_version,
+        elk_version=mermaid_include_elk,
+    )
 
 
 def generate_splash_page(app: Sphinx, env: BuildEnvironment) -> list[str]:
@@ -212,20 +228,35 @@ def linkcode_resolve(
             f"Source code linking for domain {domain!r} not implemented"
         )
 
-    if info["module"] == "":
+    module_name = info["module"]
+    object_name = info["fullname"]
+
+    if module_name == "":
         return None
 
-    module = importlib.import_module(info["module"])
-
-    if "." in info["fullname"]:
-        object_name, attribute_name = info["fullname"].split(".")
-        obj = getattr(module, object_name)
+    # Keep transferring the last part of the module name to the object name and trying
+    # to import the module until we either successfully import the module or run out of
+    # parts of the module name. This allows us to handle classes
+    while True:
         try:
-            obj = getattr(obj, attribute_name)
+            obj = importlib.import_module(module_name)
+        except ImportError:
+            if "." in module_name:
+                module_name, _, object_name_prefix = module_name.rpartition(".")
+                object_name = f"{object_name_prefix}.{object_name}"
+            else:
+                return None
+        else:
+            break
+
+    # Walk through the object name, resolving each part in turn by getting the attribute
+    # from the previous object
+    while object_name != "":
+        object_name_prefix, _, object_name = object_name.partition(".")
+        try:
+            obj = getattr(obj, object_name_prefix)
         except AttributeError:
             return None
-    else:
-        obj = getattr(module, info["fullname"])
 
     # Unwrap any decorators before getting the source code
     obj = inspect.unwrap(obj)
@@ -258,8 +289,8 @@ def setup(app: Sphinx) -> None:
     app.connect("env-updated", generate_splash_page)
 
     # Add the CHANGELOG.rst generation to the build process
-    app.add_config_value("changelog_path", "CHANGELOG.md", "")
-    app.add_config_value("changelog_output_path", "docs/changelog.rst", "")
+    app.add_config_value("changelog_path", "CHANGELOG.md", "html")
+    app.add_config_value("changelog_output_path", "docs/changelog.rst", "html")
     app.connect("config-inited", generate_changelog)
 
     # Add the skip function to the autodoc-skip-member event

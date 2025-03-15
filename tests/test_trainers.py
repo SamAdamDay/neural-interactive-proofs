@@ -23,7 +23,7 @@ from nip import (
     LrFactors,
 )
 from nip.trainers import build_trainer
-from nip.trainers.rl_tensordict_base import ReinforcementLearningTrainer
+from nip.trainers.rl_tensordict_base import TensorDictRlTrainer
 from nip.trainers.vanilla_ppo import VanillaPpoTrainer
 from nip.factory import build_scenario_instance
 
@@ -400,7 +400,7 @@ def test_loss_parameters_in_optimizer(param_spec):
 
     # Create the trainer and get the loss module and optimizer
     scenario_instance = build_scenario_instance(hyper_params, settings)
-    trainer: ReinforcementLearningTrainer = build_trainer(
+    trainer: TensorDictRlTrainer = build_trainer(
         hyper_params, scenario_instance, settings
     )
     trainer._build_operators()

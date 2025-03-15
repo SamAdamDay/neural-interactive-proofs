@@ -9,14 +9,14 @@ from torchrl.envs.transforms import Transform, Compose as ComposeTransform
 
 from nip.utils.bugfix import Reward2GoTransform
 
-from nip.trainers.rl_tensordict_base import ReinforcementLearningTrainer
+from nip.trainers.rl_tensordict_base import TensorDictRlTrainer
 from nip.trainers.registry import register_trainer
 from nip.parameters import TrainerType
 from nip.rl_objectives import ReinforceLossImproved
 
 
 @register_trainer("reinforce")
-class ReinforceTrainer(ReinforcementLearningTrainer):
+class ReinforceTrainer(TensorDictRlTrainer):
     """Policy gradient trainer using the REINFORCE algorithm.
 
     Can use the generalized advantage estimator and a critic network, or just the

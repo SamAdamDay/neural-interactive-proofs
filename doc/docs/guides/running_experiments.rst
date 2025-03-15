@@ -27,7 +27,9 @@ expert iteration (EI) trainer, and default hyper-parameters:
 
     run_experiment(hyper_params)
 
-See :doc:`../reference/running_experiments` for the API reference.
+See :doc:`../reference/running_experiments` for the API reference and
+:doc:`experiment-build-process` for an overview of how the experiment components are
+built.
 
 
 Specifying Hyper-Parameters

@@ -9,17 +9,17 @@ Glossary
         of a classification task in which we want to train agents. The main components
         of a scenario are the dataset, the environment and the agents.
         
-        An example of such a task is the :term:`code validation scenario`, where a problem
-        statement together with a purported solution is given, and the task is to
-        determine whether the solution is correct.
+        An example of such a task is the :term:`code validation scenario`, where a
+        problem statement together with a purported solution is given, and the task is
+        to determine whether the solution is correct.
 
         Scenarios are implemented by subclassing the base classes in the
         :ref:`nip.scenario_base <scenario-base-classes>` module.
 
     scenario instance
-        A :class:`ScenarioInstance <nip.factory.ScenarioInstance>` object, which
-        contains all the components of the experiment. These components are instances of
-        the classes defined in the :term:`scenario`.
+        A :class:`ScenarioInstance <nip.scenario_instance.ScenarioInstance>` object,
+        which contains all the components of the experiment. These components are
+        instances of the classes defined in the :term:`scenario`.
 
     graph isomorphism scenario
         A :term:`scenario` where the task is to determine whether two graphs are
@@ -31,7 +31,8 @@ Glossary
 
     code validation scenario
         A :term:`scenario` where the task is to determine whether a given piece of code
-        is a correct solution to a problem statement. Each problem instance consists of a problem statement and a candidate solution.
+        is a correct solution to a problem statement. Each problem instance consists of
+        a problem statement and a candidate solution.
 
     interaction protocol
         The set of rules that govern how agents interact in the environment. This
@@ -42,8 +43,8 @@ Glossary
         :doc:`Creating a new protocol <guides/new-protocol>`.
 
     deterministic interaction protocol
-        An :term:`interaction protocol` where the order of play is fixed and does not vary
-        between trajectories. Deterministic protocols with a single verifier are
+        An :term:`interaction protocol` where the order of play is fixed and does not
+        vary between trajectories. Deterministic protocols with a single verifier are
         implemented by subclassing :class:`DeterministicSingleVerifierProtocolHandler
         <nip.protocols.protocol_base.DeterministicSingleVerifierProtocolHandler>`.
 
@@ -61,7 +62,8 @@ Glossary
     experiment settings
         An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>`
         object, which contains various settings for the experiment not relevant to
-        reproducibility (e.g. the GPU device number and whether to use Weights & Biases).
+        reproducibility (e.g. the GPU device number and whether to use Weights &
+        Biases).
 
     trainer
         The class that performs the optimisation steps on the agents, using the

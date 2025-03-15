@@ -12,7 +12,7 @@ Trainers are responsible for optimising the agents in an experiment. A trainer
 
 1. The hyper-parameter of the experiment (a :class:`HyperParameters
    <nip.parameters.HyperParameters>` object).
-2. A :class:`ScenarioInstance <nip.factory.ScenarioInstance>` object, which contains all
+2. A :class:`ScenarioInstance <nip.scenario_instance.ScenarioInstance>` object, which contains all
    the components of the experiment. The most important components are:
 
     - The datasets.

@@ -4,12 +4,12 @@ from torchrl.objectives.value import GAE
 from torchrl.objectives import ValueEstimators
 
 from nip.rl_objectives import SpgLoss
-from nip.trainers.rl_tensordict_base import ReinforcementLearningTrainer
+from nip.trainers.rl_tensordict_base import TensorDictRlTrainer
 from nip.trainers.registry import register_trainer
 
 
 @register_trainer("spg")
-class SpgTrainer(ReinforcementLearningTrainer):
+class SpgTrainer(TensorDictRlTrainer):
     """Stackelberg Policy Gradient :cite:p:`Fiez2020` trainer.
 
     Implements an n-player version of Stackelberg Policy Gradient / Opponent-Shaping
