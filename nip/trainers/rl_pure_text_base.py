@@ -1082,11 +1082,15 @@ class PureTextRlTrainer(Trainer, ABC):
             )
 
         # Get the mean and std verifier decision
-        log_stats[f"{prefix}mean_decision"] = (
-            verifier_decision[last_timestep].mean().item()
-        )
-        log_stats[f"{prefix}std_decision"] = (
-            verifier_decision[last_timestep].std().item()
+        verifier_last_decision = verifier_decision[last_timestep][
+            verifier_decision[last_timestep] != 2
+        ]
+        log_stats[f"{prefix}mean_decision"] = verifier_last_decision.mean().item()
+        log_stats[f"{prefix}std_decision"] = verifier_last_decision.std().item()
+
+        # Get the proportion of rollouts where the verifier does not make a decision
+        log_stats[f"{prefix}no_decision_proportion"] = (
+            (verifier_decision[last_timestep] == 2).mean().item()
         )
 
         # Get the precision and recall of the verifier
