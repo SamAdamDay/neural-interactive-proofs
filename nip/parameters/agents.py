@@ -477,6 +477,11 @@ class PureTextAgentParameters(AgentParameters):
         The top-p value to use when sampling from the model. A value 0.1 means only the
         top 10% of tokens are considered when sampling. If ``None``, the model uses the
         default top-p value. Only one of ``temperature`` and ``top_p`` should be set.
+    repetition_penalty : float | None
+        Float that penalizes new tokens based on whether they appear in the prompt and
+        the generated text so far. Values > 1 encourage the model to use new tokens,
+        while values < 1 encourage the model to repeat tokens. Not all models support
+        this parameter.
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
@@ -501,6 +506,7 @@ class PureTextAgentParameters(AgentParameters):
 
     temperature: float | None = None
     top_p: float | None = None
+    repetition_penalty: float | None = None
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False

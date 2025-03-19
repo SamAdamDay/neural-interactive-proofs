@@ -819,12 +819,19 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             max_tokens = self.agent_params.max_tokens_per_message
             if max_tokens is None:
                 max_tokens = int(self.agent_params.max_response_words * 1.5)
+            if self.agent_params.repetition_penalty is None:
+                extra_body = {}
+            else:
+                extra_body = {
+                    "repetition_penalty": self.agent_params.repetition_penalty
+                }
             completion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=chat_messages_prompt,
                 max_tokens=max_tokens,
                 temperature=self.agent_params.temperature,
                 top_p=self.agent_params.top_p,
+                extra_body=extra_body,
             )
             choice = completion.choices[0]
             return choice.message.content, choice.finish_reason
