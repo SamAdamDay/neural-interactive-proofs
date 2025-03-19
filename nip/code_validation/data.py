@@ -61,15 +61,38 @@ class CodeValidationDataset(Dataset, ABC):
         return os.path.join(CV_DATA_DIR, self.dataset_filepath_name, "raw")
 
     @property
+    def split_dir(self) -> str:
+        """The name of the folder containing the split data."""
+        if self.train:
+            if self.max_train_size is not None:
+                return f"train_{self.max_train_size}"
+            else:
+                return "train"
+        else:
+            if self.max_test_size is not None:
+                return f"test_{self.max_test_size}"
+            else:
+                return "test"
+
+    @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
-        sub_dir = "train" if self.train else "test"
         return os.path.join(
             CV_DATA_DIR,
             self.dataset_filepath_name,
             "processed",
-            sub_dir,
+            self.split_dir,
         )
+
+    @property
+    def max_train_size(self) -> int | None:
+        """The maximum size of the training set."""
+        return self.hyper_params.dataset_options.max_train_size
+
+    @property
+    def max_test_size(self) -> int | None:
+        """The maximum size of the test set."""
+        return self.hyper_params.dataset_options.max_test_size
 
     @abstractmethod
     def _load_raw_dataset(self) -> HuggingFaceDataset:
@@ -94,7 +117,36 @@ class CodeValidationDataset(Dataset, ABC):
         processed_dataset : HuggingFaceDataset
             The processed dataset.
         """
-        return raw_dataset
+        return self._reduce_dataset_size(raw_dataset)
+
+    def _reduce_dataset_size(self, dataset: HuggingFaceDataset) -> HuggingFaceDataset:
+        """Reduce the size of a dataset if necessary.
+
+        Parameters
+        ----------
+        dataset : HuggingFaceDataset
+            The dataset to reduce.
+
+        Returns
+        -------
+        reduced_dataset : HuggingFaceDataset
+            The reduced dataset.
+        """
+
+        if (
+            self.train
+            and self.max_train_size is not None
+            and len(dataset) > self.max_train_size
+        ):
+            return dataset.select(range(self.max_train_size))
+        elif (
+            not self.train
+            and self.max_test_size is not None
+            and len(dataset) > self.max_test_size
+        ):
+            return dataset.select(range(self.max_test_size))
+        else:
+            return dataset
 
     def __init__(
         self,
@@ -184,7 +236,7 @@ class TestCodeValidationDataset(CodeValidationDataset):
         return HuggingFaceDataset.from_generator(sample_generator)
 
     def _process_data(self, raw_dataset: HuggingFaceDataset) -> HuggingFaceDataset:
-        return raw_dataset
+        return self._reduce_dataset_size(raw_dataset)
 
 
 @register_scenario_class(
@@ -245,6 +297,8 @@ class AppsCodeValidationDataset(CodeValidationDataset):
             ["question", "solution", "prover_stance", "y", "id"]
         )
 
+        processed_dataset = self._reduce_dataset_size(processed_dataset)
+
         return processed_dataset
 
 
@@ -261,14 +315,13 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
     @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
-        split_dir = "train" if self.train else "test"
         difficulty_dir = self.hyper_params.code_validation.apps_difficulty
         return os.path.join(
             CV_DATA_DIR,
             self.dataset_filepath_name,
             "processed",
             difficulty_dir,
-            split_dir,
+            self.split_dir,
         )
 
     def _load_raw_dataset(self) -> HuggingFaceDataset:
@@ -384,5 +437,7 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         processed_dataset = processed_dataset.select_columns(
             ["question", "solution", "prover_stance", "y", "id"]
         )
+
+        processed_dataset = self._reduce_dataset_size(processed_dataset)
 
         return processed_dataset

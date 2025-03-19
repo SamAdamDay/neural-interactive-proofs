@@ -28,6 +28,7 @@ from nip import (
     run_experiment,
     prepare_experiment,
     PreparedExperimentInfo,
+    DatasetParameters,
 )
 from nip.utils.experiments import (
     SequentialHyperparameterExperiment,
@@ -63,6 +64,8 @@ param_grid = dict(
     verifier_first=[True],
     debate_sequential=[False],
     debate_prover0_first=[True],
+    max_train_size=[None],
+    max_test_size=[None],
     test_scheme=["none"],
     num_test_iterations=[1],
     rerun_tests=[None],
@@ -196,6 +199,10 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         ),
         code_validation=CodeValidationParameters(
             apps_difficulty=combo["apps_difficulty"],
+        ),
+        dataset_options=DatasetParameters(
+            max_train_size=combo["max_train_size"],
+            max_test_size=combo["max_test_size"],
         ),
         base_run=base_run_params,
     )

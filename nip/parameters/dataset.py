@@ -28,6 +28,9 @@ class DatasetParameters(SubParameters):
     max_train_size : int, optional
         The size to reduce the training set to. If not provided, the dataset is not
         reduced, and the full training set is used.
+    max_test_size : int, optional
+        The size to reduce the test set to. If not provided, the dataset is not reduced,
+        and the full test set is used.
     """
 
     binarification_method: BinarificationMethodType = "merge"
@@ -36,3 +39,4 @@ class DatasetParameters(SubParameters):
     make_balanced: bool = True
 
     max_train_size: Optional[int] = None
+    max_test_size: Optional[int] = None
