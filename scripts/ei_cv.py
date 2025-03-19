@@ -41,13 +41,13 @@ param_grid = dict(
     apps_difficulty=["interview"],
     num_iterations=[8],
     rollouts_per_iteration=[200],
-    verifier_model=["gpt-4o-mini-2024-07-18"],
+    verifier_model=["OpenAI/gpt-4o-mini-2024-07-18"],
     verifier_temperature=[None],
     verifier_top_p=[None],
     verifier_guess_replacement_proportion=[0.0],
     verifier_guess_replacement_annealing=["linear"],
     verifier_guess_replacement_annealing_rate=[0.1],
-    prover_model=["gpt-4o-2024-08-06"],
+    prover_model=["OpenAI/gpt-4o-2024-08-06"],
     prover_temperature=[None],
     prover_top_p=[None],
     freeze_prover=[False],
@@ -85,9 +85,15 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         The hyperparameters object.
     """
 
+    verifier_model_provider, _, verifier_model_name = combo["verifier_model"].partition(
+        "/"
+    )
+    prover_model_provider, _, prover_model_name = combo["prover_model"].partition("/")
+
     agents_params_dict = dict(
         verifier=CodeValidationAgentParameters(
-            model_name=combo["verifier_model"],
+            model_name=verifier_model_name,
+            model_provider=verifier_model_provider,
             temperature=combo["verifier_temperature"],
             top_p=combo["verifier_top_p"],
             use_dummy_api=cmd_args.use_dummy_api,
@@ -96,7 +102,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
     )
 
     prover_params_dict = dict(
-        model_name=combo["prover_model"],
+        model_name=prover_model_name,
+        model_provider=prover_model_provider,
         temperature=combo["prover_temperature"],
         top_p=combo["prover_top_p"],
         use_dummy_api=cmd_args.use_dummy_api,

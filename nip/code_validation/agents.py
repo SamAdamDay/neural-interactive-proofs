@@ -127,6 +127,9 @@ class _ParsedChatCompletion:
 
 
 @register_scenario_class("code_validation", WholeAgent, {"model_provider": "OpenAI"})
+@register_scenario_class(
+    "code_validation", WholeAgent, {"model_provider": "vLLM-OpenAI"}
+)
 class OpenAiWholeAgent(PureTextWholeAgent):
     """The whole agent for code validation, using OpenAI's API."""
 
@@ -156,7 +159,17 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     def client(self) -> OpenAI:
         """The OpenAI client to use for interacting with the OpenAI API."""
         if self._openai_client is None:
-            self._openai_client = OpenAI()
+            if self.agent_params.model_provider == "vLLM-OpenAI":
+                self._openai_client = OpenAI(
+                    api_key="EMPTY",
+                    base_url=self.agent_params.vllm_openai_base_url,
+                )
+            elif self.agent_params.model_provider == "OpenAI":
+                self._openai_client = OpenAI()
+            else:
+                raise ValueError(
+                    f"Invalid model provider: {self.agent_params.model_provider!r}"
+                )
         return self._openai_client
 
     @property
@@ -200,6 +213,15 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             agent_name=agent_name,
             protocol_handler=protocol_handler,
         )
+
+        if (
+            self.agent_params.model_provider == "vLLM-OpenAI"
+            and self.hyper_params.rl.num_iterations > 1
+        ):
+            raise NotImplementedError(
+                "It is not possible to fine-tune a model hosted using the vLLM "
+                "OpenAI-compatible server"
+            )
 
         # Make sure the environment variables are loaded, so that we can access the
         # OpenAI API key, and check that it is set
@@ -871,6 +893,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenAI"}
+)
+@register_scenario_class(
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "vLLM-OpenAI"}
 )
 class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     """A class representing a group of code validation OpenAI agents sharing a model."""
