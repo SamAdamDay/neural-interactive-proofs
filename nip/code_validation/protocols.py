@@ -143,20 +143,29 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             The system prompt template for the agent.
         """
 
-        try:
-            prompt_template_traversable = importlib.resources.files(
-                self.system_prompt_directory
-            )
-        except ModuleNotFoundError:
-            raise NotImplementedError(
-                f"System prompt directory for protocol "
-                f"{self.hyper_params.interaction_protocol!s} not found."
-            )
+        if self.hyper_params.agents[agent_name].system_prompt_template_path is not None:
 
-        template_filename = f"{agent_name}.txt"
-        return Template(
-            prompt_template_traversable.joinpath(template_filename).read_text()
-        )
+            with open(
+                self.hyper_params.agents[agent_name].system_prompt_template_path
+            ) as f:
+                return Template(f.read())
+
+        else:
+
+            try:
+                prompt_template_traversable = importlib.resources.files(
+                    self.system_prompt_directory
+                )
+            except ModuleNotFoundError:
+                raise NotImplementedError(
+                    f"System prompt directory for protocol "
+                    f"{self.hyper_params.interaction_protocol!s} not found."
+                )
+
+            template_filename = f"{agent_name}.txt"
+            return Template(
+                prompt_template_traversable.joinpath(template_filename).read_text()
+            )
 
     def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
         """Get the system prompt for a given agent.

@@ -487,6 +487,9 @@ class PureTextAgentParameters(AgentParameters):
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    system_prompt_template_path : str | None
+        This option allows specifying a custom system prompt template. If not provided,
+        the default system prompt template is used.
     max_response_words : int
         In the system prompt, we say that the agent should respond with a message of at
         most this many words.
@@ -510,6 +513,8 @@ class PureTextAgentParameters(AgentParameters):
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
+
+    system_prompt_template_path: str | None = None
 
     max_response_words: int = 150
 
