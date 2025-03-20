@@ -6,7 +6,7 @@ import shutil
 import json
 from typing import Any, ClassVar
 from textwrap import indent
-from random import randint
+import random
 
 import numpy as np
 from numpy.typing import NDArray
@@ -65,12 +65,12 @@ class CodeValidationDataset(Dataset, ABC):
         """The name of the folder containing the split data."""
         if self.train:
             if self.max_train_size is not None:
-                return f"train_{self.max_train_size}"
+                return f"train_{self.max_train_size}_{self.reduce_shuffle_seed}"
             else:
                 return "train"
         else:
             if self.max_test_size is not None:
-                return f"test_{self.max_test_size}"
+                return f"test_{self.max_test_size}_{self.reduce_shuffle_seed}"
             else:
                 return "test"
 
@@ -93,6 +93,11 @@ class CodeValidationDataset(Dataset, ABC):
     def max_test_size(self) -> int | None:
         """The maximum size of the test set."""
         return self.hyper_params.dataset_options.max_test_size
+
+    @property
+    def reduce_shuffle_seed(self) -> int:
+        """The seed used to shuffle the dataset before reducing its size."""
+        return self.hyper_params.dataset_options.reduce_shuffle_seed
 
     @abstractmethod
     def _load_raw_dataset(self) -> HuggingFaceDataset:
@@ -133,18 +138,22 @@ class CodeValidationDataset(Dataset, ABC):
             The reduced dataset.
         """
 
+        generator = random.Random(self.reduce_shuffle_seed)
+
         if (
             self.train
             and self.max_train_size is not None
             and len(dataset) > self.max_train_size
         ):
-            return dataset.select(range(self.max_train_size))
+            selector = generator.sample(range(len(dataset)), self.max_train_size)
+            return dataset.select(selector)
         elif (
             not self.train
             and self.max_test_size is not None
             and len(dataset) > self.max_test_size
         ):
-            return dataset.select(range(self.max_test_size))
+            selector = generator.sample(range(len(dataset)), self.max_test_size)
+            return dataset.select(selector)
         else:
             return dataset
 
@@ -229,7 +238,7 @@ class TestCodeValidationDataset(CodeValidationDataset):
                     "question": f"Question {i}",
                     "solution": f"Solution {i}",
                     "prover_stance": 1,
-                    "y": randint(0, 1),
+                    "y": random.randint(0, 1),
                     "id": i,
                 }
 

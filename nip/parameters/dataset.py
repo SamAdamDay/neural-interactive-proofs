@@ -31,6 +31,9 @@ class DatasetParameters(SubParameters):
     max_test_size : int, optional
         The size to reduce the test set to. If not provided, the dataset is not reduced,
         and the full test set is used.
+    reduce_shuffle_seed : int
+        When reducing the dataset, the seed used to shuffle the dataset before reducing
+        its size.
     """
 
     binarification_method: BinarificationMethodType = "merge"
@@ -40,3 +43,4 @@ class DatasetParameters(SubParameters):
 
     max_train_size: Optional[int] = None
     max_test_size: Optional[int] = None
+    reduce_shuffle_seed: int = 42
