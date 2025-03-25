@@ -27,7 +27,8 @@ We assume that code of the following form has been executed:
      tests are run. This is useful if we have a previous run without tests, and we want
      to rerun it, just doing the testing loop.
 
-#. We set up Weights & Biases, if the ``use_wandb`` argument is set to ``True``.
+#. We set up Weights & Biases, if the ``use_wandb`` argument of :func:`run_experiment
+   <nip.run.run_experiment>` is set to ``True``.
 
 #. An :class:`ExperimentSettings <nip.experiment_settings.ExperimentSettings>` object is
    created, which contains various settings for the experiment not relevant to
@@ -61,7 +62,7 @@ We assume that code of the following form has been executed:
          these options pertains, and which parts are built, is determined by the
          hyper-parameters. For example, :term:`TensorDict`-based RL trainers require
          agents consisting of parts, with a policy head and a value head (see
-         :doc:`new-trainer` for more information). These parts are built initialising
+         :doc:`new-trainer` for more information). These parts are built by initialising
          the appropriate :class:`AgentPart <nip.scenario_base.agents.AgentPart>`
          classes.
 

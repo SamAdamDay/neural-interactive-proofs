@@ -168,7 +168,7 @@ allow you to customise the progress bar.
             ...
 
 It is also recommended that you call these methods in an
-:external+python:class:`ExitStack <contextlib.ExitStack>` context manager build using
+:external+python:class:`ExitStack <contextlib.ExitStack>` context manager built using
 :func:`_build_test_context
 <nip.trainers.trainer_base.TensorDictTrainer._build_test_context>` and
 :func:`_build_train_context
@@ -370,10 +370,10 @@ more heads.
 - Heads (:class:`AgentHead <nip.scenario_base.agents.AgentHead>`) are responsible for
   producing the agent's actions and values.
 
-  - Policy heads (:class:`PolicyHead <nip.scenario_base.agents.PolicyHead>`) produce
-    probability distributions over actions.
-  - Value heads (:class:`ValueHead <nip.scenario_base.agents.ValueHead>`) produce value
-    estimates.
+  - Policy heads (:class:`AgentPolicyHead <nip.scenario_base.agents.AgentPolicyHead>`)
+    produce probability distributions over actions.
+  - Value heads (:class:`AgentValueHead <nip.scenario_base.agents.AgentValueHead>`)
+    produce value estimates.
   - Solo agent heads (:class:`SoloAgentHead <nip.scenario_base.agents.SoloAgentHead>`)
     output predictions for the true labels of the data, and are used when the agents are
     trained in isolation using supervised learning (rather than reinforcement learning).
