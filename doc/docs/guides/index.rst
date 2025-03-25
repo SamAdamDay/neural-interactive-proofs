@@ -9,5 +9,7 @@ Guides
    installation
    running_experiments
    contributing
+   experiment-build-process
    new-protocol
+   new-trainer
    docker

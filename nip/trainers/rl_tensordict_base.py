@@ -46,7 +46,7 @@ from nip.model_cache import (
     load_cached_model_state_dicts,
 )
 from nip.scenario_base import TensorDictEnvironment
-from nip.factory import ScenarioInstance
+from nip.scenario_instance import ScenarioInstance
 from nip.artifact_logger import ArtifactLogger
 from nip.rl_objectives import Objective
 from nip.utils.maths import logit_entropy, set_seed, aggregate_mean_grouped_by_class
@@ -81,8 +81,12 @@ def update_schedule_iterator(schedule: AgentUpdateSchedule):
         raise ValueError(f"Unknown update schedule: {schedule}")
 
 
-class ReinforcementLearningTrainer(TensorDictTrainer, ABC):
+class TensorDictRlTrainer(TensorDictTrainer, ABC):
     """Base class for all reinforcement learning trainers which use tensordicts.
+
+    This class implements a standard RL training loop using TorchRL. To subclass it,
+    implement the `_get_loss_module_and_gae` method, which should return the loss module
+    and, optionally, the generalized advantage estimator.
 
     Parameters
     ----------

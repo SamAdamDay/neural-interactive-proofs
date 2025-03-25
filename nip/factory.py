@@ -11,24 +11,20 @@ the parameters.
 """
 
 from tempfile import TemporaryDirectory
-from dataclasses import dataclass, fields
-from typing import Optional, Callable, Any
+from dataclasses import fields
+from typing import Optional, Callable
 from pathlib import Path
 import os
 from typing import TypeVar
 from collections import defaultdict
 
-import numpy as np
-
 import torch
-from torch import nn
 
 import wandb
 
 from nip.parameters import (
     HyperParameters,
     ScenarioType,
-    TrainerType,
     PureTextAgentParameters,
 )
 from nip.experiment_settings import ExperimentSettings
@@ -40,7 +36,6 @@ from nip.scenario_base.data import (
 from nip.scenario_base.agents import (
     AgentPart,
     WholeAgent,
-    RandomWholeAgent,
     AgentBody,
     DummyAgentBody,
     AgentPolicyHead,
@@ -57,8 +52,11 @@ from nip.scenario_base.agents import (
 )
 from nip.scenario_base.environment import Environment
 from nip.scenario_base.pretrained_models import get_pretrained_model_class
+from nip.scenario_instance import ScenarioInstance
 from nip.protocols import ProtocolHandler, build_protocol_handler
-from nip.message_regression import MessageRegressor, build_message_regressor
+from nip.trainers import get_trainer_class
+from nip.trainers.trainer_base import Trainer, TensorDictTrainer
+from nip.message_regression import build_message_regressor
 from nip.constants import MODEL_CHECKPOINT_ARTIFACT_PREFIX
 from nip.utils.hyper_params import get_agent_part_flags
 from nip.utils.maths import set_seed
@@ -154,69 +152,6 @@ def register_scenario_class(
     return decorator
 
 
-@dataclass
-class ScenarioInstance:
-    """A dataclass for holding the components of an experiment.
-
-    The principal aim of this class is to abstract away the details of the particular
-    experiment being run.
-
-    Attributes
-    ----------
-    train_dataset : Dataset
-        The train dataset for the experiment.
-    test_dataset : Dataset
-        The test dataset for the experiment.
-    protocol_handler : ProtocolHandler
-        The interaction protocol handler for the experiment.
-    message_regressor : MessageRegressor
-        The message regressor for the experiment, which is used to test if the label can
-        be inferred purely from the messages.
-    agents : dict[str, Agent]
-        The agents for the experiment. Each 'agent' is a dictionary containing all of
-        the agent parts.
-    train_environment : Optional[Environment]
-        The train environment for the experiment, if the experiment is RL.
-    test_environment : Optional[Environment]
-        The environment for testing the agents, which uses the test dataset.
-    combined_whole : Optional[CombinedWholeAgent]
-        If the agents are not split into parts, this holds the combination of the whole
-        agents.
-    combined_body : Optional[CombinedBody]
-        The combined body of the agents, if the agents are combined the actor and critic
-        share the same body.
-    combined_policy_body : Optional[CombinedBody]
-        The combined policy body of the agents, if the agents are combined and the actor
-        and critic have separate bodies.
-    combined_value_body : Optional[CombinedBody]
-        The combined value body of the agents, if the agents are combined and the actor
-        and critic have separate bodies.
-    combined_policy_head : Optional[CombinedPolicyHead]
-        The combined policy head of the agents, if the agents are combined.
-    combined_value_head : Optional[CombinedValueHead]
-        The combined value head of the agents, if the agents are combined.
-    shared_model_groups : Optional[dict[str, PureTextSharedModelGroup]]
-        The shared model groups for pure-text environments. Agents in the same group
-        share the same model. A dictionary with the group name as the key and the shared
-        model group as the value.
-    """
-
-    train_dataset: Dataset
-    test_dataset: Dataset
-    agents: dict[str, Agent]
-    protocol_handler: ProtocolHandler
-    message_regressor: MessageRegressor
-    train_environment: Optional[Environment] = None
-    test_environment: Optional[Environment] = None
-    combined_whole: Optional[CombinedWhole] = None
-    combined_body: Optional[CombinedBody] = None
-    combined_policy_body: Optional[CombinedBody] = None
-    combined_value_body: Optional[CombinedBody] = None
-    combined_policy_head: Optional[CombinedPolicyHead] = None
-    combined_value_head: Optional[CombinedValueHead] = None
-    shared_model_groups: Optional[dict[str, PureTextSharedModelGroup]] = None
-
-
 def build_scenario_instance(
     hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ScenarioInstance:
@@ -287,6 +222,9 @@ def build_scenario_instance(
     # Create the protocol handler
     protocol_handler = build_protocol_handler(hyper_params, settings)
 
+    # Get the class for the trainer
+    trainer_class = get_trainer_class(hyper_params)
+
     # Create the message regressor
     message_regressor = build_message_regressor(
         hyper_params, settings, protocol_handler
@@ -301,7 +239,9 @@ def build_scenario_instance(
     )
 
     # Build the agents
-    agents = _build_agents(hyper_params, settings, protocol_handler, get_scenario_class)
+    agents = _build_agents(
+        hyper_params, settings, protocol_handler, get_scenario_class, trainer_class
+    )
 
     # Build the shared model groups if applicable
     if all(
@@ -360,13 +300,7 @@ def build_scenario_instance(
         )
 
     # Build additional components if the trainer is an RL trainer
-    if (
-        hyper_params.trainer == "vanilla_ppo"
-        or hyper_params.trainer == "spg"
-        or hyper_params.trainer == "reinforce"
-        or hyper_params.trainer == "pure_text_ei"
-        or hyper_params.trainer == "pure_text_malt"
-    ):
+    if trainer_class.trainer_type == "rl":
         additional_rl_components = _build_components_for_rl_trainer(
             hyper_params=hyper_params,
             settings=settings,
@@ -395,6 +329,7 @@ def _build_agents(
     settings: ExperimentSettings,
     protocol_handler: ProtocolHandler,
     get_scenario_class: Callable[[type, Optional[str]], type],
+    trainer_class: type[Trainer],
 ) -> dict[str, Agent]:
     """Build the agents for the experiment.
 
@@ -409,6 +344,8 @@ def _build_agents(
     get_scenario_class : Callable[[type], type]
         A function to get the class for a component based on the scenario and base
         class.
+    trainer_class : type[Trainer]
+        The class of the trainer for the experiment.
 
     Returns
     -------
@@ -468,10 +405,8 @@ def _build_agents(
                 else:
                     agent_dict[name] = build_part(AgentBody)
 
-        if (
-            hyper_params.trainer == "vanilla_ppo"
-            or hyper_params.trainer == "spg"
-            or hyper_params.trainer == "reinforce"
+        if trainer_class.trainer_type == "rl" and issubclass(
+            trainer_class, TensorDictTrainer
         ):
             if agent_params.is_random:
                 agent_dict["policy_head"] = build_part(RandomAgentPolicyHead)
@@ -481,7 +416,7 @@ def _build_agents(
                 agent_dict["policy_head"] = build_part(AgentPolicyHead)
                 if use_critic:
                     agent_dict["value_head"] = build_part(AgentValueHead)
-        if hyper_params.trainer == "solo_agent" or (
+        if trainer_class.trainer_type == "solo_agent" or (
             hyper_params.pretrain_agents and not agent_params.is_random
         ):
             if agent_params.is_random:

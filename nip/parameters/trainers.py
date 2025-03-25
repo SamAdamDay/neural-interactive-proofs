@@ -277,9 +277,6 @@ class TextRlParameters(SubParameters):
     test_on_whole_dataset : bool
         Whether to run the test loop on the whole dataset or only on a single
         iteration-worth of rollouts.
-    test_every_iteration : bool
-        Whether to run the test loop after every iteration. If ``False``, the test loop
-        is only run after training is complete.
     """
 
     fine_tune_on_all_previous_rollouts: bool = False
