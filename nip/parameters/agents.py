@@ -454,7 +454,7 @@ class PureTextAgentParameters(AgentParameters):
 
     Parameters
     ----------
-    model_provider : Literal["OpenAI", "vLLM-OpenAI"]
+    model_provider : Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"]
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.
@@ -501,7 +501,7 @@ class PureTextAgentParameters(AgentParameters):
         invalid response.
     """
 
-    model_provider: Literal["OpenAI", "vLLM-OpenAI"] = "OpenAI"
+    model_provider: Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"] = "OpenAI"
     model_name: str = "gpt-4o-mini-2024-07-18"
     vllm_openai_base_url: str = "http://localhost:8000/v1"
     use_dummy_api: bool = False

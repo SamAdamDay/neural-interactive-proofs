@@ -452,7 +452,9 @@ class PureTextSharedModelGroup(ABC):
     class SharedAgentParams:
         """The parameters shared by all agents in the group."""
 
+        model_provider: Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"]
         model_name: str
+        vllm_openai_base_url: str
         freeze_agent: bool
         use_dummy_api: bool
         fine_tune_from_scratch: bool

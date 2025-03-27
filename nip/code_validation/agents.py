@@ -29,12 +29,13 @@ from jaxtyping import Bool
 
 from openai import (
     OpenAI,
-    APITimeoutError,
-    APIStatusError,
-    RateLimitError,
-    APIConnectionError,
+    APITimeoutError as OpenAiApiTimeoutError,
+    APIStatusError as OpenAiApiStatusError,
+    RateLimitError as OpenAiRateLimitError,
+    APIConnectionError as OpenAiConnectionError,
 )
-from openai.types.fine_tuning import FineTuningJob as OpenAIFineTuningJob
+from openai.types.fine_tuning import FineTuningJob as OpenAiFineTuningJob
+from openai.types.chat.chat_completion import ChatCompletion as OpenAiChatCompletion
 
 from nip.scenario_base.agents import (
     WholeAgent,
@@ -61,6 +62,10 @@ from nip.utils.env import load_env_once, get_env_var
 from nip.utils.string import random_string
 from nip.utils.api import (
     GenerationError,
+    GenericConnectionError,
+    RateLimitError,
+    TimeoutError,
+    InsufficientCreditsError,
     InvalidResponseError,
     ContentFilterError,
     ContentIsNoneError,
@@ -130,8 +135,15 @@ class _ParsedChatCompletion:
 @register_scenario_class(
     "code_validation", WholeAgent, {"model_provider": "vLLM-OpenAI"}
 )
+@register_scenario_class(
+    "code_validation", WholeAgent, {"model_provider": "OpenRouter"}
+)
 class OpenAiWholeAgent(PureTextWholeAgent):
-    """The whole agent for code validation, using OpenAI's API."""
+    """The whole agent for code validation, using OpenAI's SDK.
+
+    The SDK can be used to interact with OpenAI's API, as well as other APIs like
+    OpenRouter.
+    """
 
     agent_params: CodeValidationAgentParameters
     protocol_handler: CodeValidationProtocolHandler
@@ -157,7 +169,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
     @property
     def client(self) -> OpenAI:
-        """The OpenAI client to use for interacting with the OpenAI API."""
+        """The OpenAI client to use for interacting with the OpenAI SDK."""
         if self._openai_client is None:
             if self.agent_params.model_provider == "vLLM-OpenAI":
                 self._openai_client = OpenAI(
@@ -166,6 +178,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 )
             elif self.agent_params.model_provider == "OpenAI":
                 self._openai_client = OpenAI()
+            elif self.agent_params.model_provider == "OpenRouter":
+                self._openai_client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=get_env_var("OPENROUTER_API_KEY"),
+                )
             else:
                 raise ValueError(
                     f"Invalid model provider: {self.agent_params.model_provider!r}"
@@ -222,11 +239,22 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 "It is not possible to fine-tune a model hosted using the vLLM "
                 "OpenAI-compatible server"
             )
+        if (
+            self.agent_params.model_provider == "OpenRouter"
+            and self.hyper_params.rl.num_iterations > 1
+        ):
+            raise NotImplementedError(
+                "It is not possible to fine-tune a model hosted using the OpenRouter "
+                "API"
+            )
 
         # Make sure the environment variables are loaded, so that we can access the
         # OpenAI API key, and check that it is set
         load_env_once()
-        if not self.agent_params.use_dummy_api:
+        if (
+            self.agent_params.model_provider == "OpenAI"
+            and not self.agent_params.use_dummy_api
+        ):
             get_env_var("OPENAI_API_KEY")
 
         self._openai_client: Optional[OpenAI] = None
@@ -517,6 +545,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         num_generation_errors = 0
         num_timeouts = 0
         num_connection_errors = 0
+        num_rate_limits = 0
         while True:
             try:
 
@@ -583,14 +612,35 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     raise e.copy_with_retries(num_generation_errors) from e
 
             # Retry if there is a timeout, but wait a bit first
-            except APITimeoutError as e:
+            except TimeoutError as e:
                 print("API timeout. Retrying in 10 seconds...")  # noqa: T201
                 num_timeouts += 1
                 if num_timeouts == self.settings.num_api_generation_timeouts:
                     raise e
                 sleep(10)
 
-            except APIConnectionError as e:
+            # Retry if we are rate limited, but wait with exponential backoff
+            # (2^n seconds, where n is the number of rate limits)
+            except RateLimitError as e:
+                sleep_seconds = 2**num_rate_limits
+                print(  # noqa: T201
+                    f"Rate limit error: {e}. Retrying in {sleep_seconds} seconds..."
+                )
+                num_rate_limits += 1
+                if num_rate_limits == self.settings.num_rate_limit_errors:
+                    raise e
+                sleep(sleep_seconds)
+
+            except InsufficientCreditsError as e:
+                print(  # noqa: T201
+                    f"Insufficient credits error: {e}. Go top up! Retrying in 10 "
+                    f"minutes..."
+                )
+                sleep(600)
+
+            # Retry if there is a connection error, but wait with exponential backoff
+            # (0.01 * 2^n seconds, where n is the number of connection errors)
+            except GenericConnectionError as e:
                 sleep_seconds = 0.01 * 2**num_connection_errors
                 print(  # noqa: T201
                     f"API Connection error: {e}. Retrying in {sleep_seconds} seconds..."
@@ -816,25 +866,95 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.agent_params.use_dummy_api:
             return self._generate_dummy_response(chat_messages_prompt), "stop"
         else:
+
             max_tokens = self.agent_params.max_tokens_per_message
             if max_tokens is None:
                 max_tokens = int(self.agent_params.max_response_words * 1.5)
+
             if self.agent_params.repetition_penalty is None:
                 extra_body = {}
             else:
                 extra_body = {
                     "repetition_penalty": self.agent_params.repetition_penalty
                 }
-            completion = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=chat_messages_prompt,
-                max_tokens=max_tokens,
-                temperature=self.agent_params.temperature,
-                top_p=self.agent_params.top_p,
-                extra_body=extra_body,
-            )
+
+            try:
+                completion = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=chat_messages_prompt,
+                    max_tokens=max_tokens,
+                    temperature=self.agent_params.temperature,
+                    top_p=self.agent_params.top_p,
+                    extra_body=extra_body,
+                )
+            except OpenAiApiTimeoutError as e:
+                raise TimeoutError(message=e.message) from e
+            except OpenAiRateLimitError as e:
+                raise RateLimitError(message=e.message) from e
+            except OpenAiConnectionError as e:
+                raise GenericConnectionError(
+                    message=e.message, code=e.status_code
+                ) from e
+            except OpenAiApiStatusError as e:
+                raise GenericConnectionError(
+                    message=e.message, code=e.status_code
+                ) from e
+
+            self._handle_chat_completion_error(completion)
+
             choice = completion.choices[0]
+
             return choice.message.content, choice.finish_reason
+
+    def _handle_chat_completion_error(self, completion: OpenAiChatCompletion):
+        """Handle any errors in a chat completion, raising exceptions as necessary.
+
+        The OpenRouter API indicates an error using the (non-standard) "error" attribute
+        in the completion object. This method checks for this and raises an appropriate
+        exception if necessary.
+
+        Parameters
+        ----------
+        completion : OpenAiChatCompletion
+            The chat completion object to check for errors.
+
+        Raises
+        ------
+        RateLimitError
+            If the API rate limit is exceeded.
+        TimeoutError
+            If the API request times out.
+        InsufficientCreditsError
+            If the user does not have enough credits to make a request.
+        GenericConnectionError
+            For other connection errors.
+        """
+
+        if not hasattr(completion, "error"):
+            return
+        error: dict = completion.error
+
+        if error["code"] == 429:
+            raise RateLimitError(
+                message=error.get("message", "Rate limit exceeded"),
+                metadata=error.get("metadata", None),
+            )
+        elif error["code"] == 408:
+            raise TimeoutError(
+                message=error.get("message", "Request timed out"),
+                metadata=error.get("metadata", None),
+            )
+        elif error["code"] == 402:
+            raise InsufficientCreditsError(
+                message=error.get("message", "Insufficient credits"),
+                metadata=error.get("metadata", None),
+            )
+        else:
+            raise GenericConnectionError(
+                message=error.get("message", "Unknown error"),
+                code=error.get("code", None),
+                metadata=error.get("metadata", None),
+            )
 
     def _generate_dummy_response(
         self, chat_messages_prompt: list[PromptMessage]
@@ -901,11 +1021,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenAI"}
 )
-@register_scenario_class(
-    "code_validation", PureTextSharedModelGroup, {"model_provider": "vLLM-OpenAI"}
-)
 class OpenAiSharedModelGroup(PureTextSharedModelGroup):
-    """A class representing a group of code validation OpenAI agents sharing a model."""
+    """A group of code validation OpenAI SDK agents sharing a model.
+
+    The OpenAI SDK can be used to interact with OpenAI's API, as well as other APIs like
+    OpenRouter.
+    """
 
     state_class: ClassVar[type[PureTextSharedModelGroupState]] = (
         OpenAiSharedModelGroupState
@@ -1161,7 +1282,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if error.param is not None:
             output += f" Parameter: {error.param}."
 
-        if isinstance(error, APIStatusError):
+        if isinstance(error, OpenAiApiStatusError):
             output += f" Headers: {error.response.headers}."
 
         return output
@@ -1296,7 +1417,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 )
 
             # If we are day rate limited, sleep for an hour and try again
-            except RateLimitError as e:
+            except OpenAiRateLimitError as e:
                 if e.code == "daily_rate_limit_exceeded":
                     sleep(60 * 60)
                     continue
@@ -1307,7 +1428,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         self.fine_tune_job_id = job.id
 
-    def _get_fine_tune_job(self) -> OpenAIFineTuningJob:
+    def _get_fine_tune_job(self) -> OpenAiFineTuningJob:
         """Get the fine-tune job from the OpenAI API."""
 
         if self.fine_tune_job_id is None:
@@ -1330,6 +1451,80 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         state["_openai_client"] = None
 
         return state
+
+
+@register_scenario_class(
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "vLLM-OpenAI"}
+)
+@register_scenario_class(
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenRouter"}
+)
+class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
+    """A group of code validation agents sharing a model which can't be fine-tuned.
+
+    This class is used for models accessed through an API which does not allow
+    fine-tuning.
+    """
+
+    def get_state_dict(self) -> dict:
+        """Get the state of the shared model group as a dict.
+
+        This method returns an empty dictionary because the model cannot be fine-tuned
+        and therefore has not state.
+
+        Returns
+        -------
+        state_dict : dict
+            The state of the shared model group.
+        """
+        return {}
+
+    def create_supervised_fine_tune_job(self, *args, **kwargs):
+        """Create a supervised fine-tune job for the agent.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        self._raise_not_implemented_error()
+
+    def create_dpo_fine_tune_job(self, *args, **kwargs):
+        """Create a DPO fine-tune job for the agent group given sampled timesteps.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        self._raise_not_implemented_error()
+
+    def get_fine_tune_job_status(
+        self,
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+        """Get the status of the fine-tune job.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        self._raise_not_implemented_error()
+
+    def get_fine_tune_job_error_repr(self) -> str:
+        """Get a string representation of the error for the fine-tune job.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        self._raise_not_implemented_error()
+
+    def switch_to_next_model(self):
+        """Switch to the next model after fine-tuning.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        self._raise_not_implemented_error()
+
+    def _raise_not_implemented_error(self):
+        """Raise a NotImplementedError because fine-tuning is not supported.
+
+        This method is not supported for non-fine-tunable models.
+        """
+        raise NotImplementedError(
+            f"Fine-tuning is not supported for "
+            f"{self.shared_agent_params.model_provider!r} models."
+        )
 
 
 @register_scenario_class("code_validation", RandomWholeAgent)
