@@ -22,6 +22,22 @@ compatibility of two runs and checking whether an old run can be resumed with th
 current codebase. If the older run differs by a `MINOR` version, its hyper-parameters
 are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 
+## Unreleased
+
+### Changed
+
+- Renamed `ReinforcementLearningTrainer` to `TensorDictRlTrainer`
+- Refactored the agent-building part of the factory so that which parts to build are
+  determined by class properties of the trainer classes, rather than by hard-coding the
+  names of the trainers.
+- Moved the `ScenarioInstance` dataclass into its own `scenario_instance` module.
+
+
+## Added
+
+- A guide to creating a new trainer.
+- An overview doc on how an experiment is built and run.
+
 
 ## [1.0.0] - 2025-03-10
 

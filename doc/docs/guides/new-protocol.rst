@@ -54,15 +54,16 @@ Here are the main steps to create a new protocol:
    b. Add system prompts for each agent in the protocol for the code validation task.
       See :ref:`creating-code-validation-prompts` for more information.
 
+
 .. _protocol-base-classes:
 
 Base Classes
 ============
 
 There are three base classes for protocol handlers, each more specialised than the
-previous one. Since more specialised classes implement more functionality, you should choose
-the most specialised class that fits your needs. Note that any implementation by a more
-specialised class can be overridden, if required.
+previous one. Since more specialised classes implement more functionality, you should
+choose the most specialised class that fits your needs. Note that any implementation by
+a more specialised class can be overridden, if required.
 
 1. :class:`ProtocolHandler <nip.protocols.protocol_base.ProtocolHandler>`: The most
    general class. Use this if your protocol is not deterministic or does not have a

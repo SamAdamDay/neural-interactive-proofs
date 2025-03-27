@@ -77,7 +77,32 @@ class PureTextRlTrainer(Trainer, ABC):
 
     @dataclass
     class State(Trainer.State):
-        """The state of the experiment."""
+        """The state of the experiment.
+
+        Parameters
+        ----------
+        iteration : int
+            The current iteration number.
+        agents : dict[str, AgentCheckpoint]
+            The checkpoints of the agents.
+        train_loop_stage : str
+            The current stage of the training loop. One of:
+
+            - "sample_rollouts": Sample rollouts from the training environment.
+            - "log_stats": Log the statistics of the sampled rollouts.
+            - "create_fine_tune_jobs": Create fine-tune jobs for each shared agent
+              group.
+            - "await_fine_tune_jobs": Await the completion of the fine-tune jobs.
+            - "test_during_training": Run the test loop during training.
+            - "test": Run the test loop after training.
+            - "done": The training is complete.
+
+        shared_model_groups : dict[str, PureTextSharedModelGroupState]
+            The state of each shared model group.
+        base_run_state_artifact_version : int
+            When rerunning tests, we step through the states of the base run in order.
+            This is the version of the base run state artifact that we're on.
+        """
 
         train_loop_stage: Literal[
             "sample_rollouts",

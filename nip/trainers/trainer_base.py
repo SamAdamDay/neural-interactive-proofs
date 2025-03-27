@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from contextlib import ExitStack
-from typing import ContextManager, Callable, Optional
+from typing import ContextManager, Callable, Optional, ClassVar, Literal
 import functools
 import inspect
 from pathlib import Path
@@ -27,7 +27,7 @@ from git import Repo
 
 from nip.scenario_base.agents import AgentState
 from nip.parameters import HyperParameters
-from nip.factory import ScenarioInstance
+from nip.scenario_instance import ScenarioInstance
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.hyper_params import get_agent_part_flags
 from nip.utils.io import yes_no_user_prompt
@@ -54,6 +54,21 @@ class Trainer(ABC):
         The components of the experiment.
     settings : ExperimentSettings
         The instance-specific settings of the experiment, like device, logging, etc.
+    """
+
+    trainer_type: ClassVar[Literal["rl", "solo_agent"]] = "rl"
+    """The type of trainer this is.
+    
+    This property is used to determine which parts of the agents should be constructed.
+    For example, when training an RL agent, the policy and value heads need to be
+    constructed, whereas when training a solo agent, the solo agent head should be
+    constructed.
+
+    rl
+        A reinforcement learning trainer.
+    solo_agent
+        A trainer that trains a single agent to solve the task using supervised
+        learning.
     """
 
     @dataclass
