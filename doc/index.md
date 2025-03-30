@@ -52,15 +52,15 @@ Our work on neural IPs aims to help bridge the gap between these theoretical con
 
 The main theoretical challenges are to: i) represent a given protocol in the form of a [prover-verifier game](https://arxiv.org/abs/2407.13692); and ii) train the models to approximate the right equilibria of this game. While the first challenge is reasonably straightforward, the power of different protocols can vary greatly depending on several subtle details such as the number of messages the agents can send to each other, their ability to randomise, and whether messages can be sent privately to different agents. By taking these subtleties into account, we can show an equivalence between the equilibria of the game and valid proof systems for a range of different protocols.
 
-Model     | Provers | Verifiers | Rounds | Complexity | Zero-knowledge
-----------|---------|-----------|--------|------------|---------------
-`adp`     | 1       | 1         | 2      | NP         | ❌
-`debate`  | 2       | 1         | $T$    | PSPACE     | ❌
-`mac`     | 2       | 1         | 2      | MA         | ❌
-`nip`     | 1       | 1         | $T$    | PSPACE     | ❌
-`mnip`    | 2       | 1         | $T$    | NEXP       | ❌
-`zk-nip`  | 1       | 3         | $T$    | PSPACE     | ✅
-`zk-mnip` | 2       | 3         | $T$    | NEXP       | ✅
+Model     | Rounds | Complexity | Zero-knowledge
+----------|--------|------------|---------------
+`adp`     | 2      | NP         | ❌
+`debate`  | $T$    | PSPACE     | ❌
+`mac`     | 2      | MA         | ❌
+`nip`     | $T$    | PSPACE     | ❌
+`mnip`    | $T$    | NEXP       | ❌
+`zk-nip`  | $T$    | PSPACE     | ✅
+`zk-mnip` | $T$    | NEXP       | ✅
 
 <div markdown="1" class="caption">
 
