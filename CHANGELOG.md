@@ -26,17 +26,30 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 
 ### Changed
 
-- Renamed `ReinforcementLearningTrainer` to `TensorDictRlTrainer`
+- Renamed `ReinforcementLearningTrainer` to `TensorDictRlTrainer`.
 - Refactored the agent-building part of the factory so that which parts to build are
   determined by class properties of the trainer classes, rather than by hard-coding the
   names of the trainers.
 - Moved the `ScenarioInstance` dataclass into its own `scenario_instance` module.
 
 
-## Added
+### Added
 
 - A guide to creating a new trainer.
 - An overview doc on how an experiment is built and run.
+- Ability to use more models for code validation inference using either vLLM or
+  OpenRouter.
+- Implemented `max_train_size` and `max_test_size` for code validation datasets.
+- Allowed setting `repetition_penalty` for code validation agents.
+- Logging the proportion of rollouts where the verifier does not make a decision, for
+  pure text trainers.
+- Ability to specify a custom prompt template for the code validation task.
+
+
+### Fixed
+
+- Bug where `mean_decision` and `std_decision` were incorrectly logged for pure text
+  trainers.
 
 
 ## [1.0.0] - 2025-03-10
