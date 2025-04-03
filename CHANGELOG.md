@@ -31,6 +31,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   determined by class properties of the trainer classes, rather than by hard-coding the
   names of the trainers.
 - Moved the `ScenarioInstance` dataclass into its own `scenario_instance` module.
+- Refactored code validation `RolloutAnalyser` class hierarchy
 
 
 ### Added
@@ -44,6 +45,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Logging the proportion of rollouts where the verifier does not make a decision, for
   pure text trainers.
 - Ability to specify a custom prompt template for the code validation task.
+- Verifier format conformance rollout analyser: how well does the verifier conform to
+  the required format?
 
 
 ### Fixed

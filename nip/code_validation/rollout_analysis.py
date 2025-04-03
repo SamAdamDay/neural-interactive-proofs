@@ -6,6 +6,7 @@ from itertools import product
 from typing import Literal, Optional, Iterator, ClassVar
 from random import randrange
 from abc import ABC, abstractmethod
+from numbers import Real
 
 from numpy.typing import NDArray
 import numpy as np
@@ -35,10 +36,21 @@ from nip.utils.api import (
 class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
     """Base class for analysing code validation rollouts."""
 
+    score_dtype: ClassVar[np.dtype] = np.int8
+    """The data type of the scores returned by the rollout analyser."""
+
+    max_generation_retries: ClassVar[int] = 3
+    """The number of times to retry if the model generates an invalid response."""
+
     @property
     @abstractmethod
     def system_prompt_template_filename(self) -> str:
         """The filename of the system prompt template."""
+
+    @property
+    @abstractmethod
+    def supervisor_question(self) -> Template:
+        """The question asked by the supervisor agent."""
 
     @property
     def client(self) -> OpenAI:
@@ -85,56 +97,10 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
         self._openai_client: Optional[OpenAI] = None
 
-
-class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
-    """Base class for rollout analyser which yield a binary classification.
-
-    Each rollout is analysed by a language model to generate a binary classification.
-    This is done by first giving the system prompt, then the message history, and
-    finally asking a question, which is done by the "supervisor" agent.
-
-    """
-
-    max_generation_retries: ClassVar[int] = 3
-
-    @property
-    @abstractmethod
-    def supervisor_question(self) -> Template:
-        """The question asked by the supervisor agent."""
-
-    def get_classification_from_response(self, response: str) -> int:
-        """Get the binary classification from language model response.
-
-        Parameters
-        ----------
-        response : str
-            The response from the language model.
-
-        Returns
-        -------
-        classification : int
-            The binary classification. Either 0 or 1.
-
-        Raises
-        ------
-        InvalidResponseError
-            If the response is not a valid response.
-        """
-        response = response.strip().lower()
-
-        if response.startswith("yes"):
-            return 1
-        elif response.startswith("no"):
-            return 0
-        else:
-            raise InvalidResponseError(response_text=response)
-
     def forward(
         self, rollouts: NestedArrayDict, use_tqdm: bool = False
     ) -> dict[tuple[str, str], ma.MaskedArray]:
-        """Classify the rollouts by running a language model on the message history.
-
-        Evaluations are either 0 or 1.
+        """Score the rollouts by running a language model on the message history.
 
         Parameters
         ----------
@@ -155,8 +121,8 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         -------
         evaluations : dict[tuple[str, str], ma.MaskedArray]
             The evaluations. A dictionary indexed by agent name and channel name, where
-            ``evaluations[agent_name, channel_name]`` is a 0-1 array of evaluations of
-            shape (...)
+            ``evaluations[agent_name, channel_name]`` is an array of scores of shape
+            (...)
         """
 
         batch_size = rollouts.batch_size[:-1]
@@ -168,7 +134,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
             channel_id = self.protocol_handler.message_channel_names.index(channel_name)
 
             evaluation_array = ma.array(
-                np.empty(batch_size, dtype=np.int8),
+                np.empty(batch_size, dtype=self.score_dtype),
                 mask=np.zeros(batch_size, dtype=bool),
             )
 
@@ -188,7 +154,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
                     -1, :, channel_id
                 ]
                 last_message_agent_id = rollouts["message_agent_id"][batch_id][
-                    -1, channel_id
+                    -1, :, channel_id
                 ]
 
                 evaluation = self._generate_evaluation(
@@ -210,6 +176,39 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         return evaluations
 
+    @abstractmethod
+    def _generate_dummy_response(self) -> str:
+        """Generate a dummy response for the rollout analyser.
+
+        This is used when the use_dummy_api flag is set to True, to generate a dummy
+        response to the API call.
+
+        Returns
+        -------
+        response : str
+            The dummy response.
+        """
+
+    @abstractmethod
+    def _get_score_from_response(self, response: str) -> Real:
+        """Convert the language model response to a score.
+
+        Parameters
+        ----------
+        response : str
+            The response from the language model.
+
+        Returns
+        -------
+        score : Real
+            The response converted to a score.
+
+        Raises
+        ------
+        InvalidResponseError
+            If the response is not a valid response.
+        """
+
     def _generate_evaluation(
         self,
         message_history: NDArray,
@@ -218,7 +217,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         channel_name: str,
         question: str,
         solution: str,
-    ) -> int | None:
+    ) -> Real | None:
         """Generate an evaluation for a rollout.
 
         Parameters
@@ -238,7 +237,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         Returns
         -------
-        evaluation : int | None
+        evaluation : Real | None
             The evaluation. None indicates that the evaluation could not be generated.
         """
 
@@ -253,7 +252,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         def try_generation(
             retry: int,
-        ) -> int:
+        ) -> Real:
 
             completion_text, finish_reason = self._make_generation_api_call(
                 chat_messages_prompt
@@ -268,7 +267,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
             completion_text = completion_text.strip()
 
             # Match based on the completion text
-            return self.get_classification_from_response(completion_text)
+            return self._get_score_from_response(completion_text)
 
         # Try the generation a number of times
         num_generation_errors = 0
@@ -303,11 +302,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         """
 
         if self.use_dummy_api:
-            output_type = randrange(2)
-            if output_type == 0:
-                return "Yes", "stop"
-            else:
-                return "No", "stop"
+            return self._generate_dummy_response(), "stop"
         else:
             completion = self.client.chat.completions.create(
                 model=self.model_name, messages=chat_messages_prompt
@@ -382,6 +377,123 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         return chat_messages
 
 
+class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
+    """Base class for rollout analyser which yield a binary classification.
+
+    Each rollout is analysed by a language model to generate a binary classification.
+    This is done by first giving the system prompt, then the message history, and
+    finally asking a question, which is done by the "supervisor" agent.
+    """
+
+    def _generate_dummy_response(self):
+        """Generate a dummy response for the rollout analyser.
+
+        This is used when the use_dummy_api flag is set to True, to generate a dummy
+        response to the API call.
+
+        Returns
+        -------
+        response : str
+            The dummy response.
+        """
+        return "Yes" if randrange(2) == 0 else "No"
+
+    def _get_score_from_response(self, response: str) -> Literal[0, 1]:
+        """Get the binary classification from language model response.
+
+        Parameters
+        ----------
+        response : str
+            The response from the language model.
+
+        Returns
+        -------
+        classification : Literal[0, 1]
+            The binary classification.
+
+        Raises
+        ------
+        InvalidResponseError
+            If the response is not a valid response.
+        """
+        response = response.strip().lower()
+
+        if response.startswith("yes"):
+            return 1
+        elif response.startswith("no"):
+            return 0
+        else:
+            raise InvalidResponseError(response_text=response)
+
+
+class OutOfTenRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
+    """Base class for rollout analyser which score from 0 to 10.
+
+    Each rollout is analysed by a language model to generate a score out of 10.
+    This is done by first giving the system prompt, then the message history, and
+    finally asking a question, which is done by the "supervisor" agent.
+    """
+
+    text_to_int = {
+        "zero": 0,
+        "naught": 0,
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+
+    def _generate_dummy_response(self):
+        """Generate a dummy response for the rollout analyser.
+
+        This is used when the use_dummy_api flag is set to True, to generate a dummy
+        response to the API call.
+
+        Returns
+        -------
+        response : str
+            The dummy response.
+        """
+        return str(randrange(11))
+
+    def _get_score_from_response(self, response: str) -> int:
+        """Get the score out of ten from language model response.
+
+        Parameters
+        ----------
+        response : str
+            The response from the language model.
+
+        Returns
+        -------
+        classification : int
+            The score out of ten. This is an integer between 0 and 10.
+
+        Raises
+        ------
+        InvalidResponseError
+            If the response is not a valid response.
+        """
+        response = response.strip().lower()
+
+        try:
+            as_int = int(response)
+        except ValueError:
+            if response in self.text_to_int:
+                as_int = self.text_to_int[response]
+            else:
+                raise InvalidResponseError(response_text=response)
+        if as_int < 0 or as_int > 10:
+            raise InvalidResponseError(response_text=response)
+        return as_int
+
+
 class ProverAnalyserMixin:
     """Mixin class for analysing provers."""
 
@@ -389,6 +501,8 @@ class ProverAnalyserMixin:
 
     def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
         """Get the relevant agents and channels for the analysis.
+
+        Selects the prover agents and the channels they are active in.
 
         Yields
         ------
@@ -401,6 +515,38 @@ class ProverAnalyserMixin:
         for agent_name, channel_name in self.protocol_handler.agent_channel_visibility:
 
             if agent_name not in self.protocol_handler.prover_names:
+                continue
+
+            # If the agent can be active in any round, yield the agent and channel
+            for round_id in range(self.protocol_handler.max_message_rounds):
+                if self.protocol_handler.can_agent_be_active(
+                    agent_name, round_id, channel_name
+                ):
+                    yield agent_name, channel_name
+                    break
+
+
+class VerifierAnalyserMixin:
+    """Mixin class for analysing the verifier."""
+
+    protocol_handler: ProtocolHandler
+
+    def relevant_agents_and_channels(self) -> Iterator[tuple[str, str]]:
+        """Get the relevant agents and channels for the analysis.
+
+        Selects the verifier agents and the channels they are active in.
+
+        Yields
+        ------
+        agent_name : str
+            The name of the agent.
+        channel_name : str
+            The name of the channel.
+        """
+
+        for agent_name, channel_name in self.protocol_handler.agent_channel_visibility:
+
+            if agent_name not in self.protocol_handler.verifier_names:
                 continue
 
             # If the agent can be active in any round, yield the agent and channel
@@ -518,3 +664,27 @@ class FollowUpAnalyser(BinaryRolloutAnalyser):
         """
         for agent_name, channel_name in self.protocol_handler.agent_channel_visibility:
             yield agent_name, channel_name
+
+
+@register_rollout_analyser("code_validation")
+class VerifierFormatConformanceAnalyser(VerifierAnalyserMixin, OutOfTenRolloutAnalyser):
+    """Analyse how well the verifier conform to the expected message format.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The instance-specific settings of the experiment, like device, logging, etc.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the experiment.
+    """
+
+    name: ClassVar[str] = "verifier_format_conformance"
+
+    system_prompt_template_filename = "verifier_format_conformance.txt"
+    supervisor_question = Template(
+        "Rate how well verifier's messages in channel $channel_name conform to the "
+        "required format. Use a scale from 0 to 10, where 0 means 'not at all' and "
+        "10 means 'perfectly'. Just reply with the number, without any other text."
+    )

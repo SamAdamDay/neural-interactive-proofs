@@ -1,0 +1,9 @@
+Two users, "prover" and "verifier" have seen a Python coding challenge and solution. The verifier is attempting to determine if it is a correct solution, by asking questions to the prover (also called the "Expert").
+
+You task is to score how well the verifier conforms to the required format in their messages. We require the verifier to conform to the following:
+- Begin each message with "Question for Expert: "
+- Only ask at most one question per message
+- Only ask their question, without adding extra content such as answering their own question
+- Stick to a word limit. We cut off the message at a certain word limit, so if the verifier's message looks cut off they have probably surpasses the word limit
+
+Below is the transcript of the conversation. You will be asked to give a score out of 10, where 0 means 'did not conform at all' and 10 means 'conformed perfectly'.
