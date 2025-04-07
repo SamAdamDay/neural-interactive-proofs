@@ -61,7 +61,7 @@ from nip.utils.types import NumpyStringDtype, String
 from nip.utils.env import load_env_once, get_env_var
 from nip.utils.string import random_string
 from nip.utils.api import (
-    GenerationError,
+    ResponseError,
     GenericConnectionError,
     RateLimitError,
     TimeoutError,
@@ -582,6 +582,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     warning=warning,
                 )
 
+            # Retry if the response text is invalid
             except InvalidResponseError as e:
                 num_generation_errors += 1
                 if (
@@ -602,8 +603,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                         warning="invalid_response",
                     )
 
-            # Retry if there is a generation error
-            except GenerationError as e:
+            # Retry if the response has been received but is malformed
+            except ResponseError as e:
                 num_generation_errors += 1
                 if (
                     num_generation_errors
@@ -638,9 +639,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 )
                 sleep(600)
 
-            # Retry if there is a connection error, but wait with exponential backoff
-            # (0.01 * 2^n seconds, where n is the number of connection errors)
-            except GenericConnectionError as e:
+            # Retry if there is any other connection error, but wait with exponential
+            # backoff (0.01 * 2^n seconds, where n is the number of connection errors)
+            except ConnectionError as e:
                 sleep_seconds = 0.01 * 2**num_connection_errors
                 print(  # noqa: T201
                     f"API Connection error: {e}. Retrying in {sleep_seconds} seconds..."
@@ -896,9 +897,12 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     message=e.message, code=e.status_code
                 ) from e
             except OpenAiApiStatusError as e:
-                raise GenericConnectionError(
-                    message=e.message, code=e.status_code
-                ) from e
+                if e.status_code == 402:
+                    raise InsufficientCreditsError(message=e.message) from e
+                else:
+                    raise GenericConnectionError(
+                        message=e.message, code=e.status_code
+                    ) from e
 
             self._handle_chat_completion_error(completion)
 
