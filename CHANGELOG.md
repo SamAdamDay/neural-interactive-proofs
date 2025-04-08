@@ -47,6 +47,9 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Ability to specify a custom prompt template for the code validation task.
 - Verifier format conformance rollout analyser: how well does the verifier conform to
   the required format?
+- Utilities for downloading and loading checkpoints
+- The script `download_cv_checkpoints.py` to download code validation checkpoint files
+- A utility to compute the decision agreement between rollouts
 
 
 ### Fixed
