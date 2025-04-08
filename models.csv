@@ -38,8 +38,8 @@ Llama 3.3 Instruct,70B,Meta,70,68.649768,meta-llama/llama-3.3-70b-instruct,,0.12
 Llama 4,Scout,Meta,109,,meta-llama/llama-4-scout,,0.1,0.4
 Llama 4,Maverick,Meta,400,,meta-llama/llama-4-maverick,,0.2,0.8
 Phi 3,Mini,Microsoft,3.8,,microsoft/phi-3-mini-128k-instruct,,0.1,0.1
-Phi 3,Small,Microsoft,7,2.1312,,microsoft/Phi-3-small-8k-instruct,,
-Phi 3,Medium,Microsoft,14,4.032,microsoft/phi-3-medium-4k-instruct,,1,1
+Phi 3,Small,Microsoft,7,2.1312,,microsoft/Phi-3-small-128k-instruct,,
+Phi 3,Medium,Microsoft,14,4.032,microsoft/phi-3-medium-128k-instruct,,1,1
 Phi 4,Mini,Microsoft,3.8,,,microsoft/Phi-4-mini-instruct,,
 Phi 4,,Microsoft,14,9.3202015,microsoft/phi-4,,0.07,0.14
 Codestral,,Mistral,22,,mistralai/codestral-2501,,0.3,0.9
