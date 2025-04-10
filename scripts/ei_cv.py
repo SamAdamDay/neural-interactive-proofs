@@ -51,6 +51,7 @@ param_grid = dict(
     verifier_guess_replacement_proportion=[0.0],
     verifier_guess_replacement_annealing=["linear"],
     verifier_guess_replacement_annealing_rate=[0.1],
+    freeze_verifier=[False],
     prover_model=["OpenAI/gpt-4o-2024-08-06"],
     prover_system_prompt_template=[None],
     prover_vllm_openai_base_url=["http://localhost:8000/v1"],
@@ -109,6 +110,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             top_p=combo["verifier_top_p"],
             repetition_penalty=combo["verifier_repetition_penalty"],
             use_dummy_api=cmd_args.use_dummy_api,
+            freeze_agent=combo["freeze_verifier"],
             fine_tune_from_scratch=combo["fine_tune_from_scratch"],
         ),
     )
