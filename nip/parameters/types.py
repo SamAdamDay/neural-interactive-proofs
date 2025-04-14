@@ -126,6 +126,29 @@ multi_channel_test
     A protocol for testing multi-channel communication.
 """
 
+VerifierDecisionScaleType: TypeAlias = Literal[
+    "accept_reject",
+    "likert_scale",
+    "likert_scale_no_undecided",
+    "out_of_10",
+    "out_of_100",
+]
+"""Type for the scale of the verifier's decision. Only relevant for text-based tasks.
+
+accept_reject
+    The verifier's decision is either "accept" or "reject".
+likert_scale
+    The verifier's decision one of 5 options: "strongly agree", "agree", "undecided",
+    "disagree", "strongly disagree".
+likert_scale_no_undecided
+    The verifier's decision one of 4 options: "strongly agree", "agree", "disagree",
+    "strongly disagree".
+out_of_10
+    The verifier's decision is a number between 0 and 10.
+out_of_100
+    The verifier's decision is a number between 0 and 100.
+"""
+
 ImageBuildingBlockType: TypeAlias = Literal["conv2d", "residual_basic"]
 """Type for the type of building block to use in the image classification network.
 

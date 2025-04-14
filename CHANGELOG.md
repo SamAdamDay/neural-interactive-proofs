@@ -50,6 +50,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Utilities for downloading and loading checkpoints
 - The script `download_cv_checkpoints.py` to download code validation checkpoint files
 - A utility to compute the decision agreement between rollouts
+- Option to have the verifier give a decision on a scale, rather than a binary accept or
+  reject.
 
 
 ### Fixed

@@ -43,7 +43,7 @@ from nip.scenario_base.rollout_analysis import (
 )
 from nip.protocols.protocol_base import ProtocolHandler
 from nip.trainers.trainer_base import Trainer, CheckPointNotFoundError
-from nip.utils.maths import aggregate_mean_grouped_by_class
+from nip.utils.maths import aggregate_mean_grouped_by_class, entropy_numpy
 from nip.utils.data import VariableDataCycler, truncated_iterator
 from nip.utils.nested_array_dict import (
     NestedArrayDict,
@@ -1038,6 +1038,12 @@ class PureTextRlTrainer(Trainer, ABC):
         ]
         padding: Bool[np.ndarray, "rollout round"] = rollouts["padding"]
         datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
+        verifier_decision = rollouts["agents", "decision"][
+            ..., self.agent_names.index("verifier")
+        ]
+        verifier_continuous_decision = rollouts["agents", "continuous_decision"][
+            ..., self.agent_names.index("verifier")
+        ]
 
         last_timestep = (next_done | next_terminated) & ~padding
 
@@ -1077,9 +1083,6 @@ class PureTextRlTrainer(Trainer, ABC):
         )
 
         # Get the mean and std accuracy of the verifier
-        verifier_decision = rollouts["agents", "decision"][
-            ..., self.agent_names.index("verifier")
-        ]
         accuracy = verifier_decision[last_timestep] == rollouts["y"][last_timestep]
         log_stats[f"{prefix}mean_accuracy"] = accuracy.mean().item()
         log_stats[f"{prefix}std_accuracy"] = accuracy.std().item()
@@ -1116,6 +1119,17 @@ class PureTextRlTrainer(Trainer, ABC):
         # Get the proportion of rollouts where the verifier does not make a decision
         log_stats[f"{prefix}no_decision_proportion"] = (
             (verifier_decision[last_timestep] == 2).mean().item()
+        )
+
+        # Get the proportion of rollouts where the verifier decides to neither accept
+        # nor reject
+        log_stats[f"{prefix}neither_agree_nor_disagree_proportion"] = (
+            (verifier_decision[last_timestep] == 3).mean().item()
+        )
+
+        # Get Shannon entropy of the verifier decision
+        log_stats[f"{prefix}verifier_decision_entropy"] = entropy_numpy(
+            verifier_continuous_decision
         )
 
         # Get the precision and recall of the verifier
@@ -1207,6 +1221,8 @@ class PureTextRlTrainer(Trainer, ABC):
         raw_message = rollouts["agents", "raw_message"]
         prompt = rollouts["agents", "prompt"]
         decision = rollouts["agents", "decision"]
+        continuous_decision = rollouts["agents", "continuous_decision"]
+        raw_decision = rollouts["agents", "raw_decision"]
         reward = reduce(
             rollouts["next", "agents", "reward"],
             "batch round agent -> batch agent",
@@ -1251,12 +1267,13 @@ class PureTextRlTrainer(Trainer, ABC):
                 for verifier_name in self.protocol_handler.verifier_names:
                     key = f"{verifier_name}.decision"
                     verifier_index = agent_names.index(verifier_name)
-                    if decision[rollout_id, round_id, verifier_index] == 0:
-                        processed_transcript_round[key] = "Reject"
-                        break
-                    elif decision[rollout_id, round_id, verifier_index] == 1:
-                        processed_transcript_round[key] = "Accept"
-                        break
+                    if decision[rollout_id, round_id, verifier_index] == 2:
+                        continue
+                    processed_transcript_round[key] = (
+                        f"{raw_decision[rollout_id, round_id, verifier_index]} "
+                        f"({continuous_decision[rollout_id, round_id, verifier_index]})"
+                    )
+                    break
 
                 # Otherwise, we look at the last message history in the rollout. The key
                 # is the active agent name and channel name, with an "@" in between.

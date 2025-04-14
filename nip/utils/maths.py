@@ -420,6 +420,26 @@ def logit_entropy(logits: Float[Tensor, "... logits"]) -> Float[Tensor, "..."]:
     return -torch.sum(probs * log_probs, dim=-1)
 
 
+def entropy_numpy(labels: np.ndarray, bins: int | str = "auto") -> np.ndarray:
+    """Compute the entropy of a set of labels, binned automatically.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        The labels. Should be a 1D array
+    bins : int | str, default='auto'
+        The number of bins to use for the histogram. If 'auto', the number of bins is
+        determined automatically.
+
+    Returns
+    -------
+    np.ndarray
+        The entropy of the labels.
+    """
+    probs, _ = np.histogram(labels, bins=bins, density=True)
+    return -np.sum(probs * np.log(probs + 1e-10))
+
+
 def logit_or_dual(
     a: Float[Tensor, "... logits"], b: Float[Tensor, "... logits"]
 ) -> Float[Tensor, "... logits"]:

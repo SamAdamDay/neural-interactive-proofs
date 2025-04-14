@@ -6,10 +6,10 @@ protocol.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Iterator
+from typing import Optional, Iterator, Literal
 import importlib.resources
 from string import Template
-from functools import cache
+from functools import cache, cached_property
 from collections import OrderedDict
 from random import Random
 
@@ -27,6 +27,7 @@ from nip.protocols.main_protocols import (
     MnipProtocol,
     SoloVerifierProtocol,
 )
+from nip.protocols.verifier_decision_scale import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
 
@@ -121,9 +122,31 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """The dot-separated path to the directory containing the system prompts."""
 
         return (
-            f"nip.code_validation.prompt_templates.system_prompts"
+            f"nip.code_validation.prompt_templates.system_prompts.protocols"
             f".{self.hyper_params.interaction_protocol}"
         )
+
+    @cached_property
+    def verifier_decision_instructions_prompt_template(self) -> Template:
+        """The template containing the instructions for the verifier decision."""
+
+        prompt_dir_traversable = importlib.resources.files(
+            "nip.code_validation.prompt_templates.system_prompts"
+            ".verifier_decision_instructions"
+        )
+
+        prompt_template_traversable = prompt_dir_traversable.joinpath(
+            f"{self.hyper_params.protocol_common.verifier_decision_scale}.txt"
+        )
+
+        if not prompt_template_traversable.is_file():
+            raise NotImplementedError(
+                f"Verifier decision instructions template for "
+                f"{self.hyper_params.protocol_common.verifier_decision_scale!r} not "
+                f"found."
+            )
+
+        return Template(prompt_template_traversable.read_text())
 
     @cache
     def get_agent_system_prompt_template(self, agent_name: str) -> Template:
@@ -159,7 +182,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             except ModuleNotFoundError:
                 raise NotImplementedError(
                     f"System prompt directory for protocol "
-                    f"{self.hyper_params.interaction_protocol!s} not found."
+                    f"{self.hyper_params.interaction_protocol!r} not found."
                 )
 
             template_filename = f"{agent_name}.txt"
@@ -202,8 +225,16 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             agent_name, prompt_variables
         )
 
+        verifier_decision_instructions = (
+            self.verifier_decision_instructions_prompt_template.substitute(
+                **prompt_variables
+            )
+        )
+
         return self.get_agent_system_prompt_template(agent_name).substitute(
-            **prompt_variables, agent_stance_string=agent_stance_string
+            **prompt_variables,
+            agent_stance_string=agent_stance_string,
+            verifier_decision_instructions=verifier_decision_instructions,
         )
 
     def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
@@ -240,7 +271,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
     def parse_chat_completion(
         self, completion_text: str, agent_name: str, round_id: int
-    ) -> tuple[OrderedDict[str, str] | None, int]:
+    ) -> tuple[OrderedDict[str, str] | None, Literal[0, 1, 2, 3], float, str]:
         """Parse a chat completion into a message to each channel and a decision.
 
         Parameters
@@ -257,9 +288,19 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         channel_messages : OrderedDict[str, str] | None
             A dictionary mapping channel names to messages, ordered by channel order. If
             the model has made a decision, this will be None.
-        decision : int
-            The decision made by the model. This is either 0 (reject), 1 (accept) or 2
-            (no decision).
+        discrete_decision : Literal[0, 1, 2, 3]
+            The discrete decision from the verifier model, with the following meanings:
+            - 0: reject
+            - 1: accept
+            - 2: no decision
+            - 3: end with neither accept nor reject
+        continuous_decision : float
+            The continuous decision from the verifier model. This is a number between -1 and
+            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            version of ``discrete_decision``.
+        raw_decision : str
+            The raw decision text from the verifier model. This is the text which
+            appears after "Decision: " in the completion text.
 
         Raises
         ------
@@ -270,9 +311,11 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """
 
         # First check if the completion contains a decision
-        decision = self._parse_decision(completion_text)
-        if decision != 2:
-            return None, decision
+        discrete_decision, continuous_decision, raw_decision = self._parse_decision(
+            completion_text
+        )
+        if discrete_decision != 2:
+            return None, discrete_decision, continuous_decision, raw_decision
 
         # Get the channels where the agent can be active
         active_channels = [
@@ -283,15 +326,17 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         if len(active_channels) == 0:
             raise ValueError(
-                f"Tried to parse response for {agent_name!r} in round {round_id}, but it "
-                f"is not active in any channel."
+                f"Tried to parse response for {agent_name!r} in round {round_id}, but "
+                f"it is not active in any channel."
             )
 
         # If the agent is active in only one channel, parse the message for that channel
         if len(active_channels) == 1:
             return (
                 self._parse_single_channel_message(completion_text, active_channels[0]),
-                2,
+                discrete_decision,
+                continuous_decision,
+                raw_decision,
             )
 
         # Otherwise, parse the message for all active channels
@@ -299,7 +344,9 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             self._parse_multi_channel_message(
                 completion_text, agent_name, active_channels
             ),
-            2,
+            discrete_decision,
+            continuous_decision,
+            raw_decision,
         )
 
     @property
@@ -313,7 +360,9 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             [(channel_name, "") for channel_name in self.message_channel_names]
         )
 
-    def _parse_decision(self, completion_text: str) -> int:
+    def _parse_decision(
+        self, completion_text: str
+    ) -> tuple[Literal[0, 1, 2, 3], float, str]:
         """Parse a completion text to extract the decision.
 
         Parameters
@@ -323,9 +372,19 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         Returns
         -------
-        decision : int
-            The decision extracted from the completion text. This is either 0 (reject),
-            1 (accept) or 2 (no decision).
+        discrete_decision : Literal[0, 1, 2, 3]
+            The discrete decision from the verifier model, with the following meanings:
+            - 0: reject
+            - 1: accept
+            - 2: no decision
+            - 3: end with neither accept nor reject
+        continuous_decision : float
+            The continuous decision from the verifier model. This is a number between -1 and
+            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            version of ``discrete_decision``.
+        raw_decision : str
+            The raw decision text from the verifier model. This is the text which
+            appears after "Decision: " in the completion text.
 
         Raises
         ------
@@ -334,14 +393,19 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """
 
         if "decision:" in completion_text.lower():
-            if "decision: accept" in completion_text.lower():
-                return 1
-            elif "decision: reject" in completion_text.lower():
-                return 0
-            else:
-                raise InvalidDecisionError(response_text=completion_text)
+            first_decision_index = completion_text.lower().index("decision:")
+            decision_text = completion_text[first_decision_index + len("decision:") :]
+            try:
+                return (
+                    *self.verifier_decision_scale_handler.extract_decision(
+                        decision_text
+                    ),
+                    decision_text.strip(),
+                )
+            except VerifierDecisionParseError as e:
+                raise InvalidDecisionError(response_text=completion_text) from e
         else:
-            return 2
+            return 2, 0.0, ""
 
     def _parse_single_channel_message(
         self, completion_text: str, active_channel_name: str

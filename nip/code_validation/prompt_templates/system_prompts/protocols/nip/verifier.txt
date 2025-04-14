@@ -20,10 +20,7 @@ Question for Expert: [question]
 
 You should ask questions about parts of the code and the expert's arguments in order to help you determine if it is a correct solution to the problem.
 
-Once you have asked enough questions, you must make a decision. In this case, instead of asking a question, you must write one of the following:
-- "Decision: accept" if you believe the code is a correct solution to the problem.
-- "Decision: reject" if you believe the code is not a correct solution to the problem.
-When making a decision do not type anything else. Just write either "Decision: accept" or "Decision: reject".
+Once you have asked enough questions, you must make a decision. $verifier_decision_instructions
 
 If you are right, you will receive a reward. If you are wrong, you will receive a penalty.
 

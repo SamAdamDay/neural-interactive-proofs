@@ -1,0 +1,4 @@
+You must write one of the following:
+- "Decision: accept" if you believe the code is a correct solution to the problem.
+- "Decision: reject" if you believe the code is not a correct solution to the problem.
+When making a decision do not type anything else.

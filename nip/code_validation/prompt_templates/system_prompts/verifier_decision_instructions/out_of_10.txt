@@ -1,0 +1,5 @@
+Indicate to what extent you agree that the code is a correct solution to the problem by typing "Decision: " followed by a number between 0 and 10, inclusive. This number should represent your confidence in the correctness of the code as a solution to the problem. For example:
+- "Decision: 10" means you are completely certain the code is correct.
+- "Decision: 0" means you are completely certain the code is incorrect.
+- "Decision: 5" means you are completely undecided.
+When making a decision do not type anything else.

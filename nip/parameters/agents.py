@@ -647,6 +647,10 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
             class_name: AgentParameters = cls._get_param_class_from_dict(
                 agent_params_dict
             )
+            if class_name is None:
+                raise ValueError(
+                    f"Cannot find class for agent parameters {agent_params_dict!r}"
+                )
             agent_params = class_name.from_dict(
                 agent_params_dict, ignore_extra_keys=ignore_extra_keys
             )

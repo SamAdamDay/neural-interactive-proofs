@@ -78,6 +78,7 @@ from .types import (
     BinarificationMethodType,
     ActivationType,
     InteractionProtocolType,
+    VerifierDecisionScaleType,
     ImageBuildingBlockType,
     MessageRegressionMethodType,
     BaseRunType,

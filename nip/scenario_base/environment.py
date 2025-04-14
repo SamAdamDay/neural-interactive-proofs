@@ -924,6 +924,12 @@ class PureTextEnvironment(Environment, ABC):
                 decision=IntArraySpec(
                     (*self.batch_size, self.num_agents), "batch agent"
                 ),
+                raw_decision=StringArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
+                ),
+                continuous_decision=FloatArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
+                ),
                 message=StringArraySpec(
                     (
                         *self.batch_size,

@@ -51,6 +51,7 @@ param_grid = dict(
     verifier_guess_replacement_proportion=[0.0],
     verifier_guess_replacement_annealing=["linear"],
     verifier_guess_replacement_annealing_rate=[0.1],
+    verifier_decision_scale=["accept_reject"],
     freeze_verifier=[False],
     prover_model=["OpenAI/gpt-4o-2024-08-06"],
     prover_system_prompt_template=[None],
@@ -200,6 +201,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             shared_reward=combo["shared_reward"],
             verifier_first=combo["verifier_first"],
             randomize_prover_stance=combo["randomize_prover_stance"],
+            verifier_decision_scale=combo["verifier_decision_scale"],
         ),
         nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],

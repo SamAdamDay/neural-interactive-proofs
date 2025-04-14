@@ -8,9 +8,11 @@ where rollouts are stored in a :class:`NestedArrayDict
 from typing import Literal, Optional, overload
 from pathlib import Path
 import pickle
+from copy import deepcopy
 
 from wandb import Api as WandbApi
 
+from nip.parameters import HyperParameters, convert_hyper_param_dict
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.env import get_env_var
 from nip.constants import (
@@ -304,3 +306,44 @@ def load_rollouts(
             f"iterations must be an int, a list of ints, or None. "
             f"Got {type(iterations)}."
         )
+
+
+def load_run_hyper_parameters(
+    run_id: str,
+    wandb_project: str,
+    wandb_entity: Optional[str] = None,
+    wandb_api: Optional[WandbApi] = None,
+) -> HyperParameters:
+    """Load the hyper-parameters of a run from W&B, converting them as needed.
+
+    This function loads the hyper-parameters from a W&B run and converts them to be
+    compatible with the current package version.
+
+    Parameters
+    ----------
+    run_id : str
+        The ID of the run to load the hyper-parameters from.
+    wandb_project : str
+        The project of the wandb run.
+    wandb_entity : str, optional
+        The entity of the wandb run. If not provided, the default entity will be used.
+    wandb_api : WandbApi, optional
+        The wandb API instance to use. If not provided, a new instance will be created.
+
+    Returns
+    -------
+    hyper_params : HyperParameters
+        The hyper-parameters loaded from W&B.
+    """
+
+    if wandb_api is None:
+        wandb_api = WandbApi()
+    if wandb_entity is None:
+        wandb_entity = get_env_var("WANDB_ENTITY")
+
+    run = wandb_api.run(f"{wandb_entity}/{wandb_project}/{run_id}")
+
+    # Convert the config dict to be compatible with the current package version
+    hyper_param_dict = convert_hyper_param_dict(deepcopy(run.config))
+
+    return HyperParameters.from_dict(hyper_param_dict, ignore_extra_keys=True)
