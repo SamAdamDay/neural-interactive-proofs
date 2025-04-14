@@ -10,6 +10,7 @@ Verifier scales are only relevant for text-based protocols.
 from abc import ABC, abstractmethod
 from typing import Literal
 from functools import cached_property
+import re
 
 from nip.parameters import HyperParameters
 from nip.parameters.types import VerifierDecisionScaleType
@@ -50,7 +51,9 @@ class VerifierDecisionScaleHandler(ABC):
         """
 
     @abstractmethod
-    def extract_decision(self, decision_text: str) -> tuple[Literal[0, 1, 3], float]:
+    def extract_decision(
+        self, decision_text: str
+    ) -> tuple[Literal[0, 1, 3], float, str]:
         """Extract the discrete decision and float decision from the decision text.
 
         Parameters
@@ -62,13 +65,18 @@ class VerifierDecisionScaleHandler(ABC):
         -------
         discrete_decision : Literal[0, 1, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 3: neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
+        raw_decision_text : str
+            The raw decision text from the verifier model, which should be an element of
+            ``self.possible_decision_texts``.
 
         Raises
         ------
@@ -137,7 +145,9 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
 
     possible_decision_texts = ("accept", "reject")
 
-    def extract_decision(self, decision_text: str) -> tuple[Literal[0, 1], float]:
+    def extract_decision(
+        self, decision_text: str
+    ) -> tuple[Literal[0, 1], float, Literal["accept", "reject"]]:
         """Extract the discrete decision and float decision from the decision text.
 
         Parameters
@@ -155,6 +165,8 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             The continuous decision from the verifier model. This is a number between -1 and
             1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
+        raw_decision_text : Literal["accept", "reject"]]
+            The raw decision text from the verifier model.
 
         Raises
         ------
@@ -164,9 +176,9 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         decision_text = decision_text.strip().lower().split(" ")[0]
 
         if decision_text == "accept":
-            return 1, 1.0
+            return 1, 1.0, "accept"
         elif decision_text == "reject":
-            return 0, -1.0
+            return 0, -1.0, "reject"
         else:
             raise VerifierDecisionParseError(decision_text)
 
@@ -203,7 +215,17 @@ class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
                 "strongly agree",
             )
 
-    def extract_decision(self, decision_text: str) -> tuple[Literal[0, 1, 3], float]:
+    def extract_decision(self, decision_text: str) -> tuple[
+        Literal[0, 1, 3],
+        float,
+        Literal[
+            "strongly agree",
+            "agree",
+            "neither agree nor disagree",
+            "disagree",
+            "strongly disagree",
+        ],
+    ]:
         """Extract the discrete decision and float decision from the decision text.
 
         Parameters
@@ -215,13 +237,18 @@ class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         -------
         discrete_decision : Literal[0, 1, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 3: neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
+        raw_decision_text : Literal[ "strongly agree", "agree", "neither agree nor
+        disagree", "disagree", "strongly disagree"]
+            The raw decision text from the verifier model.
 
         Raises
         ------
@@ -231,18 +258,18 @@ class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         decision_text_split = decision_text.strip().lower().split(" ")
 
         if decision_text_split[:2] == ["strongly", "agree"]:
-            return 1, 1.0
+            return 1, 1.0, "strongly agree"
         elif decision_text_split[0] == "agree":
-            return 1, 0.5
+            return 1, 0.5, "agree"
         elif (
             self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale"
             and decision_text_split[:4] == ["neither", "agree", "nor", "disagree"]
         ):
-            return 0, 0.0
+            return 0, 0.0, "neither agree nor disagree"
         elif decision_text_split[0] == "disagree":
-            return 0, -0.5
+            return 0, -0.5, "disagree"
         elif decision_text_split[:2] == ["strongly", "disagree"]:
-            return 0, -1.0
+            return 0, -1.0, "strongly disagree"
         else:
             raise VerifierDecisionParseError(decision_text)
 
@@ -256,7 +283,9 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
 
     possible_decision_texts = tuple(str(i) for i in range(11))
 
-    def extract_decision(self, decision_text: str) -> tuple[Literal[0, 1, 3], float]:
+    def extract_decision(
+        self, decision_text: str
+    ) -> tuple[Literal[0, 1, 3], float, str]:
         """Extract the discrete decision and float decision from the decision text.
 
         Parameters
@@ -268,13 +297,18 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         -------
         discrete_decision : Literal[0, 1, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 3: neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
+        raw_decision_text : str
+            The raw decision text from the verifier model, which will be a string number
+            between 0 and 10.
 
         Raises
         ------
@@ -282,9 +316,11 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             If the decision text cannot be parsed.
         """
 
-        first_word = decision_text.strip().split(" ")[0]
+        first_number_match = re.match("[0-9]+(\.[0-9]+)", decision_text.strip())
+        if first_number_match is None:
+            raise VerifierDecisionParseError(decision_text)
         try:
-            decision_value = float(first_word)
+            decision_value = float(first_number_match.group(0))
         except ValueError:
             raise VerifierDecisionParseError(decision_text) from None
         if not (0 <= decision_value <= 10):
@@ -298,7 +334,7 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             discrete_decision = 1
         continuous_decision = (decision_value / 10) * 2 - 1
 
-        return discrete_decision, continuous_decision
+        return discrete_decision, continuous_decision, str(decision_value)
 
 
 @register_verifier_decision_scale_handler("out_of_100")
@@ -310,7 +346,9 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
 
     possible_decision_texts = tuple(str(i) for i in range(101))
 
-    def extract_decision(self, decision_text: str) -> tuple[Literal[0, 1, 3], float]:
+    def extract_decision(
+        self, decision_text: str
+    ) -> tuple[Literal[0, 1, 3], float, str]:
         """Extract the discrete decision and float decision from the decision text.
 
         Parameters
@@ -322,13 +360,18 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         -------
         discrete_decision : Literal[0, 1, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 3: neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
+        raw_decision_text : str
+            The raw decision text from the verifier model, which will be a string number
+            between 0 and 100.
 
         Raises
         ------
@@ -336,9 +379,11 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             If the decision text cannot be parsed.
         """
 
-        first_word = decision_text.strip().split(" ")[0]
+        first_number_match = re.match("[0-9]+(\.[0-9]+)", decision_text.strip())
+        if first_number_match is None:
+            raise VerifierDecisionParseError(decision_text)
         try:
-            decision_value = float(first_word)
+            decision_value = float(first_number_match.group(0))
         except ValueError:
             raise VerifierDecisionParseError(decision_text) from None
         if not (0 <= decision_value <= 100):
@@ -352,4 +397,4 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             discrete_decision = 1
         continuous_decision = (decision_value / 100) * 2 - 1
 
-        return discrete_decision, continuous_decision
+        return discrete_decision, continuous_decision, str(decision_value)

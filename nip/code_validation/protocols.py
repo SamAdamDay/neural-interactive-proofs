@@ -396,11 +396,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             first_decision_index = completion_text.lower().index("decision:")
             decision_text = completion_text[first_decision_index + len("decision:") :]
             try:
-                return (
-                    *self.verifier_decision_scale_handler.extract_decision(
-                        decision_text
-                    ),
-                    decision_text.strip(),
+                return self.verifier_decision_scale_handler.extract_decision(
+                    decision_text
                 )
             except VerifierDecisionParseError as e:
                 raise InvalidDecisionError(response_text=completion_text) from e

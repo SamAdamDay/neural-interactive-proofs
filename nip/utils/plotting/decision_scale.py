@@ -1,6 +1,6 @@
 """Utilities for plotting verifier decisions."""
 
-from math import floor, ceil
+from math import ceil
 
 import numpy as np
 from numpy.typing import NDArray
