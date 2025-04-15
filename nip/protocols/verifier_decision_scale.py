@@ -255,20 +255,21 @@ class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         VerifierDecisionParseError
             If the decision text cannot be parsed.
         """
-        decision_text_split = decision_text.strip().lower().split(" ")
 
-        if decision_text_split[:2] == ["strongly", "agree"]:
+        decision_text_normalised = decision_text.strip().lower()
+
+        if decision_text_normalised.startswith("strongly agree"):
             return 1, 1.0, "strongly agree"
-        elif decision_text_split[0] == "agree":
+        elif decision_text_normalised.startswith("agree"):
             return 1, 0.5, "agree"
         elif (
             self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale"
-            and decision_text_split[:4] == ["neither", "agree", "nor", "disagree"]
+            and decision_text_normalised.startswith("neither agree nor disagree")
         ):
             return 0, 0.0, "neither agree nor disagree"
-        elif decision_text_split[0] == "disagree":
+        elif decision_text_normalised.startswith("disagree"):
             return 0, -0.5, "disagree"
-        elif decision_text_split[:2] == ["strongly", "disagree"]:
+        elif decision_text_normalised.startswith("strongly disagree"):
             return 0, -1.0, "strongly disagree"
         else:
             raise VerifierDecisionParseError(decision_text)
@@ -334,7 +335,7 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             discrete_decision = 1
         continuous_decision = (decision_value / 10) * 2 - 1
 
-        return discrete_decision, continuous_decision, str(decision_value)
+        return discrete_decision, continuous_decision, str(int(decision_value))
 
 
 @register_verifier_decision_scale_handler("out_of_100")
@@ -397,4 +398,4 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             discrete_decision = 1
         continuous_decision = (decision_value / 100) * 2 - 1
 
-        return discrete_decision, continuous_decision, str(decision_value)
+        return discrete_decision, continuous_decision, str(int(decision_value))
