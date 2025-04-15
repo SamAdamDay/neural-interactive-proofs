@@ -316,7 +316,7 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             If the decision text cannot be parsed.
         """
 
-        first_number_match = re.match("[0-9]+(\.[0-9]+)", decision_text.strip())
+        first_number_match = re.match("[0-9]+(\.[0-9]+)?", decision_text.strip())
         if first_number_match is None:
             raise VerifierDecisionParseError(decision_text)
         try:
@@ -379,7 +379,7 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
             If the decision text cannot be parsed.
         """
 
-        first_number_match = re.match("[0-9]+(\.[0-9]+)", decision_text.strip())
+        first_number_match = re.match("[0-9]+(\.[0-9]+)?", decision_text.strip())
         if first_number_match is None:
             raise VerifierDecisionParseError(decision_text)
         try:
