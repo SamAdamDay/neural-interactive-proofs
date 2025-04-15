@@ -149,7 +149,8 @@ def run_experiment(
             resume="allow" if allow_resuming_wandb_run else "never",
         )
         wandb_run.config.update(
-            hyper_params.to_dict(), allow_val_change=allow_overriding_wandb_config
+            hyper_params.to_dict(include_package_meta=True),
+            allow_val_change=allow_overriding_wandb_config,
         )
         if print_wandb_run_url:
             print(f"W&B run URL: {wandb_run.get_url()}")  # noqa: T201

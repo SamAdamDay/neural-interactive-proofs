@@ -233,7 +233,7 @@ class TensorDictRlTrainer(TensorDictTrainer, ABC):
             }
 
         # Get the parameters that define the model cache
-        model_cache_params = self.hyper_params.to_dict()
+        model_cache_params = self.hyper_params.to_dict(include_package_meta=True)
         model_cache_params = dict(
             (key, value)
             for key, value in model_cache_params.items()

@@ -54,11 +54,11 @@ def get_cached_models_path(hyper_params: HyperParameters | dict, subdir: str) ->
     """
 
     if isinstance(hyper_params, HyperParameters):
-        hyper_params = hyper_params.to_dict()
+        hyper_params = hyper_params.to_dict(include_package_meta=True)
 
     models_subdir = Path(CACHED_MODELS_DIR).joinpath(subdir)
     if not models_subdir.is_dir():
-        raise ModelNotFoundError(f"Models directory {models_subdir} does not exist.")
+        raise ModelNotFoundError(f"Models directory {models_subdir!r} does not exist.")
 
     for path in models_subdir.iterdir():
         if not path.is_dir():
@@ -127,7 +127,7 @@ def save_model_state_dicts(
     """
 
     if isinstance(hyper_params, HyperParameters):
-        hyper_params = hyper_params.to_dict()
+        hyper_params = hyper_params.to_dict(include_package_meta=True)
 
     # Remove the model directory if it already exists, and we're overwriting
     try:
