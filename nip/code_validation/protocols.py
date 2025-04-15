@@ -122,7 +122,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """The dot-separated path to the directory containing the system prompts."""
 
         return (
-            f"nip.code_validation.prompt_templates.system_prompts.protocols"
+            f"nip.code_validation.prompt_templates.system_prompts"
+            f".{self.hyper_params.code_validation.system_prompt_version}.protocols"
             f".{self.hyper_params.interaction_protocol}"
         )
 
@@ -130,9 +131,13 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
     def verifier_decision_instructions_prompt_template(self) -> Template:
         """The template containing the instructions for the verifier decision."""
 
+        if self.hyper_params.code_validation.system_prompt_version == "v1":
+            return Template("")
+
         prompt_dir_traversable = importlib.resources.files(
             "nip.code_validation.prompt_templates.system_prompts"
-            ".verifier_decision_instructions"
+            f".{self.hyper_params.code_validation.system_prompt_version}"
+            f".verifier_decision_instructions"
         )
 
         prompt_template_traversable = prompt_dir_traversable.joinpath(
@@ -290,13 +295,15 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             the model has made a decision, this will be None.
         discrete_decision : Literal[0, 1, 2, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 2: no decision
             - 3: end with neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
         raw_decision : str
             The raw decision text from the verifier model. This is the text which
@@ -374,13 +381,15 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         -------
         discrete_decision : Literal[0, 1, 2, 3]
             The discrete decision from the verifier model, with the following meanings:
+
             - 0: reject
             - 1: accept
             - 2: no decision
             - 3: end with neither accept nor reject
+
         continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
             version of ``discrete_decision``.
         raw_decision : str
             The raw decision text from the verifier model. This is the text which

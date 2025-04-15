@@ -41,8 +41,13 @@ class CodeValidationParameters(SubParameters):
         All datapoints in the Buggy APPS dataset have been passed through the OpenAI
         moderation API, with any flags noted. If this parameter is set to True, flagged
         datapoints will be excluded from the dataset.
+    system_prompt_version : Literal["v1", "v2"]
+        The version of the system prompt to use. Older versions may not have all
+        features available.
     """
 
     apps_difficulty: Literal["introductory", "interview", "competition"] = "interview"
     apps_solution_number: int = 0
     apps_exclude_flagged: bool = True
+
+    system_prompt_version: Literal["v1", "v2"] = "v2"
