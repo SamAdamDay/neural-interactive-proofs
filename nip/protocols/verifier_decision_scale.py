@@ -44,13 +44,28 @@ class VerifierDecisionScaleHandler(ABC):
 
     @property
     @abstractmethod
-    def possible_decision_texts(self) -> tuple[str]:
-        """The possible decision texts from the verifier model in order.
+    def decision_texts_and_outcomes(self) -> list[tuple[str, Literal[0, 1, 3], float]]:
+        """The possible decision texts and discrete and continuous outcomes, in order.
 
-        The decision texts should be ordered from reject to accept.
+        This is a list of tuples, where each tuple contains the following:
+
+        - The decision text (str)
+        - The discrete outcome (int): 0 for reject, 1 for accept, 3 for neither accept
+          nor reject.
+        - The continuous outcome (float): between -1 and 1, where -1 is reject and 1 is
+          accept.
+
+        The decision texts should be ordered from reject to accept (i.e. the continuous
+        outcome value should be increasing)
         """
 
-    @abstractmethod
+    @cached_property
+    def possible_decision_texts(self) -> list[str]:
+        """The possible decision texts from the verifier model in order."""
+        return [
+            decision_text for decision_text, _, _ in self.decision_texts_and_outcomes
+        ]
+
     def extract_decision(
         self, decision_text: str
     ) -> tuple[Literal[0, 1, 3], float, str]:
@@ -83,6 +98,22 @@ class VerifierDecisionScaleHandler(ABC):
         VerifierDecisionParseError
             If the decision text cannot be parsed.
         """
+
+        decision_text_normalised = decision_text.strip().lower()
+
+        for (
+            possible_decision_text,
+            discrete_decision,
+            continuous_decision,
+        ) in self.decision_texts_and_outcomes:
+            if decision_text_normalised.startswith(possible_decision_text):
+                return (
+                    discrete_decision,
+                    continuous_decision,
+                    possible_decision_text,
+                )
+
+        raise VerifierDecisionParseError(decision_text)
 
 
 VERIFIER_DECISION_SCALE_HANDLERS: dict[
@@ -143,44 +174,10 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     The decision text is expected to be either "accept" or "reject".
     """
 
-    possible_decision_texts = ("accept", "reject")
-
-    def extract_decision(
-        self, decision_text: str
-    ) -> tuple[Literal[0, 1], float, Literal["accept", "reject"]]:
-        """Extract the discrete decision and float decision from the decision text.
-
-        Parameters
-        ----------
-        decision_text : str
-            The decision text from the verifier model.
-
-        Returns
-        -------
-        discrete_decision : Literal[0, 1]
-            The discrete decision from the verifier model, with the following meanings:
-            - 0: reject
-            - 1: accept
-        continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1 and
-            1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
-            version of ``discrete_decision``.
-        raw_decision_text : Literal["accept", "reject"]]
-            The raw decision text from the verifier model.
-
-        Raises
-        ------
-        VerifierDecisionParseError
-            If the decision text cannot be parsed.
-        """
-        decision_text = decision_text.strip().lower().split(" ")[0]
-
-        if decision_text == "accept":
-            return 1, 1.0, "accept"
-        elif decision_text == "reject":
-            return 0, -1.0, "reject"
-        else:
-            raise VerifierDecisionParseError(decision_text)
+    decision_texts_and_outcomes = [
+        ("reject", 0, -1.0),
+        ("accept", 1, 1.0),
+    ]
 
 
 @register_verifier_decision_scale_handler("likert_scale")
@@ -197,82 +194,35 @@ class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     """
 
     @cached_property
-    def possible_decision_texts(self) -> tuple[str]:
-        """The possible decision texts from the verifier model."""
-        if self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale":
-            return (
-                "strongly disagree",
-                "disagree",
-                "neither agree nor disagree",
-                "agree",
-                "strongly agree",
-            )
-        else:
-            return (
-                "strongly disagree",
-                "disagree",
-                "agree",
-                "strongly agree",
-            )
+    def decision_texts_and_outcomes(self) -> list[tuple[str, Literal[0, 1, 3], float]]:
+        """The possible decision texts and discrete and continuous outcomes, in order.
 
-    def extract_decision(self, decision_text: str) -> tuple[
-        Literal[0, 1, 3],
-        float,
-        Literal[
-            "strongly agree",
-            "agree",
-            "neither agree nor disagree",
-            "disagree",
-            "strongly disagree",
-        ],
-    ]:
-        """Extract the discrete decision and float decision from the decision text.
+        This is a list of tuples, where each tuple contains the following:
 
-        Parameters
-        ----------
-        decision_text : str
-            The decision text from the verifier model.
+        - The decision text (str)
+        - The discrete outcome (int): 0 for reject, 1 for accept, 3 for neither accept
+          nor reject.
+        - The continuous outcome (float): between -1 and 1, where -1 is reject and 1 is
+          accept.
 
-        Returns
-        -------
-        discrete_decision : Literal[0, 1, 3]
-            The discrete decision from the verifier model, with the following meanings:
-
-            - 0: reject
-            - 1: accept
-            - 3: neither accept nor reject
-
-        continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1
-            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
-            version of ``discrete_decision``.
-        raw_decision_text : Literal[ "strongly agree", "agree", "neither agree nor
-        disagree", "disagree", "strongly disagree"]
-            The raw decision text from the verifier model.
-
-        Raises
-        ------
-        VerifierDecisionParseError
-            If the decision text cannot be parsed.
+        The decision texts should be ordered from reject to accept (i.e. the continuous
+        outcome value should be increasing)
         """
-
-        decision_text_normalised = decision_text.strip().lower()
-
-        if decision_text_normalised.startswith("strongly agree"):
-            return 1, 1.0, "strongly agree"
-        elif decision_text_normalised.startswith("agree"):
-            return 1, 0.5, "agree"
-        elif (
-            self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale"
-            and decision_text_normalised.startswith("neither agree nor disagree")
-        ):
-            return 0, 0.0, "neither agree nor disagree"
-        elif decision_text_normalised.startswith("disagree"):
-            return 0, -0.5, "disagree"
-        elif decision_text_normalised.startswith("strongly disagree"):
-            return 0, -1.0, "strongly disagree"
+        if self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale":
+            return [
+                ("strongly disagree", 0, -1.0),
+                ("disagree", 0, -0.5),
+                ("neither agree nor disagree", 3, 0.0),
+                ("agree", 1, 0.5),
+                ("strongly agree", 1, 1.0),
+            ]
         else:
-            raise VerifierDecisionParseError(decision_text)
+            return [
+                ("strongly disagree", 0, -1.0),
+                ("disagree", 0, -0.5),
+                ("agree", 1, 0.5),
+                ("strongly agree", 1, 1.0),
+            ]
 
 
 @register_verifier_decision_scale_handler("out_of_10")
@@ -282,51 +232,9 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     The decision text is expected to be a number between 0 and 10.
     """
 
-    possible_decision_texts = tuple(str(i) for i in range(11))
+    decision_texts_and_outcomes = []
 
-    def extract_decision(
-        self, decision_text: str
-    ) -> tuple[Literal[0, 1, 3], float, str]:
-        """Extract the discrete decision and float decision from the decision text.
-
-        Parameters
-        ----------
-        decision_text : str
-            The decision text from the verifier model.
-
-        Returns
-        -------
-        discrete_decision : Literal[0, 1, 3]
-            The discrete decision from the verifier model, with the following meanings:
-
-            - 0: reject
-            - 1: accept
-            - 3: neither accept nor reject
-
-        continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1
-            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
-            version of ``discrete_decision``.
-        raw_decision_text : str
-            The raw decision text from the verifier model, which will be a string number
-            between 0 and 10.
-
-        Raises
-        ------
-        VerifierDecisionParseError
-            If the decision text cannot be parsed.
-        """
-
-        first_number_match = re.match("[0-9]+(\.[0-9]+)?", decision_text.strip())
-        if first_number_match is None:
-            raise VerifierDecisionParseError(decision_text)
-        try:
-            decision_value = float(first_number_match.group(0))
-        except ValueError:
-            raise VerifierDecisionParseError(decision_text) from None
-        if not (0 <= decision_value <= 10):
-            raise VerifierDecisionParseError(decision_text)
-
+    for decision_value in range(11):
         if decision_value < 5:
             discrete_decision = 0
         elif decision_value == 5:
@@ -334,8 +242,9 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         else:
             discrete_decision = 1
         continuous_decision = (decision_value / 10) * 2 - 1
-
-        return discrete_decision, continuous_decision, str(int(decision_value))
+        decision_texts_and_outcomes.append(
+            (str(decision_value), discrete_decision, continuous_decision)
+        )
 
 
 @register_verifier_decision_scale_handler("out_of_100")
@@ -345,51 +254,9 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     The decision text is expected to be a number between 0 and 100.
     """
 
-    possible_decision_texts = tuple(str(i) for i in range(101))
+    decision_texts_and_outcomes = []
 
-    def extract_decision(
-        self, decision_text: str
-    ) -> tuple[Literal[0, 1, 3], float, str]:
-        """Extract the discrete decision and float decision from the decision text.
-
-        Parameters
-        ----------
-        decision_text : str
-            The decision text from the verifier model.
-
-        Returns
-        -------
-        discrete_decision : Literal[0, 1, 3]
-            The discrete decision from the verifier model, with the following meanings:
-
-            - 0: reject
-            - 1: accept
-            - 3: neither accept nor reject
-
-        continuous_decision : float
-            The continuous decision from the verifier model. This is a number between -1
-            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
-            version of ``discrete_decision``.
-        raw_decision_text : str
-            The raw decision text from the verifier model, which will be a string number
-            between 0 and 100.
-
-        Raises
-        ------
-        VerifierDecisionParseError
-            If the decision text cannot be parsed.
-        """
-
-        first_number_match = re.match("[0-9]+(\.[0-9]+)?", decision_text.strip())
-        if first_number_match is None:
-            raise VerifierDecisionParseError(decision_text)
-        try:
-            decision_value = float(first_number_match.group(0))
-        except ValueError:
-            raise VerifierDecisionParseError(decision_text) from None
-        if not (0 <= decision_value <= 100):
-            raise VerifierDecisionParseError(decision_text)
-
+    for decision_value in range(101):
         if decision_value < 50:
             discrete_decision = 0
         elif decision_value == 50:
@@ -397,5 +264,6 @@ class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         else:
             discrete_decision = 1
         continuous_decision = (decision_value / 100) * 2 - 1
-
-        return discrete_decision, continuous_decision, str(int(decision_value))
+        decision_texts_and_outcomes.append(
+            (str(decision_value), discrete_decision, continuous_decision)
+        )

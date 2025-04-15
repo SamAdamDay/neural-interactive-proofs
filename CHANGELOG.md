@@ -52,6 +52,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - A utility to compute the decision agreement between rollouts
 - Option to have the verifier give a decision on a scale, rather than a binary accept or
   reject.
+- Utilities to compute the histogram of verifier decisions and thresholded performance.
 
 
 ### Fixed
