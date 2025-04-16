@@ -84,7 +84,7 @@ The first item is done by creating and registering a
 subclasses the desired protocol handler, and provides a
 :class:`nip.code_validation.protocols.CodeValidationAgentSpec` specification for each
 agent. The second is done by creating files of the form
-``nip/code_validation/prompt_templates/system_prompts/{protocol_name}/{agent_name}.txt``.
+``nip/code_validation/prompt_templates/rollout_generation/{system_prompt_version}/main_system_prompt/{protocol_name}/{agent_name}.txt``.
 
 See :doc:`../guides/new-protocol` for more information.
 

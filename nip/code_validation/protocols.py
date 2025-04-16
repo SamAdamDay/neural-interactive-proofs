@@ -136,7 +136,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         return JinjaEnvironment(
             loader=PackageLoader(
                 "nip",
-                f"code_validation/prompt_templates/system_prompts"
+                f"code_validation/prompt_templates/rollout_generation"
                 f"/{self.hyper_params.code_validation.system_prompt_version}",
             ),
             autoescape=True,
@@ -181,7 +181,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             )
         else:
             return self.jinja_environment.get_template(
-                f"protocols/{self.hyper_params.interaction_protocol}/{agent_name}.txt"
+                f"main_system_prompts/{self.hyper_params.interaction_protocol}"
+                f"/{agent_name}.txt"
             )
 
     def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
