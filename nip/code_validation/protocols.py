@@ -7,8 +7,6 @@ protocol.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Iterator, Literal
-import importlib.resources
-from string import Template
 from functools import cache, cached_property
 from collections import OrderedDict
 from random import Random
@@ -17,6 +15,14 @@ from torch import Tensor, as_tensor
 
 from jaxtyping import Bool, Int, Float
 
+from jinja2 import (
+    Environment as JinjaEnvironment,
+    PackageLoader,
+    FileSystemLoader,
+    Template,
+)
+
+from nip.parameters.agents import CodeValidationAgentParameters
 from nip.protocols.protocol_base import ProtocolHandler
 from nip.protocols.registry import register_protocol_handler
 from nip.protocols.main_protocols import (
@@ -30,6 +36,7 @@ from nip.protocols.main_protocols import (
 from nip.protocols.verifier_decision_scale import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
+from nip.constants import PACKAGE_ROOT
 
 
 @dataclass
@@ -93,6 +100,11 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
         """A dictionary mapping agent names to specifications."""
 
+    @property
+    def agent_params(self) -> dict[str, CodeValidationAgentParameters]:
+        """A dictionary mapping agent names to parameters."""
+        return self.hyper_params.agents
+
     def modify_system_prompt_variables(
         self, agent_name: str, current_variables: dict
     ) -> dict:
@@ -117,14 +129,17 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         return current_variables
 
-    @property
-    def system_prompt_directory(self) -> str:
-        """The dot-separated path to the directory containing the system prompts."""
+    @cached_property
+    def jinja_environment(self) -> JinjaEnvironment:
+        """The Jinja2 environment for loading templates."""
 
-        return (
-            f"nip.code_validation.prompt_templates.system_prompts"
-            f".{self.hyper_params.code_validation.system_prompt_version}.protocols"
-            f".{self.hyper_params.interaction_protocol}"
+        return JinjaEnvironment(
+            loader=PackageLoader(
+                "nip",
+                f"code_validation/prompt_templates/system_prompts"
+                f"/{self.hyper_params.code_validation.system_prompt_version}",
+            ),
+            autoescape=True,
         )
 
     @cached_property
@@ -132,26 +147,12 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """The template containing the instructions for the verifier decision."""
 
         if self.hyper_params.code_validation.system_prompt_version == "v1":
-            return Template("")
+            return self.jinja_environment.from_string("")
 
-        prompt_dir_traversable = importlib.resources.files(
-            "nip.code_validation.prompt_templates.system_prompts"
-            f".{self.hyper_params.code_validation.system_prompt_version}"
-            f".verifier_decision_instructions"
-        )
-
-        prompt_template_traversable = prompt_dir_traversable.joinpath(
+        return self.jinja_environment.get_template(
+            f"verifier_decision_instructions/"
             f"{self.hyper_params.protocol_common.verifier_decision_scale}.txt"
         )
-
-        if not prompt_template_traversable.is_file():
-            raise NotImplementedError(
-                f"Verifier decision instructions template for "
-                f"{self.hyper_params.protocol_common.verifier_decision_scale!r} not "
-                f"found."
-            )
-
-        return Template(prompt_template_traversable.read_text())
 
     @cache
     def get_agent_system_prompt_template(self, agent_name: str) -> Template:
@@ -167,32 +168,20 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         Returns
         -------
-        Template
+        jinja2.Template
             The system prompt template for the agent.
         """
 
-        if self.hyper_params.agents[agent_name].system_prompt_template_path is not None:
-
-            with open(
-                self.hyper_params.agents[agent_name].system_prompt_template_path
-            ) as f:
-                return Template(f.read())
-
+        if self.agent_params[agent_name].system_prompt_template_path is not None:
+            file_system_environment = JinjaEnvironment(
+                loader=FileSystemLoader(PACKAGE_ROOT)
+            )
+            return file_system_environment.get_template(
+                self.agent_params[agent_name].system_prompt_template_path
+            )
         else:
-
-            try:
-                prompt_template_traversable = importlib.resources.files(
-                    self.system_prompt_directory
-                )
-            except ModuleNotFoundError:
-                raise NotImplementedError(
-                    f"System prompt directory for protocol "
-                    f"{self.hyper_params.interaction_protocol!r} not found."
-                )
-
-            template_filename = f"{agent_name}.txt"
-            return Template(
-                prompt_template_traversable.joinpath(template_filename).read_text()
+            return self.jinja_environment.get_template(
+                f"protocols/{self.hyper_params.interaction_protocol}/{agent_name}.txt"
             )
 
     def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
@@ -231,12 +220,12 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         )
 
         verifier_decision_instructions = (
-            self.verifier_decision_instructions_prompt_template.substitute(
+            self.verifier_decision_instructions_prompt_template.render(
                 **prompt_variables
             )
         )
 
-        return self.get_agent_system_prompt_template(agent_name).substitute(
+        return self.get_agent_system_prompt_template(agent_name).render(
             **prompt_variables,
             agent_stance_string=agent_stance_string,
             verifier_decision_instructions=verifier_decision_instructions,

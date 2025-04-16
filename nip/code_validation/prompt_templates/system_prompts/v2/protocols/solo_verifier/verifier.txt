@@ -4,16 +4,16 @@ While the solution might initially look correct, there is a 50% chance it has a 
 
 ## Problem
 
-$question
+{{ question }}
 
 ## Solution
 
 ```python
-$solution
+{{ solution }}
 ```
 
 ## Instructions
 
-$verifier_decision_instructions
+{{ verifier_decision_instructions }}
 
 If you are right, you will receive a reward. If you are wrong, you will receive a penalty.

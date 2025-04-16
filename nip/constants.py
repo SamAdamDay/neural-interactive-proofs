@@ -3,30 +3,32 @@
 import os
 from pathlib import Path
 
-_file_dir = os.path.realpath(__file__)
-_root_dir = Path(_file_dir).parent.parent.absolute()
+_file_dir = Path(os.path.realpath(__file__))
 
-ENV_FILE = os.path.join(_root_dir, ".env")
+PACKAGE_ROOT = _file_dir.parent.parent.absolute()
+"""The root directory of the package."""
+
+ENV_FILE = PACKAGE_ROOT.joinpath(".env")
 """The path to the file containing environment variables."""
 
-DATA_DIR = os.path.join(_root_dir, "data")
+DATA_DIR = PACKAGE_ROOT.joinpath("data")
 """The path to the directory containing dataset files"""
-GI_DATA_DIR = os.path.join(DATA_DIR, "graph_isomorphism")
+GI_DATA_DIR = DATA_DIR.joinpath("graph_isomorphism")
 """The path to the directory containing graph isomorphism dataset files"""
-IC_DATA_DIR = os.path.join(DATA_DIR, "image_classification")
+IC_DATA_DIR = DATA_DIR.joinpath("image_classification")
 """The path to the directory containing image classification dataset files"""
-CV_DATA_DIR = os.path.join(DATA_DIR, "code_validation")
+CV_DATA_DIR = DATA_DIR.joinpath("code_validation")
 """The path to the directory containing code validation dataset files"""
 
-CACHED_MODELS_DIR = os.path.join(_root_dir, "model_cache")
+CACHED_MODELS_DIR = PACKAGE_ROOT.joinpath("model_cache")
 """The path to the directory containing cached model files"""
 CACHED_MODELS_METADATA_FILENAME = "metadata.json"
 """The filename for the metadata file in the cached models directory"""
 
-LOG_DIR = os.path.join(_root_dir, "log")
+LOG_DIR = PACKAGE_ROOT.joinpath("log")
 """The path to the directory containing general log files (not used much)"""
 
-EXPERIMENT_STATE_DIR = os.path.join(_root_dir, "experiment_checkpoints")
+EXPERIMENT_STATE_DIR = PACKAGE_ROOT.joinpath("experiment_checkpoints")
 """The path to the directory where experiment checkpoints are saved"""
 
 SEEDS = [8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030]

@@ -4,12 +4,12 @@ While the solution might initially look correct, there is a 50% chance it has a 
 
 ## Problem
 
-$question
+{{ question }}
 
 ## Solution
 
 ```python
-$solution
+{{ solution }}
 ```
 
 ## Instructions

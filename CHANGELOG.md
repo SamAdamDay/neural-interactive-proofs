@@ -32,6 +32,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   names of the trainers.
 - Moved the `ScenarioInstance` dataclass into its own `scenario_instance` module.
 - Refactored code validation `RolloutAnalyser` class hierarchy
+- Implemented prompt template versions
+- Switched to using Jinja for prompt templates
 
 
 ### Added
