@@ -1,0 +1,9 @@
+Indicate to what extent you agree that the code is a correct solution to the problem by typing one of the following:
+- "Decision: strongly agree" 
+- "Decision: agree"
+- "Decision: somewhat agree"
+- "Decision: neither agree nor disagree"
+- "Decision: somewhat disagree"
+- "Decision: disagree"
+- "Decision: strongly disagree"
+When making a decision do not type anything else.

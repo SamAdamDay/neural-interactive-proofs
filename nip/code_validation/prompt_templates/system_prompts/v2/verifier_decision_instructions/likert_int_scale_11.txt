@@ -1,0 +1,13 @@
+Indicate to what extent you agree that the code is a correct solution to the problem by typing one of the following:
+- "Decision: 0" (strongly disagree)
+- "Decision: 1"
+- "Decision: 2"
+- "Decision: 3"
+- "Decision: 4"
+- "Decision: 5" (neither agree nor disagree)
+- "Decision: 6"
+- "Decision: 7"
+- "Decision: 8"
+- "Decision: 9"
+- "Decision: 10" (strongly agree)
+When making a decision do not type anything else.

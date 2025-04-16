@@ -101,17 +101,26 @@ class VerifierDecisionScaleHandler(ABC):
 
         decision_text_normalised = decision_text.strip().lower()
 
+        match = None
         for (
             possible_decision_text,
             discrete_decision,
             continuous_decision,
         ) in self.decision_texts_and_outcomes:
-            if decision_text_normalised.startswith(possible_decision_text):
-                return (
+
+            # Set `match` if it is the first match or if it is longer than the previous
+            # match. This is to avoid matching "1" with "10" or similar cases.
+            if decision_text_normalised.startswith(possible_decision_text) and (
+                match is None or len(possible_decision_text) > len(match[2])
+            ):
+                match = (
                     discrete_decision,
                     continuous_decision,
                     possible_decision_text,
                 )
+
+        if match is not None:
+            return match
 
         raise VerifierDecisionParseError(decision_text)
 
@@ -180,49 +189,85 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("likert_scale")
-@register_verifier_decision_scale_handler("likert_scale_no_undecided")
-class LikertScaleVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the Likert scale verifier decision scale.
+@register_verifier_decision_scale_handler("likert_int_scale_11")
+class LikertIntScale11VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
+    """Handler for the 11-point Likert integer scale verifier decision scale.
 
-    The decision text is expected to be one of the following:
-    - "strongly agree"
-    - "agree"
-    - "undecided" (not for "likert_scale_no_undecided")
-    - "disagree"
-    - "strongly disagree"
+    Decisions are specified as integers between 0 and 10, where some integers have
+    special names given by the Likert scale, as follows:
+
+    - 0: strongly disagree
+    - 5: neither agree nor disagree
+    - 10: strongly agree
     """
 
-    @cached_property
-    def decision_texts_and_outcomes(self) -> list[tuple[str, Literal[0, 1, 3], float]]:
-        """The possible decision texts and discrete and continuous outcomes, in order.
+    decision_texts_and_outcomes = []
 
-        This is a list of tuples, where each tuple contains the following:
-
-        - The decision text (str)
-        - The discrete outcome (int): 0 for reject, 1 for accept, 3 for neither accept
-          nor reject.
-        - The continuous outcome (float): between -1 and 1, where -1 is reject and 1 is
-          accept.
-
-        The decision texts should be ordered from reject to accept (i.e. the continuous
-        outcome value should be increasing)
-        """
-        if self.hyper_params.protocol_common.verifier_decision_scale == "likert_scale":
-            return [
-                ("strongly disagree", 0, -1.0),
-                ("disagree", 0, -0.5),
-                ("neither agree nor disagree", 3, 0.0),
-                ("agree", 1, 0.5),
-                ("strongly agree", 1, 1.0),
-            ]
+    for decision_value in range(11):
+        if decision_value < 5:
+            discrete_decision = 0
+        elif decision_value == 5:
+            discrete_decision = 3
         else:
-            return [
-                ("strongly disagree", 0, -1.0),
-                ("disagree", 0, -0.5),
-                ("agree", 1, 0.5),
-                ("strongly agree", 1, 1.0),
-            ]
+            discrete_decision = 1
+        continuous_decision = (decision_value / 10) * 2 - 1
+        decision_texts_and_outcomes.append(
+            (str(decision_value), discrete_decision, continuous_decision)
+        )
+
+
+@register_verifier_decision_scale_handler("likert_scale_7")
+class LikertScale7VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
+    """Handler for the 7-point Likert scale verifier decision scale."""
+
+    decision_texts_and_outcomes = [
+        ("strongly disagree", 0, -1.0),
+        ("disagree", 0, -0.667),
+        ("somewhat disagree", 0, -0.333),
+        ("neither agree nor disagree", 3, 0.0),
+        ("somewhat agree", 1, 0.333),
+        ("agree", 1, 0.667),
+        ("strongly agree", 1, 1.0),
+    ]
+
+
+@register_verifier_decision_scale_handler("likert_scale_6")
+class LikertScale6VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
+    """Handler for the 6-point Likert scale verifier decision scale."""
+
+    decision_texts_and_outcomes = [
+        ("strongly disagree", 0, -1.0),
+        ("disagree", 0, -0.667),
+        ("somewhat disagree", 0, -0.333),
+        ("somewhat agree", 1, 0.333),
+        ("agree", 1, 0.667),
+        ("strongly agree", 1, 1.0),
+    ]
+
+
+@register_verifier_decision_scale_handler("likert_scale_5")
+class LikertScale5VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
+    """Handler for the 5-point Likert scale verifier decision scale."""
+
+    decision_texts_and_outcomes = [
+        ("strongly disagree", 0, -1.0),
+        ("disagree", 0, -0.5),
+        ("neither agree nor disagree", 3, 0.0),
+        ("agree", 1, 0.5),
+        ("strongly agree", 1, 1.0),
+    ]
+
+
+@register_verifier_decision_scale_handler("likert_scale_4")
+class LikertScale4VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
+    """Handler for the 4-point Likert scale verifier decision scale."""
+
+    decision_texts_and_outcomes = [
+        ("strongly disagree", 0, -1.0),
+        ("disagree", 0, -0.5),
+        ("agree", 1, 0.5),
+        ("strongly agree", 1, 1.0),
+    ]
 
 
 @register_verifier_decision_scale_handler("out_of_10")

@@ -128,6 +128,10 @@ multi_channel_test
 
 VerifierDecisionScaleType: TypeAlias = Literal[
     "accept_reject",
+    "likert_scale_4",
+    "likert_scale_5",
+    "likert_scale_6",
+    "likert_scale_7",
     "likert_scale",
     "likert_scale_no_undecided",
     "out_of_10",
@@ -137,12 +141,27 @@ VerifierDecisionScaleType: TypeAlias = Literal[
 
 accept_reject
     The verifier's decision is either "accept" or "reject".
-likert_scale
-    The verifier's decision one of 5 options: "strongly agree", "agree", "undecided",
-    "disagree", "strongly disagree".
-likert_scale_no_undecided
-    The verifier's decision one of 4 options: "strongly agree", "agree", "disagree",
+likert_scale_4
+    The verifier's decision is one of 4 options: "strongly agree", "agree", "disagree",
     "strongly disagree".
+likert_scale_5
+    The verifier's decision is one of 5 options: "strongly agree", "agree", "neither
+    agree nor disagree", "disagree", "strongly disagree".
+likert_scale_6
+    The verifier's decision is one of 6 options: "strongly agree", "agree", "somewhat
+    agree", "disagree", "somewhat disagree", "strongly disagree".
+likert_scale_7
+    The verifier's decision is one of 7 options: "strongly agree", "agree", "somewhat
+    agree", "neither agree nor disagree", "somewhat disagree", "disagree", "strongly
+    disagree".
+likert_int_scale_11
+    Decisions are specified as integers between 0 and 10, where some integers have
+    special names given by the Likert scale, as follows:
+
+    - 0: strongly disagree
+    - 5: neither agree nor disagree
+    - 10: strongly agree
+    
 out_of_10
     The verifier's decision is a number between 0 and 10.
 out_of_100
