@@ -135,7 +135,7 @@ class CodeValidationDatasetConfig:
         if self.system_prompt is None:
 
             prompt_template_traversable = importlib.resources.files(
-                "nip.code_validation.prompt_templates.dataset_generation"
+                "nip.code_validation.templates.dataset_generation"
             )
 
             if not 0 <= self.num_problematic_inputs <= 10:

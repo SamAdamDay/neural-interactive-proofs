@@ -1,6 +1,6 @@
 """Functions for handling parameters and deriving properties from them."""
 
-from nip.parameters import HyperParameters, TrainerType
+from nip.parameters import HyperParameters, PureTextAgentParameters
 
 
 def get_agent_part_flags(
@@ -43,3 +43,40 @@ def get_agent_part_flags(
         return False, False, True
     else:
         raise ValueError(f"Unknown trainer type: {hyper_params.trainer}")
+
+
+def check_use_supervisor_message(
+    agent_params: PureTextAgentParameters, round_id: int
+) -> bool:
+    """Check if we should include the supervisor message in chat history.
+
+    The supervisor message is a message that is appended to the chat history before
+    being sent to the model. Whether to include it or not is determined by the
+    agent's parameters and the round ID.
+
+    Parameters
+    ----------
+    agent_params : PureTextAgentParameters
+        The parameters of the agent.
+    round_id : int
+        The current round number.
+
+    Returns
+    -------
+    use_supervisor_message : bool
+        Whether to include the supervisor message in the chat history.
+    """
+
+    if agent_params.use_supervisor_message == "none":
+        return False
+    elif agent_params.use_supervisor_message == "all":
+        return True
+    elif agent_params.use_supervisor_message == "first":
+        return round_id == 0
+    elif agent_params.use_supervisor_message == "all_but_first":
+        return round_id != 0
+    else:
+        raise ValueError(
+            f"Unknown use_supervisor_message value: "
+            f"{agent_params.use_supervisor_message!r}"
+        )

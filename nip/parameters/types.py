@@ -199,3 +199,23 @@ rerun_tests
     Rerun the tests of a previous run. The hyper-parameters controlling the tests
     can be different.
 """
+
+UseSupervisorType: TypeAlias = Literal["none", "all", "first", "all_but_first"]
+"""Type for specifying when to use a supervisor message in pure-text tasks.
+
+A supervisor message is appended to each chat history before being sent to the model.
+
+Values
+------
+none
+    Do not use a supervisor message.
+all
+    Use a supervisor message for all rounds.
+first
+    Use a supervisor message only for the first round. This is useful for models that
+    require at least one user message to be able to generate a response.
+all_but_first
+    Use a supervisor message for all rounds except the first one. The supervisor message
+    is somewhat superfluous for the first round, because the system message already
+    contains all the instructions.
+"""

@@ -1,0 +1,4 @@
+{%- extends "supervisor_message/_common/prover_base.txt" -%}
+{%- block first_message -%}
+    Send a message to Verifier with the aim of convincing them to accept the solution.
+{%- endblock first_message -%}

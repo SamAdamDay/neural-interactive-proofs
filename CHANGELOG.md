@@ -55,6 +55,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Option to have the verifier give a decision on a scale, rather than a binary accept or
   reject.
 - Utilities to compute the histogram of verifier decisions and thresholded performance.
+- Functionality for appending a 'supervisor' message to the chat history before sending
+  it to the model, to help it better follow the instructions.
 
 
 ### Fixed

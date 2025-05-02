@@ -66,6 +66,16 @@ class VerifierDecisionScaleHandler(ABC):
             decision_text for decision_text, _, _ in self.decision_texts_and_outcomes
         ]
 
+    @cached_property
+    def strongest_reject_decision_text(self) -> str:
+        """The strongest reject decision text from the verifier model."""
+        return self.possible_decision_texts[0]
+
+    @cached_property
+    def strongest_accept_decision_text(self) -> str:
+        """The strongest accept decision text from the verifier model."""
+        return self.possible_decision_texts[-1]
+
     def extract_decision(
         self, decision_text: str
     ) -> tuple[Literal[0, 1, 3], float, str]:

@@ -52,6 +52,7 @@ param_grid = dict(
     verifier_guess_replacement_annealing=["linear"],
     verifier_guess_replacement_annealing_rate=[0.1],
     verifier_decision_scale=["accept_reject"],
+    verifier_supervisor_message=["all"],
     freeze_verifier=[False],
     prover_model=["OpenAI/gpt-4o-2024-08-06"],
     prover_system_prompt_template=[None],
@@ -59,6 +60,7 @@ param_grid = dict(
     prover_temperature=[None],
     prover_top_p=[None],
     prover_repetition_penalty=[None],
+    prover_supervisor_message=["all"],
     freeze_prover=[False],
     provers_share_model=[True],
     fine_tune_from_scratch=[True],
@@ -113,6 +115,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             use_dummy_api=cmd_args.use_dummy_api,
             freeze_agent=combo["freeze_verifier"],
             fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+            use_supervisor_message=combo["verifier_supervisor_message"],
         ),
     )
 
@@ -127,6 +130,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         use_dummy_api=cmd_args.use_dummy_api,
         freeze_agent=combo["freeze_prover"],
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
+        use_supervisor_message=combo["prover_supervisor_message"],
     )
 
     if combo["provers_share_model"]:

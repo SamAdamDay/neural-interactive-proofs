@@ -1,0 +1,7 @@
+{%- extends "supervisor_message/_common/prover_base.txt" -%}
+{%- block first_message -%}
+    Send a message to Verifier with the aim of convincing them to reject the solution.
+{%- endblock first_message -%}
+{%- block answer_question -%}
+    Answer Verifier's question as well as the arguments made by the other expert, with the aim of convincing them to reject the solution. Begin your response with "Answer: ".
+{%- endblock answer_question -%}

@@ -18,8 +18,8 @@ from jaxtyping import Bool, Int, Float
 from jinja2 import (
     Environment as JinjaEnvironment,
     PackageLoader,
-    FileSystemLoader,
     Template,
+    StrictUndefined,
 )
 
 from nip.parameters.agents import CodeValidationAgentParameters
@@ -36,6 +36,7 @@ from nip.protocols.main_protocols import (
 from nip.protocols.verifier_decision_scale import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
+from nip.utils.jinja_filters import capitalise_first_letter, add_s_plural
 from nip.constants import PACKAGE_ROOT
 
 
@@ -66,7 +67,9 @@ class CodeValidationAgentSpec:
     last_round_system_message : str, optional
         If set, this message will be sent as a system message at the beginning of the
         last round of the interaction to the agent. This can be used to tell the agent
-        to make a decision.
+        to make a decision. NOTE: This functionality overlaps with the 'supervisor
+        message'. If the supervisor message would be sent in the last round, this
+        setting is ignored.
     use_raw_message_for_self_prompt : bool, default=True
         When prompting the agent for a message, whether messages sent from this agent
         should be included in the chat history as raw messages (rather than being split
@@ -105,10 +108,8 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """A dictionary mapping agent names to parameters."""
         return self.hyper_params.agents
 
-    def modify_system_prompt_variables(
-        self, agent_name: str, current_variables: dict
-    ) -> dict:
-        """Modify the system prompt variables for a given agent.
+    def modify_system_prompt_context(self, agent_name: str, context: dict) -> dict:
+        """Modify the template context for a system prompt for a given agent.
 
         This method can be overridden by any protocol handler which needs to include
         additional variables in the system prompts.
@@ -117,30 +118,47 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         ----------
         agent_name : str
             The name of the agent.
-        current_variables : dict
+        context : dict
             The current variables to include in the system prompts.
 
         Returns
         -------
-        dict
+        system_prompt_variables : dict
             A dictionary mapping variable names to values. To add new variables, return
-            ``current_variables`` with the new variables added.
+            ``context`` with the new variables added.
         """
 
-        return current_variables
+        return context
+
+    @cached_property
+    def jinja_filters(self) -> dict[str, callable]:
+        """The custom Jinja2 filters for this protocol handler."""
+        return {
+            "capitalise_first_letter": capitalise_first_letter,
+            "add_s_plural": add_s_plural,
+        }
 
     @cached_property
     def jinja_environment(self) -> JinjaEnvironment:
         """The Jinja2 environment for loading templates."""
 
-        return JinjaEnvironment(
+        environment = JinjaEnvironment(
             loader=PackageLoader(
                 "nip",
-                f"code_validation/prompt_templates/rollout_generation"
+                f"code_validation/templates/rollout_generation"
                 f"/{self.hyper_params.code_validation.system_prompt_version}",
             ),
             autoescape=True,
+            trim_blocks=True,
+            lstrip_blocks=True,
+            undefined=StrictUndefined,
         )
+
+        # Add custom filters to the Jinja2 environment
+        for filter_name, filter_func in self.jinja_filters.items():
+            environment.filters[filter_name] = filter_func
+
+        return environment
 
     @cached_property
     def verifier_decision_instructions_prompt_template(self) -> Template:
@@ -168,24 +186,23 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         Returns
         -------
-        jinja2.Template
+        system_prompt_template : jinja2.Template
             The system prompt template for the agent.
         """
 
         if self.agent_params[agent_name].system_prompt_template_path is not None:
-            file_system_environment = JinjaEnvironment(
-                loader=FileSystemLoader(PACKAGE_ROOT)
-            )
-            return file_system_environment.get_template(
-                self.agent_params[agent_name].system_prompt_template_path
-            )
+            with open(
+                self.agent_params[agent_name].system_prompt_template_path, "r"
+            ) as f:
+                template_string = f.read()
+            return self.jinja_environment.from_string(template_string)
         else:
             return self.jinja_environment.get_template(
-                f"main_system_prompts/{self.hyper_params.interaction_protocol}"
+                f"main_system_prompt/{self.hyper_params.interaction_protocol}"
                 f"/{agent_name}.txt"
             )
 
-    def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
+    def get_agent_system_prompt(self, agent_name: str, **context) -> str:
         """Get the system prompt for a given agent.
 
         This prompt is used to generate system prompts at the beginning of the chat
@@ -196,40 +213,83 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         agent_name : str
             The name of the agent.
         kwargs
-            Additional keyword arguments to pass to the template.
+            Additional keyword arguments to pass to the template as context.
 
         Returns
         -------
-        str
+        system_prompt : str
             The system prompt for the agent.
         """
 
-        # Determine the stance of the agent as a string, if it can be randomized
-        if (
-            self.prover_stance_can_be_randomized
-            and self.hyper_params.protocol_common.randomize_prover_stance
-        ):
-            agent_stance: int = prompt_variables.pop(
-                "agent_stance", self.agent_specs[agent_name].default_stance
-            )
-        else:
-            agent_stance = self.agent_specs[agent_name].default_stance
-        agent_stance_string = "accept" if agent_stance == 1 else "reject"
-
-        prompt_variables = self.modify_system_prompt_variables(
-            agent_name, prompt_variables
-        )
+        context = self.modify_system_prompt_context(agent_name, context)
 
         verifier_decision_instructions = (
-            self.verifier_decision_instructions_prompt_template.render(
-                **prompt_variables
-            )
+            self.verifier_decision_instructions_prompt_template.render(**context)
         )
 
         return self.get_agent_system_prompt_template(agent_name).render(
-            **prompt_variables,
-            agent_stance_string=agent_stance_string,
+            **context,
+            agent_stance_string=self._get_agent_stance_string(agent_name, context),
             verifier_decision_instructions=verifier_decision_instructions,
+        )
+
+    @cache
+    def get_agent_supervisor_message_template(self, agent_name: str) -> Template:
+        """Get the supervisor message template for a given agent.
+
+        This template is used to generate a message appended to the chat history before
+        it is passed to the agent model.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+
+        Returns
+        -------
+        supervisor_message_template : jinja2.Template
+            The supervisor message template for the agent.
+        """
+        return self.jinja_environment.get_template(
+            f"supervisor_message/{self.hyper_params.interaction_protocol}"
+            f"/{agent_name}.txt"
+        )
+
+    def get_agent_supervisor_message(
+        self,
+        agent_name: str,
+        round_id: int,
+        num_questions_left: int,
+        **context,
+    ) -> str:
+        """Get the supervisor message for a given agent.
+
+        This message is appended to the chat history before it is passed to the agent
+        model.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        kwargs
+            Additional keyword arguments to pass to the template as context.
+
+        Returns
+        -------
+        supervisor_message : str
+            The system prompt for the agent.
+        """
+
+        verifier_decision_instructions = (
+            self.verifier_decision_instructions_prompt_template.render(**context)
+        )
+
+        return self.get_agent_supervisor_message_template(agent_name).render(
+            round_id=round_id,
+            num_questions_left=num_questions_left,
+            agent_stance_string=self._get_agent_stance_string(agent_name, context),
+            verifier_decision_instructions=verifier_decision_instructions,
+            **context,
         )
 
     def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
@@ -356,6 +416,40 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         return OrderedDict(
             [(channel_name, "") for channel_name in self.message_channel_names]
         )
+
+    def _get_agent_stance_string(self, agent_name: str, context: dict) -> str:
+        """Get the stance of the agent as a string, when substituting a template.
+
+        The stance is either "accept" or "reject", and tells the agent what to argue
+        for. This is only relevant for provers.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        context : dict
+            The template variables to use for rendering the template.
+
+        Returns
+        -------
+        agent_stance_string : str
+            The stance of the agent as a string.
+        """
+
+        if (
+            self.prover_stance_can_be_randomized
+            and self.hyper_params.protocol_common.randomize_prover_stance
+        ):
+            agent_stance: int = context.pop(
+                "agent_stance", self.agent_specs[agent_name].default_stance
+            )
+        else:
+            agent_stance = self.agent_specs[agent_name].default_stance
+
+        if agent_stance == 0:
+            return "reject"
+        else:
+            return "accept"
 
     def _parse_decision(
         self, completion_text: str

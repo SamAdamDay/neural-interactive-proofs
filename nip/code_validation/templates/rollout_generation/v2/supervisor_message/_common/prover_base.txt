@@ -1,0 +1,9 @@
+{%- if round_id == 0 -%}
+    {%- block first_message -%}
+        Send a message to Verifier with the aim of convincing them to {{ agent_stance_string }} the solution.
+    {%- endblock first_message -%}
+{%- else -%}
+    {%- block answer_question -%}
+        Answer Verifier's question with the aim of convincing them to {{ agent_stance_string }} the solution. Begin your response with "Answer: ".
+    {%- endblock answer_question -%}
+{%- endif -%}

@@ -56,7 +56,6 @@ Examples
 """
 
 from typing import Optional
-import typing
 from dataclasses import dataclass, fields
 
 from nip.utils.version import get_package_name, get_version
@@ -82,6 +81,7 @@ from .types import (
     ImageBuildingBlockType,
     MessageRegressionMethodType,
     BaseRunType,
+    UseSupervisorType,
 )
 from .agents import (
     LrFactors,

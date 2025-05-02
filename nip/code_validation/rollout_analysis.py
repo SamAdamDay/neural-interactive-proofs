@@ -87,7 +87,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
         # Load the system prompt template
         prompt_template_traversable = importlib.resources.files(
-            "nip.code_validation.prompt_templates.rollout_analysis"
+            "nip.code_validation.templates.rollout_analysis"
         )
         self.system_template = Template(
             prompt_template_traversable.joinpath(

@@ -19,6 +19,7 @@ from collections import OrderedDict
 from warnings import warn
 
 from torch import from_numpy
+import torch
 
 import numpy as np
 from numpy.typing import NDArray
@@ -71,6 +72,7 @@ from nip.utils.api import (
     ContentIsNoneError,
     UnknownFinishReasonError,
 )
+from nip.utils.hyper_params import check_use_supervisor_message
 from nip.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
@@ -357,6 +359,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     replace_last_message_with_true_label=(
                         self.is_verifier and replace_verifier_guess_with_true_label
                     ),
+                    allow_supervisor_message=False,
                 )
             except AgentNotActiveInChannelError:
                 continue
@@ -695,6 +698,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         y: Optional[int] = None,
         ensure_last_message_is_assistant: bool = False,
         replace_last_message_with_true_label: bool = False,
+        allow_supervisor_message: bool = True,
     ) -> list[PromptMessage]:
         """Construct the chat history ready to feed to the API.
 
@@ -726,6 +730,13 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             Whether to replace the last message with 'Decision: accept' or 'Decision:
             reject' based on the true label. If this is set to True, ``y`` must be
             provided. Only used if ``ensure_last_message_is_assistant`` is set to True.
+        allow_supervisor_message : bool, default=True
+            Whether to allow the supervisor message in the chat history. The supervisor
+            message is a message that is appended to the chat history before being sent
+            to the model. It is used to provide additional context or instructions to
+            the model. If this is set to False, the supervisor message will not be
+            included in the chat history. If this is set to True, the supervisor message
+            will be included depending on the agent's settings.
 
         Returns
         -------
@@ -756,6 +767,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     "agent must be a verifier."
                 )
 
+        use_supervisor_message = check_use_supervisor_message(
+            self.agent_params, round_id
+        )
+
         # First add the system prompt
         system_prompt = self.protocol_handler.get_agent_system_prompt(
             agent_name=self.agent_name,
@@ -767,14 +782,25 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         )
         chat_messages = [dict(role="system", content=system_prompt)]
 
+        num_turns_taken = 0
+
+        # A 1D mask indicating which rounds the agent is active in
+        active_mask = self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+            torch.arange(round_id + 1), torch.tensor([seed] * (round_id + 1))
+        )[:, self.agent_id, :].any(dim=-1)
+
         # Then add the chat history, with messages from the current agent
-        for round_id in range(self.max_message_rounds):
+        for current_round_id in range(self.max_message_rounds):
+
+            if active_mask[current_round_id]:
+                num_turns_taken += 1
 
             no_message = True
 
             # Add the last-round system message if applicable
             if (
-                round_id == self.max_message_rounds - 1
+                not use_supervisor_message
+                and current_round_id == self.max_message_rounds - 1
                 and self.agent_spec.last_round_system_message is not None
             ):
                 chat_messages.append(
@@ -788,18 +814,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             # is not None
             if (
                 self.agent_spec.use_raw_message_for_self_prompt
-                and raw_message_history[round_id, self.agent_index] is not None
+                and raw_message_history[current_round_id, self.agent_index] is not None
             ):
                 chat_messages.append(
                     dict(
                         role="assistant",
-                        content=raw_message_history[round_id, self.agent_index],
+                        content=raw_message_history[current_round_id, self.agent_index],
                     )
                 )
                 no_message = False
 
             for channel_name in self.protocol_handler.get_agent_ordered_channels(
-                self.agent_name, seed=seed + round_id
+                self.agent_name, seed=seed + current_round_id
             ):
 
                 # If the agent cannot see the channel, skip
@@ -812,7 +838,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     channel_name
                 )
 
-                message = message_history[round_id, channel_id]
+                message = message_history[current_round_id, channel_id]
 
                 # Message is None if no agent sent a message in this channel in this
                 # round
@@ -820,10 +846,10 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     continue
 
                 # Determine which agent sent the message
-                if message_agent_id[round_id, channel_id] == -1:
-                    raise ValueError(f"Agent ID is -1 in round {round_id}")
+                if message_agent_id[current_round_id, channel_id] == -1:
+                    raise ValueError(f"Agent ID is -1 in round {current_round_id}")
                 message_agent_name = self.protocol_handler.agent_names[
-                    message_agent_id[round_id, channel_id]
+                    message_agent_id[current_round_id, channel_id]
                 ]
 
                 # If the agent which sent the message is the current agent, and we have
@@ -857,6 +883,22 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             if no_message:
                 break
 
+        if use_supervisor_message:
+            supervisor_message = self.protocol_handler.get_agent_supervisor_message(
+                agent_name=self.agent_name,
+                round_id=round_id,
+                num_questions_left=self.protocol_handler.max_verifier_questions
+                - num_turns_taken,
+                agent_stance=prover_stance,
+            )
+            chat_messages.append(
+                dict(
+                    role="user",
+                    name=self.agent_params.supervisor_name,
+                    content=supervisor_message,
+                )
+            )
+
         if ensure_last_message_is_assistant:
             while chat_messages[-1]["role"] != "assistant":
                 chat_messages.pop()
@@ -864,10 +906,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     raise AgentNotActiveInChannelError
 
             if replace_last_message_with_true_label:
+                verifier_decision_scale_handler = (
+                    self.protocol_handler.verifier_decision_scale_handler
+                )
                 if y == 0:
-                    chat_messages[-1]["content"] = "Decision: reject"
+                    decision_text = (
+                        verifier_decision_scale_handler.strongest_reject_decision_text
+                    )
                 else:
-                    chat_messages[-1]["content"] = "Decision: accept"
+                    decision_text = (
+                        verifier_decision_scale_handler.strongest_accept_decision_text
+                    )
+                chat_messages[-1]["content"] = f"Decision: {decision_text}"
 
         return chat_messages
 
