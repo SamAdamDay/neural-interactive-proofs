@@ -18,23 +18,29 @@ class DecisionAgreementAnalysis:
 
     Parameters
     ----------
-    matrix : NDArray
+    agreement_matrix : NDArray
         A matrix of shape (n_rollouts, n_rollouts), which for each pair of rollouts
         contains the proportion of the datapoints for which the verifier makes the same
         decision.
-    positive_matrix : NDArray
+    positive_agreement_matrix : NDArray
         A matrix of shape (n_rollouts, n_rollouts), which for each pair of rollouts
         contains the proportion of the positively labelled datapoints for which the
         verifier makes the same decision.
-    negative_matrix : NDArray
+    negative_agreement_matrix : NDArray
         A matrix of shape (n_rollouts, n_rollouts), which for each pair of rollouts
         contains the proportion of the negatively labelled datapoints for which the
         verifier makes the same decision.
+    cohen_kappa_matrix : NDArray
+        A matrix of shape (n_rollouts, n_rollouts), which for each pair of rollouts
+        contains the Cohen's kappa score :cite:p:`Cohen1960` for the decisions made by
+        the verifiers. This is a measure of the agreement between two raters, corrected
+        for chance agreement.
     """
 
-    matrix: NDArray
-    positive_matrix: NDArray
-    negative_matrix: NDArray
+    agreement_matrix: NDArray
+    positive_agreement_matrix: NDArray
+    negative_agreement_matrix: NDArray
+    cohen_kappa_matrix: NDArray
 
 
 def analyse_decision_agreement(
@@ -91,6 +97,7 @@ def analyse_decision_agreement(
     decision_agreement_matrix = np.zeros((num_rollouts, num_rollouts))
     decision_agreement_positive_matrix = np.zeros((num_rollouts, num_rollouts))
     decision_agreement_negative_matrix = np.zeros((num_rollouts, num_rollouts))
+    accuracies = np.zeros(num_rollouts)
 
     num_pairs = num_rollouts * (num_rollouts - 1) / 2
 
@@ -101,15 +108,17 @@ def analyse_decision_agreement(
     )
 
     for i, first_rollout_set in enumerate(rollouts):
+
+        y = first_rollout_set["y"][..., -1]
+        first_decision = first_rollout_set["agents", "decision"][..., -1]
+        first_decision = first_decision[get_last_timestep_mask(first_rollout_set)]
+
+        accuracies[i] = np.mean(first_decision == y)
+
         for j, second_rollout_set in enumerate(rollouts):
             if i >= j:
                 continue
 
-            y = first_rollout_set["y"][..., -1]
-
-            # Get the verifier decisions for each rollout
-            first_decision = first_rollout_set["agents", "decision"][..., -1]
-            first_decision = first_decision[get_last_timestep_mask(first_rollout_set)]
             second_decision = second_rollout_set["agents", "decision"][..., -1]
             second_decision = second_decision[
                 get_last_timestep_mask(second_rollout_set)
@@ -139,8 +148,19 @@ def analyse_decision_agreement(
     np.fill_diagonal(decision_agreement_positive_matrix, 1)
     np.fill_diagonal(decision_agreement_negative_matrix, 1)
 
+    # Compute Cohen's kappa. First compute the expected agreement matrix for chance
+    # agreement. Then apply the formula for Cohen's kappa:
+    # (observed_agreement - expected_agreement) / (1 - expected_agreement)
+    expected_agreement = np.outer(accuracies, accuracies) + np.outer(
+        1 - accuracies, 1 - accuracies
+    )
+    cohen_kappa_matrix = (
+        decision_agreement_matrix - expected_agreement
+    ) / (1 - expected_agreement)
+
     return DecisionAgreementAnalysis(
-        matrix=decision_agreement_matrix,
-        positive_matrix=decision_agreement_positive_matrix,
-        negative_matrix=decision_agreement_negative_matrix,
+        agreement_matrix=decision_agreement_matrix,
+        positive_agreement_matrix=decision_agreement_positive_matrix,
+        negative_agreement_matrix=decision_agreement_negative_matrix,
+        cohen_kappa_matrix=cohen_kappa_matrix,
     )

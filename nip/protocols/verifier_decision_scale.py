@@ -182,7 +182,7 @@ def build_verifier_decision_scale_handler(
     """
 
     decision_scale_type = hyper_params.protocol_common.verifier_decision_scale
-    handler_class = VERIFIER_DECISION_SCALE_HANDLERS.get(decision_scale_type)
+    handler_class = VERIFIER_DECISION_SCALE_HANDLERS[decision_scale_type]
     return handler_class(hyper_params)
 
 
