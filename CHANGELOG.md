@@ -57,6 +57,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Utilities to compute the histogram of verifier decisions and thresholded performance.
 - Functionality for appending a 'supervisor' message to the chat history before sending
   it to the model, to help it better follow the instructions.
+- Enabled analysing a batch of rollouts with `scripts/analyse_cv_rollouts.py`.
 
 
 ### Fixed
