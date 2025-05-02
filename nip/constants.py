@@ -31,6 +31,11 @@ LOG_DIR = PACKAGE_ROOT.joinpath("log")
 EXPERIMENT_STATE_DIR = PACKAGE_ROOT.joinpath("experiment_checkpoints")
 """The path to the directory where experiment checkpoints are saved"""
 
+DATABASE_DIR = PACKAGE_ROOT.joinpath("databases")
+"""The path to the directory where databases are saved"""
+LANGUAGE_MODEL_DB_DIR = DATABASE_DIR.joinpath("language_models.csv")
+"""The path to the database containing language model metadata"""
+
 SEEDS = [8144, 820, 4173, 3992, 4506, 9876, 5074, 446, 5147, 9030]
 """The default seeds to use for experiments"""
 

@@ -58,6 +58,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Functionality for appending a 'supervisor' message to the chat history before sending
   it to the model, to help it better follow the instructions.
 - Enabled analysing a batch of rollouts with `scripts/analyse_cv_rollouts.py`.
+- A database of language model metadata. This helps with running a sweep of experiments
+  across multiple models.
 
 
 ### Fixed
