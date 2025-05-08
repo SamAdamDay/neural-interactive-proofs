@@ -1485,6 +1485,14 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         else:
             model_name = self.model_name
 
+        method_key = {"type": method}
+        if method == "dpo":
+            if self.shared_agent_params.dpo_beta is None:
+                beta = "auto"
+            else:
+                beta = self.shared_agent_params.dpo_beta
+            method_key["dpo"] = {"hyperparameters": {"beta": beta}}
+
         # Create the fine-tune job
         while True:
             try:
@@ -1499,7 +1507,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                             },
                         }
                     ],
-                    method={"type": method},
+                    method=method_key,
                     suffix=job_name,
                 )
 

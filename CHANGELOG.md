@@ -60,6 +60,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Enabled analysing a batch of rollouts with `scripts/analyse_cv_rollouts.py`.
 - A database of language model metadata. This helps with running a sweep of experiments
   across multiple models.
+- The beta parameter can now be specified when doing DPO with the OpenAI API.
 
 
 ### Fixed

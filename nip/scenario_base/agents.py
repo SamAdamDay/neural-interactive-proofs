@@ -458,6 +458,7 @@ class PureTextSharedModelGroup(ABC):
         freeze_agent: bool
         use_dummy_api: bool
         fine_tune_from_scratch: bool
+        dpo_beta: Optional[float]
 
     @property
     def model_name(self) -> str:

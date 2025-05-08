@@ -491,6 +491,10 @@ class PureTextAgentParameters(AgentParameters):
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    dpo_beta : float | None
+        The beta parameter for to use when training the model with DPO. This is a float
+        between 0 and 2, which controls how strictly the new model will adhere to its
+        previous behaviour. If ``None``, the value is configured by the model provider.
     system_prompt_template_path : str | None
         This option allows specifying a custom system prompt template. If not provided,
         the default system prompt template is used.
@@ -528,6 +532,7 @@ class PureTextAgentParameters(AgentParameters):
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
+    dpo_beta: Optional[float] = None
 
     system_prompt_template_path: str | None = None
 
@@ -594,6 +599,10 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    dpo_beta : float | None
+        The beta parameter for to use when training the model with DPO. This is a float
+        between 0 and 2, which controls how strictly the new model will adhere to its
+        previous behaviour. If ``None``, the value is configured by the model provider.
     system_prompt_template_path : str | None
         This option allows specifying a custom system prompt template. If not provided,
         the default system prompt template is used.
