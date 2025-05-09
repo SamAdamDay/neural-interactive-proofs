@@ -786,7 +786,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         # A 1D mask indicating which rounds the agent is active in
         active_mask = self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
-            torch.arange(round_id + 1), torch.tensor([seed] * (round_id + 1))
+            torch.arange(self.max_message_rounds),
+            torch.tensor([seed] * (self.max_message_rounds)),
         )[:, self.agent_id, :].any(dim=-1)
 
         # Then add the chat history, with messages from the current agent
