@@ -602,6 +602,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: NestedArrayDict,
     ):
@@ -629,8 +630,10 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         if self.hyper_params.protocol_common.shared_reward:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = reward[..., self.verifier_index]
+
         else:
             if len(self.prover_names) == 1:
+
                 if (
                     self.prover_stance_can_be_randomized
                     and self.hyper_params.protocol_common.randomize_prover_stance
@@ -640,16 +643,45 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
                     prover_stance = self.agent_specs[
                         self.prover_names[0]
                     ].default_stance
-                reward[..., self.prover_indices[0]] = (
-                    verifier_decision_made & (verifier_decision == prover_stance)
-                ).float() * self.hyper_params.protocol_common.prover_reward
+
+                if verifier_float_decision is not None:
+                    reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                        (verifier_float_decision / 2 + 0.5)[verifier_decision_made]
+                        * self.hyper_params.protocol_common.prover_reward
+                        * (2 * prover_stance - 1)
+                    )
+
+                else:
+                    reward[..., self.prover_indices[0]] = (
+                        verifier_decision_made & (verifier_decision == prover_stance)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
+
             else:
-                reward[..., self.prover_indices[0]] = (
-                    verifier_decision_made & (verifier_decision == 0)
-                ).float() * self.hyper_params.protocol_common.prover_reward
-                reward[..., self.prover_indices[1]] = (
-                    verifier_decision_made & (verifier_decision == 1)
-                ).float() * self.hyper_params.protocol_common.prover_reward
+
+                if verifier_float_decision is not None:
+
+                    reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                        verifier_float_decision / 2 + 0.5
+                    )[
+                        verifier_decision_made
+                    ] * self.hyper_params.protocol_common.prover_reward
+
+                    reward[..., self.prover_indices[1]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[1]][verifier_decision_made] = (
+                        -verifier_float_decision / 2 + 0.5
+                    )[
+                        verifier_decision_made
+                    ] * self.hyper_params.protocol_common.prover_reward
+
+                else:
+                    reward[..., self.prover_indices[0]] = (
+                        verifier_decision_made & (verifier_decision == 0)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
+                    reward[..., self.prover_indices[1]] = (
+                        verifier_decision_made & (verifier_decision == 1)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
 
 
 @register_protocol_handler("nip", "code_validation")
@@ -797,6 +829,7 @@ class SoloVerifierCodeValidationProtocol(
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: NestedArrayDict,
     ):

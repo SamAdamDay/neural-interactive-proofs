@@ -666,8 +666,18 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         ] = self.protocol_common.verifier_no_guess_reward
 
         # Compute the rewards for the other agents and add them
+        if ("agents", "continuous_decision") in nested_keys:
+            verifier_float_decision = as_tensor(
+                env_td["agents", "continuous_decision"]
+            )[..., self.verifier_index]
+        else:
+            verifier_float_decision = None
         self._include_prover_rewards(
-            verifier_decision_made, decision[..., self.verifier_index], reward, env_td
+            verifier_decision_made,
+            decision[..., self.verifier_index],
+            verifier_float_decision,
+            reward,
+            env_td,
         )
 
         # The agent-specific done signal is the same as the shared done signal
@@ -829,6 +839,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: TensorDictBase | NestedArrayDict,
     ):
@@ -839,6 +850,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         - If there is one prover, they are rewarded when the verifier guesses "accept".
         - If there are two provers, the first is rewarded when the verifier guesses
           "reject" and the second is rewarded when the verifier guesses "accept".
+
+        When the ``continuous_decision`` key is present in the environment tensor, a
+        continuous version of this is used instead, where the reward is a linear
+        transformation of the verifier's decision.
 
         Implement a custom method for protocols with more than two provers, or for
         protocols with different reward schemes.
@@ -851,7 +866,12 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         verifier_decision_made : Bool[Tensor, "..."]
             A boolean mask indicating whether the verifier has made a decision.
         verifier_decision : Int[Tensor, "..."]
-            The verifier's decision.
+            The verifier's discrete decision.
+        verifier_float_decision : Float[Tensor, "..."] | None
+            The verifier's continuous decision. This is only used if the
+            ``continuous_decision`` key is present in the environment tensor. If not
+            ``None``, it is used to compute the reward for the provers instead of the
+            discrete decision.
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
             verifier.
@@ -870,7 +890,33 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         if self.hyper_params.protocol_common.shared_reward:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = reward[..., self.verifier_index]
+
+        elif verifier_float_decision is not None:
+
+            if len(self.prover_names) == 1:
+                reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                    verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+
+            else:
+                reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                    verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+                reward[..., self.prover_indices[1]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[1]][verifier_decision_made] = (
+                    -verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+
         else:
+
             if len(self.prover_names) == 1:
                 reward[..., self.prover_indices[0]] = (
                     verifier_decision_made & (verifier_decision == 1)
