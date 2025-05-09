@@ -70,6 +70,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 
 - Bug where `mean_decision` and `std_decision` were incorrectly logged for pure text
   trainers.
+- Bug where one of the provers in the MNIP protocol for code validation got the
+  incorrect rewards, due to a mistake with inheritance.
 
 
 ## [1.0.0] - 2025-03-10

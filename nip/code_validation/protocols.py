@@ -768,6 +768,22 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
             ),
         }
 
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
+        reward: Float[Tensor, "... agent"],
+        env_td: NestedArrayDict,
+    ):
+        super(CodeValidationProtocolHandler, self)._include_prover_rewards(
+            verifier_decision_made=verifier_decision_made,
+            verifier_decision=verifier_decision,
+            verifier_float_decision=verifier_float_decision,
+            reward=reward,
+            env_td=env_td,
+        )
+
 
 @register_protocol_handler("solo_verifier", "code_validation")
 class SoloVerifierCodeValidationProtocol(
