@@ -347,6 +347,15 @@ class PureTextMaltParameters(SubParameters):
     num_responses_per_timestep : int
         The number of responses to sample from the agents at each timestep. This yields
         a tree of size at most ``num_responses_per_timestep ** max_message_rounds``.
+    frozen_agents_generate_one_response : bool
+        If ``False``, when generating the tree of rollouts, we sample multiple responses
+        from the frozen agents. Since frozen agents are not trained, it is not really
+        necessary to sample multiple responses from them. However, having multiple
+        enriches the tree, meaning the preference pairs are likely of higher quality.
+        Currently this option does not apply if there is a round where both a frozen and
+        a non-frozen agent take actions. In this case, the frozen agent will
+        automatically sample multiple responses.
     """
 
     num_responses_per_timestep: int = 2
+    frozen_agents_generate_one_response: bool = True

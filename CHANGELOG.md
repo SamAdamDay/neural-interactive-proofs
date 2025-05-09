@@ -34,6 +34,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Refactored code validation `RolloutAnalyser` class hierarchy
 - Implemented prompt template versions
 - Switched to using Jinja for prompt templates
+- Defaulting to not generating multiple responses for frozen agents in MALT (this is now
+  configurable).
 
 
 ### Added

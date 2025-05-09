@@ -12,6 +12,9 @@ from typing import Optional, ClassVar, Any
 from dataclasses import dataclass, InitVar
 import dataclasses
 
+import torch
+from torch import Tensor
+
 import numpy as np
 
 import pandas as pd
@@ -20,7 +23,7 @@ import einops
 
 from jaxtyping import Int, Float, Bool
 
-from nip.parameters import HyperParameters
+from nip.parameters import HyperParameters, PureTextAgentParameters
 from nip.protocols.protocol_base import ProtocolHandler
 from nip.trainers.rl_pure_text_base import PureTextRlTrainer
 from nip.trainers.registry import register_trainer
@@ -552,16 +555,53 @@ def _generate_response_tree(
         [_PartialRolloutNode(base_env_state, node_id_base=node_id_base)]
     ]
 
+    # Get a mask indicating whether there is an unfrozen active agent in each round
+    active_agents_mask: Bool[Tensor, "round agent channel"] = (
+        protocol_handler.get_active_agents_mask_from_rounds_and_seed(
+            torch.arange(protocol_handler.max_message_rounds),
+            einops.repeat(
+                torch.from_numpy(base_env_state["seed"]),
+                "1 -> round",
+                round=protocol_handler.max_message_rounds,
+            ),
+        )
+    )
+    unfrozen_active_agent_mask = []
+    for round_id in range(protocol_handler.max_message_rounds):
+        for agent_id, agent_name in enumerate(protocol_handler.agent_names):
+            agent_params: PureTextAgentParameters = hyper_params.agents[agent_name]
+            if (
+                active_agents_mask[round_id, agent_id].any()
+                and not agent_params.freeze_agent
+            ):
+                unfrozen_active_agent_mask.append(True)
+                break
+        else:
+            unfrozen_active_agent_mask.append(False)
+
     # Generate the tree of responses by iterating down level-by-level
     for level in range(protocol_handler.max_message_rounds):
+
         partial_rollouts_by_level.append([])
+
         for base_partial_rollout in partial_rollouts_by_level[level]:
+
             if not base_partial_rollout.ended:
+
+                if (
+                    not hyper_params.pure_text_malt.frozen_agents_generate_one_response
+                    or unfrozen_active_agent_mask[level]
+                ):
+                    num_children = (
+                        hyper_params.pure_text_malt.num_responses_per_timestep
+                    )
+                else:
+                    num_children = 1
 
                 # Clone the base rollout to create multiple child rollouts, one for each
                 # response per timestep
                 child_partial_rollouts: list[_PartialRolloutNode] = []
-                for _ in range(hyper_params.pure_text_malt.num_responses_per_timestep):
+                for _ in range(num_children):
                     child_partial_rollouts.append(base_partial_rollout.clone_as_child())
 
                 for child_partial_rollout in child_partial_rollouts:
