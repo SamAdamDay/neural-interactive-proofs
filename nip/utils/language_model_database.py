@@ -41,7 +41,7 @@ class LanguageModelDbEntry:
     def model_id(self) -> str:
         """The ID of the model in the model provider."""
         return self.uri.partition("/")[2]
-    
+
     @property
     def display_name(self) -> str:
         """A nice name for the model."""

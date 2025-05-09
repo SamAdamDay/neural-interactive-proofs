@@ -61,6 +61,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - A database of language model metadata. This helps with running a sweep of experiments
   across multiple models.
 - The beta parameter can now be specified when doing DPO with the OpenAI API.
+- Script and utility for visualising MALT rollouts as a forest of trees.
 
 
 ### Fixed

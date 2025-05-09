@@ -1227,15 +1227,16 @@ class PureTextEnvironment(Environment, ABC):
 
         return state_env
 
+    @classmethod
     @abstractmethod
-    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+    def get_datapoint_from_env_state_as_dict(cls, env_state: NestedArrayDict) -> dict:
         """Get the datapoint from a single-element environment state as a dictionary.
 
         This returns a dictionary which specifies the datapoint for the environment
         state.
 
         This method should be extended by base classes to include whatever additional
-        fields consistute the datapoint.
+        fields constitute the datapoint.
 
         Parameters
         ----------

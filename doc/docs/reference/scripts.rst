@@ -40,6 +40,9 @@ The Code Validation Task
 
    ei_cv
    create_cv_dataset
+   download_cv_checkpoints
+   visualise_malt_rollouts
+
 
 
 Miscellaneous Scripts

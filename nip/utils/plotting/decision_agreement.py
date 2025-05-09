@@ -154,9 +154,9 @@ def analyse_decision_agreement(
     expected_agreement = np.outer(accuracies, accuracies) + np.outer(
         1 - accuracies, 1 - accuracies
     )
-    cohen_kappa_matrix = (
-        decision_agreement_matrix - expected_agreement
-    ) / (1 - expected_agreement)
+    cohen_kappa_matrix = (decision_agreement_matrix - expected_agreement) / (
+        1 - expected_agreement
+    )
 
     return DecisionAgreementAnalysis(
         agreement_matrix=decision_agreement_matrix,

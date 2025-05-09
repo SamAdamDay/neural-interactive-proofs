@@ -152,6 +152,53 @@ def register_scenario_class(
     return decorator
 
 
+def get_scenario_class(
+    hyper_params: HyperParameters, base_class: type[T], agent_name: str | None = None
+) -> type[T]:
+    """Get the class for a component based on the scenario and base class.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The hyper_params of the experiment.
+    base_class : type
+        The base class of the component to get.
+    agent_name : str, default=None
+        If not None, we get a component for this specific agent.
+
+    Returns
+    -------
+    scenario_class : type
+        The class for the component.
+
+    Raises
+    ------
+    NotImplementedError
+        If no class is found for the scenario and base class.
+    """
+
+    if (hyper_params.scenario, base_class) not in SCENARIO_CLASS_REGISTRY:
+        raise NotImplementedError(
+            f"Scenario {hyper_params.scenario} does not have a class for "
+            f"{base_class}."
+        )
+
+    param_selector = SCENARIO_CLASS_REGISTRY[(hyper_params.scenario, base_class)]
+
+    if agent_name is not None:
+        params_to_select = hyper_params.agents[agent_name]
+    else:
+        params_to_select = hyper_params
+
+    try:
+        return param_selector.select(params_to_select)
+    except NotImplementedError as e:
+        raise NotImplementedError(
+            f"No class found for {hyper_params.scenario!r} and {base_class} matching "
+            f"any filter."
+        ) from e
+
+
 def build_scenario_instance(
     hyper_params: HyperParameters, settings: ExperimentSettings
 ) -> ScenarioInstance:
@@ -173,45 +220,6 @@ def build_scenario_instance(
         The constructed scenario instance, which holds the components of the scenario.
     """
 
-    def get_scenario_class(
-        base_class: type[T], agent_name: str | None = None
-    ) -> type[T]:
-        """Get the class for a component based on the scenario and base class.
-
-        Parameters
-        ----------
-        base_class : type
-            The base class of the component to get.
-        agent_name : str, default=None
-            If not None, we get a component for this specific agent.
-
-        Returns
-        -------
-        scenario_class : type
-            The class for the component.
-        """
-
-        if (hyper_params.scenario, base_class) not in SCENARIO_CLASS_REGISTRY:
-            raise NotImplementedError(
-                f"Scenario {hyper_params.scenario} does not have a class for "
-                f"{base_class}."
-            )
-
-        param_selector = SCENARIO_CLASS_REGISTRY[(hyper_params.scenario, base_class)]
-
-        if agent_name is not None:
-            params_to_select = hyper_params.agents[agent_name]
-        else:
-            params_to_select = hyper_params
-
-        try:
-            return param_selector.select(params_to_select)
-        except NotImplementedError as e:
-            raise NotImplementedError(
-                f"No class found for {hyper_params.scenario} and {base_class} matching "
-                f"any filter."
-            ) from e
-
     # Set the random seed
     set_seed(hyper_params.seed)
 
@@ -231,17 +239,15 @@ def build_scenario_instance(
     )
 
     # Create the datasets
-    train_dataset = get_scenario_class(Dataset)(
+    train_dataset = get_scenario_class(hyper_params, Dataset)(
         hyper_params, settings, protocol_handler, train=True
     )
-    test_dataset = get_scenario_class(Dataset)(
+    test_dataset = get_scenario_class(hyper_params, Dataset)(
         hyper_params, settings, protocol_handler, train=False
     )
 
     # Build the agents
-    agents = _build_agents(
-        hyper_params, settings, protocol_handler, get_scenario_class, trainer_class
-    )
+    agents = _build_agents(hyper_params, settings, protocol_handler, trainer_class)
 
     # Build the shared model groups if applicable
     if all(
@@ -268,10 +274,10 @@ def build_scenario_instance(
             # agents in the group use the same class
             if group_name not in scenario_classes:
                 scenario_classes[group_name] = get_scenario_class(
-                    PureTextSharedModelGroup, agent_name=agent_name
+                    hyper_params, PureTextSharedModelGroup, agent_name=agent_name
                 )
             elif scenario_classes[group_name] != get_scenario_class(
-                PureTextSharedModelGroup, agent_name=agent_name
+                hyper_params, PureTextSharedModelGroup, agent_name=agent_name
             ):
                 raise ValueError(
                     f"Shared model group {group_name!r} has different "
@@ -308,7 +314,6 @@ def build_scenario_instance(
             train_dataset=train_dataset,
             test_dataset=test_dataset,
             agents=agents,
-            get_scenario_class=get_scenario_class,
         )
     else:
         additional_rl_components = {}
@@ -328,7 +333,6 @@ def _build_agents(
     hyper_params: HyperParameters,
     settings: ExperimentSettings,
     protocol_handler: ProtocolHandler,
-    get_scenario_class: Callable[[type, Optional[str]], type],
     trainer_class: type[Trainer],
 ) -> dict[str, Agent]:
     """Build the agents for the experiment.
@@ -341,9 +345,6 @@ def _build_agents(
         The settings for the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
-    get_scenario_class : Callable[[type], type]
-        A function to get the class for a component based on the scenario and base
-        class.
     trainer_class : type[Trainer]
         The class of the trainer for the experiment.
 
@@ -390,7 +391,7 @@ def _build_agents(
             body_names = ["policy_body", "value_body"]
 
         def build_part(base_class: type[T]) -> T:
-            return get_scenario_class(base_class, agent_name=agent_name)(
+            return get_scenario_class(hyper_params, base_class, agent_name=agent_name)(
                 hyper_params=hyper_params,
                 settings=settings,
                 protocol_handler=protocol_handler,
@@ -425,9 +426,9 @@ def _build_agents(
         if use_whole_agent:
             agent_dict["whole"] = build_part(WholeAgent)
 
-        agents[agent_name] = get_scenario_class(Agent, agent_name=agent_name)(
-            hyper_params=hyper_params, agent_name=agent_name, **agent_dict
-        )
+        agents[agent_name] = get_scenario_class(
+            hyper_params, Agent, agent_name=agent_name
+        )(hyper_params=hyper_params, agent_name=agent_name, **agent_dict)
 
         # Load the agent checkpoint if requested
         if agent_params.load_checkpoint_and_parameters:
@@ -544,7 +545,6 @@ def _build_components_for_rl_trainer(
     train_dataset: Dataset,
     test_dataset: Dataset,
     agents: dict[str, Agent],
-    get_scenario_class: Callable[[type], type],
 ) -> dict[str, Environment | CombinedBody | CombinedPolicyHead | CombinedValueHead]:
     """Build the additional components needed for an RL trainer.
 
@@ -562,9 +562,6 @@ def _build_components_for_rl_trainer(
         The test dataset for the experiment.
     agents : dict[str, Agent]
         The agents for the experiment.
-    get_scenario_class : Callable[[type], type]
-        A function to get the class for a component based on the scenario and base
-        class.
 
     Returns
     -------
@@ -578,14 +575,18 @@ def _build_components_for_rl_trainer(
     additional_rl_components = {}
 
     # Create the environments
-    additional_rl_components["train_environment"] = get_scenario_class(Environment)(
+    additional_rl_components["train_environment"] = get_scenario_class(
+        hyper_params, Environment
+    )(
         hyper_params=hyper_params,
         settings=settings,
         dataset=train_dataset,
         protocol_handler=protocol_handler,
         train=True,
     )
-    additional_rl_components["test_environment"] = get_scenario_class(Environment)(
+    additional_rl_components["test_environment"] = get_scenario_class(
+        hyper_params, Environment
+    )(
         hyper_params=hyper_params,
         settings=settings,
         dataset=test_dataset,
@@ -595,7 +596,9 @@ def _build_components_for_rl_trainer(
 
     # Create the combined agents
     if use_whole_agent:
-        additional_rl_components["combined_whole"] = get_scenario_class(CombinedWhole)(
+        additional_rl_components["combined_whole"] = get_scenario_class(
+            hyper_params, CombinedWhole
+        )(
             hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
@@ -604,7 +607,7 @@ def _build_components_for_rl_trainer(
     else:
         if use_single_body:
             additional_rl_components["combined_body"] = get_scenario_class(
-                CombinedBody
+                hyper_params, CombinedBody
             )(
                 hyper_params=hyper_params,
                 settings=settings,
@@ -615,7 +618,7 @@ def _build_components_for_rl_trainer(
             )
         else:
             additional_rl_components["combined_policy_body"] = get_scenario_class(
-                CombinedBody
+                hyper_params, CombinedBody
             )(
                 hyper_params=hyper_params,
                 settings=settings,
@@ -627,7 +630,7 @@ def _build_components_for_rl_trainer(
             )
             if use_critic:
                 additional_rl_components["combined_value_body"] = get_scenario_class(
-                    CombinedBody
+                    hyper_params, CombinedBody
                 )(
                     hyper_params=hyper_params,
                     settings=settings,
@@ -638,7 +641,7 @@ def _build_components_for_rl_trainer(
                     },
                 )
         additional_rl_components["combined_policy_head"] = get_scenario_class(
-            CombinedPolicyHead
+            hyper_params, CombinedPolicyHead
         )(
             hyper_params=hyper_params,
             settings=settings,
@@ -649,7 +652,7 @@ def _build_components_for_rl_trainer(
         )
         if use_critic:
             additional_rl_components["combined_value_head"] = get_scenario_class(
-                CombinedValueHead
+                hyper_params, CombinedValueHead
             )(
                 hyper_params=hyper_params,
                 settings=settings,

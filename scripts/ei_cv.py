@@ -40,8 +40,8 @@ param_grid = dict(
     interaction_protocol=["nip"],
     dataset_name=["lrhammond/buggy-apps"],
     apps_difficulty=["interview"],
-    num_iterations=[8],
-    rollouts_per_iteration=[200],
+    num_iterations=[2],
+    rollouts_per_iteration=[10],
     verifier_model=["OpenAI/gpt-4o-mini-2024-07-18"],
     verifier_system_prompt_template=[None],
     verifier_vllm_openai_base_url=["http://localhost:8000/v1"],
@@ -172,7 +172,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     return HyperParameters(
         scenario="code_validation",
-        trainer="pure_text_ei",
+        trainer="pure_text_malt",
         dataset=combo["dataset_name"],
         rl=RlTrainerParameters(
             rollouts_per_iteration=combo["rollouts_per_iteration"],
