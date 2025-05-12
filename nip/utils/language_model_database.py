@@ -69,7 +69,10 @@ class LanguageModelDbEntry:
             header = field.type.__metadata__[0]
             value = row[header]
             if pd.isna(value):
-                arguments[field.name] = None
+                if field.type.__origin__ is str:
+                    arguments[field.name] = ""
+                else:
+                    arguments[field.name] = None
             elif isinstance(value, np.floating):
                 arguments[field.name] = float(value)
             else:
