@@ -36,6 +36,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Switched to using Jinja for prompt templates
 - Defaulting to not generating multiple responses for frozen agents in MALT (this is now
   configurable).
+- The mid-point reward estimate for the verifier is now more comprehensive, taking into
+  account the reward for not guessing.
 
 
 ### Added
@@ -64,6 +66,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   across multiple models.
 - The beta parameter can now be specified when doing DPO with the OpenAI API.
 - Script and utility for visualising MALT rollouts as a forest of trees.
+- The option to select response pairs for MALT by thresholding the difference in
+  expected reward between the two.
 
 
 ### Fixed

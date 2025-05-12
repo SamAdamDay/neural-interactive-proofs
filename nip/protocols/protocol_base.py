@@ -48,8 +48,8 @@ class ProtocolHandler(ABC):
     - ``get_verifier_guess_mask_from_rounds_and_seed`` (method): Get a boolean mask of
       the verifier's guesses for a batch of rounds.
     - ``step_interaction_protocol`` (method): Take a step in the interaction protocol.
-    - ``reward_mid_point_estimate`` (method): Get an estimate of the expected reward if
-      all agents play randomly.
+    - ``max_reward`` (method): Get the maximum possible reward for an agent.
+    - ``min_reward`` (method): Get the minimum possible reward for an agent.
 
     Parameters
     ----------
@@ -389,6 +389,35 @@ class ProtocolHandler(ABC):
         """
 
     @abstractmethod
+    def max_reward(self, agent_name: str) -> float:
+        """Get the maximum possible reward for an agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the maximum reward for.
+
+        Returns
+        -------
+        max_reward : float
+            The maximum possible reward for the agent.
+        """
+
+    @abstractmethod
+    def min_reward(self, agent_name: str) -> float:
+        """Get the minimum possible reward for an agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the minimum reward for.
+
+        Returns
+        -------
+        min_reward : float
+            The minimum possible reward for the agent.
+        """
+
     def reward_mid_point_estimate(self, agent_name: str) -> float:
         """Get an estimate of the expected reward if all agents play randomly.
 
@@ -407,6 +436,8 @@ class ProtocolHandler(ABC):
         reward_mid_point : float
             The expected reward for the agent if all agents play randomly.
         """
+
+        return (self.max_reward(agent_name) + self.min_reward(agent_name)) / 2
 
     def _get_agent_decision_made_mask(
         self,
@@ -685,34 +716,65 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         return shared_done, agent_done, terminated, reward
 
-    def reward_mid_point_estimate(self, agent_name: str) -> float:
-        """Get an estimate of the expected reward if all agents play randomly.
+    def max_reward(self, agent_name: str) -> float:
+        """Get the maximum possible reward for an agent.
 
-        This is used to compute the mid-point of the reward range for the agent.
+        For the verifier, this is the maximum reward it gets for guessing plus the bonus
+        for not guessing in each round (if positive).
 
-        For the verifier, the mid-point is the average of the verifier reward and the
-        verifier incorrect penalty. For the prover, the mid-point is the prover reward
-        divided by 2 (because the prover gets 0 when it is not rewarded).
+        For the prover, this is the reward it gets for being accepted by the verifier.
 
         Parameters
         ----------
         agent_name : str
-            The name of the agent to get the reward mid-point for.
+            The name of the agent to get the maximum reward for.
 
         Returns
         -------
-        reward_mid_point : float
-            An estimate of the expected reward for ``agent_name`` if all agents play
-            randomly.
+        max_reward : float
+            The maximum possible reward for the agent.
         """
 
         if agent_name == self.verifier_name:
-            return (
-                self.hyper_params.protocol_common.verifier_reward
-                + self.hyper_params.protocol_common.verifier_incorrect_penalty
-            ) / 2
+            return max(
+                self.hyper_params.protocol_common.verifier_reward,
+                self.hyper_params.protocol_common.verifier_incorrect_penalty,
+                self.verifier_neither_accept_nor_reject_reward,
+            ) + max(0, self.hyper_params.protocol_common.verifier_no_guess_reward) * (
+                self.max_verifier_questions - 1
+            )
         else:
-            return self.hyper_params.protocol_common.prover_reward / 2
+            return self.hyper_params.protocol_common.prover_reward
+
+    def min_reward(self, agent_name: str) -> float:
+        """Get the minimum possible reward for an agent.
+
+        For the verifier, this is the minimum reward it gets for guessing plus the bonus
+        for not guessing in each round (if negative).
+
+        For the prover, this 0.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the maximum reward for.
+
+        Returns
+        -------
+        min_reward : float
+            The minimum possible reward for the agent.
+        """
+
+        if agent_name == self.verifier_name:
+            return min(
+                self.hyper_params.protocol_common.verifier_reward,
+                self.hyper_params.protocol_common.verifier_incorrect_penalty,
+                self.verifier_neither_accept_nor_reject_reward,
+            ) + min(0, self.hyper_params.protocol_common.verifier_no_guess_reward) * (
+                self.max_verifier_questions - 1
+            )
+        else:
+            return 0.0
 
     def _get_new_terminated_mask(
         self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]

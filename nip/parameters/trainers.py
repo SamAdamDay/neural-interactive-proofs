@@ -355,7 +355,29 @@ class PureTextMaltParameters(SubParameters):
         Currently this option does not apply if there is a round where both a frozen and
         a non-frozen agent take actions. In this case, the frozen agent will
         automatically sample multiple responses.
+    pair_selection_method : Literal["positive_negative", "interval"]
+        The method to use for selecting the pairs of responses for DPO training.
+        Possible values are:
+
+        - "positive_negative": Selects a response where the agent's expected reward is
+          above a certain threshold (by default the reward mid-point) and a response
+          where the agent's expected reward is below this threshold.
+        - "interval": Selects a pair of responses where the difference in expected
+          reward is above a certain threshold. This threshold is computed as
+          ``interval_threshold_proportion`` times the difference between the maximum and
+          minimum possible reward for the agent.
+
+    interval_threshold_proportion : float
+        When ``pair_selection_method`` is "interval", this value is used to compute the
+        threshold for the difference in expected reward. The threshold is computed as
+        ``interval_threshold_proportion`` times the difference between the maximum and
+        minimum possible reward for the agent.
     """
 
     num_responses_per_timestep: int = 2
     frozen_agents_generate_one_response: bool = True
+
+    pair_selection_method: Literal["positive_negative", "interval"] = (
+        "interval"
+    )
+    interval_threshold_proportion: float = 0.1

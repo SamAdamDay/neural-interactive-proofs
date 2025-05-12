@@ -11,6 +11,7 @@ using Direct Preference Optimization :cite:`Rafailov2023`.
 from typing import Optional, ClassVar, Any
 from dataclasses import dataclass, InitVar
 import dataclasses
+import itertools
 
 import torch
 from torch import Tensor
@@ -259,6 +260,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         _sample_positive_and_negative_examples(
             partial_rollouts_by_level=partial_rollouts_by_level,
             hyper_params=hyper_params,
+            protocol_handler=protocol_handler,
         )
 
         # Concatenate the environment states of the nodes in the last level to get the
@@ -745,13 +747,23 @@ def _compute_tree_expected_reward(
 def _sample_positive_and_negative_examples(
     partial_rollouts_by_level: list[list[_PartialRolloutNode]],
     hyper_params: HyperParameters,
+    protocol_handler: ProtocolHandler,
 ):
     """Sample positive and negative examples for each node in the tree of responses.
 
-    We look at each node and check if in its children there is a positive and a negative
-    example. If so, we set the ``("agents", "has_positive_and_negative")`` field to
-    True. In this case, we randomly sample a positive and a negative example from the
-    children and set the ``("agents", "sampled_positive_example")`` and ``("agents",
+    The way this is done depends on the ``pair_selection_method`` hyper-parameter, which
+    can be one of the following:
+
+    - "positive_negative": We look at each node and check if in its children there is a
+      positive and a negative example.
+    - "interval": We look at each node and check if in its children there is a pair of
+      nodes whose expected rewards differ by more than a certain threshold. This
+      threshold is ``interval_threshold_proportion`` times the difference between the
+      maximum and minimum possible reward for the agent.
+
+    If we find a valid pair, we set the ``("agents", "has_positive_and_negative")``
+    field to True. In this case, we randomly sample a pair from the children and set the
+    ``("agents", "sampled_positive_example")`` and ``("agents",
     "sampled_negative_example")`` fields to the corresponding node IDs. Otherwise these
     fields are set to -1.
 
@@ -764,49 +776,98 @@ def _sample_positive_and_negative_examples(
         fields to the rollouts.
     hyper_params : HyperParameters
         The parameters of the experiment.
+    protocol_handler : ProtocolHandler
+        The interaction protocol handler for the experiment.
     """
 
     environment_seed = partial_rollouts_by_level[-1][0].current_env_state["seed"]
     rng = np.random.default_rng(seed=hyper_params.seed + environment_seed)
 
-    num_agents = (
-        partial_rollouts_by_level[-1][0].current_env_state["agents", "done"].shape[1]
-    )
-
     # Sample positive and negative examples for each node in the tree of responses
     for partial_rollout in _tree_iter(partial_rollouts_by_level):
 
-        has_positive_and_negative = np.zeros((1, num_agents), dtype=bool)
-        sampled_positive_example = np.full((1, num_agents), -1)
-        sampled_negative_example = np.full((1, num_agents), -1)
+        has_positive_and_negative = np.zeros(
+            (1, protocol_handler.num_agents), dtype=bool
+        )
+        sampled_positive_example = np.full((1, protocol_handler.num_agents), -1)
+        sampled_negative_example = np.full((1, protocol_handler.num_agents), -1)
 
-        for agent_id in range(num_agents):
+        for agent_id, agent_name in enumerate(protocol_handler.agent_names):
 
-            # Check if in its children there is a positive and a negative example
-            positive_examples: list[_PartialRolloutNode] = []
-            negative_examples: list[_PartialRolloutNode] = []
-            for child_partial_rollout in partial_rollout.child_partial_rollouts:
-                last_env_state = child_partial_rollout.trajectory_env_states[-1]
-                if last_env_state["agents", "is_positive_example"][0, agent_id]:
-                    positive_examples.append(child_partial_rollout)
-                else:
-                    negative_examples.append(child_partial_rollout)
+            if hyper_params.pure_text_malt.pair_selection_method == "positive_negative":
 
-            # If there are positive and negative examples, set the corresponding fields
-            # and randomly sample a positive and a negative example from the children
-            if len(positive_examples) > 0 and len(negative_examples) > 0:
-                has_positive_and_negative[0, agent_id] = True
-                sampled_positive_partial_rollout: _PartialRolloutNode = rng.choice(
-                    positive_examples
+                # Check if in its children there is a positive and a negative example
+                positive_examples: list[_PartialRolloutNode] = []
+                negative_examples: list[_PartialRolloutNode] = []
+                for child_partial_rollout in partial_rollout.child_partial_rollouts:
+                    last_env_state = child_partial_rollout.trajectory_env_states[-1]
+                    if last_env_state["agents", "is_positive_example"][0, agent_id]:
+                        positive_examples.append(child_partial_rollout)
+                    else:
+                        negative_examples.append(child_partial_rollout)
+
+                # If there are positive and negative examples, set the corresponding
+                # fields and randomly sample a positive and a negative example from the
+                # children
+                if len(positive_examples) > 0 and len(negative_examples) > 0:
+                    has_positive_and_negative[0, agent_id] = True
+                    sampled_positive_partial_rollout: _PartialRolloutNode = rng.choice(
+                        positive_examples
+                    )
+                    sampled_negative_partial_rollout: _PartialRolloutNode = rng.choice(
+                        negative_examples
+                    )
+                    sampled_positive_example[0, agent_id] = (
+                        sampled_positive_partial_rollout.node_id
+                    )
+                    sampled_negative_example[0, agent_id] = (
+                        sampled_negative_partial_rollout.node_id
+                    )
+
+            elif hyper_params.pure_text_malt.pair_selection_method == "interval":
+
+                interval_threshold = (
+                    hyper_params.pure_text_malt.interval_threshold_proportion
+                    * (
+                        protocol_handler.max_reward(agent_name)
+                        - protocol_handler.min_reward(agent_name)
+                    )
                 )
-                sampled_negative_partial_rollout: _PartialRolloutNode = rng.choice(
-                    negative_examples
-                )
-                sampled_positive_example[0, agent_id] = (
-                    sampled_positive_partial_rollout.node_id
-                )
-                sampled_negative_example[0, agent_id] = (
-                    sampled_negative_partial_rollout.node_id
+
+                possible_pairs: list[
+                    tuple[_PartialRolloutNode, _PartialRolloutNode]
+                ] = []
+                for child_1, child_2 in itertools.combinations(
+                    partial_rollout.child_partial_rollouts, 2
+                ):
+                    expected_reward_1 = child_1.trajectory_env_states[-1][
+                        "agents", "expected_reward"
+                    ][0, agent_id]
+                    expected_reward_2 = child_2.trajectory_env_states[-1][
+                        "agents", "expected_reward"
+                    ][0, agent_id]
+                    if expected_reward_1 - expected_reward_2 > interval_threshold:
+                        possible_pairs.append((child_1, child_2))
+                    elif expected_reward_2 - expected_reward_1 > interval_threshold:
+                        possible_pairs.append((child_2, child_1))
+
+                if len(possible_pairs) > 0:
+                    has_positive_and_negative[0, agent_id] = True
+                    (
+                        sampled_positive_partial_rollout,
+                        sampled_negative_partial_rollout,
+                    ) = rng.choice(possible_pairs)
+                    sampled_positive_example[0, agent_id] = (
+                        sampled_positive_partial_rollout.node_id
+                    )
+                    sampled_negative_example[0, agent_id] = (
+                        sampled_negative_partial_rollout.node_id
+                    )
+
+            else:
+                raise ValueError(
+                    f"Unknown pair selection method: "
+                    f"{hyper_params.pure_text_malt.pair_selection_method!r}"
                 )
 
         partial_rollout.trajectory_env_states[-1][
