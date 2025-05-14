@@ -494,7 +494,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
     ) -> bool:
         """Run an experiment for a single combination of hyperparameters."""
 
-        info_prefix = f"[{combo_index}/{len(combinations)}] "
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
