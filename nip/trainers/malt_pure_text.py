@@ -3,9 +3,23 @@
 In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per timestep
 from the agents. This means that for each datapoint we have a tree of responses. For
 each agent ``A``, at each decision point for ``A`` we look at the expected reward for
-`A` for each of the responses. We threshold this expected reward to get a binary
-classification label for each response. We select good-bad pairs of these, and train
-using Direct Preference Optimization :cite:`Rafailov2023`.
+``A`` for each of the responses. We then select preference pairs of responses from these
+and train using Direct Preference Optimization :cite:p:`Rafailov2023`. The way pairs are
+selected is determined by the ``hyper_params.pure_text_malt.pair_selection_method``
+parameter, which can be one of the following:
+
+- "positive_negative": Selects a response where the agent's expected reward is above a
+  certain threshold (by default the reward mid-point) and a response where the agent's
+  expected reward is below this threshold.
+- "interval": Selects a pair of responses where the difference in expected reward is
+  above a certain threshold. This threshold is computed as
+  ``interval_threshold_proportion`` times the difference between the maximum and minimum
+  possible reward for the agent.
+
+It is also possible do some rounds of Expert Iteration (EI) before doing MALT. The
+``PureTextMaltTrainer`` class inherits from the ``PureTextEiTrainer`` class, which
+implements the EI protocol, and allows running EI for a number of iterations specified
+by the ``hyper_params.pure_text_malt.num_initial_ei_iterations`` parameter.
 """
 
 from typing import (
@@ -81,6 +95,7 @@ def _dispatch_to_trainer(
         if (
             self.state.iteration
             < self.hyper_params.pure_text_malt.num_initial_ei_iterations
+            or self.state.train_loop_stage in ("test", "test_during_training")
         ):
             return getattr(super(type(self), self), method.__name__)(*args, **kwargs)
         else:
@@ -285,6 +300,7 @@ class PureTextMaltTrainer(PureTextEiTrainer):
         if (
             self.state.iteration
             < self.hyper_params.pure_text_malt.num_initial_ei_iterations
+            or self.state.train_loop_stage in ("test", "test_during_training")
         ):
             return super()._sample_rollouts_for_single_environment
         else:

@@ -275,7 +275,7 @@ class TextRlParameters(SubParameters):
         When to run the test loop during training. See :const:`TestSchemeType
         <nip.parameters.types.TestSchemeType>` for options.
     test_on_whole_dataset : bool
-        Whether to run the test loop on the whole dataset or only on a single
+        Whether to run the test loop on the whole test dataset or only on a single
         iteration-worth of rollouts.
     """
 

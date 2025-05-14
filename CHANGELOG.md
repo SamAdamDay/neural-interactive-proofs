@@ -46,6 +46,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - For the code validation scenario, the test dataset is split into "train" and
   "validation" sets, and testing can now be done on the validation set rather than the
   test dataset.
+- When doing MALT, for testing we sample rollouts in the regular way, rather than
+  constructing a MALT tree. 
 
 
 ### Added
