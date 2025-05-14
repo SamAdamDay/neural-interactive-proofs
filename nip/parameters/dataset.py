@@ -25,6 +25,10 @@ class DatasetParameters(SubParameters):
         default for the dataset is used.
     make_balanced : bool
         Whether to make sure the dataset is balanced.
+    validation_proportion : float
+        The size of the validation set, if using. The validation set is created by
+        splitting the training set. Currently not supported for the graph isomorphism
+        and image classification scenarios.
     max_train_size : int, optional
         The size to reduce the training set to. If not provided, the dataset is not
         reduced, and the full training set is used.
@@ -40,6 +44,8 @@ class DatasetParameters(SubParameters):
     selected_classes: Optional[tuple[int, int]] = None
     binarification_seed: Optional[int] = None
     make_balanced: bool = True
+
+    validation_proportion: float = 0.1
 
     max_train_size: Optional[int] = None
     max_test_size: Optional[int] = None

@@ -55,7 +55,7 @@ Examples
 ... )
 """
 
-from typing import Optional
+from typing import Optional, Literal, Annotated
 from dataclasses import dataclass, fields
 
 from nip.utils.version import get_package_name, get_version
@@ -155,8 +155,9 @@ class HyperParameters(BaseHyperParameters):
     pretrain_agents : bool
         Whether to pretrain the agents in isolation before running the main training.
         This pretrains the bodies of the agents using the parameters in ``solo_agent``.
-    test_size : float
-        The proportion of the dataset to use for testing.
+    test_dataset_split : Literal["validation", "test"]
+        The dataset split to use for testing. Currently only "test" is supported for the
+        graph isomorphism and image classification scenarios.
     d_representation : int
         The dimension of each agent's body representation output.
     message_size : int
@@ -229,7 +230,9 @@ class HyperParameters(BaseHyperParameters):
 
     pretrain_agents: bool = False
 
-    test_size: float = 0.2
+    test_dataset_split: Annotated[
+        Literal["validation", "test"], BaseRunPreserve("rerun_tests")
+    ] = "test"
 
     d_representation: int = 16
 

@@ -41,6 +41,11 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Renamed the `cv_benchmark.py` script to `benchmark_cv.py`.
 - Renamed the `ei_cv.py` script to `cv_experiment.py`, and allowed it run MALT
   experiments too.
+- The solo agent trainer now uses the train and test splits provided by the dataset,
+  rather than using its own.
+- For the code validation scenario, the test dataset is split into "train" and
+  "validation" sets, and testing can now be done on the validation set rather than the
+  test dataset.
 
 
 ### Added
@@ -72,6 +77,13 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - The option to select response pairs for MALT by thresholding the difference in
   expected reward between the two.
 - The option to run some rounds of expert iteration before MALT.
+- The `test_dataset_split`, which controls which dataset split is used for testing.
+- Implemented `max_test_size` for graph isomorphism and image classification datasets.
+
+
+### Removed
+
+- The `test_size` hyper-parameter, which is now unused.
 
 
 ### Fixed

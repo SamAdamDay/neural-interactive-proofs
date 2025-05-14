@@ -63,12 +63,6 @@ class SoloAgentTrainer(TensorDictTrainer):
 
         logger.info("Loading dataset and agents...")
 
-        dataset = self.scenario_instance.train_dataset
-        train_dataset, test_dataset = random_split(
-            dataset,
-            (1 - self.hyper_params.test_size, self.hyper_params.test_size),
-        )
-
         # Select the non-random agents
         agents_params = AgentsParameters(
             **{
@@ -100,7 +94,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         with ExitStack() as stack:
             self._build_train_context(stack)
             self._run_train_loop(
-                train_dataset,
+                self.scenario_instance.train_dataset,
                 agents_params,
                 agents,
                 agent_models,
@@ -112,7 +106,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         with ExitStack() as stack:
             self._build_train_context(stack)
             self._run_test_loop(
-                test_dataset,
+                self.scenario_instance.test_dataset,
                 agents_params,
                 agents,
                 agent_models,

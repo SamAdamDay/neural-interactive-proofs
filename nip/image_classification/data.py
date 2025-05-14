@@ -19,7 +19,6 @@ import torch
 from torch.utils.data import DataLoader as TorchDataLoader
 
 from torchvision.datasets import (
-    VisionDataset,
     MNIST,
     CIFAR10,
     FashionMNIST,
@@ -33,7 +32,6 @@ from torchvision import transforms
 from tensordict import TensorDict
 
 from nip.parameters import BinarificationMethodType
-from nip.parameters import ScenarioType
 from nip.factory import register_scenario_class
 from nip.scenario_base import Dataset, TensorDictDataset
 from nip.constants import IC_DATA_DIR
@@ -222,9 +220,18 @@ class ImageClassificationDataset(TensorDictDataset):
         dataset : TorchVisionDatasetWrapper
             The TorchVision dataset.
         """
+
+        if self.split == "validation":
+            raise NotImplementedError(
+                "Validation set not implemented for image classification."
+            )
+
         dataset_class = DATASET_WRAPPER_CLASSES[self.hyper_params.dataset]
         return dataset_class(
-            root=self.raw_dir, train=self.train, transform=transform, download=True
+            root=self.raw_dir,
+            train=self.split == "train",
+            transform=transform,
+            download=True,
         )
 
     def build_tensor_dict(self) -> TensorDict:
@@ -352,24 +359,30 @@ class ImageClassificationDataset(TensorDictDataset):
         ):
             processed_name += f"_{self.binarification_seed}"
 
-        if self.train and self.hyper_params.dataset_options.max_train_size is not None:
+        if (
+            self.split == "train"
+            and self.hyper_params.dataset_options.max_train_size is not None
+        ):
             processed_name += f"_{self.hyper_params.dataset_options.max_train_size}"
 
-        sub_dir = "train" if self.train else "test"
+        if (
+            self.split == "test"
+            and self.hyper_params.dataset_options.max_test_size is not None
+        ):
+            processed_name += f"_{self.hyper_params.dataset_options.max_test_size}"
 
         return os.path.join(
             IC_DATA_DIR,
             self.hyper_params.dataset,
             processed_name,
-            sub_dir,
+            self.split,
         )
 
     @property
     def pretrained_embeddings_dir(self) -> str:
         """The path to the directory containing cached pretrained model embeddings."""
-        sub_dir = "train" if self.train else "test"
         return os.path.join(
-            IC_DATA_DIR, self.hyper_params.dataset, "pretrained_embeddings", sub_dir
+            IC_DATA_DIR, self.hyper_params.dataset, "pretrained_embeddings", self.split
         )
 
     @property

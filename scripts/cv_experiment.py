@@ -83,6 +83,7 @@ param_grid = dict(
     max_test_size=[None],
     test_scheme=["none"],
     num_test_iterations=[1],
+    test_dataset_split=["validation"],
     rerun_tests=[None],
 )
 
@@ -179,6 +180,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         scenario="code_validation",
         trainer=combo["trainer"],
         dataset=combo["dataset_name"],
+        test_dataset_split=combo["test_dataset_split"],
         rl=RlTrainerParameters(
             rollouts_per_iteration=combo["rollouts_per_iteration"],
             frames_per_batch=None,
@@ -356,7 +358,8 @@ experiment = SequentialHyperparameterExperiment(
 experiment.parser.add_argument(
     "run_infix",
     type=str,
-    help="Infix to add to the run ID to distinguish between different runs. Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
+    help="Infix to add to the run ID to distinguish between different runs. "
+    "Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
     nargs="?",
     default="",
 )
@@ -365,7 +368,8 @@ experiment.parser.add_argument(
     "--num-rollout-workers",
     type=int,
     default=None,
-    help="Number of workers to use for sampling rollouts. Defaults 0 when using dummy API, 8 otherwise.",
+    help="Number of workers to use for sampling rollouts. Defaults 0 when using "
+    "dummy API, 8 otherwise.",
 )
 
 experiment.parser.add_argument(

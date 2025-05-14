@@ -12,7 +12,6 @@ the parameters.
 
 from tempfile import TemporaryDirectory
 from dataclasses import fields
-from typing import Optional, Callable
 from pathlib import Path
 import os
 from typing import TypeVar
@@ -240,11 +239,19 @@ def build_scenario_instance(
 
     # Create the datasets
     train_dataset = get_scenario_class(hyper_params, Dataset)(
-        hyper_params, settings, protocol_handler, train=True
+        hyper_params, settings, protocol_handler, split="train"
     )
-    test_dataset = get_scenario_class(hyper_params, Dataset)(
-        hyper_params, settings, protocol_handler, train=False
-    )
+    if (
+        trainer_class.trainer_type == "rl"
+        and hyper_params.test_dataset_split == "validation"
+    ):
+        test_dataset = get_scenario_class(hyper_params, Dataset)(
+            hyper_params, settings, protocol_handler, split="validation"
+        )
+    else:
+        test_dataset = get_scenario_class(hyper_params, Dataset)(
+            hyper_params, settings, protocol_handler, split="test"
+        )
 
     # Build the agents
     agents = _build_agents(hyper_params, settings, protocol_handler, trainer_class)
@@ -582,7 +589,6 @@ def _build_components_for_rl_trainer(
         settings=settings,
         dataset=train_dataset,
         protocol_handler=protocol_handler,
-        train=True,
     )
     additional_rl_components["test_environment"] = get_scenario_class(
         hyper_params, Environment
@@ -591,7 +597,6 @@ def _build_components_for_rl_trainer(
         settings=settings,
         dataset=test_dataset,
         protocol_handler=protocol_handler,
-        train=False,
     )
 
     # Create the combined agents

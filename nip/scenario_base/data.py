@@ -9,7 +9,7 @@ import os
 from textwrap import indent
 from pathlib import Path
 import json
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import torch
 from torch import Tensor
@@ -61,8 +61,8 @@ class Dataset(ABC):
         The settings for the experiment.
     protocol_handler : ProtocolHandler
         The protocol handler for the experiment.
-    train : bool
-        Whether to load the training or test set.
+    split : Literal["train", "test", "validation"], default="train"
+        The split of the dataset to load.
     """
 
     instance_keys: ClassVar[tuple[str]] = []
@@ -83,12 +83,12 @@ class Dataset(ABC):
         hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
-        train: bool = True,
+        split: Literal["train", "test", "validation"] = "train",
     ):
         self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
-        self.train = train
+        self.split: Literal["train", "test", "validation"] = split
 
     @abstractmethod
     def __getitem__(self, index: IndexType) -> Any:
@@ -143,13 +143,13 @@ class TensorDictDataset(Dataset, ABC):
         hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
-        train: bool = True,
+        split: Literal["train", "test", "validation"] = "train",
     ):
         super().__init__(
             hyper_params=hyper_params,
             settings=settings,
             protocol_handler=protocol_handler,
-            train=train,
+            split=split,
         )
 
         # Download the raw data if this is implemented
@@ -169,13 +169,20 @@ class TensorDictDataset(Dataset, ABC):
             # Add the id field
             self._main_data["id"] = torch.arange(len(self._main_data))
 
-            # Reduce the size of the training set if needed
+            # Reduce the size of the training and test sets if needed
             if (
-                self.train
+                self.split == "train"
                 and self.hyper_params.dataset_options.max_train_size is not None
             ):
                 self._main_data = self._main_data[
                     : self.hyper_params.dataset_options.max_train_size
+                ]
+            if (
+                self.split == "test"
+                and self.hyper_params.dataset_options.max_test_size is not None
+            ):
+                self._main_data = self._main_data[
+                    : self.hyper_params.dataset_options.max_test_size
                 ]
 
             # Save it to disk as a memory-mapped file

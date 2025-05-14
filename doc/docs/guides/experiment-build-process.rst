@@ -46,7 +46,10 @@ We assume that code of the following form has been executed:
       appropriate protocol handler for the parameters in the registry.
 
    #. The train and test datasets are loaded, by initialising the appropriate
-      :class:`Dataset <nip.scenario_base.data.Dataset>` class.
+      :class:`Dataset <nip.scenario_base.data.Dataset>` class. When testing on the
+      validation split (controlled by ``hyper_params.test_dataset_split``; only
+      supported for pure-text scenarios), the test dataset is loaded from the validation
+      split of the training dataset.
 
    #. We build the agents. Agents typically consist of multiple parts, and which parts
       get built depends on the hyper-parameters. Each agent specified in the

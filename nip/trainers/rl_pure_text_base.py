@@ -893,8 +893,10 @@ class PureTextRlTrainer(Trainer, ABC):
         if iteration is None:
             iteration = self.state.iteration
 
-        if environment.train:
+        if environment.split == "train":
             base_name = f"{iteration}"
+        elif environment.split == "validation":
+            base_name = f"validation_{iteration}"
         else:
             base_name = f"test_{iteration}"
 
@@ -1074,7 +1076,7 @@ class PureTextRlTrainer(Trainer, ABC):
         if train:
             prefix = ""
         else:
-            prefix = "test_"
+            prefix = f"{self.test_environment.split}_"
 
         reward: Float[np.ndarray, "rollout round agent"] = rollouts[
             "next", "agents", "reward"

@@ -38,7 +38,6 @@ from nip.utils.experiments import (
 )
 
 MULTIPROCESS = True
-TEST_SIZE = 0.2
 
 param_grid = dict(
     dataset_name=["cifar10"],

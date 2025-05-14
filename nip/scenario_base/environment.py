@@ -66,8 +66,6 @@ class Environment(ABC):
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.
-    train : bool, optional
-        Whether the environment is used for training or evaluation.
     """
 
     @cached_property
@@ -157,19 +155,21 @@ class Environment(ABC):
     def done_spec(self) -> TensorSpec | NumpySpec:
         """The specification for the done keys (done and terminated)."""
 
+    @property
+    def split(self) -> Literal["train", "test", "validation"]:
+        """The split of the dataset used for the environment."""
+        return self.dataset.split
+
     def __init__(
         self,
         hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: Dataset,
         protocol_handler: ProtocolHandler,
-        *,
-        train: bool = True,
     ):
         self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
-        self.train = train
         self.dataset = dataset
 
         self.num_agents = len(self.protocol_handler.agent_names)
@@ -233,8 +233,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.
-    train : bool, optional
-        Whether the environment is used for training or evaluation.
     """
 
     dataset: TensorDictDataset
@@ -247,8 +245,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         settings: ExperimentSettings,
         dataset: TensorDictDataset,
         protocol_handler: ProtocolHandler,
-        *,
-        train: bool = True,
     ):
         super().__init__(device=settings.device)
 
@@ -258,7 +254,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             settings=settings,
             protocol_handler=protocol_handler,
             dataset=dataset,
-            train=train,
         )
 
         # Call the batch size property of ``Environment`` to set the batch size
@@ -859,7 +854,19 @@ class PromptMessage(TypedDict):
 
 
 class PureTextEnvironment(Environment, ABC):
-    """Base for environments which handle non-tokenised text with nested array dicts."""
+    """Base for environments which handle non-tokenised text with nested array dicts.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    dataset : Dataset
+        The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    """
 
     dataset: NestedArrayDictDataset
 

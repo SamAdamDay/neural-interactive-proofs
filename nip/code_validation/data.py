@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import os
 import shutil
 import json
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 from textwrap import indent
 import random
 
@@ -19,7 +19,7 @@ from datasets import (
 )
 
 from nip.experiment_settings import ExperimentSettings
-from nip.parameters import HyperParameters, ScenarioType
+from nip.parameters import HyperParameters
 from nip.protocols import ProtocolHandler
 from nip.scenario_base.data import Dataset
 from nip.factory import register_scenario_class
@@ -63,16 +63,24 @@ class CodeValidationDataset(Dataset, ABC):
     @property
     def split_dir(self) -> str:
         """The name of the folder containing the split data."""
-        if self.train:
+        if self.split == "train":
+            split_dir = f"train_{self.validation_proportion}"
             if self.max_train_size is not None:
-                return f"train_{self.max_train_size}_{self.reduce_shuffle_seed}"
+                return f"{split_dir}_{self.max_train_size}_{self.reduce_shuffle_seed}"
             else:
-                return "train"
-        else:
+                return split_dir
+        elif self.split == "test":
             if self.max_test_size is not None:
                 return f"test_{self.max_test_size}_{self.reduce_shuffle_seed}"
             else:
                 return "test"
+        elif self.split == "validation":
+            return f"validation_{self.validation_proportion}"
+        else:
+            raise ValueError(
+                f"Invalid split name: {self.split!r}. Expected 'train', 'test', or "
+                f"'validation'."
+            )
 
     @property
     def processed_dir(self) -> str:
@@ -98,6 +106,11 @@ class CodeValidationDataset(Dataset, ABC):
     def reduce_shuffle_seed(self) -> int:
         """The seed used to shuffle the dataset before reducing its size."""
         return self.hyper_params.dataset_options.reduce_shuffle_seed
+
+    @property
+    def validation_proportion(self) -> float:
+        """The proportion of the training set to use for validation."""
+        return self.hyper_params.dataset_options.validation_proportion
 
     @abstractmethod
     def _load_raw_dataset(self) -> HuggingFaceDataset:
@@ -141,14 +154,14 @@ class CodeValidationDataset(Dataset, ABC):
         generator = random.Random(self.reduce_shuffle_seed)
 
         if (
-            self.train
+            self.split == "train"
             and self.max_train_size is not None
             and len(dataset) > self.max_train_size
         ):
             selector = generator.sample(range(len(dataset)), self.max_train_size)
             return dataset.select(selector)
         elif (
-            not self.train
+            self.split == "test"
             and self.max_test_size is not None
             and len(dataset) > self.max_test_size
         ):
@@ -162,9 +175,9 @@ class CodeValidationDataset(Dataset, ABC):
         hyper_params: HyperParameters,
         settings: ExperimentSettings,
         protocol_handler: ProtocolHandler,
-        train: bool = True,
+        split: Literal["train", "test", "validation"] = "train",
     ):
-        super().__init__(hyper_params, settings, protocol_handler, train)
+        super().__init__(hyper_params, settings, protocol_handler, split=split)
 
         if not os.path.isdir(self.processed_dir) or settings.ignore_cache:
 
@@ -221,7 +234,7 @@ class CodeValidationDataset(Dataset, ABC):
         output = f"{self.__class__.__name__}(\n"
         output += indent(f"fields={list(self._main_data.features.keys())},\n", " " * 4)
         output += indent(f"num_rows={len(self)},\n", " " * 4)
-        output += indent(f"train={self.train},\n", " " * 4)
+        output += indent(f"split={self.split},\n", " " * 4)
         output += ")"
         return output
 
@@ -255,7 +268,10 @@ class AppsCodeValidationDataset(CodeValidationDataset):
     """The APPS :cite:p:`Hendrycks2021` dataset for code validation."""
 
     def _load_raw_dataset(self) -> HuggingFaceDataset:
-        split = "train" if self.train else "test"
+        if self.split in ("train", "validation"):
+            split = "train"
+        else:
+            split = "test"
         return load_dataset(
             self.hyper_params.dataset,
             self.hyper_params.code_validation.apps_difficulty,
@@ -334,7 +350,10 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         )
 
     def _load_raw_dataset(self) -> HuggingFaceDataset:
-        split = "train" if self.train else "test"
+        if self.split in ("train", "validation"):
+            split = "train"
+        else:
+            split = "test"
         return load_dataset(
             self.hyper_params.dataset,
             split=split,
@@ -446,6 +465,17 @@ class BuggyAppsCodeValidationDataset(CodeValidationDataset):
         processed_dataset = processed_dataset.select_columns(
             ["question", "solution", "prover_stance", "y", "id"]
         )
+
+        if self.split in ("train", "validation"):
+            split_dataset = processed_dataset.train_test_split(
+                test_size=self.hyper_params.dataset_options.validation_proportion,
+                shuffle=True,
+                seed=self.reduce_shuffle_seed,
+            )
+            if self.split == "train":
+                processed_dataset = split_dataset["train"]
+            else:
+                processed_dataset = split_dataset["test"]
 
         processed_dataset = self._reduce_dataset_size(processed_dataset)
 
