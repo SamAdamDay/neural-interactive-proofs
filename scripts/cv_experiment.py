@@ -72,6 +72,7 @@ param_grid = dict(
     fine_tune_on_all_previous_rollouts=[True],
     rollout_selection_method=["threshold"],
     weighting_use_replacement=[True],
+    dpo_beta=[None],
     shared_reward=[False],
     randomize_prover_stance=[False],
     min_message_rounds=[1],
@@ -122,6 +123,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             freeze_agent=combo["freeze_verifier"],
             fine_tune_from_scratch=combo["fine_tune_from_scratch"],
             use_supervisor_message=combo["verifier_supervisor_message"],
+            dpo_beta=combo["dpo_beta"],
         ),
     )
 
@@ -137,6 +139,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         freeze_agent=combo["freeze_prover"],
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
         use_supervisor_message=combo["prover_supervisor_message"],
+        dpo_beta=combo["dpo_beta"],
     )
 
     if combo["provers_share_model"]:
