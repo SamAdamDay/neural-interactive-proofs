@@ -1,9 +1,10 @@
 """Base classes for RL trainers for text-based environments that only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal, Iterable, Iterator
+from typing import Optional, Literal, Iterable, Iterator, Callable
 from multiprocessing import Pool
 from functools import cached_property
+from itertools import chain
 from pathlib import Path
 import pickle
 import dataclasses
@@ -354,7 +355,12 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 # Load all the rollouts if we are fine-tuning on all previous rollouts
                 if self.hyper_params.text_rl.fine_tune_on_all_previous_rollouts:
-                    rollouts = self._load_rollouts(range(self.state.iteration + 1))
+                    rollouts = self._load_rollouts(
+                        chain(
+                            self._previous_compatible_iterations(),
+                            (self.state.iteration,),
+                        )
+                    )
 
                 # Load the rollouts if they are not already set (i.e. if we are resuming
                 # this stage)
@@ -680,22 +686,47 @@ class PureTextRlTrainer(Trainer, ABC):
         # When the number of rollout workers is set to 0, we sample the rollouts
         # sequentially, without using a pool
         if self.settings.num_rollout_workers == 0:
-            rollout_iterator = map(
-                self._sample_rollouts_for_single_environment, arg_iterator
-            )
+            rollout_iterator = map(self._get_single_environment_sampler(), arg_iterator)
             rollout_list = get_rollouts(rollout_iterator)
 
         # If we have multiple workers, we can use a pool to parallelize the rollouts
         else:
             with Pool(self.settings.num_rollout_workers) as pool:
                 rollout_iterator = pool.imap_unordered(
-                    self._sample_rollouts_for_single_environment, arg_iterator
+                    self._get_single_environment_sampler(), arg_iterator
                 )
                 rollout_list = get_rollouts(rollout_iterator)
 
         rollouts_stacked = stack_nested_array_dicts(rollout_list, dim=0)
 
         return rollouts_stacked
+
+    def _get_single_environment_sampler(self) -> Callable[
+        [
+            tuple[
+                HyperParameters,
+                ProtocolHandler,
+                PureTextEnvironment,
+                PureTextCombinedWhole,
+                Optional[NestedArrayDict],
+            ]
+        ],
+        list[NestedArrayDict],
+    ]:
+        """Get the single-environment sampler function.
+
+        This function samples rollouts from a single environment. By default, this is
+        the `_sample_rollouts_for_single_environment` static method, but this may vary
+        by iteration.
+
+        Returns
+        -------
+        sample_rollouts_for_single_environment : Callable
+            The function to sample rollouts from a single environment. This function
+            takes the hyperparameters, protocol handler, environment, combined agent,
+            and data batch as arguments, and returns a list of rollouts.
+        """
+        return self._sample_rollouts_for_single_environment
 
     @staticmethod
     def _sample_rollouts_for_single_environment(
@@ -783,6 +814,21 @@ class PureTextRlTrainer(Trainer, ABC):
         sampled_rollout = concatenate_nested_array_dicts(env_states, dim=0)
 
         return [sampled_rollout]
+
+    def _previous_compatible_iterations(self) -> Iterable[int]:
+        """Get the previous iterations which are combinable with the current iteration.
+
+        The method is used when combining rollouts from different iterations, and
+        returns an iterable of the previous iteration numbers which are able to be
+        combined with the current iteration.
+
+        Returns
+        -------
+        previous_iterations : Iterable[int]
+            The previous iterations which are combinable with the current iteration.
+        """
+
+        return range(self.state.iteration)
 
     def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
         """Get the proportion of rollouts to replace the guess with the true label.
@@ -961,6 +1007,8 @@ class PureTextRlTrainer(Trainer, ABC):
 
         if isinstance(iterations, int):
             iterations = [iterations]
+        else:
+            iterations = list(iterations)
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 

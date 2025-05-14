@@ -372,12 +372,19 @@ class PureTextMaltParameters(SubParameters):
         threshold for the difference in expected reward. The threshold is computed as
         ``interval_threshold_proportion`` times the difference between the maximum and
         minimum possible reward for the agent.
+    num_initial_ei_iterations : int
+        The number of iterations to run the EI trainer for before switching to MALT.
+        This is used to warm-start the training process. These iterations count towards
+        the total number of iterations, so the number of iterations for MALT is
+        ``num_iterations - num_initial_ei_iterations``.
     """
 
     num_responses_per_timestep: int = 2
     frozen_agents_generate_one_response: bool = True
 
     pair_selection_method: Literal["positive_negative", "interval"] = (
-        "interval"
+        "positive_negative"
     )
     interval_threshold_proportion: float = 0.1
+
+    num_initial_ei_iterations: int = 0

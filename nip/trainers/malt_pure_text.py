@@ -8,10 +8,20 @@ classification label for each response. We select good-bad pairs of these, and t
 using Direct Preference Optimization :cite:`Rafailov2023`.
 """
 
-from typing import Optional, ClassVar, Any
+from typing import (
+    Optional,
+    ClassVar,
+    Any,
+    Iterable,
+    Callable,
+    ParamSpec,
+    Concatenate,
+    TypeVar,
+)
 from dataclasses import dataclass, InitVar
 import dataclasses
 import itertools
+from functools import wraps
 
 import torch
 from torch import Tensor
@@ -26,24 +36,85 @@ from jaxtyping import Int, Float, Bool
 
 from nip.parameters import HyperParameters, PureTextAgentParameters
 from nip.protocols.protocol_base import ProtocolHandler
-from nip.trainers.rl_pure_text_base import PureTextRlTrainer
 from nip.trainers.registry import register_trainer
+from nip.trainers.ei_pure_text import PureTextEiTrainer
 from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import PureTextCombinedWhole
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 from nip.utils.maths import mean_for_unique_keys
 
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _dispatch_to_trainer(
+    method: Callable[Concatenate["PureTextMaltTrainer", P], R],
+) -> Callable[Concatenate["PureTextMaltTrainer", P], R]:
+    """Dispatch a method to the appropriate trainer.
+
+    This decorator dispatches a method either to the ``PureTextMaltTrainer``
+    implementation or to the ``PureTextEiTrainer
+    <nip.trainers.ei_pure_text.PureTextEiTrainer>`` implementation, depending on the
+    iteration number. This allows doing some rounds of Expert Iteration (EI) before
+    doing MALT.
+
+    Parameters
+    ----------
+    method : Callable
+        The method to dispatch. This should be a method of the ``PureTextMaltTrainer``
+        class.
+
+    Returns
+    -------
+    dispatch_method : Callable
+        The dispatched method, which will call either `method` or the base class
+        implementation of the method, depending on the iteration number.
+    """
+
+    @wraps(method)
+    def dispatch_method(
+        self: "PureTextMaltTrainer",
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> R:
+        if (
+            self.state.iteration
+            < self.hyper_params.pure_text_malt.num_initial_ei_iterations
+        ):
+            return getattr(super(type(self), self), method.__name__)(*args, **kwargs)
+        else:
+            return method(self, *args, **kwargs)
+
+    return dispatch_method
+
+
 @register_trainer("pure_text_malt")
-class PureTextMaltTrainer(PureTextRlTrainer):
+class PureTextMaltTrainer(PureTextEiTrainer):
     """Multi-Agent LLM Training (MALT) for text-based environments that only use APIs.
 
     In the MALT protocol :cite:p:`Motwani2024`, we sample multiple responses per
     timestep from the agents. This means that for each datapoint we have a tree of
     responses. For each agent ``A``, at each decision point for ``A`` we look at the
-    expected reward for ``A`` for each of the responses. We threshold this expected
-    reward to get a binary classification label for each response. We select good-bad
-    pairs of these, and train using Direct Preference Optimization :cite:`Rafailov2023`.
+    expected reward for ``A`` for each of the responses. We then select preference pairs
+    of responses from these and train using Direct Preference Optimization
+    :cite:p:`Rafailov2023`. The way pairs are selected is determined by the
+    ``hyper_params.pure_text_malt.pair_selection_method`` parameter, which can be one of
+    the following:
+
+    - "positive_negative": Selects a response where the agent's expected reward is above
+      a certain threshold (by default the reward mid-point) and a response where the
+      agent's expected reward is below this threshold.
+    - "interval": Selects a pair of responses where the difference in expected reward is
+      above a certain threshold. This threshold is computed as
+      ``interval_threshold_proportion`` times the difference between the maximum and
+      minimum possible reward for the agent.
+
+    It is also possible do some rounds of Expert Iteration (EI) before doing MALT. The
+    ``PureTextMaltTrainer`` class inherits from the ``PureTextEiTrainer`` class, which
+    implements the EI protocol, and allows running EI for a number of iterations
+    specified by the ``hyper_params.pure_text_malt.num_initial_ei_iterations``
+    parameter.
 
     Parameters
     ----------
@@ -55,6 +126,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
+    @_dispatch_to_trainer
     def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
         """Training stage: create fine-tune jobs for each agent.
 
@@ -157,6 +229,66 @@ class PureTextMaltTrainer(PureTextRlTrainer):
                 negative_examples_per_agent,
                 job_name=self._get_fine_tune_job_name(shared_model_group),
             )
+
+    @_dispatch_to_trainer
+    def _previous_compatible_iterations(self) -> Iterable[int]:
+        """Get the previous iterations which are combinable with the current iteration.
+
+        The method is used when combining rollouts from different iterations, and
+        returns an iterable of the previous iteration numbers which are able to be
+        combined with the current iteration.
+
+        When doing initial EI iterations, on the iterations where we do MALT, we
+        combine only the rollouts which also do MALT, not the ones which do EI. This is
+        because the rollouts are not compatible, and we don't want to mix them.
+
+        Returns
+        -------
+        previous_iterations : Iterable[int]
+            The previous iterations which are combinable with the current iteration.
+        """
+
+        return range(
+            self.hyper_params.pure_text_malt.num_initial_ei_iterations,
+            self.state.iteration,
+        )
+
+    def _get_single_environment_sampler(self) -> Callable[
+        [
+            tuple[
+                HyperParameters,
+                ProtocolHandler,
+                PureTextEnvironment,
+                PureTextCombinedWhole,
+                Optional[NestedArrayDict],
+            ]
+        ],
+        list[NestedArrayDict],
+    ]:
+        """Get the single-environment sampler function.
+
+        This function samples rollouts from a single environment. Usually, this is the
+        MALT-implemented `_sample_rollouts_for_single_environment` static method, but
+        when doing initial EI iterations, it is the base class method.
+
+        Returns
+        -------
+        sample_rollouts_for_single_environment : Callable
+            The function to sample rollouts from a single environment. This function
+            takes the hyperparameters, protocol handler, environment, combined agent,
+            and data batch as arguments, and returns a list of rollouts.
+        """
+
+        # Can't use `_dispatch_to_trainer` here, because
+        # `super()._get_single_environment_sampler` returns
+        # `self._sample_rollouts_for_single_environment`.
+        if (
+            self.state.iteration
+            < self.hyper_params.pure_text_malt.num_initial_ei_iterations
+        ):
+            return super()._sample_rollouts_for_single_environment
+        else:
+            return self._sample_rollouts_for_single_environment
 
     @staticmethod
     def _sample_rollouts_for_single_environment(
@@ -276,6 +408,7 @@ class PureTextMaltTrainer(PureTextRlTrainer):
 
         return sampled_rollouts
 
+    @_dispatch_to_trainer
     def _get_log_stats(
         self,
         rollouts: NestedArrayDict,

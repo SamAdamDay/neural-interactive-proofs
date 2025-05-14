@@ -38,6 +38,9 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   configurable).
 - The mid-point reward estimate for the verifier is now more comprehensive, taking into
   account the reward for not guessing.
+- Renamed the `cv_benchmark.py` script to `benchmark_cv.py`.
+- Renamed the `ei_cv.py` script to `cv_experiment.py`, and allowed it run MALT
+  experiments too.
 
 
 ### Added
@@ -68,6 +71,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Script and utility for visualising MALT rollouts as a forest of trees.
 - The option to select response pairs for MALT by thresholding the difference in
   expected reward between the two.
+- The option to run some rounds of expert iteration before MALT.
 
 
 ### Fixed

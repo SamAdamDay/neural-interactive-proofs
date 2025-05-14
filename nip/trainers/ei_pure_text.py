@@ -16,6 +16,11 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
     See :cite:t:`Anthony2017` for more information on EI.
 
+    This implementation also includes a 'stabilised' version of EI
+    :cite:p:`Hammond2018`, which in a proportion of the rollouts replaces the verifier
+    guess with the true label (this proportion can be annealed over time). This helps
+    correct verifier bias towards either accepting or rejecting.
+
     Parameters
     ----------
     hyper_params : HyperParameters

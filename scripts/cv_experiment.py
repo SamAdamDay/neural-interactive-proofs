@@ -1,7 +1,8 @@
-"""Script for running Expert Iteration (EI) with the code validation task.
+"""Script for running code validation experiments.
 
 This script runs through a grid of hyperparameters, specified in the ``param_grid``
-dict, and runs EI experiments for the code validation task for each.
+dict, and runs experiments for the code validation task for each. The grid specifies the
+trainer to use, the interaction protocol and many other parameters.
 
 Additional settings, like whether to log to W&B, the number of rollout workers to use,
 and whether to use the dummy API, can be set via command line arguments. Run the script
@@ -23,6 +24,7 @@ from nip import (
     NipProtocolParameters,
     DebateProtocolParameters,
     PureTextEiParameters,
+    PureTextMaltParameters,
     CodeValidationParameters,
     BaseRunParameters,
     run_experiment,
@@ -37,11 +39,14 @@ from nip.utils.experiments import (
 from nip.utils.env import get_env_var
 
 param_grid = dict(
+    trainer=["pure_text_ei"],
     interaction_protocol=["nip"],
     dataset_name=["lrhammond/buggy-apps"],
     apps_difficulty=["interview"],
     num_iterations=[8],
     rollouts_per_iteration=[200],
+    malt_num_initial_ei_iterations=[2],
+    malt_pair_selection_method=["interval"],
     verifier_model=["OpenAI/gpt-4o-mini-2024-07-18"],
     verifier_system_prompt_template=[None],
     verifier_vllm_openai_base_url=["http://localhost:8000/v1"],
@@ -172,7 +177,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     return HyperParameters(
         scenario="code_validation",
-        trainer="pure_text_ei",
+        trainer=combo["trainer"],
         dataset=combo["dataset_name"],
         rl=RlTrainerParameters(
             rollouts_per_iteration=combo["rollouts_per_iteration"],
@@ -198,6 +203,10 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         pure_text_ei=PureTextEiParameters(
             rollout_selection_method=combo["rollout_selection_method"],
             weighting_use_replacement=combo["weighting_use_replacement"],
+        ),
+        pure_text_malt=PureTextMaltParameters(
+            num_initial_ei_iterations=combo["malt_num_initial_ei_iterations"],
+            pair_selection_method=combo["malt_pair_selection_method"],
         ),
         agents=AgentsParameters(**agents_params_dict),
         interaction_protocol=combo["interaction_protocol"],
