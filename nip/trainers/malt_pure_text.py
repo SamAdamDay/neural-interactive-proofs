@@ -189,6 +189,9 @@ class PureTextMaltTrainer(PureTextEiTrainer):
 
         for group_name, shared_model_group in self.shared_model_groups.items():
 
+            if shared_model_group.shared_agent_params.freeze_agent:
+                continue
+
             timesteps_per_agent: dict[str, NestedArrayDict] = {}
             positive_examples_per_agent: dict[str, NestedArrayDict] = {}
             negative_examples_per_agent: dict[str, NestedArrayDict] = {}

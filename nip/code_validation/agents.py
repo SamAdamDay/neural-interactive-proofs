@@ -233,7 +233,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if not isinstance(protocol_handler, CodeValidationProtocolHandler):
             raise NotImplementedError(
                 f"The code validation scenario is not implemented for "
-                f"{hyper_params.scenario}, because a `CodeValidationProtocolHandler` "
+                f"{hyper_params.scenario!r}, because a `CodeValidationProtocolHandler` "
                 f"subclass has not been registered."
             )
 
@@ -245,21 +245,19 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         )
 
         if (
-            self.agent_params.model_provider == "vLLM-OpenAI"
-            and self.hyper_params.rl.num_iterations > 1
+            self.hyper_params.rl.num_iterations > 1
+            and not self.agent_params.freeze_agent
         ):
-            raise NotImplementedError(
-                "It is not possible to fine-tune a model hosted using the vLLM "
-                "OpenAI-compatible server"
-            )
-        if (
-            self.agent_params.model_provider == "OpenRouter"
-            and self.hyper_params.rl.num_iterations > 1
-        ):
-            raise NotImplementedError(
-                "It is not possible to fine-tune a model hosted using the OpenRouter "
-                "API"
-            )
+            if self.agent_params.model_provider == "vLLM-OpenAI":
+                raise NotImplementedError(
+                    "It is not possible to fine-tune a model hosted using the vLLM "
+                    "OpenAI-compatible server"
+                )
+            elif self.agent_params.model_provider == "OpenRouter":
+                raise NotImplementedError(
+                    "It is not possible to fine-tune a model hosted using the "
+                    "OpenRouter API"
+                )
 
         # Make sure the environment variables are loaded, so that we can access the
         # OpenAI API key, and check that it is set

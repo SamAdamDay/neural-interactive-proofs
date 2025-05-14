@@ -42,6 +42,9 @@ class PureTextEiTrainer(PureTextRlTrainer):
 
         for group_name, shared_model_group in self.shared_model_groups.items():
 
+            if shared_model_group.shared_agent_params.freeze_agent:
+                continue
+
             # Select the rollouts to fine-tune on for each agent in the shared model
             # group. If the agent is a verifier, we take a proportion of the rollouts
             # and replace the verifier guess with the true label.

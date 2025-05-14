@@ -490,7 +490,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
     def _get_iteration_begin_message(self) -> str:
         """Get the message to log at the beginning of each iteration.
-        
+
         Returns
         -------
         message : str
@@ -550,7 +550,10 @@ class PureTextRlTrainer(Trainer, ABC):
 
             num_successful_jobs = 0
             for group_name, shared_model_group in self.shared_model_groups.items():
-                if shared_model_group.get_fine_tune_job_status() == "succeeded":
+                if (
+                    shared_model_group.shared_agent_params.freeze_agent
+                    or shared_model_group.get_fine_tune_job_status() == "succeeded"
+                ):
                     num_successful_jobs += 1
                 elif shared_model_group.get_fine_tune_job_status() == "failed":
                     raise RuntimeError(
@@ -567,7 +570,8 @@ class PureTextRlTrainer(Trainer, ABC):
 
         # Make all the agents use the new, fine-tuned models
         for shared_model_group in self.shared_model_groups.values():
-            shared_model_group.switch_to_next_model()
+            if not shared_model_group.shared_agent_params.freeze_agent:
+                shared_model_group.switch_to_next_model()
 
     def _stage_run_test_loop(self):
         """Training stage: run the test loop."""
