@@ -282,7 +282,7 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 self.settings.logger.info(
                     f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] "
-                    f"Iteration begins."
+                    f"{self._get_iteration_begin_message()}"
                 )
 
                 rollouts = self._stage_sample_rollouts()
@@ -487,6 +487,16 @@ class PureTextRlTrainer(Trainer, ABC):
                 if not dry_run:
                     with open(analysis_file, "wb") as f:
                         pickle.dump(evaluations, f)
+
+    def _get_iteration_begin_message(self) -> str:
+        """Get the message to log at the beginning of each iteration.
+        
+        Returns
+        -------
+        message : str
+            The message to log at the beginning of each iteration.
+        """
+        return "Iteration begins."
 
     def _stage_sample_rollouts(self) -> NestedArrayDict:
         """Training stage: sample rollouts from the training environment.

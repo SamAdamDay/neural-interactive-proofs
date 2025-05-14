@@ -245,6 +245,25 @@ class PureTextMaltTrainer(PureTextEiTrainer):
                 job_name=self._get_fine_tune_job_name(shared_model_group),
             )
 
+    def _get_iteration_begin_message(self) -> str:
+        """Get the message to log at the beginning of each iteration.
+
+        Returns
+        -------
+        message : str
+            The message to log at the beginning of each iteration.
+        """
+        if (
+            self.state.iteration
+            < self.hyper_params.pure_text_malt.num_initial_ei_iterations
+        ):
+            return (
+                f"Initial EI iteration {self.state.iteration+1}/"
+                f"{self.hyper_params.pure_text_malt.num_initial_ei_iterations} begins."
+            )
+        else:
+            return "MALT iteration begins."
+
     @_dispatch_to_trainer
     def _previous_compatible_iterations(self) -> Iterable[int]:
         """Get the previous iterations which are combinable with the current iteration.
