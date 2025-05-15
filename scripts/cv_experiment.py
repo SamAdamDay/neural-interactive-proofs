@@ -86,6 +86,7 @@ param_grid = dict(
     num_test_iterations=[1],
     test_dataset_split=["validation"],
     rerun_tests=[None],
+    seed=[6198],
 )
 
 
@@ -238,6 +239,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             max_test_size=combo["max_test_size"],
         ),
         base_run=base_run_params,
+        seed=combo["seed"],
     )
 
 
