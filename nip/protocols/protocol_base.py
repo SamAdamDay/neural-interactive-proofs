@@ -665,15 +665,17 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         else:
             nested_keys = env_td.keys()
         if ("agents", "continuous_decision") in nested_keys:
+            verifier_float_decision = as_tensor(
+                env_td["agents", "continuous_decision"]
+            )[..., self.verifier_index]
             self._get_verifier_guess_reward_continuous(
                 reward,
                 y=y,
                 verifier_decision_made=verifier_decision_made,
-                verifier_float_decision=as_tensor(
-                    env_td["agents", "continuous_decision"]
-                )[..., self.verifier_index],
+                verifier_float_decision=verifier_float_decision,
             )
         else:
+            verifier_float_decision = None
             self._get_verifier_guess_reward_discrete(
                 reward,
                 y=y,
@@ -697,12 +699,6 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         ] = self.protocol_common.verifier_no_guess_reward
 
         # Compute the rewards for the other agents and add them
-        if ("agents", "continuous_decision") in nested_keys:
-            verifier_float_decision = as_tensor(
-                env_td["agents", "continuous_decision"]
-            )[..., self.verifier_index]
-        else:
-            verifier_float_decision = None
         self._include_prover_rewards(
             verifier_decision_made,
             decision[..., self.verifier_index],
