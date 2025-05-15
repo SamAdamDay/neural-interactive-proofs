@@ -322,8 +322,8 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
     else:
         run_infix = cmd_args.run_infix
     if combo_index is None:
-        return f"ei_cv_{run_infix}"
-    return f"ei_cv_{run_infix}_{combo_index}"
+        return f"cv_{run_infix}"
+    return f"cv_{run_infix}_{combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
@@ -352,8 +352,8 @@ experiment = SequentialHyperparameterExperiment(
     experiment_fn=experiment_fn,
     run_id_fn=run_id_fn,
     run_preparer_fn=run_preparer_fn,
-    experiment_name="EI_VC",
-    arg_parser_description="Run Code Validation experiments with Expert Iteration, "
+    experiment_name="CV",
+    arg_parser_description="Run Code Validation experiments, "
     "running from a hyperparameter grid in sequence.",
     default_wandb_project=get_env_var("WANDB_CV_PROJECT", ""),
     allow_resuming_wandb_run=True,
