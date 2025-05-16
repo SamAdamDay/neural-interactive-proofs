@@ -573,7 +573,6 @@ class PureTextSharedModelGroup(ABC):
     @abstractmethod
     def create_dpo_fine_tune_job(
         self,
-        timesteps_per_agent: dict[str, NestedArrayDict],
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
         job_name: Optional[str] = None,
@@ -582,15 +581,18 @@ class PureTextSharedModelGroup(ABC):
 
         Parameters
         ----------
-        timesteps_per_agent : dict[str, NestedArrayDict]
-            The data for each agent in the group. Each agent's data is a nested
-            dictionary of arrays, which are timesteps selected from the rollouts.
         positive_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the preferred response for each of the timesteps in
-            ``timesteps_per_agent``.
+            ``timesteps_per_agent``. Each is a nested array dict with batch size
+            (timestep, ) rather than the usual (batch, round), because we have selected
+            timesteps from the first two dimensions of the batch.
         negative_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the non-preferred response for each of the timesteps in
-            ``timesteps_per_agent``.
+            ``timesteps_per_agent``. Each is a nested array dict with batch size
+            (timestep, ) rather than the usual (batch, round), because we have selected
+            timesteps from the first two dimensions of the batch.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
     @abstractmethod

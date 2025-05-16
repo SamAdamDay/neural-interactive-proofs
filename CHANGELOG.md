@@ -48,6 +48,17 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   test dataset.
 - When doing MALT, for testing we sample rollouts in the regular way, rather than
   constructing a MALT tree. 
+- When generating preference pairs for MALT, timesteps are now filtered based on whether
+  an agent has taken an action, rather than on whether they are active according to the
+  protocol handler. This is currently functionally equivalent, but this could change in
+  the future.
+- The way MALT forests are stored as arrays has changed a little. We now explicitly
+  store the parent ID of a node. The "has_positive_and_negative", "is_positive",
+  "sampled_positive_example" and "sampled_negative_example" fields have been removed.
+  Instead the Boolean fields "is_pair_positive" and "is_pair_negative" record the nodes
+  which form the positive-negative pairs for their parents. This is easier to work with
+  and less brittle. As a consequence of this, the stats logged when doing MALT are now
+  completely different.
 
 
 ### Added
@@ -81,6 +92,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - The option to run some rounds of expert iteration before MALT.
 - The `test_dataset_split`, which controls which dataset split is used for testing.
 - Implemented `max_test_size` for graph isomorphism and image classification datasets.
+- The `_PartialRolloutNode` instances generated when building a MALT tree can now be
+  visualised.
 
 
 ### Removed
@@ -94,6 +107,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   trainers.
 - Bug where one of the provers in the MNIP protocol for code validation got the
   incorrect rewards, due to a mistake with inheritance.
+- Design flaw where MALT preference pairs were not generated for the root node.
 
 
 ## [1.0.0] - 2025-03-10

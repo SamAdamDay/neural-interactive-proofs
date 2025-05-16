@@ -31,11 +31,13 @@ from typing import (
     ParamSpec,
     Concatenate,
     TypeVar,
+    Self,
 )
 from dataclasses import dataclass, InitVar
 import dataclasses
 import itertools
 from functools import wraps
+from textwrap import indent
 
 import torch
 from torch import Tensor
@@ -56,6 +58,7 @@ from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import PureTextCombinedWhole
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 from nip.utils.maths import mean_for_unique_keys
+from nip.utils.rollouts import get_pretty_pure_text_round_message
 
 
 P = ParamSpec("P")
@@ -151,90 +154,35 @@ class PureTextMaltTrainer(PureTextEiTrainer):
             The rollouts sampled in this iteration.
         """
 
-        node_id: Int[np.ndarray, "batch round"] = rollouts["_node_id"]
+        timesteps = self._get_unique_timesteps(rollouts)
 
-        # Break the rollouts into timesteps, and remove duplicate nodes
-        _, unique_index = np.unique(
-            einops.rearrange(node_id, "batch round -> (batch round)"), return_index=True
-        )
-        unique_mask = np.zeros((node_id.shape[0] * node_id.shape[1]), dtype=bool)
-        unique_mask[unique_index] = True
-        unique_mask = einops.rearrange(
-            unique_mask, "(batch round) -> batch round", batch=node_id.shape[0]
-        )
-        timesteps = rollouts[unique_mask]
+        # Order by parent node ID, so that in particular sibling nodes are next to each
+        # other.
+        timesteps = timesteps[np.argsort(timesteps["_parent_node_id"])]
 
-        node_id: Int[np.ndarray, "timestep"] = timesteps["_node_id"]
-        has_positive_and_negative: Bool[np.ndarray, "timestep agent"] = timesteps[
-            "agents", "has_positive_and_negative"
+        is_pair_positive: Bool[np.ndarray, "timestep agent"] = timesteps[
+            "agents", "is_pair_positive"
         ]
-
-        # A mask indicating which agents are active in any channel in the next round at
-        # each timestep. Note that for the last round we say that no agents are active
-        # in the next round, because there is no next round.
-        last_round_id = self.protocol_handler.max_message_rounds - 1
-        clipped_next_round = np.minimum(timesteps["round"] + 1, last_round_id)
-        agent_active_mask: Bool[np.ndarray, "timestep agent channel"] = (
-            self.protocol_handler.get_active_agents_mask_from_rounds_and_seed(
-                clipped_next_round,
-                timesteps["seed"],
-            )
-            .cpu()
-            .numpy()
-        )
-        agent_active_mask_any: Bool[np.ndarray, "timestep agent"] = einops.reduce(
-            agent_active_mask, "timestep agent channel -> timestep agent", "max"
-        )
-        agent_active_mask_any[timesteps["round"] == last_round_id] = False
+        is_pair_negative: Bool[np.ndarray, "timestep agent"] = timesteps[
+            "agents", "is_pair_negative"
+        ]
 
         for group_name, shared_model_group in self.shared_model_groups.items():
 
             if shared_model_group.shared_agent_params.freeze_agent:
                 continue
 
-            timesteps_per_agent: dict[str, NestedArrayDict] = {}
+            # Get the positive and negative examples. These line up with each other
+            # because we have ordered the timesteps by parent node ID, so that sibling
+            # nodes are next to each other.
             positive_examples_per_agent: dict[str, NestedArrayDict] = {}
             negative_examples_per_agent: dict[str, NestedArrayDict] = {}
             for agent_id, agent_name in shared_model_group.agent_ids_and_names():
-
-                # Select the timesteps which have positive and negative examples for the
-                # agent
-                timesteps_per_agent[agent_name] = timesteps[
-                    has_positive_and_negative[:, agent_id]
-                    & agent_active_mask_any[:, agent_id]
-                ]
-
-                # Get the node IDs of the positive and negative examples
-                sampled_positive_example: Int[np.ndarray, "timestep"] = (
-                    timesteps_per_agent[agent_name][
-                        "agents", "sampled_positive_example"
-                    ][:, agent_id]
-                )
-                sampled_negative_example: Int[np.ndarray, "timestep"] = (
-                    timesteps_per_agent[agent_name][
-                        "agents", "sampled_negative_example"
-                    ][:, agent_id]
-                )
-
-                # Get the indices of the positive and negative examples
-                node_id_sorter = np.argsort(node_id)
-                positive_example_index = node_id_sorter[
-                    np.searchsorted(
-                        node_id, sampled_positive_example, sorter=node_id_sorter
-                    )
-                ]
-                negative_example_index = node_id_sorter[
-                    np.searchsorted(
-                        node_id, sampled_negative_example, sorter=node_id_sorter
-                    )
-                ]
-
-                # Get the positive and negative examples
                 positive_examples_per_agent[agent_name] = timesteps[
-                    positive_example_index
+                    is_pair_positive[:, agent_id]
                 ]
                 negative_examples_per_agent[agent_name] = timesteps[
-                    negative_example_index
+                    is_pair_negative[:, agent_id]
                 ]
 
             self.settings.logger.info(
@@ -242,7 +190,6 @@ class PureTextMaltTrainer(PureTextEiTrainer):
             )
 
             shared_model_group.create_dpo_fine_tune_job(
-                timesteps_per_agent,
                 positive_examples_per_agent,
                 negative_examples_per_agent,
                 job_name=self._get_fine_tune_job_name(shared_model_group),
@@ -353,36 +300,31 @@ class PureTextMaltTrainer(PureTextEiTrainer):
         arrays.
 
         1. We compute the expected reward for each agent at each node of the tree by
-        summing up the total reward for all descendants, proceeding from the leaves to
-        the root, and dividing by the number of branches passing through the node. This
-        is stored in the ``("agents", "expected_reward")`` field of the rollouts.
+           summing up the total reward for all descendants, proceeding from the leaves
+           to the root, and dividing by the number of branches passing through the node.
+           This is stored in the ``("agents", "expected_reward")`` field of the
+           rollouts.
 
-        2. The expected reward is thresholded using an estimate of the reward mid-points
-        to get a binary classification label for each response, into 'positive' and
-        'negative' examples. This is stored in ``("agents", "is_positive_example")``.
+        2. We look at each node and check if in its children there a valid preference
+           pair. If so, we randomly sample one and set the ``("agents",
+           "is_pair_positive")`` and ``("agents", "is_pair_negative")`` fields to
+           ``True`` for the positive and negative example, respectively.
 
-        3. We look at each node and check if in its children there is a positive and a
-        negative example. If so, we set the ``("agents", "has_positive_and_negative")``
-        field to True. In this case, we randomly sample a positive and a negative
-        example from the children and set the ``("agents", "sampled_positive_example")``
-        and ``("agents", "sampled_negative_example")`` fields to the corresponding node
-        IDs. Otherwise these fields are set to -1.
-
-        4. Each node in the response tree gets a unique ID, stored in
-        ``_node_id`` which has shape ``(max_message_rounds, )``. This allows
-        reconstructing the tree of responses later, if required, because if the same
-        node ID appears in two different rollouts, then those points in the message
-        history are the same.
+        3. Each node in the response tree gets a unique ID, stored in ``_node_id`` which
+           has shape ``(max_message_rounds, )``. This allows reconstructing the tree of
+           responses later, if required, because if the same node ID appears in two
+           different rollouts, then those points in the message history are the same. We
+           also store the parent node ID in the ``_parent_node_id`` field. The first
+           timesteps of a rollout have a 'pseudo-parent' node ID. This is important
+           because the tree may branch immediately at the first timestep.
 
         Shapes
         ------
         The following are the shapes of the additional fields added to each rollout.
 
         - ("agents", "expected_reward"): "round agent"
-        - ("agents", "is_positive_example"): "round agent"
-        - ("agents", "has_positive_and_negative"): "round agent"
-        - ("agents", "sampled_positive_example"): "round agent"
-        - ("agents", "sampled_negative_example"): "round agent"
+        - ("agents", "is_pair_positive"): "round agent"
+        - ("agents", "is_pair_negative"): "round agent"
         - "_node_id": "round"
 
         Notes
@@ -423,7 +365,6 @@ class PureTextMaltTrainer(PureTextEiTrainer):
 
         _compute_tree_expected_reward(
             partial_rollouts_by_level=partial_rollouts_by_level,
-            hyper_params=hyper_params,
             protocol_handler=protocol_handler,
         )
 
@@ -473,110 +414,69 @@ class PureTextMaltTrainer(PureTextEiTrainer):
 
         log_stats = super()._get_log_stats(rollouts, train=train)
 
-        datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
-        node_id: Int[np.ndarray, "rollout round"] = rollouts["_node_id"]
+        timesteps = self._get_unique_timesteps(rollouts)
+        timesteps = timesteps[~timesteps["padding"]]
 
-        expected_reward: Float[np.ndarray, "rollout round agent"] = rollouts[
-            "agents", "expected_reward"
+        is_pair_positive: Bool[np.ndarray, "timestep agent"] = timesteps[
+            "agents", "is_pair_positive"
         ]
-        is_positive_example: Float[np.ndarray, "rollout round agent"] = rollouts[
-            "agents", "is_positive_example"
-        ]
-        has_positive_and_negative: Bool[np.ndarray, "rollout round agent"] = rollouts[
-            "agents", "has_positive_and_negative"
-        ]
+        datapoint_id: Int[np.ndarray, "timestep"] = timesteps["datapoint_id"]
+        next_done: Bool[np.ndarray, "timestep"] = timesteps["next", "done"]
 
-        # Split the rollouts, grouping by datapoint ID. We do this assuming that
-        # datapoint IDs are contiguous, i.e. that all rollouts for the same datapoint
-        # are next to each other in the array. TODO: Write a test to make sure this
-        # stays the case.
-        _, datapoint_index = np.unique(datapoint_id, return_index=True)
-        datapoint_index.sort()
-        datapoint_index = datapoint_index[1:]
-        node_id_by_datapoint = np.split(node_id, datapoint_index)
-        expected_reward_by_datapoint = np.split(expected_reward, datapoint_index)
-        is_positive_example_by_datapoint = np.split(
-            is_positive_example, datapoint_index
+        unique_datapoint_ids, node_count_by_datapoint = np.unique(
+            datapoint_id, return_counts=True
         )
-        has_positive_and_negative_by_datapoint = np.split(
-            has_positive_and_negative, datapoint_index
+        _, non_terminal_node_count_by_datapoint = np.unique(
+            datapoint_id[~next_done], return_counts=True
         )
 
-        # Compute the mean of the various quantities for each datapoint, round and
-        # agent. Note the Python loop introduces a some inefficiency, but it's not too
-        # bad because the number of datapoints per iteration is usually small.
-        mean_shape = (
-            len(node_id_by_datapoint),
-            self.max_message_rounds,
-            self.num_agents,
+        log_stats["mean_malt_nodes"] = (
+            np.sum(node_count_by_datapoint) / unique_datapoint_ids.shape[0]
         )
-        mean_expected_reward = np.zeros(mean_shape, dtype=float)
-        mean_is_positive_example = np.zeros(mean_shape, dtype=float)
-        mean_has_positive_and_negative = np.zeros(mean_shape, dtype=float)
-        for (
-            i,
-            node_id_datapoint,
-            expected_reward_datapoint,
-            is_positive_example_datapoint,
-            has_positive_and_negative_datapoint,
-        ) in zip(
-            range(len(node_id_by_datapoint)),
-            node_id_by_datapoint,
-            expected_reward_by_datapoint,
-            is_positive_example_by_datapoint,
-            has_positive_and_negative_by_datapoint,
-        ):
-            mean_expected_reward[i] = mean_for_unique_keys(
-                expected_reward_datapoint, node_id_datapoint[..., None], axis=0
-            )
-            mean_is_positive_example[i] = mean_for_unique_keys(
-                is_positive_example_datapoint, node_id_datapoint[..., None], axis=0
-            )
-            mean_has_positive_and_negative[i] = mean_for_unique_keys(
-                has_positive_and_negative_datapoint,
-                node_id_datapoint[..., None],
-                axis=0,
-            )
+        log_stats["mean_non_terminal_malt_nodes"] = (
+            np.sum(non_terminal_node_count_by_datapoint) / unique_datapoint_ids.shape[0]
+        )
 
-        log_stats[f"mean_expected_reward_by_round"] = pd.DataFrame(
-            np.mean(mean_expected_reward, axis=0), columns=self.agent_names
-        )
-        log_stats[f"std_expected_reward_by_round"] = pd.DataFrame(
-            np.std(mean_expected_reward, axis=0), columns=self.agent_names
-        )
-        log_stats[f"mean_is_positive_example_by_round"] = pd.DataFrame(
-            np.mean(mean_is_positive_example, axis=0), columns=self.agent_names
-        )
-        log_stats[f"std_is_positive_example_by_round"] = pd.DataFrame(
-            np.std(mean_is_positive_example, axis=0), columns=self.agent_names
-        )
-        log_stats[f"mean_has_positive_and_negative_by_round"] = pd.DataFrame(
-            np.mean(mean_has_positive_and_negative, axis=0), columns=self.agent_names
-        )
-        log_stats[f"std_has_positive_and_negative_by_round"] = pd.DataFrame(
-            np.std(mean_has_positive_and_negative, axis=0), columns=self.agent_names
-        )
         for agent_id, agent_name in enumerate(self.agent_names):
-            log_stats[f"{agent_name}.mean_expected_reward"] = np.mean(
-                mean_expected_reward[..., agent_id]
+            log_stats[f"{agent_name}.mean_malt_pairs"] = (
+                np.sum(is_pair_positive[:, agent_id]) / unique_datapoint_ids.shape[0]
             )
-            log_stats[f"{agent_name}.std_expected_reward"] = np.std(
-                mean_expected_reward[..., agent_id]
-            )
-            log_stats[f"{agent_name}.mean_is_positive_example"] = np.mean(
-                mean_is_positive_example[..., agent_id]
-            )
-            log_stats[f"{agent_name}.std_is_positive_example"] = np.std(
-                mean_is_positive_example[..., agent_id]
-            )
-            log_stats[f"{agent_name}.mean_has_positive_and_negative"] = np.mean(
-                mean_has_positive_and_negative[..., agent_id]
-            )
-            log_stats[f"{agent_name}.std_has_positive_and_negative"] = np.std(
-                mean_has_positive_and_negative[..., agent_id]
-            )
+            log_stats[f"{agent_name}.malt_pair_proportion"] = np.sum(
+                is_pair_positive[:, agent_id]
+            ) / np.sum(~next_done)
 
         return log_stats
+
+    def _get_unique_timesteps(self, rollouts: NestedArrayDict) -> NestedArrayDict:
+        """Break the rollouts into timesteps, and remove duplicate nodes.
+
+        Each timestep is a unique node in the tree of responses.
+
+        Parameters
+        ----------
+        rollouts : NestedArrayDict
+            The rollouts to get the timesteps for. Has batch size (batch round).
+
+        Returns
+        -------
+        timesteps : NestedArrayDict
+            The rollouts, broken into timesteps, with the duplicate nodes removed. Has
+            batch size (timestep).
+        """
+
+        node_id: Int[np.ndarray, "batch round"] = rollouts["_node_id"]
+
+        _, unique_index = np.unique(
+            einops.rearrange(node_id, "batch round -> (batch round)"), return_index=True
+        )
+
+        unique_mask = np.zeros((node_id.shape[0] * node_id.shape[1]), dtype=bool)
+        unique_mask[unique_index] = True
+        unique_mask = einops.rearrange(
+            unique_mask, "(batch round) -> batch round", batch=node_id.shape[0]
+        )
+
+        return rollouts[unique_mask]
 
 
 @dataclass
@@ -584,21 +484,73 @@ class _PartialRolloutNode:
     """A node in the tree of responses, which is a partially generated rollout."""
 
     current_env_state: NestedArrayDict
+    """The state of the environment at this node.
+    
+    This is either the initial state of the environment, for root nodes, or the state
+    obtained by calling ``PureTextEnvironment.get_next_state_from_state
+    <nip.scenario_base.environment.PureTextEnvironment.get_next_state_from_state>`` on
+    the parent node's state. In particular, it doesn't contain any of the agent actions
+    or the consequences of those actions.
+    """
+
+    protocol_handler: ProtocolHandler
+    """The protocol handler for the experiment."""
+
     ended: bool = False
+    """Whether the rollout has ended from this point onwards."""
+
+    padding: bool = False
+    """Whether this node is a padding node.
+    
+    Padding nodes are nodes which are not part of the tree, but are used to fill in
+    the tree so that it has uniform depth.
+
+    A node is a padding node if and only if its parent node has ended.
+    """
+
     trajectory_env_states: list[NestedArrayDict] = dataclasses.field(
         default_factory=list
     )
+    """A list of the environment states in the trajectory leading up to this node."""
+
     node_id: int = -1
+    """The ID of this node, which is unique in the forest of rollouts.
+    
+    If not set, the ID is set to the next available ID in the shared data. The
+    ``node_id_base`` attribute is used to set the base ID, which ensures that the IDs
+    are unique across multiple trees.
+    """
+
     parent_partial_rollout: Optional["_PartialRolloutNode"] = None
+    """The parent node of this node, or None if this is the root node."""
+
     child_partial_rollouts: list["_PartialRolloutNode"] = dataclasses.field(
         default_factory=list
     )
+    """The child nodes of this node, the one-step continuations of this node."""
+
     num_branches: int = 0
+    """The number of branches passing through this node.
+    
+    This is computed after the tree is generated, so is not available immediately.
+    """
+
     total_reward_per_agent: np.ndarray | float = 0.0
+    """The total reward for each agent at this node and below.
+    
+    This is computed after the tree is generated, so is not available immediately.
+    """
 
     node_id_base: InitVar[Optional[int]] = None
+    """The base ID, which is used to set the initial ID of a root node."""
 
     _shared_data: ClassVar[dict[str, Any]] = {"next_node_id": 0}
+    """Shared data for all nodes in the forest.
+    
+    Note that this is a class variable, so it is shared between all instances of this
+    class. This is used to ensure that the node IDs are unique across all nodes in the
+    forest.
+    """
 
     def __post_init__(self, node_id_base: Optional[int]):
         if node_id_base is not None:
@@ -607,7 +559,17 @@ class _PartialRolloutNode:
             self.node_id = self._shared_data["next_node_id"]
             self._shared_data["next_node_id"] += 1
 
-    def clone_as_child(self):
+    def clone_as_child(self) -> Self:
+        """Clone this node as a child of the current node.
+
+        This creates a new node with the same environment state and adds it to the
+        current node's list of child nodes.
+
+        Returns
+        -------
+        cloned_partial_rollout : _PartialRolloutNode
+            The cloned node, which is a child of the current node.
+        """
         # We deep copy the current environment state, because that will be
         # modified in place. We shallow copy the trajectory list, because the
         # states will be shared between nodes with the same ancestors, but the
@@ -617,7 +579,9 @@ class _PartialRolloutNode:
         # probably negligible.
         cloned_partial_rollout = type(self)(
             current_env_state=self.current_env_state.clone(),
+            protocol_handler=self.protocol_handler,
             ended=self.ended,
+            padding=self.ended,
             trajectory_env_states=self.trajectory_env_states.copy(),
             node_id=self._shared_data["next_node_id"],
             parent_partial_rollout=self,
@@ -626,15 +590,138 @@ class _PartialRolloutNode:
         self.child_partial_rollouts.append(cloned_partial_rollout)
         return cloned_partial_rollout
 
+    def has_agent_acted(self, agent_name: str) -> bool:
+        """Check if the given agent has acted at this node.
+
+        An action means either sending a message or making a decision (for verifiers).
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to check.
+
+        Returns
+        -------
+        has_acted : bool
+            True if the agent has acted at this node, False otherwise.
+        """
+
+        if len(self.trajectory_env_states) == 0 or self.padding:
+            return False
+
+        last_env_state = self.trajectory_env_states[-1]
+        agent_id = self.protocol_handler.agent_names.index(agent_name)
+
+        if last_env_state["agents", "message"][0, agent_id, :].any():
+            return True
+        if (
+            agent_name in self.protocol_handler.verifier_names
+            and last_env_state["agents", "decision"][0, agent_id] != 2
+        ):
+            return True
+
+        return False
+
+    def visualise(
+        self,
+        include_messages: bool = True,
+        include_expected_reward: bool = True,
+        include_pair_info: bool = True,
+        include_padding_nodes: bool = False,
+        tab_size: int = 2,
+    ) -> str:
+        """Get a recursive string representation of the rollout tree.
+
+        Returns
+        -------
+        tree_string : str
+            A representation of the rollout tree starting from this node.
+        include_messages : bool, default=True
+            Whether to include the messages and decisions sent be each agent at each
+            node.
+        include_expected_reward : bool, default=True
+            Whether to include the expected reward for each agent.
+        include_pair_info : bool, default=True
+            Whether to indicate whether a node is the positive or negative example in a
+            preference pair.
+        include_padding_nodes : bool, default=False
+            Whether to include padding nodes in the output. Padding nodes are nodes
+            which are not part of the tree, but are used to fill in the tree so that it
+            has uniform depth.
+        tab_size : int, default=2
+            The number of spaces to indent each level of the tree.
+        """
+
+        tree_string = f"Node ID: {self.node_id}"
+
+        if len(self.trajectory_env_states) > 0:
+            last_env_state = self.trajectory_env_states[-1]
+        else:
+            last_env_state = None
+
+        if self.padding:
+            tree_string += " (padding)"
+        elif include_messages and last_env_state is not None:
+            pretty_message_dict = get_pretty_pure_text_round_message(
+                protocol_handler=self.protocol_handler,
+                decision=last_env_state["agents", "decision"][0],
+                continuous_decision=last_env_state["agents", "continuous_decision"][0],
+                raw_decision=last_env_state["agents", "raw_decision"][0],
+                message=last_env_state["agents", "message"][0],
+            )
+            for key, value in pretty_message_dict.items():
+                tree_string += f"\n{key}: {value}"
+
+        include_expected_reward = (
+            include_expected_reward
+            and last_env_state is not None
+            and ("agents", "expected_reward") in last_env_state.keys()
+        )
+        include_pair_info = (
+            include_pair_info
+            and last_env_state is not None
+            and ("agents", "is_pair_positive") in last_env_state.keys()
+            and ("agents", "is_pair_negative") in last_env_state.keys()
+        )
+        if include_expected_reward or include_pair_info:
+            for agent_id, agent_name in enumerate(self.protocol_handler.agent_names):
+                agent_string = ""
+                if include_expected_reward:
+                    expected_reward = last_env_state["agents", "expected_reward"][0]
+                    agent_string += (
+                        f"\nExpected reward: {expected_reward[agent_id]:.2f}"
+                    )
+                if include_pair_info:
+                    if last_env_state["agents", "is_pair_positive"][0][agent_id]:
+                        agent_string += "\n[POSITIVE EXAMPLE]"
+                    if last_env_state["agents", "is_pair_negative"][0][agent_id]:
+                        agent_string += "\n[NEGATIVE EXAMPLE]"
+                tree_string += f"\n{agent_name}: {indent(agent_string, ' ' * tab_size)}"
+
+        child_strings = []
+        for child in self.child_partial_rollouts:
+            if not include_padding_nodes and child.padding:
+                continue
+            child_string = child.visualise(
+                include_messages=include_messages,
+                include_padding_nodes=include_padding_nodes,
+                tab_size=tab_size,
+            )
+            child_strings.append(indent(child_string, " " * tab_size))
+        if len(child_strings) > 0:
+            tree_string += "\nChildren:\n"
+            tree_string += "\n".join(child_strings)
+
+        return tree_string
+
 
 def _tree_iter(
     partial_rollouts_by_level: list[list[_PartialRolloutNode]],
     include_level: bool = False,
     leaves_first: bool = False,
+    include_root: bool = False,
 ):
     """Iterate over the tree of responses, either downwards or upwards.
-
-    We omit the root node, because it is not a response.
 
     Parameters
     ----------
@@ -645,6 +732,8 @@ def _tree_iter(
         of the level and the partial rollout.
     leaves_first : bool, default=False
         Whether to iterate from the leaves upwards.
+    include_root : bool, default=False
+        Whether to include the root node in the output.
 
     Yields
     ------
@@ -654,15 +743,19 @@ def _tree_iter(
         The next node in the tree of responses.
     """
 
+    if include_root:
+        first_level = 0
+    else:
+        first_level = 1
     if leaves_first:
-        for level in range(len(partial_rollouts_by_level) - 1, 0, -1):
+        for level in range(len(partial_rollouts_by_level) - 1, first_level - 1, -1):
             for partial_rollout in partial_rollouts_by_level[level]:
                 if include_level:
                     yield level, partial_rollout
                 else:
                     yield partial_rollout
     else:
-        for level in range(1, len(partial_rollouts_by_level)):
+        for level in range(first_level, len(partial_rollouts_by_level)):
             for partial_rollout in partial_rollouts_by_level[level]:
                 if include_level:
                     yield level, partial_rollout
@@ -725,7 +818,11 @@ def _generate_response_tree(
     # This is the tree structure, stratified by the level in the tree. We start with the
     # root node, which is the initial state of the environment.
     partial_rollouts_by_level = [
-        [_PartialRolloutNode(base_env_state, node_id_base=node_id_base)]
+        [
+            _PartialRolloutNode(
+                base_env_state, protocol_handler, node_id_base=node_id_base
+            )
+        ]
     ]
 
     # Get a mask indicating whether there is an unfrozen active agent in each round
@@ -800,6 +897,7 @@ def _generate_response_tree(
                     # the environment state. This allows reconstructing the tree of
                     # responses later, if required.
                     env_state["_node_id"] = [child_partial_rollout.node_id]
+                    env_state["_parent_node_id"] = [base_partial_rollout.node_id]
 
                     # Append the current state to the environment states
                     child_partial_rollout.trajectory_env_states.append(env_state)
@@ -817,6 +915,7 @@ def _generate_response_tree(
                 env_state = child_partial_rollout.current_env_state
                 env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
                 env_state["_node_id"] = [child_partial_rollout.node_id]
+                env_state["_parent_node_id"] = [base_partial_rollout.node_id]
                 if "next" not in env_state.keys():
                     env_state = environment.add_dummy_actions_and_next_to_state(
                         env_state
@@ -829,7 +928,6 @@ def _generate_response_tree(
 
 def _compute_tree_expected_reward(
     partial_rollouts_by_level: list[list[_PartialRolloutNode]],
-    hyper_params: HyperParameters,
     protocol_handler: ProtocolHandler,
 ):
     """Compute the expected reward for each agent at each node of the tree.
@@ -842,30 +940,15 @@ def _compute_tree_expected_reward(
     the leaves to the root, and dividing by the number of branches passing through the
     node.
 
-    We also threshold the expected reward to get a binary classification label for each
-    response. This is stored in the ``("agents", "is_positive_example")`` field.
-
     Parameters
     ----------
     partial_rollouts_by_level : list[list[_PartialRolloutNode]]
         The tree of responses, stratified by level. These are modified in-place, where
-        we add ``("agents", "expected_reward")`` and ``("agents",
-        "is_positive_example")`` fields containing the expected reward for each agent at
-        each node.
-    hyper_params : HyperParameters
-        The parameters of the experiment.
+        we add the ``("agents", "expected_reward")`` field containing the expected
+        reward for each agent at each node.
     protocol_handler : ProtocolHandler
         The interaction protocol handler for the experiment.
     """
-
-    # The threshold for being a positive example for each agent. This is the midpoint of
-    # the reward range for each agent
-    agent_reward_thresholds = np.array(
-        [
-            protocol_handler.reward_mid_point_estimate(agent_name)
-            for agent_name in protocol_handler.agent_names
-        ]
-    )
 
     # Compute the expected reward for each agent at each node of the tree by summing up
     # the total reward for all descendants, proceeding from the leaves to the root
@@ -895,12 +978,6 @@ def _compute_tree_expected_reward(
         last_env_state["agents", "expected_reward"] = (
             partial_rollout.total_reward_per_agent / partial_rollout.num_branches
         )
-
-        # Threshold the expected reward to get a binary classification label for each
-        # response
-        last_env_state["agents", "is_positive_example"] = (
-            last_env_state["agents", "expected_reward"] >= agent_reward_thresholds
-        ).astype(np.bool)
 
         # Each of the branches passing through this node pass through the parent, so add
         # the number of branches passing through this node to the number of branches
@@ -932,18 +1009,15 @@ def _sample_positive_and_negative_examples(
       threshold is ``interval_threshold_proportion`` times the difference between the
       maximum and minimum possible reward for the agent.
 
-    If we find a valid pair, we set the ``("agents", "has_positive_and_negative")``
-    field to True. In this case, we randomly sample a pair from the children and set the
-    ``("agents", "sampled_positive_example")`` and ``("agents",
-    "sampled_negative_example")`` fields to the corresponding node IDs. Otherwise these
-    fields are set to -1.
+    If we find a valid pair we randomly sample one and set the ``("agents",
+    "is_pair_positive")`` and ``("agents", "is_pair_negative")`` fields to True in the
+    positive and negative example, respectively.
 
     Parameters
     ----------
     partial_rollouts_by_level : list[list[_PartialRolloutNode]]
         The tree of responses, stratified by level. These are modified in-place, where
-        we add ``("agents", "has_positive_and_negative")``, ``("agents",
-        "sampled_positive_example")``, and ``("agents", "sampled_negative_example")``
+        we add ``("agents", "is_pair_positive")`` and ``("agents", "is_pair_negative")``
         fields to the rollouts.
     hyper_params : HyperParameters
         The parameters of the experiment.
@@ -954,25 +1028,40 @@ def _sample_positive_and_negative_examples(
     environment_seed = partial_rollouts_by_level[-1][0].current_env_state["seed"]
     rng = np.random.default_rng(seed=hyper_params.seed + environment_seed)
 
-    # Sample positive and negative examples for each node in the tree of responses
     for partial_rollout in _tree_iter(partial_rollouts_by_level):
-
-        has_positive_and_negative = np.zeros(
+        # Add the is_pair_positive and is_pair_negative fields to the last state in the
+        # partial trajectory. This will be set to True for the positive and negative
+        # examples, respectively.
+        last_env_state = partial_rollout.trajectory_env_states[-1]
+        last_env_state["agents", "is_pair_positive"] = np.zeros(
             (1, protocol_handler.num_agents), dtype=bool
         )
-        sampled_positive_example = np.full((1, protocol_handler.num_agents), -1)
-        sampled_negative_example = np.full((1, protocol_handler.num_agents), -1)
+        last_env_state["agents", "is_pair_negative"] = np.zeros(
+            (1, protocol_handler.num_agents), dtype=bool
+        )
+
+    # Sample positive and negative examples for each node in the tree of responses
+    for partial_rollout in _tree_iter(partial_rollouts_by_level, include_root=True):
 
         for agent_id, agent_name in enumerate(protocol_handler.agent_names):
 
             if hyper_params.pure_text_malt.pair_selection_method == "positive_negative":
 
+                reward_threshold = protocol_handler.reward_mid_point_estimate(
+                    agent_name
+                )
+
                 # Check if in its children there is a positive and a negative example
                 positive_examples: list[_PartialRolloutNode] = []
                 negative_examples: list[_PartialRolloutNode] = []
                 for child_partial_rollout in partial_rollout.child_partial_rollouts:
+                    if not child_partial_rollout.has_agent_acted(agent_name):
+                        continue
                     last_env_state = child_partial_rollout.trajectory_env_states[-1]
-                    if last_env_state["agents", "is_positive_example"][0, agent_id]:
+                    if (
+                        last_env_state["agents", "expected_reward"][0, agent_id]
+                        >= reward_threshold
+                    ):
                         positive_examples.append(child_partial_rollout)
                     else:
                         negative_examples.append(child_partial_rollout)
@@ -981,19 +1070,18 @@ def _sample_positive_and_negative_examples(
                 # fields and randomly sample a positive and a negative example from the
                 # children
                 if len(positive_examples) > 0 and len(negative_examples) > 0:
-                    has_positive_and_negative[0, agent_id] = True
                     sampled_positive_partial_rollout: _PartialRolloutNode = rng.choice(
                         positive_examples
                     )
                     sampled_negative_partial_rollout: _PartialRolloutNode = rng.choice(
                         negative_examples
                     )
-                    sampled_positive_example[0, agent_id] = (
-                        sampled_positive_partial_rollout.node_id
-                    )
-                    sampled_negative_example[0, agent_id] = (
-                        sampled_negative_partial_rollout.node_id
-                    )
+                    sampled_positive_partial_rollout.trajectory_env_states[-1][
+                        "agents", "is_pair_positive"
+                    ][0, agent_id] = True
+                    sampled_negative_partial_rollout.trajectory_env_states[-1][
+                        "agents", "is_pair_negative"
+                    ][0, agent_id] = True
 
             elif hyper_params.pure_text_malt.pair_selection_method == "interval":
 
@@ -1011,6 +1099,10 @@ def _sample_positive_and_negative_examples(
                 for child_1, child_2 in itertools.combinations(
                     partial_rollout.child_partial_rollouts, 2
                 ):
+                    if not child_1.has_agent_acted(
+                        agent_name
+                    ) or not child_2.has_agent_acted(agent_name):
+                        continue
                     expected_reward_1 = child_1.trajectory_env_states[-1][
                         "agents", "expected_reward"
                     ][0, agent_id]
@@ -1023,31 +1115,19 @@ def _sample_positive_and_negative_examples(
                         possible_pairs.append((child_2, child_1))
 
                 if len(possible_pairs) > 0:
-                    has_positive_and_negative[0, agent_id] = True
                     (
                         sampled_positive_partial_rollout,
                         sampled_negative_partial_rollout,
                     ) = rng.choice(possible_pairs)
-                    sampled_positive_example[0, agent_id] = (
-                        sampled_positive_partial_rollout.node_id
-                    )
-                    sampled_negative_example[0, agent_id] = (
-                        sampled_negative_partial_rollout.node_id
-                    )
+                    sampled_positive_partial_rollout.trajectory_env_states[-1][
+                        "agents", "is_pair_positive"
+                    ][0, agent_id] = True
+                    sampled_negative_partial_rollout.trajectory_env_states[-1][
+                        "agents", "is_pair_negative"
+                    ][0, agent_id] = True
 
             else:
                 raise ValueError(
                     f"Unknown pair selection method: "
                     f"{hyper_params.pure_text_malt.pair_selection_method!r}"
                 )
-
-        partial_rollout.trajectory_env_states[-1][
-            "agents", "has_positive_and_negative"
-        ] = has_positive_and_negative
-
-        partial_rollout.trajectory_env_states[-1][
-            "agents", "sampled_positive_example"
-        ] = sampled_positive_example
-        partial_rollout.trajectory_env_states[-1][
-            "agents", "sampled_negative_example"
-        ] = sampled_negative_example

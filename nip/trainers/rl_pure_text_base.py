@@ -18,6 +18,7 @@ import yaml
 import torch
 
 import numpy as np
+from numpy.typing import NDArray
 
 from einops import reduce
 
@@ -51,6 +52,8 @@ from nip.utils.nested_array_dict import (
     stack_nested_array_dicts,
     concatenate_nested_array_dicts,
 )
+from nip.utils.rollouts import get_pretty_pure_text_round_message
+from nip.utils.types import String
 from nip.constants import (
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
@@ -1238,17 +1241,19 @@ class PureTextRlTrainer(Trainer, ABC):
         rollouts : NestedArrayDict
             The rollouts to extract the transcripts from. A NestedArrayDict with keys:
 
-            - "message_history" (batch round round channel) : The message history for
-              each rollout. In each timestep this gives the history of all messages
-              generated up to that point.
-            - "message_agent_id" (batch round round channel) : The ID of the agent that
-              generated each message in the message history.
+            - ("agents", "message") (batch round agent channel) : The processed message
+              sent by each agent to each channel in each timestep.
             - ("agents", "raw_message") (batch round agent) : The raw message generated
               by each model in each timestep.
             - ("agents", "prompt") (batch round agent message field) : The prompt used
               by to generate the message for each agent in each timestep.
             - ("agents", "decision") (batch round agent) : The decision made by each
               agent in each timestep.
+            - ("agents", "continuous_decision") (batch round agent) : A float version of
+              the decision made by each agent at each timestep, which is a value between
+              -1 and 1.
+            - ("agents", "raw_decision") (batch round agent) : The raw decision text
+              sent by each agent in each timestep.
             - ("agents", "reward") (batch round agent) : The reward received by each
               agent in each timestep.
 
@@ -1280,13 +1285,22 @@ class PureTextRlTrainer(Trainer, ABC):
             specified by the ``PromptMessage`` class.
         """
 
-        message_history = rollouts["message_history"]
-        message_agent_id = rollouts["message_agent_id"]
-        raw_message = rollouts["agents", "raw_message"]
-        prompt = rollouts["agents", "prompt"]
-        decision = rollouts["agents", "decision"]
-        continuous_decision = rollouts["agents", "continuous_decision"]
-        raw_decision = rollouts["agents", "raw_decision"]
+        message: String[NDArray, "batch round agent channel"] = rollouts[
+            "agents", "message"
+        ]
+        raw_message: String[NDArray, "batch round agent"] = rollouts[
+            "agents", "raw_message"
+        ]
+        prompt: String[NDArray, "batch round agent message field"] = rollouts[
+            "agents", "prompt"
+        ]
+        decision: Int[NDArray, "batch round agent"] = rollouts["agents", "decision"]
+        continuous_decision: Float[NDArray, "batch round agent"] = rollouts[
+            "agents", "continuous_decision"
+        ]
+        raw_decision: String[NDArray, "batch round agent"] = rollouts[
+            "agents", "raw_decision"
+        ]
         reward = reduce(
             rollouts["next", "agents", "reward"],
             "batch round agent -> batch agent",
@@ -1294,7 +1308,6 @@ class PureTextRlTrainer(Trainer, ABC):
         )
         num_rollouts = rollouts.batch_size[0]
 
-        channel_names = self.protocol_handler.message_channel_names
         agent_names = self.protocol_handler.agent_names
 
         raw_transcripts = []
@@ -1323,47 +1336,13 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 raw_transcript.append(raw_transcript_round)
 
-                processed_transcript_round = {}
-
-                # We first check the decision made by a verifier, and if it is made, we
-                # set the processed transcript to "Accept" or "Reject" based on the
-                # decision.
-                for verifier_name in self.protocol_handler.verifier_names:
-                    key = f"{verifier_name}.decision"
-                    verifier_index = agent_names.index(verifier_name)
-                    if decision[rollout_id, round_id, verifier_index] == 2:
-                        continue
-                    processed_transcript_round[key] = (
-                        f"{raw_decision[rollout_id, round_id, verifier_index]} "
-                        f"({continuous_decision[rollout_id, round_id, verifier_index]})"
-                    )
-                    break
-
-                # Otherwise, we look at the last message history in the rollout. The key
-                # is the active agent name and channel name, with an "@" in between.
-                else:
-                    for channel_id, channel_name in enumerate(channel_names):
-
-                        # Get the id of the agent who messaged in this channel
-                        agent_id = message_agent_id[
-                            rollout_id, -1, round_id, channel_id
-                        ]
-
-                        # If the agent id is -1, it means no agent messaged in this
-                        # channel in this round
-                        if agent_id == -1:
-                            continue
-
-                        agent_name = agent_names[
-                            message_agent_id[rollout_id, -1, round_id, channel_id]
-                        ]
-
-                        # Add the message to the processed transcript with the key
-                        # "{agent_name}@{channel_name}"
-                        key = f"{agent_name}@{channel_name}"
-                        processed_transcript_round[key] = message_history[
-                            rollout_id, -1, round_id, channel_id
-                        ]
+                processed_transcript_round = get_pretty_pure_text_round_message(
+                    protocol_handler=self.protocol_handler,
+                    decision=decision[rollout_id, round_id],
+                    raw_decision=raw_decision[rollout_id, round_id],
+                    continuous_decision=continuous_decision[rollout_id, round_id],
+                    message=message[rollout_id, round_id],
+                )
 
                 if processed_transcript_round:
                     processed_transcript.append(processed_transcript_round)

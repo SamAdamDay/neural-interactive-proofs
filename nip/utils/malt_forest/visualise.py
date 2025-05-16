@@ -21,6 +21,7 @@ from nip.experiment_settings import ExperimentSettings
 from nip.utils.malt_forest.forest import MaltNode, MaltTree, reconstruct_malt_forest
 from nip.utils.checkpoints import load_rollouts, load_run_hyper_parameters
 from nip.utils.types import String
+from nip.utils.rollouts import get_pretty_pure_text_round_message
 
 
 class MaltForestVisualiser:
@@ -221,7 +222,6 @@ class MaltForestVisualiser:
         ]
 
         agent_names = self.protocol_handler.agent_names
-        channel_names = self.protocol_handler.message_channel_names
 
         malt_dict_tree = {
             "node_id": malt_node.env_state["_node_id"].item(),
@@ -230,42 +230,22 @@ class MaltForestVisualiser:
         # Reward info for the current node
         for agent_id, agent_name in enumerate(agent_names):
             malt_dict_tree[agent_name] = {
-                key: malt_node.env_state["agents", key][agent_id].item()
-                for key in ("expected_reward", "is_positive_example")
+                "expected_reward": malt_node.env_state["agents", "expected_reward"][
+                    agent_id
+                ].item()
             }
-            if malt_node.env_state["agents", "has_positive_and_negative"][agent_id]:
-                for key in ("sampled_positive_example", "sampled_negative_example"):
-                    malt_dict_tree[agent_name][key] = malt_node.env_state[
-                        "agents", key
-                    ][agent_id].item()
+            if malt_node.env_state["agents", "is_pair_positive"][agent_id]:
+                malt_dict_tree[agent_name]["pair"] = "positive"
+            elif malt_node.env_state["agents", "is_pair_negative"][agent_id]:
+                malt_dict_tree[agent_name]["pair"] = "negative"
 
-        # We first check the decision made by a verifier, and if it is made, we
-        # set the processed transcript to "Accept" or "Reject" based on the
-        # decision.
-        for verifier_name in self.protocol_handler.verifier_names:
-            key = f"{verifier_name}.decision"
-            verifier_index = agent_names.index(verifier_name)
-            if decision[verifier_index] == 2:
-                continue
-            malt_dict_tree[key] = (
-                f"{raw_decision[verifier_index]} "
-                f"({continuous_decision[verifier_index]})"
-            )
-            break
-
-        # Otherwise, we look at the message history for the message sent this timestep.
-        # The key is the active agent name and channel name, with an "@" in between.
-        else:
-            for agent_id, agent_name in enumerate(agent_names):
-                for channel_id, channel_name in enumerate(channel_names):
-
-                    if message[agent_id, channel_id] is None:
-                        continue
-
-                    # Add the message to the processed transcript with the key
-                    # "{agent_name}@{channel_name}"
-                    key = f"{agent_name}@{channel_name}"
-                    malt_dict_tree[key] = message[agent_id, channel_id]
+        malt_dict_tree = malt_dict_tree | get_pretty_pure_text_round_message(
+            protocol_handler=self.protocol_handler,
+            decision=decision,
+            raw_decision=raw_decision,
+            continuous_decision=continuous_decision,
+            message=message,
+        )
 
         children = [self._build_dict_tree(child) for child in malt_node.children]
         if len(children) > 0:
