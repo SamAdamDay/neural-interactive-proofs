@@ -9,7 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 import dataclasses
 import json
-from logging import getLogger
+import logging
 import sys
 from tempfile import TemporaryDirectory
 
@@ -37,6 +37,9 @@ from nip.constants import (
     CHECKPOINT_STATE_ARTIFACT_PREFIX,
     CHECKPOINT_STATE_ARTIFACT_TYPE,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CheckPointNotFoundError(Exception):
@@ -119,9 +122,6 @@ class Trainer(ABC):
         self.scenario_instance = scenario_instance
         self.settings = settings
 
-        if settings.logger is None:
-            self.settings.logger = getLogger(__name__)
-
         # Try to restore the experiment state from a checkpoint. If no checkpoint is
         # available, initialise the state.
         if settings.do_not_load_checkpoint or settings.test_run:
@@ -132,7 +132,7 @@ class Trainer(ABC):
             except CheckPointNotFoundError:
                 self._initialise_state()
             else:
-                self.settings.logger.info(
+                logger.info(
                     f"Restoring experiment state from iteration {self.state.iteration}"
                 )
 
@@ -180,9 +180,7 @@ class Trainer(ABC):
             self.settings.wandb_run.log_artifact(artifact)
 
         if log:
-            self.settings.logger.info(
-                f"Saved experiment state to '{self.checkpoint_state_path}'"
-            )
+            logger.info(f"Saved experiment state to '{self.checkpoint_state_path}'")
 
     def _initialise_state(self):
         """Initialise the state of the experiment.

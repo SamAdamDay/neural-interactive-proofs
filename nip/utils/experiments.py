@@ -41,6 +41,9 @@ from nip.run import PreparedExperimentInfo
 from nip.utils.env import get_env_var
 
 
+logger = logging.getLogger(__name__)
+
+
 def _identity(string: str) -> str:
     """Return the input string.
 
@@ -139,8 +142,10 @@ class ExperimentFunctionArguments:
         A name for the experiment that is common to all runs.
     tqdm_func : callable
         A function used to create a tqdm progress bar.
-    child_logger_adapter : logging.Logger
-        The logger adapter to use for logging.
+    global_tqdm_step_fn : callable
+        A function used to update the global progress bar.
+    log_level : int
+        The log level to use for the experiment. Can be used with ``logging.setLevel``.
     """
 
     combo: dict
@@ -148,8 +153,8 @@ class ExperimentFunctionArguments:
     cmd_args: Namespace
     common_run_name: str
     tqdm_func: callable
-    child_logger_adapter: logging.Logger
     global_tqdm_step_fn: callable = lambda: ...
+    log_level: int = logging.INFO
 
 
 class HyperparameterExperiment(ABC):
@@ -200,15 +205,9 @@ class HyperparameterExperiment(ABC):
             "-d", "--debug", help="Print debug messages", action="store_true"
         )
         self.parser.add_argument(
-            "-v",
-            "--verbose",
-            help="Print additional info messages",
-            action="store_true",
-        )
-        self.parser.add_argument(
             "-q",
             "--quiet",
-            help="Print less output",
+            help="Print less output (set log level to WARNING)",
             action="store_true",
         )
 
@@ -271,7 +270,7 @@ class HyperparameterExperiment(ABC):
         self.cmd_args: Optional[Namespace] = None
 
     @abstractmethod
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         """Run the experiment.
 
         This is the function that actually runs the experiment, and should be
@@ -339,19 +338,18 @@ class HyperparameterExperiment(ABC):
         self.check_no_extant_runs()
 
         # Set up the logger
-        base_logger = logging.getLogger(__name__)
         setup_logger_tqdm(formatter=self.logging_formatter)
 
         # Set the log level inside the experiment function
         if self.cmd_args.debug:
             self.experiment_log_level = logging.DEBUG
-        elif self.cmd_args.verbose:
+        elif not self.cmd_args.quiet:
             self.experiment_log_level = logging.INFO
         else:
             self.experiment_log_level = logging.WARNING
 
         # Run the experiment
-        self._run(base_logger)
+        self._run()
 
         # Send a W&B alert to say the experiment is finished
         if self.cmd_args.use_wandb:
@@ -364,12 +362,42 @@ class HyperparameterExperiment(ABC):
             wandb.alert(
                 title=f"{self.common_run_name} finished",
                 text=(
-                    f"This hyperparameter experiment for {self.experiment_name}"
+                    f"The hyperparameter experiment for {self.experiment_name!r}"
                     f" has finished."
                 ),
                 level=WandbAlertLevel.INFO,
             )
             dummy_run.finish()
+
+    def _setup_logger(self, combo_index: int, num_combos: int):
+        """Set up the logger for a single run.
+
+        Parameters
+        ----------
+        combo_index : int
+            The index of the current combination in the list of combinations.
+        num_combos : int
+            The total number of combinations.
+        """
+
+        # The root logger is set to WARNING, so that we don't get too much output from
+        # other packages. The package-level logger is configured separately.
+        logging.getLogger().setLevel(logging.WARNING)
+
+        package_logger = logging.getLogger(__name__.partition(".")[0])
+        package_logger.setLevel(self.experiment_log_level)
+        package_logger.propagate = False
+
+        handler = logging.StreamHandler()
+
+        info_prefix = f"[{combo_index+1}/{num_combos}]"
+        formatter = MultiLineFormatter(
+            fmt=f"[%(asctime)s %(levelname)s] {info_prefix} %(message)s",
+            datefmt="%x %X",
+        )
+        handler.setFormatter(formatter)
+
+        package_logger.addHandler(handler)
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
@@ -490,35 +518,22 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         combo: dict,
         combo_index: int,
         cmd_args: Namespace,
-        base_logger: logging.Logger,
     ) -> bool:
         """Run an experiment for a single combination of hyperparameters."""
-
-        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
 
-        # Set up the logger
-        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
-        child_logger.setLevel(self.experiment_log_level)
-        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
-
-        # The tqdm function to use
-        tqdm_func = partial(
-            tqdm,
-            bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
-        )
+        self._setup_logger(combo_index, len(combinations))
 
         # Print the run_id and the hyper-parameters
-        if not cmd_args.quiet:
-            base_logger.info("")
-            base_logger.info("=" * self.output_width)
-            title = f"| {self.experiment_name} | Run ID: {run_id}"
-            title += (" " * (self.output_width - 1 - len(title))) + "|"
-            title = textwrap.fill(title, self.output_width)
-            base_logger.info(title)
-            base_logger.info("=" * self.output_width)
+        logger.info("")
+        logger.info("=" * self.output_width)
+        title = f"| {self.experiment_name} | Run ID: {run_id}"
+        title += (" " * (self.output_width - 1 - len(title))) + "|"
+        title = textwrap.fill(title, self.output_width)
+        logger.info(title)
+        logger.info("=" * self.output_width)
 
         # Run the experiment
         self.experiment_fn(
@@ -526,15 +541,15 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 combo=combo,
                 run_id=run_id,
                 cmd_args=cmd_args,
-                tqdm_func=tqdm_func,
-                child_logger_adapter=child_logger_adapter,
+                tqdm_func=tqdm,
                 common_run_name=self.common_run_name,
+                log_level=self.experiment_log_level,
             )
         )
 
         return True
 
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         cmd_args = self.cmd_args
 
         # Filter to combos
@@ -560,30 +575,25 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 # Set the status of the current run to failed until proven otherwise
                 run_results[i] = "FAILED"
 
-                self._run_single_experiment(
-                    combinations, combo, combo_index, cmd_args, base_logger
-                )
+                self._run_single_experiment(combinations, combo, combo_index, cmd_args)
 
                 run_results[i] = "SUCCEEDED"
 
         finally:
             # Print a summary of the experiment results
-            if not cmd_args.quiet:
-                base_logger.info("")
-                base_logger.info("")
-                base_logger.info("=" * self.output_width)
-                title = (
-                    f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
-                )
-                title += (" " * (self.output_width - 1 - len(title))) + "|"
-                title = textwrap.fill(title, self.output_width)
-                base_logger.info(title)
-                base_logger.info("=" * self.output_width)
-                for result, (combo_num, combo) in zip(run_results, combinations):
-                    base_logger.info("")
-                    base_logger.info(f"COMBO {combo_num}")
-                    base_logger.info(textwrap.fill(str(combo)))
-                    base_logger.info(result)
+            logger.info("")
+            logger.info("")
+            logger.info("=" * self.output_width)
+            title = f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
+            title += (" " * (self.output_width - 1 - len(title))) + "|"
+            title = textwrap.fill(title, self.output_width)
+            logger.info(title)
+            logger.info("=" * self.output_width)
+            for result, (combo_num, combo) in zip(run_results, combinations):
+                logger.info("")
+                logger.info(f"COMBO {combo_num}")
+                logger.info(textwrap.fill(str(combo)))
+                logger.info(result)
 
 
 class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
@@ -703,7 +713,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         combinations: list[dict],
         combo_index: int,
         cmd_args: Namespace,
-        base_logger: logging.Logger,
         fine_grained_global_tqdm: bool,
         tqdm_func: Callable,
         global_tqdm: tqdm,
@@ -718,8 +727,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             The index of the current combination.
         cmd_args : Namespace
             The command line arguments.
-        base_logger : logging.Logger
-            The base logger.
         fine_grained_global_tqdm : bool
             Whether to update the global progress bar after each iteration. If False,
             the global progress bar is only updated after each experiment is finished.
@@ -729,19 +736,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         global_tqdm : tqdm
             The global progress bar. This argument is provided by ``tqdm_multiprocess``.
         """
-        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
 
-        # Set up the logger
-        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
-        child_logger.setLevel(self.experiment_log_level)
-        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
+        self._setup_logger(combo_index, len(combinations))
 
         # The tqdm function to use. Set the leave argument to False because otherwise
         # tqdm doesn't display multiple progress bars properly due to a bug
         # https://github.com/tqdm/tqdm/issues/1496
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
         tqdm_func = partial(
             tqdm_func,
             leave=False,
@@ -765,9 +769,9 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
                 run_id=run_id,
                 cmd_args=cmd_args,
                 tqdm_func=tqdm_func,
-                child_logger_adapter=child_logger_adapter,
                 global_tqdm_step_fn=global_tqdm_step_fn,
                 common_run_name=self.common_run_name,
+                log_level=self.experiment_log_level,
             )
         )
 
@@ -776,11 +780,11 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             global_tqdm.update(1)
 
         # Log that this run is finished
-        base_logger.info(f"{info_prefix}{run_id} finished")
+        logger.info(f"{info_prefix}{run_id} finished")
 
         return True
 
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         cmd_args = self.cmd_args
 
         # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
@@ -813,7 +817,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
                     combinations,
                     combo_index,
                     cmd_args,
-                    base_logger,
                     fine_grained_global_tqdm,
                 ),
             )

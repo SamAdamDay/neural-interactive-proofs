@@ -98,8 +98,6 @@ not (in theory) affect the results of the experiment. The most important ones ar
        default.
    * - ``run_id``
      - The ID of the run to log the experiment to.
-   * - ``num_rollout_workers``
-     - The number of workers to use for collecting rollout samples in text-based tasks.
 
 See the documentation for :func:`run_experiment <nip.run.run_experiment>` for the full
 list of arguments.

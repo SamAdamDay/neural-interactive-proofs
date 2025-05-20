@@ -29,7 +29,7 @@ from einops import rearrange
 from jaxtyping import Bool
 
 from openai import (
-    OpenAI,
+    AsyncOpenAI,
     APITimeoutError as OpenAiApiTimeoutError,
     APIStatusError as OpenAiApiStatusError,
     RateLimitError as OpenAiRateLimitError,
@@ -73,6 +73,7 @@ from nip.utils.api import (
     UnknownFinishReasonError,
 )
 from nip.utils.hyper_params import check_use_supervisor_message
+from nip.utils.asyncio import run_coroutine_sync
 from nip.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
@@ -181,18 +182,18 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     ]
 
     @property
-    def client(self) -> OpenAI:
+    def client(self) -> AsyncOpenAI:
         """The OpenAI client to use for interacting with the OpenAI SDK."""
         if self._openai_client is None:
             if self.agent_params.model_provider == "vLLM-OpenAI":
-                self._openai_client = OpenAI(
+                self._openai_client = AsyncOpenAI(
                     api_key="EMPTY",
                     base_url=self.agent_params.vllm_openai_base_url,
                 )
             elif self.agent_params.model_provider == "OpenAI":
-                self._openai_client = OpenAI()
+                self._openai_client = AsyncOpenAI()
             elif self.agent_params.model_provider == "OpenRouter":
-                self._openai_client = OpenAI(
+                self._openai_client = AsyncOpenAI(
                     base_url="https://openrouter.ai/api/v1",
                     api_key=get_env_var("OPENROUTER_API_KEY"),
                 )
@@ -268,7 +269,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         ):
             get_env_var("OPENAI_API_KEY")
 
-        self._openai_client: Optional[OpenAI] = None
+        self._openai_client: Optional[AsyncOpenAI] = None
 
     def build_fine_tune_dataset(
         self,
@@ -387,7 +388,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         return fine_tune_dataset
 
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Forward pass through the agent policy head.
@@ -485,7 +486,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 continue
 
             # Generate and store the next message and decision
-            parsed_completion = self._generate_next_message_and_decision(
+            parsed_completion = await self._generate_next_message_and_decision(
                 message_history=data["message_history"][batch_id],
                 message_agent_id=data["message_agent_id"][batch_id],
                 raw_message_history=data["raw_message_history"][batch_id],
@@ -518,7 +519,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         return output_data
 
-    def _generate_next_message_and_decision(
+    async def _generate_next_message_and_decision(
         self,
         message_history: String[NDArray, "round channel"],
         message_agent_id: String[NDArray, "round channel"],
@@ -596,7 +597,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         while True:
             try:
 
-                completion_text, finish_reason = self._make_generation_api_call(
+                completion_text, finish_reason = await self._make_generation_api_call(
                     chat_messages_prompt
                 )
 
@@ -941,7 +942,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         return chat_messages
 
-    def _make_generation_api_call(
+    async def _make_generation_api_call(
         self,
         chat_messages_prompt: list[PromptMessage],
     ) -> tuple[
@@ -967,49 +968,44 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         if self.agent_params.use_dummy_api:
             return self._generate_dummy_response(chat_messages_prompt), "stop"
+
+        max_tokens = self.agent_params.max_tokens_per_message
+        if max_tokens is None:
+            max_tokens = int(self.agent_params.max_response_words * 1.5)
+
+        if self.agent_params.repetition_penalty is None:
+            extra_body = {}
         else:
+            extra_body = {"repetition_penalty": self.agent_params.repetition_penalty}
 
-            max_tokens = self.agent_params.max_tokens_per_message
-            if max_tokens is None:
-                max_tokens = int(self.agent_params.max_response_words * 1.5)
-
-            if self.agent_params.repetition_penalty is None:
-                extra_body = {}
+        try:
+            completion = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=chat_messages_prompt,
+                max_tokens=max_tokens,
+                temperature=self.agent_params.temperature,
+                top_p=self.agent_params.top_p,
+                extra_body=extra_body,
+            )
+        except OpenAiApiTimeoutError as e:
+            raise TimeoutError(message=e.message) from e
+        except OpenAiRateLimitError as e:
+            raise RateLimitError(message=e.message) from e
+        except OpenAiConnectionError as e:
+            raise GenericConnectionError(message=e.message, code=e.status_code) from e
+        except OpenAiApiStatusError as e:
+            if e.status_code == 402:
+                raise InsufficientCreditsError(message=e.message) from e
             else:
-                extra_body = {
-                    "repetition_penalty": self.agent_params.repetition_penalty
-                }
-
-            try:
-                completion = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=chat_messages_prompt,
-                    max_tokens=max_tokens,
-                    temperature=self.agent_params.temperature,
-                    top_p=self.agent_params.top_p,
-                    extra_body=extra_body,
-                )
-            except OpenAiApiTimeoutError as e:
-                raise TimeoutError(message=e.message) from e
-            except OpenAiRateLimitError as e:
-                raise RateLimitError(message=e.message) from e
-            except OpenAiConnectionError as e:
                 raise GenericConnectionError(
                     message=e.message, code=e.status_code
                 ) from e
-            except OpenAiApiStatusError as e:
-                if e.status_code == 402:
-                    raise InsufficientCreditsError(message=e.message) from e
-                else:
-                    raise GenericConnectionError(
-                        message=e.message, code=e.status_code
-                    ) from e
 
-            self._handle_chat_completion_error(completion)
+        self._handle_chat_completion_error(completion)
 
-            choice = completion.choices[0]
+        choice = completion.choices[0]
 
-            return choice.message.content, choice.finish_reason
+        return choice.message.content, choice.finish_reason
 
     def _handle_chat_completion_error(self, completion: OpenAiChatCompletion):
         """Handle any errors in a chat completion, raising exceptions as necessary.
@@ -1108,22 +1104,6 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 ]
                 return "\n".join(response)
 
-    def __getstate__(self) -> dict[str, Any]:
-        """Get the state of the object for pickling.
-
-        We don't pickle the OpenAI client, as it is not picklable.
-
-        Returns
-        -------
-        state : dict[str, any]
-            The state of the object.
-        """
-
-        state = self.__dict__
-        state["_openai_client"] = None
-
-        return state
-
 
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenAI"}
@@ -1142,10 +1122,10 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     agent_wholes: dict[str, OpenAiWholeAgent]
 
     @property
-    def client(self) -> OpenAI:
+    def client(self) -> AsyncOpenAI:
         """The OpenAI client to use for interacting with the OpenAI API."""
         if self._openai_client is None:
-            self._openai_client = OpenAI()
+            self._openai_client = AsyncOpenAI()
         return self._openai_client
 
     def __init__(
@@ -1172,9 +1152,9 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         # OpenAI API key
         load_env_once()
 
-        self._openai_client: Optional[OpenAI] = None
+        self._openai_client: Optional[AsyncOpenAI] = None
 
-    def create_supervised_fine_tune_job(
+    async def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
@@ -1243,11 +1223,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         fine_tune_dataset = sum(fine_tune_datasets.values(), [])
 
-        self._make_fine_tune_api_call(
+        await self._make_fine_tune_api_call(
             fine_tune_dataset, method="supervised", job_name=job_name
         )
 
-    def create_dpo_fine_tune_job(
+    async def create_dpo_fine_tune_job(
         self,
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
@@ -1344,7 +1324,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         fine_tune_dataset = sum(fine_tune_datasets.values(), [])
 
-        self._make_fine_tune_api_call(
+        await self._make_fine_tune_api_call(
             fine_tune_dataset, method="dpo", job_name=job_name
         )
 
@@ -1362,7 +1342,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if self.fine_tune_job_id == "insufficient_data_job_id":
             return "succeeded"
 
-        status = self._get_fine_tune_job().status
+        fine_tune_job = self._get_fine_tune_job()
+        status = fine_tune_job.status
 
         if status in ["validating_files", "queued"]:
             return "pending"
@@ -1383,7 +1364,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if self.fine_tune_job_id == "insufficient_data_job_id":
             raise ValueError("Cannot get error for insufficient data job")
 
-        error = self._get_fine_tune_job().error
+        fine_tune_job = self._get_fine_tune_job()
+        error = fine_tune_job.error
 
         output = f"Code: {error.code}. Message: {error.message}."
         if error.param is not None:
@@ -1412,17 +1394,18 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             self.fine_tuned_model_name = None
             return
 
-        job = self._get_fine_tune_job()
+        fine_tune_job = self._get_fine_tune_job()
 
-        if job.status != "succeeded":
+        if fine_tune_job.status != "succeeded":
             raise ValueError(
-                f"Cannot switch to next model: fine-tune job status is {job.status!r}"
+                f"Cannot switch to next model: fine-tune job status is "
+                f"{fine_tune_job.status!r}"
             )
 
-        if job.fine_tuned_model is None:
+        if fine_tune_job.fine_tuned_model is None:
             raise ValueError("Fine-tuned model name not set in fine-tune job")
 
-        self.fine_tuned_model_name = job.fine_tuned_model
+        self.fine_tuned_model_name = fine_tune_job.fine_tuned_model
 
     def get_state_dict(self) -> dict:
         """Get the state dictionary of the agent.
@@ -1453,7 +1436,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         self.fine_tune_job_id = checkpoint.fine_tune_job_id
         self.fine_tuned_model_name = checkpoint.fine_tuned_model_name
 
-    def _make_fine_tune_api_call(
+    async def _make_fine_tune_api_call(
         self,
         fine_tune_dataset: list[dict],
         method: Literal["supervised", "dpo"],
@@ -1494,7 +1477,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                     f.write(json.dumps(example) + "\n")
 
             # Upload the file to OpenAI
-            uploaded_file = self.client.files.create(
+            uploaded_file = await self.client.files.create(
                 file=open(file_path, "rb"), purpose="fine-tune"
             )
 
@@ -1516,7 +1499,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         # Create the fine-tune job
         while True:
             try:
-                job = self.client.fine_tuning.jobs.create(
+                job = await self.client.fine_tuning.jobs.create(
                     model=model_name,
                     training_file=file_id,
                     integrations=[
@@ -1549,23 +1532,9 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if self.fine_tune_job_id is None:
             raise ValueError("Fine-tune job ID not set")
 
-        return self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
-
-    def __getstate__(self) -> dict[str, Any]:
-        """Get the state of the object for pickling.
-
-        We don't pickle the OpenAI client, as it is not picklable.
-
-        Returns
-        -------
-        state : dict[str, any]
-            The state of the object.
-        """
-
-        state = self.__dict__
-        state["_openai_client"] = None
-
-        return state
+        return run_coroutine_sync(
+            self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
+        )
 
 
 @register_scenario_class(
@@ -1594,14 +1563,14 @@ class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
         """
         return {}
 
-    def create_supervised_fine_tune_job(self, *args, **kwargs):
+    async def create_supervised_fine_tune_job(self, *args, **kwargs):
         """Create a supervised fine-tune job for the agent.
 
         This method is not supported for non-fine-tunable models.
         """
         self._raise_not_implemented_error()
 
-    def create_dpo_fine_tune_job(self, *args, **kwargs):
+    async def create_dpo_fine_tune_job(self, *args, **kwargs):
         """Create a DPO fine-tune job for the agent group given sampled timesteps.
 
         This method is not supported for non-fine-tunable models.
@@ -1651,7 +1620,7 @@ class CodeValidationRandomAgentPolicyHead(PureTextWholeAgent, RandomWholeAgent):
 class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
     """Module which combines all agents for code validation."""
 
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Run the forward pass through all agent parts and combine the outputs.
@@ -1718,7 +1687,9 @@ class CodeValidationCombinedWholeAgent(PureTextCombinedWhole):
             )
 
             # Run the agent
-            whole_outputs[agent_name] = self.wholes[agent_name](input_nad, environment)
+            whole_outputs[agent_name] = await self.wholes[agent_name].forward(
+                input_nad, environment
+            )
 
         agents_update = {}
 

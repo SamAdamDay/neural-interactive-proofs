@@ -38,6 +38,9 @@ from nip.utils.experiments import (
 )
 from nip.utils.env import get_env_var
 
+script_name = os.path.basename(__file__)
+logger = logging.getLogger(f"nip.scripts.{script_name}")
+
 param_grid = dict(
     trainer=["pure_text_ei"],
     interaction_protocol=["nip"],
@@ -254,21 +257,13 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     combo = arguments.combo
     cmd_args = arguments.cmd_args
-    logger = arguments.child_logger_adapter
-    logger.setLevel(logging.INFO)
+
+    logger.setLevel(arguments.log_level)
 
     logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
 
     hyper_params = _construct_params(combo, cmd_args)
-
-    if cmd_args.num_rollout_workers is None:
-        if cmd_args.use_dummy_api:
-            num_rollout_workers = 0
-        else:
-            num_rollout_workers = 8
-    else:
-        num_rollout_workers = cmd_args.num_rollout_workers
 
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
@@ -282,7 +277,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     # Train and test the agents
     run_experiment(
         hyper_params,
-        logger=logger,
         tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,
@@ -293,7 +287,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
-        num_rollout_workers=num_rollout_workers,
     )
 
 
@@ -367,14 +360,6 @@ experiment.parser.add_argument(
     "Defaults to 'test_{time_now}' when using dummy API; otherwise raises an error.",
     nargs="?",
     default="",
-)
-
-experiment.parser.add_argument(
-    "--num-rollout-workers",
-    type=int,
-    default=None,
-    help="Number of workers to use for sampling rollouts. Defaults 0 when using "
-    "dummy API, 8 otherwise.",
 )
 
 experiment.parser.add_argument(

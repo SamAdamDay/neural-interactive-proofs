@@ -230,5 +230,4 @@ def test_prepare_run_experiment(param_spec: dict):
         test_run=True,
         ignore_cache=True,
         pin_memory=False,
-        num_rollout_workers=0,
     )

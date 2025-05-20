@@ -379,7 +379,7 @@ class PureTextWholeAgent(WholeAgent, ABC):
         return super().visible_message_channel_mask.cpu().detach().numpy()
 
     @abstractmethod
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Forward pass through the agent.
@@ -413,11 +413,6 @@ class PureTextWholeAgent(WholeAgent, ABC):
         fine_tune_dataset : list
             The dataset for fine-tuning the agent.
         """
-
-    def __call__(  # noqa: D102
-        self, data: NestedArrayDict, environment: PureTextEnvironment
-    ) -> NestedArrayDict:
-        return self.forward(data, environment)
 
 
 @dataclass
@@ -548,7 +543,7 @@ class PureTextSharedModelGroup(ABC):
         self.fine_tuned_model_name: Optional[str] = None
 
     @abstractmethod
-    def create_supervised_fine_tune_job(
+    async def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
@@ -571,7 +566,7 @@ class PureTextSharedModelGroup(ABC):
         """
 
     @abstractmethod
-    def create_dpo_fine_tune_job(
+    async def create_dpo_fine_tune_job(
         self,
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
@@ -909,7 +904,7 @@ class PureTextCombinedWhole(CombinedWhole, ABC):
     """Base class for modules which combine whole pure-text agents together."""
 
     @abstractmethod
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Run a forward pass through all the agents and combine the output."""

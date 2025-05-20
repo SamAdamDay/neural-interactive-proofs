@@ -21,7 +21,7 @@ from nip.parameters import HyperParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.factory import build_scenario_instance
 from nip.trainers import build_trainer
-from nip.utils.types import TorchDevice, LoggingType
+from nip.utils.types import TorchDevice
 from nip.utils.env import get_env_var
 from nip.protocols import build_protocol_handler
 from nip.stat_logger import WandbStatLogger, DummyStatLogger
@@ -34,7 +34,6 @@ import nip.code_validation
 def run_experiment(
     hyper_params: HyperParameters,
     device: TorchDevice = "cpu",
-    logger: Optional[LoggingType] = None,
     profiler: Optional[torch.profiler.profile] = None,
     tqdm_func: callable = tqdm,
     ignore_cache: bool = False,
@@ -49,7 +48,6 @@ def run_experiment(
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
     num_dataset_threads: int = 8,
-    num_rollout_workers: int = 4,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
     enable_efficient_attention: bool = False,
@@ -68,8 +66,6 @@ def run_experiment(
         experiment may differ from ``hyper_params`` if a base run is used.
     device : TorchDevice, default="cpu"
         The device to use for training.
-    logger : logging.Logger | logging.LoggerAdapter, optional
-        The logger to log to. If None, the trainer will create a logger.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
     tqdm_func : Callable, optional
@@ -100,9 +96,6 @@ def run_experiment(
         together in the UI. This is useful for doing multiple runs on the same machine.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
-    num_rollout_workers : int, default=4
-        The number of workers to use for collecting rollout samples, when this is done
-        in parallel.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with ``non_blocking=True``. This can speed up training.
@@ -166,12 +159,10 @@ def run_experiment(
         wandb_run=wandb_run,
         stat_logger=stat_logger,
         tqdm_func=tqdm_func,
-        logger=logger,
         profiler=profiler,
         ignore_cache=ignore_cache,
         base_wandb_run=base_run,
         num_dataset_threads=num_dataset_threads,
-        num_rollout_workers=num_rollout_workers,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
         enable_efficient_attention=enable_efficient_attention,
@@ -272,7 +263,6 @@ def prepare_experiment(
     settings = ExperimentSettings(
         device=device,
         wandb_run=None,
-        logger=None,
         profiler=profiler,
         ignore_cache=ignore_cache,
         num_dataset_threads=num_dataset_threads,

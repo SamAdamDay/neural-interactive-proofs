@@ -41,6 +41,9 @@ from nip.utils.experiments import (
     ExperimentFunctionArguments,
 )
 
+script_name = os.path.basename(__file__)
+logger = logging.getLogger(f"nip.scripts.{script_name}")
+
 MULTIPROCESS = True
 
 param_grid = dict(
@@ -310,7 +313,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     """
     combo = arguments.combo
     cmd_args = arguments.cmd_args
-    logger = arguments.child_logger_adapter
 
     logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
@@ -334,7 +336,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         device=device,
         dataset_on_device=cmd_args.dataset_on_device,
         enable_efficient_attention=cmd_args.enable_efficient_attention,
-        logger=logger,
         tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,
         use_wandb=cmd_args.use_wandb,

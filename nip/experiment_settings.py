@@ -55,8 +55,6 @@ class ExperimentSettings:
         used, which does nothing.
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
-    logger : logging.Logger | logging.LoggerAdapter, optional
-        The logger to log to. If None, the trainer will create a logger.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
     ignore_cache : bool, default=False
@@ -72,9 +70,6 @@ class ExperimentSettings:
         RL training between each save of the models.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
-    num_rollout_workers : int, default=4
-        The number of workers to use for collecting rollout samples, when this is done
-        in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with ``non_blocking=True``. This can speed up training. When the device is
@@ -122,14 +117,12 @@ class ExperimentSettings:
     base_wandb_run: Annotated[Optional[wandb.apis.public.Run], MarkUnpicklable] = None
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
-    logger: Optional[LoggingType] = None
     profiler: Optional[torch.profiler.profile] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
-    num_rollout_workers: int = 4
     pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False

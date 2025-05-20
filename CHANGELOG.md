@@ -59,6 +59,10 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   which form the positive-negative pairs for their parents. This is easier to work with
   and less brittle. As a consequence of this, the stats logged when doing MALT are now
   completely different.
+- Logging is now done consistently on the module-level with
+  `logging.getLogger(__name__)`, rather than on an ad hoc basis.
+- Switched to using `async.io` for pure-text rollout generation, rather than
+  `multiprocessing.Pool`.
 
 
 ### Added

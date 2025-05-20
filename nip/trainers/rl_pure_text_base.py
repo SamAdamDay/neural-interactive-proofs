@@ -1,7 +1,7 @@
 """Base classes for RL trainers for text-based environments that only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal, Iterable, Iterator, Callable
+from typing import Optional, Literal, Iterable
 from multiprocessing import Pool
 from functools import cached_property
 from itertools import chain
@@ -12,6 +12,9 @@ from dataclasses import dataclass
 import json
 from time import sleep
 from warnings import warn
+from asyncio import TaskGroup, Queue
+import asyncio
+import logging
 
 import yaml
 
@@ -30,7 +33,6 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
-from nip.parameters import HyperParameters
 from nip.scenario_base.data import NestedArrayDictDataLoader
 from nip.scenario_base.environment import PureTextEnvironment, PromptMessage
 from nip.scenario_base.agents import (
@@ -43,7 +45,6 @@ from nip.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
 )
-from nip.protocols.protocol_base import ProtocolHandler
 from nip.trainers.trainer_base import Trainer, CheckPointNotFoundError
 from nip.utils.maths import aggregate_mean_grouped_by_class, entropy_numpy
 from nip.utils.data import VariableDataCycler, truncated_iterator
@@ -64,6 +65,8 @@ from nip.constants import (
     PROMPTS_ARTIFACT_PREFIX,
     PROMPTS_ARTIFACT_TYPE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PureTextRlTrainer(Trainer, ABC):
@@ -234,7 +237,7 @@ class PureTextRlTrainer(Trainer, ABC):
         rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
 
         if rerun_tests:
-            self.settings.logger.info(
+            logger.info(
                 f"Rerunning tests from base run {self.hyper_params.base_run.run_id!r}. "
                 f"Loading the state from the base run."
             )
@@ -260,7 +263,7 @@ class PureTextRlTrainer(Trainer, ABC):
                         version=f"v{base_run_state_artifact_version}",
                     )
                 except CheckPointNotFoundError:
-                    self.settings.logger.info(
+                    logger.info(
                         f"Reached the end of the base run. Iteration: "
                         f"{self.state.iteration}, stage: "
                         f"{self.state.train_loop_stage!r}."
@@ -271,7 +274,7 @@ class PureTextRlTrainer(Trainer, ABC):
                     base_run_state_artifact_version
                 )
 
-                self.settings.logger.info(
+                logger.info(
                     f"Loaded state artifact version "
                     f"'v{self.state.base_run_state_artifact_version}'. Iteration: "
                     f"{self.state.iteration}, stage: "
@@ -283,7 +286,7 @@ class PureTextRlTrainer(Trainer, ABC):
             # Sample rollouts from the training environment
             if self.state.train_loop_stage == "sample_rollouts" and not rerun_tests:
 
-                self.settings.logger.info(
+                logger.info(
                     f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] "
                     f"{self._get_iteration_begin_message()}"
                 )
@@ -321,7 +324,7 @@ class PureTextRlTrainer(Trainer, ABC):
             ):
 
                 if test_during_log_stats_stage:
-                    self.settings.logger.info(
+                    logger.info(
                         "Testing during 'log_stats' stage for compatibility with older "
                         "runs without a 'test_during_training' stage."
                     )
@@ -370,7 +373,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 elif rollouts is None:
                     rollouts = self._load_rollouts(self.state.iteration)
 
-                self._stage_create_fine_tune_jobs(rollouts)
+                asyncio.run(self._stage_create_fine_tune_jobs(rollouts))
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
@@ -402,7 +405,7 @@ class PureTextRlTrainer(Trainer, ABC):
         # Save the final checkpoint
         self.save_checkpoint()
 
-        self.settings.logger.info("Training complete.")
+        logger.info("Training complete.")
 
     def run_analysers(
         self,
@@ -466,12 +469,12 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 if analysis_file.exists():
                     if not overwrite:
-                        self.settings.logger.warning(
+                        logger.warning(
                             f"Analysis file {analysis_file!r} already exists. Skipping."
                         )
                         continue
                     else:
-                        self.settings.logger.warning(
+                        logger.warning(
                             f"Overwriting existing analysis file {analysis_file!r}"
                         )
                     if not dry_run:
@@ -480,7 +483,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 try:
                     rollouts = self._load_rollouts(iteration)
                 except FileNotFoundError:
-                    self.settings.logger.warning(
+                    logger.warning(
                         f"No rollouts found for iteration {iteration+1}. Skipping."
                     )
                     continue
@@ -511,10 +514,12 @@ class PureTextRlTrainer(Trainer, ABC):
         """
 
         # Sample rollouts
-        rollouts = self._sample_rollouts(
-            self.train_environment,
-            self.state.iteration,
-            use_tqdm=not self.settings.test_run,
+        rollouts = asyncio.run(
+            self._sample_rollouts(
+                self.train_environment,
+                self.state.iteration,
+                use_tqdm=not self.settings.test_run,
+            )
         )
 
         # Save the rollouts to the checkpoint directory
@@ -535,7 +540,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats, self.state.iteration)
 
     @abstractmethod
-    def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
+    async def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
         """Training stage: create fine-tune jobs for each agent.
 
         Parameters
@@ -547,7 +552,7 @@ class PureTextRlTrainer(Trainer, ABC):
     def _stage_await_fine_tune_jobs(self):
         """Training stage: await the completion of the fine-tune jobs."""
 
-        self.settings.logger.info("Awaiting completion of fine-tune jobs...")
+        logger.info("Awaiting completion of fine-tune jobs...")
 
         while True:
 
@@ -565,7 +570,7 @@ class PureTextRlTrainer(Trainer, ABC):
                     )
 
             if num_successful_jobs == len(self.shared_model_groups):
-                self.settings.logger.info("All fine-tune jobs succeeded")
+                logger.info("All fine-tune jobs succeeded")
                 break
 
             # Wait for a minute before checking again
@@ -580,8 +585,10 @@ class PureTextRlTrainer(Trainer, ABC):
         """Training stage: run the test loop."""
 
         # Sample rollouts from the test environment
-        rollouts = self._sample_rollouts(
-            self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
+        rollouts = asyncio.run(
+            self._sample_rollouts(
+                self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
+            )
         )
 
         # Log the statistics of the rollouts
@@ -616,7 +623,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 f"Invalid test scheme {self.hyper_params.text_rl.test_scheme!r}"
             )
 
-    def _sample_rollouts(
+    async def _sample_rollouts(
         self,
         environment: PureTextEnvironment,
         iteration: int | Literal["test"],
@@ -676,84 +683,37 @@ class PureTextRlTrainer(Trainer, ABC):
         else:
             num_rollouts = environment.num_envs
 
-        arg_iterator = (
-            (
-                self.hyper_params,
-                self.protocol_handler,
-                environment,
-                self.combined_agent,
-                data_batch,
+        sample_queue = Queue()
+        if use_tqdm:
+            progress_bar = tqdm(total=num_rollouts, desc=tqdm_desc)
+
+        async def sample_task(
+            data_batch: Optional[NestedArrayDict],
+        ):
+            sample = await self._sample_rollouts_for_single_environment(
+                environment, data_batch
             )
-            for data_batch in truncated_iterator(data_cycler, num_rollouts)
-        )
-
-        def get_rollouts(
-            rollout_iterator: Iterator[list[NestedArrayDict]],
-        ) -> list[NestedArrayDict]:
-
+            await sample_queue.put(sample)
             if use_tqdm:
-                rollout_iterator = tqdm(
-                    rollout_iterator,
-                    total=num_rollouts,
-                    desc=tqdm_desc,
-                )
+                progress_bar.update(1)
 
-            return sum(rollout_iterator, [])
+        async with TaskGroup() as task_group:
+            for data_batch in truncated_iterator(data_cycler, num_rollouts):
+                task_group.create_task(sample_task(data_batch))
 
-        # When the number of rollout workers is set to 0, we sample the rollouts
-        # sequentially, without using a pool
-        if self.settings.num_rollout_workers == 0:
-            rollout_iterator = map(self._get_single_environment_sampler(), arg_iterator)
-            rollout_list = get_rollouts(rollout_iterator)
-
-        # If we have multiple workers, we can use a pool to parallelize the rollouts
-        else:
-            with Pool(self.settings.num_rollout_workers) as pool:
-                rollout_iterator = pool.imap_unordered(
-                    self._get_single_environment_sampler(), arg_iterator
-                )
-                rollout_list = get_rollouts(rollout_iterator)
+        rollout_list = []
+        while not sample_queue.empty():
+            sample = await sample_queue.get()
+            rollout_list.extend(sample)
 
         rollouts_stacked = stack_nested_array_dicts(rollout_list, dim=0)
 
         return rollouts_stacked
 
-    def _get_single_environment_sampler(self) -> Callable[
-        [
-            tuple[
-                HyperParameters,
-                ProtocolHandler,
-                PureTextEnvironment,
-                PureTextCombinedWhole,
-                Optional[NestedArrayDict],
-            ]
-        ],
-        list[NestedArrayDict],
-    ]:
-        """Get the single-environment sampler function.
-
-        This function samples rollouts from a single environment. By default, this is
-        the `_sample_rollouts_for_single_environment` static method, but this may vary
-        by iteration.
-
-        Returns
-        -------
-        sample_rollouts_for_single_environment : Callable
-            The function to sample rollouts from a single environment. This function
-            takes the hyperparameters, protocol handler, environment, combined agent,
-            and data batch as arguments, and returns a list of rollouts.
-        """
-        return self._sample_rollouts_for_single_environment
-
-    @staticmethod
-    def _sample_rollouts_for_single_environment(
-        args: tuple[
-            HyperParameters,
-            ProtocolHandler,
-            PureTextEnvironment,
-            PureTextCombinedWhole,
-            Optional[NestedArrayDict],
-        ],
+    async def _sample_rollouts_for_single_environment(
+        self,
+        environment: PureTextEnvironment,
+        data_batch: Optional[NestedArrayDict] = None,
     ) -> list[NestedArrayDict]:
         """Sample rollouts for a single environment.
 
@@ -765,21 +725,10 @@ class PureTextRlTrainer(Trainer, ABC):
         environment until it is done, and then padding the rollout with zero states up
         to the maximum number of message rounds.
 
-        Notes
-        -----
-        This function is intended to be applied by a pool of workers. As such it must be
-        a static function and take all trainer attributes required as arguments.
-
         Parameters
         ----------
-        hyper_params : HyperParameters
-            The parameters of the experiment.
-        protocol_handler : ProtocolHandler
-            The interaction protocol handler for the experiment.
         environment : PureTextEnvironment
-            The environment to sample a rollout in.
-        combined_agent : PureTextCombinedWhole
-            The combined agent to use for the rollout.
+            The environment to sample rollouts in.
         data_batch : NestedArrayDict, optional
             The data batch to use for the rollout. If None, the data batch will be
             sampled from the dataset.
@@ -791,17 +740,15 @@ class PureTextRlTrainer(Trainer, ABC):
             batch size (max_message_rounds, )
         """
 
-        _, protocol_handler, environment, combined_agent, data_batch = args
-
         ended = False
         env_state = environment.reset(data_batch=data_batch)
         env_states = []
 
-        for _ in range(protocol_handler.max_message_rounds):
+        for _ in range(self.max_message_rounds):
             if not ended:
 
                 # Run the forward pass on all agents to sample actions
-                env_state = combined_agent.forward(env_state, environment)
+                env_state = await self.combined_agent.forward(env_state, environment)
 
                 # Step the environment to get the next state. This writes the next state
                 # in the "next" sub-dictionary.
