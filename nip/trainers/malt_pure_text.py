@@ -38,7 +38,7 @@ import dataclasses
 import itertools
 from functools import wraps
 from textwrap import indent
-from asyncio import TaskGroup
+from asyncio import TaskGroup, Lock
 import logging
 
 import torch
@@ -58,6 +58,7 @@ from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import PureTextSharedModelGroup
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 from nip.utils.rollouts import get_pretty_pure_text_round_message
+from nip.utils.asyncio import run_coroutine_sync
 
 
 logger = logging.getLogger(__name__)
@@ -129,10 +130,10 @@ class _PartialRolloutNode:
     This is computed after the tree is generated, so is not available immediately.
     """
 
-    node_id_base: InitVar[Optional[int]] = None
-    """The base ID, which is used to set the initial ID of a root node."""
-
-    _shared_data: ClassVar[dict[str, Any]] = {"next_node_id": 0}
+    _shared_data: ClassVar[dict[str, Any]] = {
+        "next_node_id": 0,
+        "next_node_id_lock": None,
+    }
     """Shared data for all nodes in the forest.
     
     Note that this is a class variable, so it is shared between all instances of this
@@ -140,14 +141,11 @@ class _PartialRolloutNode:
     forest.
     """
 
-    def __post_init__(self, node_id_base: Optional[int]):
-        if node_id_base is not None:
-            self._shared_data["next_node_id"] = node_id_base
+    def __post_init__(self):
         if self.node_id == -1:
-            self.node_id = self._shared_data["next_node_id"]
-            self._shared_data["next_node_id"] += 1
+            self.node_id = run_coroutine_sync(self._get_next_node_id_and_increment())
 
-    def clone_as_child(self) -> Self:
+    async def clone_as_child(self) -> Self:
         """Clone this node as a child of the current node.
 
         This creates a new node with the same environment state and adds it to the
@@ -171,10 +169,9 @@ class _PartialRolloutNode:
             ended=self.ended,
             padding=self.ended,
             trajectory_env_states=self.trajectory_env_states.copy(),
-            node_id=self._shared_data["next_node_id"],
+            node_id=await self._get_next_node_id_and_increment(),
             parent_partial_rollout=self,
         )
-        self._shared_data["next_node_id"] += 1
         self.child_partial_rollouts.append(cloned_partial_rollout)
         return cloned_partial_rollout
 
@@ -301,6 +298,27 @@ class _PartialRolloutNode:
             tree_string += "\n".join(child_strings)
 
         return tree_string
+
+    async def _get_next_node_id_and_increment(self) -> int:
+        """Get the next node ID and increment the counter.
+
+        This uses a class-level lock to ensure that the node IDs are unique across all
+        nodes in the forest.
+
+        Returns
+        -------
+        node_id : int
+            The next node ID.
+        """
+
+        if self._shared_data["next_node_id_lock"] is None:
+            self._shared_data["next_node_id_lock"] = Lock()
+
+        async with self._shared_data["next_node_id_lock"]:
+            node_id = self._shared_data["next_node_id"]
+            self._shared_data["next_node_id"] += 1
+
+        return node_id
 
 
 def _tree_iter(
@@ -583,6 +601,7 @@ class PureTextMaltTrainer(PureTextEiTrainer):
         - ("agents", "is_pair_positive"): "round agent"
         - ("agents", "is_pair_negative"): "round agent"
         - "_node_id": "round"
+        - "_parent_node_id": "round"
 
         Parameters
         ----------
@@ -650,24 +669,10 @@ class PureTextMaltTrainer(PureTextEiTrainer):
         # Reset the environment to get the initial state
         base_env_state = environment.reset(data_batch=data_batch)
 
-        # A shift which is applied to each node ID to make them unique across all
-        # datapoints. This is required because the node IDs are only unique within a
-        # datapoint.
-        datapoint_id = int(base_env_state["datapoint_id"].item())
-        max_num_nodes = (
-            self.hyper_params.pure_text_malt.num_responses_per_timestep
-            * self.protocol_handler.num_agents
-        ) ** (self.protocol_handler.max_message_rounds + 1)
-        node_id_base = datapoint_id * max_num_nodes
-
         # This is the tree structure, stratified by the level in the tree. We start with
         # the root node, which is the initial state of the environment.
         partial_rollouts_by_level = [
-            [
-                _PartialRolloutNode(
-                    base_env_state, self.protocol_handler, node_id_base=node_id_base
-                )
-            ]
+            [_PartialRolloutNode(base_env_state, self.protocol_handler)]
         ]
 
         # Get a mask indicating whether there is an unfrozen active agent in each round
@@ -724,7 +729,7 @@ class PureTextMaltTrainer(PureTextEiTrainer):
                     child_partial_rollouts: list[_PartialRolloutNode] = []
                     for _ in range(num_children):
                         child_partial_rollouts.append(
-                            base_partial_rollout.clone_as_child()
+                            await base_partial_rollout.clone_as_child()
                         )
 
                     for child_partial_rollout in child_partial_rollouts:
@@ -764,7 +769,7 @@ class PureTextMaltTrainer(PureTextEiTrainer):
 
                 # If we are done, we need to pad the rollout with zero actions
                 else:
-                    child_partial_rollout = base_partial_rollout.clone_as_child()
+                    child_partial_rollout = await base_partial_rollout.clone_as_child()
                     env_state = child_partial_rollout.current_env_state
                     env_state["padding"] = np.ones(*environment.batch_size, dtype=bool)
                     env_state["_node_id"] = [child_partial_rollout.node_id]
