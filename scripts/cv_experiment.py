@@ -71,6 +71,7 @@ param_grid = dict(
     prover_supervisor_message=["all"],
     freeze_prover=[False],
     provers_share_model=[True],
+    prover_invalid_response_penalty=[None],
     fine_tune_from_scratch=[True],
     fine_tune_on_all_previous_rollouts=[True],
     rollout_selection_method=["threshold"],
@@ -224,6 +225,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             verifier_first=combo["verifier_first"],
             randomize_prover_stance=combo["randomize_prover_stance"],
             verifier_decision_scale=combo["verifier_decision_scale"],
+            prover_invalid_response_penalty=combo["prover_invalid_response_penalty"],
         ),
         nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],

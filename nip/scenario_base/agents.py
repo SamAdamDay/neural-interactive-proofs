@@ -414,6 +414,45 @@ class PureTextWholeAgent(WholeAgent, ABC):
             The dataset for fine-tuning the agent.
         """
 
+    async def __call__(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Run a forward pass through the agent, with some safety checks.
+
+        Parameters
+        ----------
+        data : NestedArrayDict
+            The input to the agent.
+        environment : PureTextEnvironment
+            The environment the agent is interacting with.
+
+        Returns
+        -------
+        output : NestedArrayDict
+            The output of the forward pass on the input.
+        """
+
+        output = await self.forward(data, environment)
+
+        for key in self.out_keys:
+            if key not in output.keys():
+                raise ValueError(
+                    f"Required output key {key!r} not found in agent "
+                    f"{self.agent_name!r} {type(self).__name__}.forward() output."
+                )
+
+        for key in output.keys():
+            if key not in self.out_keys:
+                raise ValueError(
+                    f"Key {key!r} found in agent {self.agent_name!r} "
+                    f"{type(self).__name__}.forward() output, but not in the "
+                    f"output key specification. This probably means that the key needs "
+                    f"to be added to either the `agent_level_out_keys` or "
+                    f"`env_level_out_keys` attribute of the agent part."
+                )
+
+        return output
+
 
 @dataclass
 class PureTextSharedModelGroupState(ABC):
@@ -908,6 +947,12 @@ class PureTextCombinedWhole(CombinedWhole, ABC):
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Run a forward pass through all the agents and combine the output."""
+
+    async def __call__(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Run a forward pass through all the agents and combine the output."""
+        return await self.forward(data, environment)
 
 
 class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):

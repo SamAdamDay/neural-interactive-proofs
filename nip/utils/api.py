@@ -164,26 +164,26 @@ class UnknownFinishReasonError(ResponseError):
             )
 
 
-class InvalidResponseError(ResponseError):
-    """Raised when the agent's response text is invalid."""
+class UnparsableResponseError(ResponseError):
+    """Raised when the agent's response text is not able to be parsed."""
 
     def __init__(self, response_text: str, num_retries: Optional[int] = None):
         self.response_text = response_text
         self.num_retries = num_retries
         if num_retries is None:
             super(ResponseError, self).__init__(
-                f"Invalid generation. Response: {response_text!r}"
+                f"Unparsable generation. Response: {response_text!r}"
             )
         else:
             super(ResponseError, self).__init__(
-                f"Invalid generation after {num_retries} retries. Response: "
+                f"Unparsable generation after {num_retries} retries. Response: "
                 f"{response_text!r}"
             )
 
 
-class InvalidDecisionError(InvalidResponseError):
+class InvalidDecisionError(UnparsableResponseError):
     """Raised when the agent's decision is invalid (i.e. not accept or reject)."""
 
 
-class NotAllActiveChannelsInResponseError(InvalidResponseError):
+class NotAllActiveChannelsInResponseError(UnparsableResponseError):
     """Raised when the response does not contain messages for all active channels."""

@@ -605,8 +605,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             - "y" (... 1): The target value.
             - "round" (...): The current round.
             - ("agents", "decision") (... agent): The decision of each agent.
-            - ("agents", "continuous_decision") (... agent): A more fine-grained version of
-              the decision, which is a float between -1 and 1.
+            - ("agents", "continuous_decision") (... agent): (Optional) A more
+              fine-grained version of the decision, which is a float between -1 and 1.
+            - ("agents", "valid_response") (... agent): (Optional) A boolean mask
+              indicating whether the agent's response is valid.
             - "done" (...): A boolean mask indicating whether the episode is done.
             - ("agents", "done") (... agent): A boolean mask indicating whether each
                 agent is done.
@@ -700,12 +702,27 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
 
         # Compute the rewards for the other agents and add them
         self._include_prover_rewards(
-            verifier_decision_made,
-            decision[..., self.verifier_index],
-            verifier_float_decision,
-            reward,
-            env_td,
+            verifier_decision_made=verifier_decision_made,
+            verifier_decision=decision[..., self.verifier_index],
+            verifier_float_decision=verifier_float_decision,
+            reward=reward,
+            env_td=env_td,
         )
+
+        # If the ``prover_invalid_response_penalty`` hyper-parameter is set, any prover
+        # which produces an invalid response is given a penalty and the episode is
+        # terminated.
+        if (
+            self.hyper_params.protocol_common.prover_invalid_response_penalty
+            is not None
+            and ("agents", "valid_response") in env_td.keys()
+        ):
+            valid_response = as_tensor(env_td["agents", "valid_response"])
+            for prover_index in self.prover_indices:
+                reward[..., prover_index][
+                    ~valid_response[..., prover_index]
+                ] = self.hyper_params.protocol_common.prover_invalid_response_penalty
+                terminated[~valid_response[..., prover_index]] = True
 
         # The agent-specific done signal is the same as the shared done signal
         agent_done = agent_done | shared_done[..., None]
@@ -932,7 +949,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             discrete decision.
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
-            verifier.
+            verifier. This is updated in place.
         env_td : TensorDictBase | NestedArrayDict
             The current observation and state. If a ``NestedArrayDict``, it is converted
             to a ``TensorDictBase``.

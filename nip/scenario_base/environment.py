@@ -961,6 +961,9 @@ class PureTextEnvironment(Environment, ABC):
                     ),
                     "batch agent message field",
                 ),
+                valid_response=BoolArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
+                ),
                 retry_count=IntArraySpec(
                     (
                         *self.batch_size,

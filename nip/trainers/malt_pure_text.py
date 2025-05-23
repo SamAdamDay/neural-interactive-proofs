@@ -736,7 +736,7 @@ class PureTextMaltTrainer(PureTextEiTrainer):
 
                         # Run the forward pass on all agents to sample actions for this
                         # child
-                        env_state = await self.combined_agent.forward(
+                        env_state = await self.combined_agent(
                             child_partial_rollout.current_env_state, environment
                         )
 

@@ -29,7 +29,7 @@ from nip.utils.api import (
     GenerationError,
     ContentFilterError,
     UnknownFinishReasonError,
-    InvalidResponseError,
+    UnparsableResponseError,
 )
 
 
@@ -205,7 +205,7 @@ class CodeValidationRolloutAnalyser(PureTextRolloutAnalyser, ABC):
 
         Raises
         ------
-        InvalidResponseError
+        UnparsableResponseError
             If the response is not a valid response.
         """
 
@@ -413,7 +413,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         Raises
         ------
-        InvalidResponseError
+        UnparsableResponseError
             If the response is not a valid response.
         """
         response = response.strip().lower()
@@ -423,7 +423,7 @@ class BinaryRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
         elif response.startswith("no"):
             return 0
         else:
-            raise InvalidResponseError(response_text=response)
+            raise UnparsableResponseError(response_text=response)
 
 
 class OutOfTenRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
@@ -477,7 +477,7 @@ class OutOfTenRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
 
         Raises
         ------
-        InvalidResponseError
+        UnparsableResponseError
             If the response is not a valid response.
         """
         response = response.strip().lower()
@@ -488,9 +488,9 @@ class OutOfTenRolloutAnalyser(CodeValidationRolloutAnalyser, ABC):
             if response in self.text_to_int:
                 as_int = self.text_to_int[response]
             else:
-                raise InvalidResponseError(response_text=response)
+                raise UnparsableResponseError(response_text=response)
         if as_int < 0 or as_int > 10:
-            raise InvalidResponseError(response_text=response)
+            raise UnparsableResponseError(response_text=response)
         return as_int
 
 

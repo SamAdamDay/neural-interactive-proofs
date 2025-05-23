@@ -748,7 +748,7 @@ class PureTextRlTrainer(Trainer, ABC):
             if not ended:
 
                 # Run the forward pass on all agents to sample actions
-                env_state = await self.combined_agent.forward(env_state, environment)
+                env_state = await self.combined_agent(env_state, environment)
 
                 # Step the environment to get the next state. This writes the next state
                 # in the "next" sub-dictionary.

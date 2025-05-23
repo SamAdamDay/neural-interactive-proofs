@@ -63,6 +63,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   `logging.getLogger(__name__)`, rather than on an ad hoc basis.
 - Switched to using `async.io` for pure-text rollout generation, rather than
   `multiprocessing.Pool`.
+- Renamed `InvalidResponseError` to `UnparsableResponseError`.
 
 
 ### Added
@@ -98,6 +99,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Implemented `max_test_size` for graph isomorphism and image classification datasets.
 - The `_PartialRolloutNode` instances generated when building a MALT tree can now be
   visualised.
+- Enabled terminating an episode when a prover generates an invalid response, giving
+  them a penalty.
 
 
 ### Removed

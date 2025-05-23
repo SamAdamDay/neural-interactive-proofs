@@ -23,6 +23,10 @@ class CommonProtocolParameters(SubParameters):
         protocol.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
+    prover_invalid_response_penalty : float | None
+        The reward given to a prover when it gives an invalid response. If ``None``,
+        provers are not penalized for invalid responses. This is only relevant in
+        pure-text scenarios, where the prover is expected to give a text response.
     verifier_reward : float
         The reward given to the verifier when it guesses correctly.
     verifier_incorrect_penalty : float
@@ -58,6 +62,7 @@ class CommonProtocolParameters(SubParameters):
     randomize_prover_stance: bool = False
 
     prover_reward: float = 1.0
+    prover_invalid_response_penalty: float | None = None
     verifier_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
     verifier_neither_accept_nor_reject_reward: float | None = None
