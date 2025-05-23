@@ -60,6 +60,13 @@ parser.add_argument(
     help="The wandb entity to use.",
 )
 
+parser.add_argument(
+    "--overwrite",
+    "-o",
+    action="store_true",
+    help="Whether to overwrite an existing visualisation.",
+)
+
 if __name__ == "__main__":
 
     cmd_args = parser.parse_args()
@@ -87,6 +94,10 @@ if __name__ == "__main__":
             / f"{cmd_args.iteration}.{cmd_args.format}"
         )
         file_path.parent.mkdir(parents=True, exist_ok=True)
+        if file_path.exists() and not cmd_args.overwrite:
+            raise FileExistsError(
+                f"File {file_path!s} already exists. Use --overwrite to overwrite it."
+            )
         with open(file_path, "w") as file:
             file.write(malt_forest_visualisation)
         print(f"Saved visualisation to {file_path!s}.")  # noqa: T201
