@@ -64,6 +64,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Switched to using `async.io` for pure-text rollout generation, rather than
   `multiprocessing.Pool`.
 - Renamed `InvalidResponseError` to `UnparsableResponseError`.
+- The `cv_experiments.py` script now takes a config file as an argument, which specifies
+  the hyper-parameters of the experiment.
 
 
 ### Added

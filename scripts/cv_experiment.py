@@ -13,6 +13,7 @@ from argparse import Namespace
 import os
 import logging
 from datetime import datetime
+from pathlib import Path
 
 from nip import (
     HyperParameters,
@@ -41,57 +42,8 @@ from nip.utils.env import get_env_var
 script_name = os.path.basename(__file__)
 logger = logging.getLogger(f"nip.scripts.{script_name}")
 
-param_grid = dict(
-    trainer=["pure_text_ei"],
-    interaction_protocol=["nip"],
-    dataset_name=["lrhammond/buggy-apps"],
-    apps_difficulty=["interview"],
-    num_iterations=[8],
-    rollouts_per_iteration=[200],
-    malt_num_initial_ei_iterations=[1],
-    malt_pair_selection_method=["interval"],
-    verifier_model=["OpenAI/gpt-4o-mini-2024-07-18"],
-    verifier_system_prompt_template=[None],
-    verifier_vllm_openai_base_url=["http://localhost:8000/v1"],
-    verifier_temperature=[None],
-    verifier_top_p=[None],
-    verifier_repetition_penalty=[None],
-    verifier_guess_replacement_proportion=[0.0],
-    verifier_guess_replacement_annealing=["linear"],
-    verifier_guess_replacement_annealing_rate=[0.1],
-    verifier_decision_scale=["accept_reject"],
-    verifier_supervisor_message=["all"],
-    freeze_verifier=[False],
-    prover_model=["OpenAI/gpt-4o-2024-08-06"],
-    prover_system_prompt_template=[None],
-    prover_vllm_openai_base_url=["http://localhost:8000/v1"],
-    prover_temperature=[None],
-    prover_top_p=[None],
-    prover_repetition_penalty=[None],
-    prover_supervisor_message=["all"],
-    freeze_prover=[False],
-    provers_share_model=[True],
-    prover_invalid_response_penalty=[None],
-    fine_tune_from_scratch=[True],
-    fine_tune_on_all_previous_rollouts=[True],
-    rollout_selection_method=["threshold"],
-    weighting_use_replacement=[True],
-    dpo_beta=[None],
-    shared_reward=[False],
-    randomize_prover_stance=[False],
-    min_message_rounds=[1],
-    max_message_rounds=[9],
-    verifier_first=[True],
-    debate_sequential=[False],
-    debate_prover0_first=[True],
-    max_train_size=[None],
-    max_test_size=[None],
-    test_scheme=["none"],
-    num_test_iterations=[1],
-    test_dataset_split=["validation"],
-    rerun_tests=[None],
-    seed=[6198],
-)
+scripts_dir = Path(__file__).parent
+config_dir = scripts_dir / "config" / "cv_experiment"
 
 
 def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
@@ -343,13 +295,14 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
 
 
 experiment = SequentialHyperparameterExperiment(
-    param_grid=param_grid,
     experiment_fn=experiment_fn,
     run_id_fn=run_id_fn,
     run_preparer_fn=run_preparer_fn,
     experiment_name="CV",
     arg_parser_description="Run Code Validation experiments, "
     "running from a hyperparameter grid in sequence.",
+    default_config_filename="single_experiment.json5",
+    config_file_base_path=config_dir,
     default_wandb_project=get_env_var("WANDB_CV_PROJECT", ""),
     allow_resuming_wandb_run=True,
     add_run_infix_argument=False,

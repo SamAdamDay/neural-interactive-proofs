@@ -1,0 +1,69 @@
+// A configuration file for cv_experiment.py using a grid of parameters.
+//
+// Each parameter is a list of values, and the script will run an experiment for each
+// combination of parameters.
+//
+// The object defined in this file is passed to
+// ``sklearn.model_selection.ParameterGrid`` to generate a grid of parameters. This
+// means it is also possible to use a sequence of grids, by defining a list of
+// dictionaries, instead of a single dictionary. See the documentation of
+// ``sklearn.model_selection.ParameterGrid`` for more details.
+
+{
+    "kind": "grid",
+    "parameters":
+    {
+        "trainer": ["pure_text_ei"],
+        "interaction_protocol": ["nip"],
+        "dataset_name": ["lrhammond/buggy-apps"],
+        "apps_difficulty": ["interview"],
+        "num_iterations": [8],
+        "rollouts_per_iteration": [200],
+        "malt_num_initial_ei_iterations": [1],
+        "malt_pair_selection_method": ["interval"],
+        "verifier_model": ["OpenAI/gpt-4o-mini-2024-07-18"],
+        "verifier_system_prompt_template": [null],
+        "verifier_vllm_openai_base_url": ["http://localhost:8000/v1"],
+        "verifier_temperature": [null],
+        "verifier_top_p": [null],
+        "verifier_repetition_penalty": [null],
+        "verifier_guess_replacement_proportion": [0.0],
+        "verifier_guess_replacement_annealing": ["linear"],
+        "verifier_guess_replacement_annealing_rate": [0.1],
+        "verifier_decision_scale": ["accept_reject"],
+        "verifier_supervisor_message": ["all"],
+        "freeze_verifier": [false],
+        "prover_model": ["OpenAI/gpt-4o-2024-08-06"],
+        "prover_system_prompt_template": [null],
+        "prover_vllm_openai_base_url": ["http://localhost:8000/v1"],
+        "prover_temperature": [null],
+        "prover_top_p": [null],
+        "prover_repetition_penalty": [null],
+        "prover_supervisor_message": ["all"],
+        "freeze_prover": [false],
+        "provers_share_model": [true],
+        "prover_invalid_response_penalty": [null],
+        "fine_tune_from_scratch": [true],
+        "fine_tune_on_all_previous_rollouts": [true],
+        "rollout_selection_method": ["threshold"],
+        "weighting_use_replacement": [true],
+        "dpo_beta": [null],
+        "shared_reward": [false],
+        "randomize_prover_stance": [false],
+        "min_message_rounds": [1],
+        "max_message_rounds": [9],
+        "verifier_first": [true],
+        "debate_sequential": [false],
+        "debate_prover0_first": [true],
+        "max_train_size": [null],
+        "max_test_size": [null],
+        "test_scheme": ["none"],
+        "num_test_iterations": [1],
+        "test_dataset_split": ["validation"],
+        // If set, this should be the ID of a previous experiment. This experiment will
+        // be stepped through, running the tests as specified by "test_scheme" and other
+        // test parameters.
+        "rerun_tests": [null],
+        "seed": [6198],
+    },
+}
