@@ -3,15 +3,15 @@
 {
     "kind": "single_experiment",
     "parameters": {
-        "trainer": "pure_text_ei",
-        "interaction_protocol": "nip",
+        "trainer": "pure_text_malt",
+        "interaction_protocol": "adp",
         "dataset_name": "lrhammond/buggy-apps",
         "apps_difficulty": "interview",
-        "num_iterations": 8,
+        "num_iterations": 16,
         "rollouts_per_iteration": 200,
         "malt_num_initial_ei_iterations": 1,
         "malt_pair_selection_method": "interval",
-        "verifier_model": "OpenAI/gpt-4o-mini-2024-07-18",
+        "verifier_model": "OpenRouter/meta-llama/llama-3.2-1b-instruct",
         "verifier_system_prompt_template": null,
         "verifier_vllm_openai_base_url": "http://localhost:8000/v1",
         "verifier_temperature": null,
@@ -20,24 +20,24 @@
         "verifier_guess_replacement_proportion": 0.0,
         "verifier_guess_replacement_annealing": "linear",
         "verifier_guess_replacement_annealing_rate": 0.1,
-        "verifier_decision_scale": "accept_reject",
+        "verifier_decision_scale": "likert_int_scale_11",
         "verifier_supervisor_message": "all",
-        "freeze_verifier": false,
+        "freeze_verifier": true,
         "prover_model": "OpenAI/gpt-4o-2024-08-06",
         "prover_system_prompt_template": null,
         "prover_vllm_openai_base_url": "http://localhost:8000/v1",
-        "prover_temperature": null,
+        "prover_temperature": 1.0,
         "prover_top_p": null,
         "prover_repetition_penalty": null,
         "prover_supervisor_message": "all",
         "freeze_prover": false,
         "provers_share_model": true,
         "prover_invalid_response_penalty": null,
-        "fine_tune_from_scratch": true,
-        "fine_tune_on_all_previous_rollouts": true,
+        "fine_tune_from_scratch": false,
+        "fine_tune_on_all_previous_rollouts": false,
         "rollout_selection_method": "threshold",
         "weighting_use_replacement": true,
-        "dpo_beta": null,
+        "dpo_beta": 0.3,
         "shared_reward": false,
         "randomize_prover_stance": false,
         "min_message_rounds": 1,
@@ -47,13 +47,19 @@
         "debate_prover0_first": true,
         "max_train_size": null,
         "max_test_size": null,
-        "test_scheme": "none",
+        "test_scheme": "all",
         "num_test_iterations": 1,
         "test_dataset_split": "validation",
         // If set, this should be the ID of a previous experiment. This experiment will
         // be stepped through, running the tests as specified by "test_scheme" and other
         // test parameters.
         "rerun_tests": null,
+        // If set to true and the script is run with a run ID which already exists, the
+        // script will continue running the experiment from the last completed
+        // iteration, even if the previous had fewer iterations than specified
+        // in this configuration file. This is useful for continuing promising
+        // experiments which have already completed.
+        "force_more_iterations": false,
         "seed": 6198,
     }
 }

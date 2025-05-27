@@ -103,6 +103,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   visualised.
 - Enabled terminating an episode when a prover generates an invalid response, giving
   them a penalty.
+- Ability to force a code validation experiment to run for more iterations that its
+  original hyper-parameters.
 
 
 ### Removed

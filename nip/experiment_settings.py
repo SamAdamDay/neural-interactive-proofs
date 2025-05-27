@@ -50,6 +50,12 @@ class ExperimentSettings:
     base_wandb_run : wandb.apis.public.Run, optional
         The base W&B run, if using. This is an already complete run loaded using the W&B
         API.
+    force_more_iterations : bool, default=False
+        If set to True and ``run_id`` already exists, the trainer will be forced to
+        perform as many iterations as specified in the hyper-parameters, even if the
+        run has already been completed. This is useful for continuing training
+        experiments that have been officially completed, but where you want to
+        continue training for more iterations.
     stat_logger : StatLogger, optional
         The logger to use for logging statistics. If not provided, a dummy logger is
         used, which does nothing.
@@ -115,6 +121,7 @@ class ExperimentSettings:
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
     base_wandb_run: Annotated[Optional[wandb.apis.public.Run], MarkUnpicklable] = None
+    force_more_iterations: bool = False
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
     profiler: Optional[torch.profiler.profile] = None

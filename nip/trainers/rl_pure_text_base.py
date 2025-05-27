@@ -252,6 +252,26 @@ class PureTextRlTrainer(Trainer, ABC):
             and self.hyper_params.base_run.rerun_tests_force_test_during_training_state
         )
 
+        # This condition happens when resuming a previously completed run but with more
+        # iterations
+        if (
+            self.state.iteration < self.hyper_params.rl.num_iterations
+            and self.state.train_loop_stage == "done"
+        ):
+            if self.settings.force_more_iterations:
+                logger.info(
+                    "Forcing more iterations to be run, even though the state "
+                    "indicates that the training is done."
+                )
+                self.state.train_loop_stage = "sample_rollouts"
+                self.save_checkpoint()
+            else:
+                logger.info(
+                    "Training is already done. If you want to run more iterations, "
+                    "set `force_more_iterations=True` in the experiment settings."
+                )
+                return
+
         rollouts: Optional[NestedArrayDict] = None
 
         while self.state.iteration < self.hyper_params.rl.num_iterations:

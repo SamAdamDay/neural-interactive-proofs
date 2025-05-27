@@ -241,6 +241,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
+        force_more_iterations=combo["force_more_iterations"],
     )
 
 

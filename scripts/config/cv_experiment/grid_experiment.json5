@@ -64,6 +64,12 @@
         // be stepped through, running the tests as specified by "test_scheme" and other
         // test parameters.
         "rerun_tests": [null],
+        // If set to true and the script is run with a run ID which already exists, the
+        // script will continue running the experiment from the last completed
+        // iteration, even if the previous had fewer iterations than specified
+        // in this configuration file. This is useful for continuing promising
+        // experiments which have already completed.
+        "force_more_iterations": [false],
         "seed": [6198],
     },
 }

@@ -47,6 +47,7 @@ def run_experiment(
     print_wandb_run_url: bool = False,
     wandb_tags: list = [],
     wandb_group: Optional[str] = None,
+    force_more_iterations: bool = False,
     num_dataset_threads: int = 8,
     pin_memory: bool = True,
     dataset_on_device: bool = False,
@@ -94,6 +95,12 @@ def run_experiment(
     wandb_group : str, optional
         The name of the W&B group for the run. Runs with the same group are placed
         together in the UI. This is useful for doing multiple runs on the same machine.
+    force_more_iterations : bool, default=False
+        If set to True and ``run_id`` already exists, the trainer will be forced to
+        perform as many iterations as specified in the hyper-parameters, even if the
+        run has already been completed. This is useful for continuing training
+        experiments that have been officially completed, but where you want to
+        continue training for more iterations.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     pin_memory : bool, default=True
@@ -162,6 +169,7 @@ def run_experiment(
         profiler=profiler,
         ignore_cache=ignore_cache,
         base_wandb_run=base_run,
+        force_more_iterations=force_more_iterations,
         num_dataset_threads=num_dataset_threads,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,
