@@ -40,6 +40,7 @@
         "prover_top_p": [null],
         "prover_repetition_penalty": [null],
         "prover_supervisor_message": ["all"],
+        "prover_max_words": [150],
         "freeze_prover": [false],
         "provers_share_model": [true],
         "prover_invalid_response_penalty": [null],

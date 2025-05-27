@@ -97,6 +97,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
         use_supervisor_message=combo["prover_supervisor_message"],
         dpo_beta=combo["dpo_beta"],
+        max_response_words=combo["prover_max_words"],
     )
 
     if combo["provers_share_model"]:
