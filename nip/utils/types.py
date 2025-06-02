@@ -16,6 +16,9 @@ NumpyStringDtype = StringDType(na_object=None)
 
 NOT_GIVEN = object()
 
+NestedKey: TypeAlias = str | tuple["NestedKey", ...]
+"""A nested key type used for tensordict keys."""
+
 
 def get_union_elements(tp: Any) -> list:
     """Get the elements of a union type.

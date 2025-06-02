@@ -202,8 +202,8 @@ class TensorDictRlTrainer(TensorDictTrainer, ABC):
         for env in [self.train_environment, self.test_environment]:
             for key in normalization_keys:
                 transform = ObservationNorm(in_keys=[key], standard_normal=True)
-                env.append_transform(transform)
                 size = len(env.observation_spec[key].shape)
+                env.append_transform(transform)
                 transform.init_stats(
                     num_normalization_steps,
                     key=key,

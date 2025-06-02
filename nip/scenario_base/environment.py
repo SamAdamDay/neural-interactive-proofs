@@ -14,13 +14,8 @@ import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    BinaryDiscreteTensorSpec,
-    DiscreteTensorSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import Categorical, UnboundedContinuous, Composite, Binary
+from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs import EnvBase
 
 import numpy as np
@@ -28,7 +23,7 @@ from numpy.typing import NDArray
 
 import einops
 
-from jaxtyping import Float, Int
+from jaxtyping import Int
 
 from nip.scenario_base import (
     TensorDictDataLoader,
@@ -332,31 +327,31 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The observation specification.
         """
 
-        observation_spec = CompositeSpec(
-            round=DiscreteTensorSpec(
+        observation_spec = Composite(
+            round=Categorical(
                 self.protocol_handler.max_message_rounds,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
             ),
-            decision_restriction=DiscreteTensorSpec(
+            decision_restriction=Categorical(
                 3,
                 shape=(self.num_envs,),
                 dtype=self._int_dtype,
                 device=self.device,
             ),
-            x=UnboundedContinuousTensorSpec(
+            x=UnboundedContinuous(
                 shape=self.message_history_shape,
                 dtype=torch.float,
                 device=self.device,
             ),
-            seed=DiscreteTensorSpec(
+            seed=Categorical(
                 2**16,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
             ),
-            message_history=BinaryDiscreteTensorSpec(
+            message_history=Binary(
                 self.message_history_shape[-1],
                 shape=self.message_history_shape,
                 dtype=torch.float,
@@ -369,22 +364,18 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # Add specifications for the pretrained embeddings, if any
         pretrained_model_names = self.dataset.pretrained_model_names
         for model_name in pretrained_model_names:
-            observation_spec["pretrained_embeddings", model_name] = (
-                UnboundedContinuousTensorSpec(
-                    shape=(
-                        self.num_envs,
-                        *self.dataset.get_pretrained_embedding_feature_shape(
-                            model_name
-                        ),
-                    ),
-                    dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
-                    device=self.device,
-                )
+            observation_spec["pretrained_embeddings", model_name] = UnboundedContinuous(
+                shape=(
+                    self.num_envs,
+                    *self.dataset.get_pretrained_embedding_feature_shape(model_name),
+                ),
+                dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
+                device=self.device,
             )
 
         # Add the linear message history, if it is included
         if self.hyper_params.include_linear_message_space:
-            observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
+            observation_spec["linear_message_history"] = Binary(
                 self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
@@ -411,15 +402,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The action specification.
         """
 
-        action_spec = CompositeSpec(
-            agents=CompositeSpec(
-                decision=DiscreteTensorSpec(
+        action_spec = Composite(
+            agents=Composite(
+                decision=Categorical(
                     3,
                     shape=(self.num_envs, self.num_agents),
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
-                main_message_logits=UnboundedContinuousTensorSpec(
+                main_message_logits=UnboundedContinuous(
                     shape=(
                         self.num_envs,
                         self.num_agents,
@@ -429,7 +420,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     ),
                     device=self.device,
                 ),
-                decision_logits=UnboundedContinuousTensorSpec(
+                decision_logits=UnboundedContinuous(
                     shape=(
                         self.num_envs,
                         self.num_agents,
@@ -445,7 +436,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         if self.hyper_params.include_linear_message_space:
-            action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
+            action_spec["agents"]["linear_message_selected"] = Categorical(
                 self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
@@ -469,14 +460,14 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         state_spec : TensorSpec
             The state specification.
         """
-        return CompositeSpec(
-            y=BinaryDiscreteTensorSpec(
+        return Composite(
+            y=Binary(
                 1,
                 shape=(self.num_envs, 1),
                 dtype=torch.long,
                 device=self.device,
             ),
-            datapoint_id=DiscreteTensorSpec(
+            datapoint_id=Categorical(
                 len(self.dataset),
                 shape=(self.num_envs,),
                 dtype=torch.long,
@@ -494,9 +485,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         reward_spec : TensorSpec
             The reward specification.
         """
-        return CompositeSpec(
-            agents=CompositeSpec(
-                reward=UnboundedContinuousTensorSpec(
+        return Composite(
+            agents=Composite(
+                reward=UnboundedContinuous(
                     shape=(self.num_envs, self.num_agents),
                     device=self.device,
                 ),
@@ -519,11 +510,11 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         done_spec : TensorSpec
             The done specification.
         """
-        return CompositeSpec(
+        return Composite(
             # TODO: This may lead to issues because TorchRL calls ``any`` on the done
             # signal
-            agents=CompositeSpec(
-                done=BinaryDiscreteTensorSpec(
+            agents=Composite(
+                done=Binary(
                     self.num_agents,
                     shape=(self.num_envs, self.num_agents),
                     dtype=torch.bool,
@@ -532,13 +523,13 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 shape=(self.num_envs, self.num_agents),
                 device=self.device,
             ),
-            done=BinaryDiscreteTensorSpec(
+            done=Binary(
                 self.num_envs,
                 shape=(self.num_envs,),
                 dtype=torch.bool,
                 device=self.device,
             ),
-            terminated=BinaryDiscreteTensorSpec(
+            terminated=Binary(
                 self.num_envs,
                 shape=(self.num_envs,),
                 dtype=torch.bool,

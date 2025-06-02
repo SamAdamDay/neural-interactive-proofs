@@ -17,6 +17,6 @@ sphinxcontrib-autoprogram==0.1.9
 sphinxcontrib-bibtex==2.6.3
 sphinxcontrib-mermaid==1.0.0
 sphinxcontrib-httpdomain==1.8.1
-sympy==1.12.1
+sympy==1.14.0
 tensorboard==2.17.0
 torch_tb_profiler==0.4.3

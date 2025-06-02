@@ -35,7 +35,6 @@ from torch.nn.parameter import Parameter as TorchParameter
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
-from tensordict.utils import NestedKey
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
@@ -81,7 +80,7 @@ from nip.utils.torch import (
     Print,
     TensorDictPrint,
 )
-from nip.utils.types import TorchDevice
+from nip.utils.types import TorchDevice, NestedKey
 
 GI_SCENARIO = "graph_isomorphism"
 

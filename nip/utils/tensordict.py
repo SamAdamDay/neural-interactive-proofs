@@ -3,7 +3,8 @@
 import torch
 
 from tensordict import TensorDictBase
-from tensordict.utils import NestedKey
+
+from nip.utils.types import NestedKey
 
 
 def tensordict_add(

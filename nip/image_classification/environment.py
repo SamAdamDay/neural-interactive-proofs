@@ -2,20 +2,14 @@
 
 from typing import Optional
 from math import floor, prod
-from functools import cached_property
 
 import torch
 from torch import Tensor
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import Categorical, UnboundedContinuous, Composite
 
-from nip.parameters import ScenarioType
 from nip.scenario_base import Environment, TensorDictEnvironment
 from nip.factory import register_scenario_class
 from nip.image_classification.data import DATASET_WRAPPER_CLASSES
@@ -114,7 +108,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
         """
         return (self.latent_height, self.latent_width)
 
-    def _get_observation_spec(self) -> CompositeSpec:
+    def _get_observation_spec(self) -> Composite:
         """Get the specification of the agent observations.
 
         Agents see the image and the messages sent so far. The "message" field contains
@@ -122,13 +116,13 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
 
         Returns
         -------
-        observation_spec : CompositeSpec
+        observation_spec : Composite
             The observation specification.
         """
 
         observation_spec = super()._get_observation_spec()
 
-        observation_spec["image"] = UnboundedContinuousTensorSpec(
+        observation_spec["image"] = UnboundedContinuous(
             shape=(
                 self.num_envs,
                 self.dataset_num_channels,
@@ -139,7 +133,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
             device=self.device,
         )
 
-        observation_spec["message"] = DiscreteTensorSpec(
+        observation_spec["message"] = Categorical(
             self.latent_width,
             shape=(
                 self.num_envs,
@@ -154,7 +148,7 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
 
         return observation_spec
 
-    def _get_action_spec(self) -> CompositeSpec:
+    def _get_action_spec(self) -> Composite:
         """Get the specification of the agent actions.
 
         Each action space has shape (batch_size, num_agents). Each agent chooses both a
@@ -163,11 +157,11 @@ class ImageClassificationEnvironment(TensorDictEnvironment):
 
         Returns
         -------
-        action_spec : CompositeSpec
+        action_spec : Composite
             The action specification.
         """
         action_spec = super()._get_action_spec()
-        action_spec["agents"]["latent_pixel_selected"] = DiscreteTensorSpec(
+        action_spec["agents"]["latent_pixel_selected"] = Categorical(
             prod(self.main_message_space_shape),
             shape=(
                 self.num_envs,

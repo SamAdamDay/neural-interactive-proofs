@@ -25,7 +25,6 @@ from numpy.typing import NDArray
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import NestedKey
 
 from einops import repeat, rearrange
 
@@ -35,7 +34,7 @@ from nip.parameters import HyperParameters, PureTextAgentParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.protocols import ProtocolHandler
 from nip.scenario_base.environment import PureTextEnvironment
-from nip.utils.types import TorchDevice
+from nip.utils.types import TorchDevice, NestedKey
 from nip.utils.hyper_params import get_agent_part_flags
 from nip.utils.torch import apply_orthogonal_initialisation
 from nip.utils.nested_array_dict import NestedArrayDict

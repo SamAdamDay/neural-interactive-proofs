@@ -16,11 +16,12 @@ from torchvision.models.resnet import (
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import NestedKey
 
 import einops
 
 from jaxtyping import Float, Bool
+
+from nip.utils.types import NestedKey
 
 
 ACTIVATION_CLASSES = {
