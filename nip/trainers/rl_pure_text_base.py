@@ -311,7 +311,7 @@ class PureTextRlTrainer(Trainer, ABC):
                     f"{self._get_iteration_begin_message()}"
                 )
 
-                rollouts = self._stage_sample_rollouts()
+                rollouts = asyncio.run(self._stage_sample_rollouts())
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "log_stats"
@@ -524,7 +524,7 @@ class PureTextRlTrainer(Trainer, ABC):
         """
         return "Iteration begins."
 
-    def _stage_sample_rollouts(self) -> NestedArrayDict:
+    async def _stage_sample_rollouts(self) -> NestedArrayDict:
         """Training stage: sample rollouts from the training environment.
 
         Returns
@@ -533,13 +533,16 @@ class PureTextRlTrainer(Trainer, ABC):
             The sampled rollouts.
         """
 
-        # Sample rollouts
-        rollouts = asyncio.run(
-            self._sample_rollouts(
-                self.train_environment,
-                self.state.iteration,
-                use_tqdm=not self.settings.test_run,
-            )
+        # Make sure all the shared model groups are in evaluation mode. We can do this
+        # concurrently for each group
+        async with TaskGroup() as task_group:
+            for shared_model_group in self.shared_model_groups.values():
+                task_group.create_task(shared_model_group.eval())
+
+        rollouts = await self._sample_rollouts(
+            self.train_environment,
+            self.state.iteration,
+            use_tqdm=not self.settings.test_run,
         )
 
         # Save the rollouts to the checkpoint directory

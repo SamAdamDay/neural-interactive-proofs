@@ -1,11 +1,11 @@
 Model Series,Model Name,Developer,URI,Parameters (10E+9),FLOPs (10E+23),OpenRouter Input Cost,OpenRouter Output Cost,MMLU-Pro
 Jamba 1.6,Mini,AI21,OpenRouter/ai21/jamba-1.6-mini,52,,0.2,0.4,0.37
 Jamba 1.6,Large,AI21,OpenRouter/ai21/jamba-1.6-large,398,,2,8,0.56
-Qwen 2.5 Instruct,0.5B,Alibaba,vLLM-OpenAI/Qwen/Qwen2.5-0.5B-Instruct,0.5,,,,0.15
-Qwen 2.5 Instruct,1.5B,Alibaba,vLLM-OpenAI/Qwen/Qwen2.5-1.5B-Instruct,1.5,1.6632,,,0.32
-Qwen 2.5 Instruct,3B,Alibaba,vLLM-OpenAI/Qwen/Qwen2.5-3B-Instruct,3,3.3372,,,0.44
+Qwen 2.5 Instruct,0.5B,Alibaba,SelfHosted/Qwen/Qwen2.5-0.5B-Instruct,0.5,,,,0.15
+Qwen 2.5 Instruct,1.5B,Alibaba,SelfHosted/Qwen/Qwen2.5-1.5B-Instruct,1.5,1.6632,,,0.32
+Qwen 2.5 Instruct,3B,Alibaba,SelfHosted/Qwen/Qwen2.5-3B-Instruct,3,3.3372,,,0.44
 Qwen 2.5 Instruct,7B,Alibaba,OpenRouter/qwen/qwen-2.5-7b-instruct,7,8.2188,0.3,0.3,0.45
-Qwen 2.5 Instruct,14B,Alibaba,vLLM-OpenAI/Qwen/Qwen2.5-14B-Instruct,14,15.876,,,0.64
+Qwen 2.5 Instruct,14B,Alibaba,SelfHosted/Qwen/Qwen2.5-14B-Instruct,14,15.876,,,0.64
 Qwen 2.5 Instruct,32B,Alibaba,OpenRouter/qwen/qwen2.5-32b-instruct,32,35.1,0.79,0.79,0.7
 Qwen 2.5 Instruct,72B,Alibaba,OpenRouter/qwen/qwen-2.5-72b-instruct,72,78,0.7,0.7,0.72
 Claude 3,Haiku,Anthropic,OpenRouter/anthropic/claude-3-haiku,,,0.25,1.25,
@@ -16,16 +16,16 @@ Claude 3.7,Sonnet,Anthropic,OpenRouter/anthropic/claude-3.7-sonnet,,335,3,15,0.8
 Command,R7B,Cohere,OpenRouter/cohere/command-r7b-12-2024,7,,0.0375,0.15,0.29
 Command,R,Cohere,OpenRouter/cohere/command-r,35,,0.15,0.6,0.34
 Command,R+,Cohere,OpenRouter/cohere/command-r-plus,104,,3,15,0.43
-DeepSeek Coder Instruct,1.3B,DeepSeek,vLLM-OpenAI/deepseek-ai/deepseek-coder-1.3b-instruct,1.3,,,,
-DeepSeek Coder Instruct,6.7B,DeepSeek,vLLM-OpenAI/deepseek-ai/deepseek-coder-6.7b-instruct,6.7,,,,
-DeepSeek Coder Instruct,33B,DeepSeek,vLLM-OpenAI/deepseek-ai/deepseek-coder-33b-instruct,33,,,,
-DeepSeek Coder v2,Lite,DeepSeek,vLLM-OpenAI/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct,16,,,,0.42
-DeepSeek Coder v2,,DeepSeek,vLLM-OpenAI/deepseek-ai/DeepSeek-Coder-V2-Instruct,236,,,,0.64
-DeepSeek V2.5,,DeepSeek,vLLM-OpenAI/deepseek-ai/DeepSeek-V2.5,236,17.892,,,
+DeepSeek Coder Instruct,1.3B,DeepSeek,SelfHosted/deepseek-ai/deepseek-coder-1.3b-instruct,1.3,,,,
+DeepSeek Coder Instruct,6.7B,DeepSeek,SelfHosted/deepseek-ai/deepseek-coder-6.7b-instruct,6.7,,,,
+DeepSeek Coder Instruct,33B,DeepSeek,SelfHosted/deepseek-ai/deepseek-coder-33b-instruct,33,,,,
+DeepSeek Coder v2,Lite,DeepSeek,SelfHosted/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct,16,,,,0.42
+DeepSeek Coder v2,,DeepSeek,SelfHosted/deepseek-ai/DeepSeek-Coder-V2-Instruct,236,,,,0.64
+DeepSeek V2.5,,DeepSeek,SelfHosted/deepseek-ai/DeepSeek-V2.5,236,17.892,,,
 DeepSeek V3,,DeepSeek,OpenRouter/deepseek/deepseek-chat-v3-0324,671,34.078,0.27,1.1,0.76
 Gemma 2,9B,Google DeepMind,OpenRouter/google/gemma-2-9b-it,9,4.32,0.2,0.2,0.5
 Gemma 2,27B,Google DeepMind,OpenRouter/google/gemma-2-27b-it,27,21.06,0.8,0.8,0.57
-Gemma 3,1B,Google DeepMind,vLLM-OpenAI/google/gemma-3-1b-it,1,,,,0.1
+Gemma 3,1B,Google DeepMind,SelfHosted/google/gemma-3-1b-it,1,,,,0.1
 Gemma 3,4B,Google DeepMind,OpenRouter/google/gemma-3-4b-it,4,,0.02,0.04,0.42
 Gemma 3,12B,Google DeepMind,OpenRouter/google/gemma-3-12b-it,12,,0.05,0.1,0.6
 Gemma 3,27B,Google DeepMind,OpenRouter/google/gemma-3-27b-it,27,,0.2,0.4,0.67
@@ -38,9 +38,9 @@ Llama 3.3 Instruct,70B,Meta,OpenRouter/meta-llama/llama-3.3-70b-instruct,70,68.6
 Llama 4,Scout,Meta,OpenRouter/meta-llama/llama-4-scout,109,,0.1,0.4,0.74
 Llama 4,Maverick,Meta,OpenRouter/meta-llama/llama-4-maverick,400,,0.2,0.8,0.81
 Phi 3,Mini,Microsoft,OpenRouter/microsoft/phi-3-mini-128k-instruct,3.8,,0.1,0.1,0.44
-Phi 3,Small,Microsoft,vLLM-OpenAI/microsoft/Phi-3-small-128k-instruct,7,2.1312,,,
+Phi 3,Small,Microsoft,SelfHosted/microsoft/Phi-3-small-128k-instruct,7,2.1312,,,
 Phi 3,Medium,Microsoft,OpenRouter/microsoft/phi-3-medium-128k-instruct,14,4.032,1,1,0.52
-Phi 4,Mini,Microsoft,vLLM-OpenAI/microsoft/Phi-4-mini-instruct,3.8,,,,0.53
+Phi 4,Mini,Microsoft,SelfHosted/microsoft/Phi-4-mini-instruct,3.8,,,,0.53
 Phi 4,,Microsoft,OpenRouter/microsoft/phi-4,14,9.3202015,0.07,0.14,0.7
 Codestral,,Mistral,OpenRouter/mistralai/codestral-2501,22,,0.3,0.9,0.45
 Ministral,3B,Mistral,OpenRouter/mistralai/ministral-3b,3,,0.04,0.04,0.34

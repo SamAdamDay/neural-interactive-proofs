@@ -66,6 +66,9 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - Renamed `InvalidResponseError` to `UnparsableResponseError`.
 - The `cv_experiments.py` script now takes a config file as an argument, which specifies
   the hyper-parameters of the experiment.
+- The "vLLM-OpenAI" model provider has been renamed to "SelfHosted", which corresponds
+  to models hosted using the language model server, which uses vLLM for inference and
+  HuggingFace for training.
 
 
 ### Added
@@ -105,11 +108,16 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
   them a penalty.
 - Ability to force a code validation experiment to run for more iterations that its
   original hyper-parameters.
+- A self-hosting language model server and client. The server controls a vLLM process
+  and HuggingFace trainer, allowing for convenient self-hosting of open-weight models.
 
 
 ### Removed
 
 - The `test_size` hyper-parameter, which is now unused.
+- The `PureTextAgentParameters.vllm_openai_base_url` parameter, which is now specified
+  by `PureTextAgentParameters.language_model_server_scheme_host` and
+  `PureTextAgentParameters.vllm_server_port`.
 
 
 ### Fixed

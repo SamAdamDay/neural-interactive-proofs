@@ -130,7 +130,8 @@ def run(cmd_args: Namespace):
 
 
 parser = ArgumentParser(
-    description="Run a dummy graph isomorphism test",
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
     formatter_class=ArgumentDefaultsHelpFormatter,
 )
 parser.add_argument("--use_cpu", action="store_true")

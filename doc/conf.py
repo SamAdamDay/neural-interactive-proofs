@@ -56,6 +56,7 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
     "sphinxcontrib.mermaid",
+    "sphinxcontrib.httpdomain",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",

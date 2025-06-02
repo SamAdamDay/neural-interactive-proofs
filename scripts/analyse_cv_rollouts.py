@@ -36,7 +36,8 @@ for scenario, analyser in ROLLOUT_ANALYSERS.keys():
         available_analysers.append(analyser)
 
 parser = ArgumentParser(
-    description=__doc__,
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
     formatter_class=ArgumentDefaultsHelpFormatter,
 )
 

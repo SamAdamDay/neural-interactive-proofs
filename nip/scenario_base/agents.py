@@ -486,9 +486,11 @@ class PureTextSharedModelGroup(ABC):
     class SharedAgentParams:
         """The parameters shared by all agents in the group."""
 
-        model_provider: Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"]
+        model_provider: Literal["OpenAI", "SelfHosted", "OpenRouter"]
         model_name: str
-        vllm_openai_base_url: str
+        language_model_server_scheme_host: str
+        language_model_server_port: int
+        vllm_server_port: int
         freeze_agent: bool
         use_dummy_api: bool
         fine_tune_from_scratch: bool
@@ -580,6 +582,20 @@ class PureTextSharedModelGroup(ABC):
 
         self.fine_tune_job_id: Optional[str] = None
         self.fine_tuned_model_name: Optional[str] = None
+
+    async def eval(self):
+        """Set the agent group to evaluation mode.
+
+        This method may be overridden by subclasses if anything needs to be done when
+        the agent group is set to evaluation mode.
+        """
+
+    async def train(self):
+        """Set the agent group to training mode.
+
+        This method may be overridden by subclasses if anything needs to be done when
+        the agent group is set to training mode.
+        """
 
     @abstractmethod
     async def create_supervised_fine_tune_job(

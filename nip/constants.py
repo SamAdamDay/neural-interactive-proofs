@@ -26,7 +26,8 @@ CACHED_MODELS_METADATA_FILENAME = "metadata.json"
 """The filename for the metadata file in the cached models directory"""
 
 LOG_DIR = PACKAGE_ROOT.joinpath("log")
-"""The path to the directory containing general log files (not used much)"""
+"""The path to the directory containing general log files"""
+VLLM_LOG_DIR = LOG_DIR.joinpath("vllm")
 
 EXPERIMENT_STATE_DIR = PACKAGE_ROOT.joinpath("experiment_checkpoints")
 """The path to the directory where experiment checkpoints are saved"""

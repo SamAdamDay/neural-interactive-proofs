@@ -458,12 +458,20 @@ class PureTextAgentParameters(AgentParameters):
 
     Parameters
     ----------
-    model_provider : Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"]
+    model_provider : Literal["OpenAI", "SelfHosted", "OpenRouter"]
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.
-    vllm_openai_base_url : str
-        When using vLLM's OpenAI-compatible server, this is the URL of the server
+    language_model_server_scheme_host : str
+        The scheme and host of the language model server. If the model provider is
+        "SelfHosted", this controls the vLLM server and open-weight fine-tuning.
+    language_model_server_port : int
+        The port of the language model server. If the model provider is "SelfHosted", this
+        controls the vLLM server and open-weight fine-tuning.
+    vllm_server_port : int
+        The port of the vLLM server. This is used when the model provider is "SelfHosted".
+        Models are served by vLLM, which uses the ``language_model_server_scheme_host``
+        scheme and host, and this port.
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
@@ -520,9 +528,11 @@ class PureTextAgentParameters(AgentParameters):
         invalid response.
     """
 
-    model_provider: Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"] = "OpenAI"
+    model_provider: Literal["OpenAI", "SelfHosted", "OpenRouter"] = "OpenAI"
     model_name: str = "gpt-4o-mini-2024-07-18"
-    vllm_openai_base_url: str = "http://localhost:8000/v1"
+    language_model_server_scheme_host: str = "http://localhost"
+    language_model_server_port: int = 5000
+    vllm_server_port: int = 8000
     use_dummy_api: bool = False
     shared_model_group: Optional[str] = None
 
@@ -566,7 +576,7 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
 
     Parameters
     ----------
-    model_provider : Literal["OpenAI", "vLLM-OpenAI", "OpenRouter"]
+    model_provider : Literal["OpenAI", "SelfHosted", "OpenRouter"]
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.

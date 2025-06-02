@@ -44,6 +44,16 @@ The Code Validation Task
    visualise_malt_rollouts
 
 
+Language Model Server
+---------------------
+
+.. autosummary::
+   :template: autosummary/script.rst
+   :toctree: generated/scripts
+
+   run_lm_server
+
+
 
 Miscellaneous Scripts
 ---------------------

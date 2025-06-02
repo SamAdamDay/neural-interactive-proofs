@@ -14,7 +14,8 @@ from nip.utils.malt_forest import MaltForestVisualiser
 from nip.utils.env import get_env_var
 
 parser = ArgumentParser(
-    description=__doc__.strip(),
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
     formatter_class=ArgumentDefaultsHelpFormatter,
 )
 

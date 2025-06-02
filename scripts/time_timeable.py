@@ -12,7 +12,10 @@ from textwrap import indent
 
 from nip.timing import time_timeable, time_all_timeables, list_timeables
 
-parser = ArgumentParser(description="Time a timeable action")
+parser = ArgumentParser(
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
+)
 parser.add_argument(
     "-a", "--all", action="store_true", help="Time all available timeables"
 )

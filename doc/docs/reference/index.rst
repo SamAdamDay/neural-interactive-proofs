@@ -26,4 +26,5 @@ Developer API
    trainers
    experiment_settings
    constants
+   language_model_server
    auxiliary_modules

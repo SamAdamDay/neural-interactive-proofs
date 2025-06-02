@@ -15,7 +15,8 @@ from nip.graph_isomorphism.dataset_generation import (
 
 # Set up the arg parser
 parser = ArgumentParser(
-    description="Generate a graph isomorphism dataset",
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
     formatter_class=ArgumentDefaultsHelpFormatter,
 )
 parser.add_argument(

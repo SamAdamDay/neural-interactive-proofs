@@ -17,6 +17,7 @@ import json
 from time import sleep
 from collections import OrderedDict
 from warnings import warn
+import logging
 
 from torch import from_numpy
 import torch
@@ -57,6 +58,7 @@ from nip.parameters import (
 from nip.experiment_settings import ExperimentSettings
 from nip.factory import register_scenario_class
 from nip.protocols import ProtocolHandler
+from nip.language_model_server.client import LanguageModelClient
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.types import NumpyStringDtype, String
 from nip.utils.env import load_env_once, get_env_var
@@ -78,6 +80,8 @@ from nip.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AgentNotActiveInChannelError(Exception):
@@ -145,7 +149,7 @@ class _ParsedChatCompletion:
 
 @register_scenario_class("code_validation", WholeAgent, {"model_provider": "OpenAI"})
 @register_scenario_class(
-    "code_validation", WholeAgent, {"model_provider": "vLLM-OpenAI"}
+    "code_validation", WholeAgent, {"model_provider": "SelfHosted"}
 )
 @register_scenario_class(
     "code_validation", WholeAgent, {"model_provider": "OpenRouter"}
@@ -183,13 +187,14 @@ class OpenAiWholeAgent(PureTextWholeAgent):
     ]
 
     @property
-    def client(self) -> AsyncOpenAI:
+    def openai_client(self) -> AsyncOpenAI:
         """The OpenAI client to use for interacting with the OpenAI SDK."""
         if self._openai_client is None:
-            if self.agent_params.model_provider == "vLLM-OpenAI":
+            if self.agent_params.model_provider == "SelfHosted":
                 self._openai_client = AsyncOpenAI(
                     api_key="EMPTY",
-                    base_url=self.agent_params.vllm_openai_base_url,
+                    base_url=f"{self.agent_params.language_model_server_scheme_host}"
+                    f":{self.agent_params.vllm_server_port}/v1",
                 )
             elif self.agent_params.model_provider == "OpenAI":
                 self._openai_client = AsyncOpenAI()
@@ -250,7 +255,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             self.hyper_params.rl.num_iterations > 1
             and not self.agent_params.freeze_agent
         ):
-            if self.agent_params.model_provider == "vLLM-OpenAI":
+            if self.agent_params.model_provider == "SelfHosted":
                 raise NotImplementedError(
                     "It is not possible to fine-tune a model hosted using the vLLM "
                     "OpenAI-compatible server"
@@ -271,6 +276,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             get_env_var("OPENAI_API_KEY")
 
         self._openai_client: Optional[AsyncOpenAI] = None
+        self._language_model_client: Optional[LanguageModelClient] = None
 
     def build_fine_tune_dataset(
         self,
@@ -988,7 +994,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             extra_body = {"repetition_penalty": self.agent_params.repetition_penalty}
 
         try:
-            completion = await self.client.chat.completions.create(
+            completion = await self.openai_client.chat.completions.create(
                 model=self.model_name,
                 messages=chat_messages_prompt,
                 max_tokens=max_tokens,
@@ -1131,11 +1137,31 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     agent_wholes: dict[str, OpenAiWholeAgent]
 
     @property
-    def client(self) -> AsyncOpenAI:
+    def openai_client(self) -> AsyncOpenAI:
         """The OpenAI client to use for interacting with the OpenAI API."""
         if self._openai_client is None:
             self._openai_client = AsyncOpenAI()
         return self._openai_client
+
+    @property
+    def language_model_client(self) -> LanguageModelClient:
+        """The language model client for controlling the vLLM server."""
+
+        if self.shared_agent_params.model_provider != "SelfHosted":
+            raise ValueError(
+                "The `language_model_client` property is only available when using "
+                "`SelfHosted` as the model provider."
+            )
+
+        if self._language_model_client is None:
+            self._language_model_client = LanguageModelClient(
+                server_url=(
+                    f"{self.shared_agent_params.language_model_server_scheme_host}"
+                    f":{self.shared_agent_params.language_model_server_port}"
+                )
+            )
+
+        return self._language_model_client
 
     def __init__(
         self,
@@ -1162,6 +1188,21 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         load_env_once()
 
         self._openai_client: Optional[AsyncOpenAI] = None
+
+    async def eval(self):
+        """Set the agent group to evaluation mode."""
+
+        if (
+            self.shared_agent_params.model_provider == "SelfHosted"
+            and not self.shared_agent_params.use_dummy_api
+        ):
+            await self.language_model_client.start_vllm_server(
+                model_name=self.base_model_name
+            )
+            logger.info(
+                f"Waiting for vLLM server for model {self.base_model_name!r}..."
+            )
+            await self.language_model_client.wait_for_vllm_server()
 
     async def create_supervised_fine_tune_job(
         self,
@@ -1486,7 +1527,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                     f.write(json.dumps(example) + "\n")
 
             # Upload the file to OpenAI
-            uploaded_file = await self.client.files.create(
+            uploaded_file = await self.openai_client.files.create(
                 file=open(file_path, "rb"), purpose="fine-tune"
             )
 
@@ -1508,7 +1549,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         # Create the fine-tune job
         while True:
             try:
-                job = await self.client.fine_tuning.jobs.create(
+                job = await self.openai_client.fine_tuning.jobs.create(
                     model=model_name,
                     training_file=file_id,
                     integrations=[
@@ -1542,12 +1583,12 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             raise ValueError("Fine-tune job ID not set")
 
         return run_coroutine_sync(
-            self.client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
+            self.openai_client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
         )
 
 
 @register_scenario_class(
-    "code_validation", PureTextSharedModelGroup, {"model_provider": "vLLM-OpenAI"}
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "SelfHosted"}
 )
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenRouter"}

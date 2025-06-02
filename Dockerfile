@@ -64,6 +64,9 @@ RUN pip install wheel cython \
     && pip install -e . \
     && pip install nvitop
 
+# Install uv then use it to install vLLM in a separate environment.
+RUN pip install uv \
+    && uv tool install vllm
 
 # The default target doesn't do much else
 FROM base AS default

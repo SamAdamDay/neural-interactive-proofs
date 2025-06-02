@@ -1,7 +1,9 @@
-einops==0.8.0
 datasets==2.21.0
+einops==0.8.0
+flask==3.1.1
 gitpython==3.1.43
 huggingface_hub==0.27.1
+httpx==0.27.0
 ipykernel==6.29.4
 ipython==8.25.0
 ipywidgets==8.1.3
@@ -29,3 +31,4 @@ torchvision==0.18.1
 tqdm_multiprocess==0.0.11
 tqdm==4.66.4
 wandb==0.17.2
+werkzeug==3.1.3
