@@ -69,6 +69,7 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 - The "vLLM-OpenAI" model provider has been renamed to "SelfHosted", which corresponds
   to models hosted using the language model server, which uses vLLM for inference and
   HuggingFace for training.
+- Switched to `uv` as the recommended package and project manager.
 
 
 ### Added

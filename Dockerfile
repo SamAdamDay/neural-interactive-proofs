@@ -7,21 +7,21 @@ ENV TZ=Europe/London
 # Update the apt sources
 RUN apt update
 
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Remove the Pytorch version from the image. We'll be installing our own version later
-RUN pip uninstall -y torch torchvision torchaudio
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
 RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ python-dev-is-python3
 
+# Install nvitop for monitoring GPU usage
+RUN uv tool install nvitop
+
 # Move to the root home directory
 WORKDIR /root
 
 # Install Weights & Biases now so we we can log in
-RUN pip install wandb
+RUN uv tool install wandb
 
 # Invalidate the cache if this argument is different from the last build. Convention:
 # use: --build-arg CACHE_BUST=`git rev-parse main`
@@ -59,14 +59,7 @@ RUN grep timm== requirements.txt \
     | tar -xzC /root/neural-interactive-proofs/vendor
 
 # Install all the required packages
-RUN pip install wheel cython \
-    && pip install --extra-index-url https://download.pytorch.org/whl/cu118 -r requirements_dev.txt \
-    && pip install -e . \
-    && pip install nvitop
-
-# Install uv then use it to install vLLM in a separate environment.
-RUN pip install uv \
-    && uv tool install vllm
+RUN uv sync
 
 # The default target doesn't do much else
 FROM base AS default
@@ -76,7 +69,6 @@ WORKDIR /root
 
 # Expose the default SSH port (inside the container)
 EXPOSE 22
-
 
 # The datasets target downloads all the datasets used in the project. This is slower to
 # download from the hub, but faster overall if you're using a large dataset
