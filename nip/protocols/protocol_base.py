@@ -20,7 +20,9 @@ from jaxtyping import Int, Bool, Float
 from nip.parameters import HyperParameters, CommonProtocolParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.nested_array_dict import NestedArrayDict
-from nip.protocols.verifier_decision_scale import build_verifier_decision_scale_handler
+from nip.protocols.verifier_decision_spectrum import (
+    build_verifier_decision_spectrum_handler,
+)
 
 
 class ProtocolHandler(ABC):
@@ -62,8 +64,8 @@ class ProtocolHandler(ABC):
     def __init__(self, hyper_params: HyperParameters, settings: ExperimentSettings):
         self.hyper_params = hyper_params
         self.settings = settings
-        self.verifier_decision_scale_handler = build_verifier_decision_scale_handler(
-            hyper_params
+        self.verifier_decision_spectrum_handler = (
+            build_verifier_decision_spectrum_handler(hyper_params)
         )
 
     @property

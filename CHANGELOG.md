@@ -93,8 +93,8 @@ to communicate reliably.
 - Utilities for downloading and loading checkpoints
 - The script `download_cv_checkpoints.py` to download code validation checkpoint files
 - A utility to compute the decision agreement between rollouts
-- Option to have the verifier give a decision on a scale, rather than a binary accept or
-  reject.
+- Option to have the verifier give a decision on a spectrum, rather than a binary accept
+  or reject.
 - Utilities to compute the histogram of verifier decisions and thresholded performance.
 - Functionality for appending a 'supervisor' message to the chat history before sending
   it to the model, to help it better follow the instructions.

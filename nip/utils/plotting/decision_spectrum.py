@@ -8,7 +8,9 @@ from numpy.typing import NDArray
 
 import pandas as pd
 
-from nip.protocols.verifier_decision_scale import build_verifier_decision_scale_handler
+from nip.protocols.verifier_decision_spectrum import (
+    build_verifier_decision_spectrum_handler,
+)
 from nip.parameters import HyperParameters
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.plotting.rollouts import get_last_timestep_mask
@@ -32,7 +34,7 @@ def get_decision_histogram(
         verifier decisions.
     hyper_params : HyperParameters
         The hyperparameters of the experiment. This is used to determine the decision
-        scale used by the verifier.
+        spectrum used by the verifier.
     bins : int | str, default="auto"
         The number of bins to use for the histogram. This is passed to the
         :func:`numpy.histogram` function. See the documentation for more details.
@@ -55,11 +57,11 @@ def get_decision_histogram(
         is a list of length ``n_bins``.
     """
 
-    verifier_decision_scale_handler = build_verifier_decision_scale_handler(
+    verifier_decision_spectrum_handler = build_verifier_decision_spectrum_handler(
         hyper_params
     )
 
-    possible_raw_decisions = verifier_decision_scale_handler.possible_decision_texts
+    possible_raw_decisions = verifier_decision_spectrum_handler.possible_decision_texts
     verifier_raw_decisions = rollouts["agents", "raw_decision"][
         get_last_timestep_mask(rollouts)
     ][:, -1]
@@ -142,7 +144,7 @@ def get_thresholded_performance(
         - "precision": The precision of the verifier at this threshold.
     """
 
-    verifier_decision_scale_handler = build_verifier_decision_scale_handler(
+    verifier_decision_spectrum_handler = build_verifier_decision_spectrum_handler(
         hyper_params
     )
 
@@ -165,7 +167,7 @@ def get_thresholded_performance(
     y = rollouts["y"][:, 0]
 
     decision_texts_and_outcomes = (
-        verifier_decision_scale_handler.decision_texts_and_outcomes
+        verifier_decision_spectrum_handler.decision_texts_and_outcomes
         + [("<infinity>", 1, float("inf"))]
     )
 

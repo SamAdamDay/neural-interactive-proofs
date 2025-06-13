@@ -1,10 +1,10 @@
-"""Classes for handling the decision scale of a verifier.
+"""Classes for handling the decision spectrum of a verifier.
 
-A verifier scale allows for more nuanced decisions than just "accept" or "reject". This
-module contains the classes and functions necessary to handle the verifier decision
-scale in a protocol.
+A verifier decision spectrum allows for more nuanced decisions than just "accept" or
+"reject". This module contains the classes and functions necessary to handle the
+verifier decision spectrum in a protocol.
 
-Verifier scales are only relevant for text-based protocols.
+Verifier decision spectra are only relevant for text-based protocols.
 """
 
 from abc import ABC, abstractmethod
@@ -13,7 +13,7 @@ from functools import cached_property
 import re
 
 from nip.parameters import HyperParameters
-from nip.parameters.types import VerifierDecisionScaleType
+from nip.parameters.types import VerifierDecisionSpectrumType
 
 
 class VerifierDecisionParseError(Exception):
@@ -30,8 +30,8 @@ class VerifierDecisionParseError(Exception):
         self.decision_text = decision_text
 
 
-class VerifierDecisionScaleHandler(ABC):
-    """Base class for handling the verifier decision scale.
+class VerifierDecisionSpectrumHandler(ABC):
+    """Base class for handling the verifier decision spectrum.
 
     Parameters
     ----------
@@ -135,40 +135,40 @@ class VerifierDecisionScaleHandler(ABC):
         raise VerifierDecisionParseError(decision_text)
 
 
-VERIFIER_DECISION_SCALE_HANDLERS: dict[
-    VerifierDecisionScaleType, type[VerifierDecisionScaleHandler]
+VERIFIER_DECISION_SPECTRUM_HANDLERS: dict[
+    VerifierDecisionSpectrumType, type[VerifierDecisionSpectrumHandler]
 ] = {}
 
 
-def register_verifier_decision_scale_handler(
-    decision_scale_type: VerifierDecisionScaleType,
-) -> type[VerifierDecisionScaleHandler]:
-    """Register a verifier decision scale handler.
+def register_verifier_decision_spectrum_handler(
+    decision_spectrum_type: VerifierDecisionSpectrumType,
+) -> type[VerifierDecisionSpectrumHandler]:
+    """Register a verifier decision spectrum handler.
 
     Parameters
     ----------
-    decision_scale_type : VerifierDecisionScaleType
-        The decision scale type to register the handler for.
+    decision_spectrum_type : VerifierDecisionSpectrumType
+        The decision spectrum type to register the handler for.
 
     Returns
     -------
-    handler_class : type[VerifierDecisionScaleHandler]
+    handler_class : type[VerifierDecisionSpectrumHandler]
         The class of the handler.
     """
 
     def decorator(
-        handler_class: type[VerifierDecisionScaleHandler],
-    ) -> type[VerifierDecisionScaleHandler]:
-        VERIFIER_DECISION_SCALE_HANDLERS[decision_scale_type] = handler_class
+        handler_class: type[VerifierDecisionSpectrumHandler],
+    ) -> type[VerifierDecisionSpectrumHandler]:
+        VERIFIER_DECISION_SPECTRUM_HANDLERS[decision_spectrum_type] = handler_class
         return handler_class
 
     return decorator
 
 
-def build_verifier_decision_scale_handler(
+def build_verifier_decision_spectrum_handler(
     hyper_params: HyperParameters,
-) -> VerifierDecisionScaleHandler:
-    """Build the verifier decision scale handler.
+) -> VerifierDecisionSpectrumHandler:
+    """Build the verifier decision spectrum handler.
 
     Parameters
     ----------
@@ -177,18 +177,18 @@ def build_verifier_decision_scale_handler(
 
     Returns
     -------
-    handler : VerifierDecisionScaleHandler
-        The verifier decision scale handler.
+    handler : VerifierDecisionSpectrumHandler
+        The verifier decision spectrum handler.
     """
 
-    decision_scale_type = hyper_params.protocol_common.verifier_decision_scale
-    handler_class = VERIFIER_DECISION_SCALE_HANDLERS[decision_scale_type]
+    decision_spectrum_type = hyper_params.protocol_common.verifier_decision_spectrum
+    handler_class = VERIFIER_DECISION_SPECTRUM_HANDLERS[decision_spectrum_type]
     return handler_class(hyper_params)
 
 
-@register_verifier_decision_scale_handler("accept_reject")
-class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the accept/reject verifier decision scale.
+@register_verifier_decision_spectrum_handler("accept_reject")
+class AcceptRejectVerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the accept/reject verifier decision spectrum.
 
     The decision text is expected to be either "accept" or "reject".
     """
@@ -199,9 +199,9 @@ class AcceptRejectVerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("likert_int_scale_11")
-class LikertIntScale11VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the 11-point Likert integer scale verifier decision scale.
+@register_verifier_decision_spectrum_handler("likert_int_scale_11")
+class LikertIntScale11VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the 11-point Likert integer scale verifier decision spectrum.
 
     Decisions are specified as integers between 0 and 10, where some integers have
     special names given by the Likert scale, as follows:
@@ -226,9 +226,9 @@ class LikertIntScale11VerifierDecisionScaleHandler(VerifierDecisionScaleHandler)
         )
 
 
-@register_verifier_decision_scale_handler("likert_scale_7")
-class LikertScale7VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the 7-point Likert scale verifier decision scale."""
+@register_verifier_decision_spectrum_handler("likert_scale_7")
+class LikertScale7VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the 7-point Likert scale verifier decision spectrum."""
 
     decision_texts_and_outcomes = [
         ("strongly disagree", 0, -1.0),
@@ -241,9 +241,9 @@ class LikertScale7VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("likert_scale_6")
-class LikertScale6VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the 6-point Likert scale verifier decision scale."""
+@register_verifier_decision_spectrum_handler("likert_scale_6")
+class LikertScale6VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the 6-point Likert scale verifier decision spectrum."""
 
     decision_texts_and_outcomes = [
         ("strongly disagree", 0, -1.0),
@@ -255,9 +255,9 @@ class LikertScale6VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("likert_scale_5")
-class LikertScale5VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the 5-point Likert scale verifier decision scale."""
+@register_verifier_decision_spectrum_handler("likert_scale_5")
+class LikertScale5VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the 5-point Likert scale verifier decision spectrum."""
 
     decision_texts_and_outcomes = [
         ("strongly disagree", 0, -1.0),
@@ -268,9 +268,9 @@ class LikertScale5VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("likert_scale_4")
-class LikertScale4VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the 4-point Likert scale verifier decision scale."""
+@register_verifier_decision_spectrum_handler("likert_scale_4")
+class LikertScale4VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the 4-point Likert scale verifier decision spectrum."""
 
     decision_texts_and_outcomes = [
         ("strongly disagree", 0, -1.0),
@@ -280,9 +280,9 @@ class LikertScale4VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
     ]
 
 
-@register_verifier_decision_scale_handler("out_of_10")
-class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the out of 10 verifier decision scale.
+@register_verifier_decision_spectrum_handler("out_of_10")
+class OutOf10VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the out of 10 verifier decision spectrum.
 
     The decision text is expected to be a number between 0 and 10.
     """
@@ -302,9 +302,9 @@ class OutOf10VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
         )
 
 
-@register_verifier_decision_scale_handler("out_of_100")
-class OutOf100VerifierDecisionScaleHandler(VerifierDecisionScaleHandler):
-    """Handler for the out of 100 verifier decision scale.
+@register_verifier_decision_spectrum_handler("out_of_100")
+class OutOf100VerifierDecisionSpectrumHandler(VerifierDecisionSpectrumHandler):
+    """Handler for the out of 100 verifier decision spectrum.
 
     The decision text is expected to be a number between 0 and 100.
     """

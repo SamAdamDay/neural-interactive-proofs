@@ -2,4 +2,4 @@
 
 from .decision_agreement import DecisionAgreementAnalysis, analyse_decision_agreement
 from .rollouts import get_last_timestep_mask
-from .decision_scale import get_decision_histogram, get_thresholded_performance
+from .decision_spectrum import get_decision_histogram, get_thresholded_performance

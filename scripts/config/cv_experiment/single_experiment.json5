@@ -28,7 +28,7 @@
             "guess_replacement_proportion": 0.0,
             "guess_replacement_annealing": "linear",
             "guess_replacement_annealing_rate": 0.1,
-            "decision_scale": "accept_reject",
+            "decision_spectrum": "accept_reject",
             "supervisor_message": "all",
             "freeze": true,
         },

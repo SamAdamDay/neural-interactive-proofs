@@ -33,7 +33,7 @@ from nip.protocols.main_protocols import (
     MnipProtocol,
     SoloVerifierProtocol,
 )
-from nip.protocols.verifier_decision_scale import VerifierDecisionParseError
+from nip.protocols.verifier_decision_spectrum import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.jinja_filters import capitalise_first_letter, add_s_plural
@@ -169,7 +169,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         return self.jinja_environment.get_template(
             f"verifier_decision_instructions/"
-            f"{self.hyper_params.protocol_common.verifier_decision_scale}.txt"
+            f"{self.hyper_params.protocol_common.verifier_decision_spectrum}.txt"
         )
 
     @cache
@@ -489,7 +489,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             first_decision_index = completion_text.lower().index("decision:")
             decision_text = completion_text[first_decision_index + len("decision:") :]
             try:
-                return self.verifier_decision_scale_handler.extract_decision(
+                return self.verifier_decision_spectrum_handler.extract_decision(
                     decision_text
                 )
             except VerifierDecisionParseError as e:

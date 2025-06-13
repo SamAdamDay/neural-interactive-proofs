@@ -188,7 +188,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             shared_reward=combo["shared_reward"],
             verifier_first=combo["verifier_first"],
             randomize_prover_stance=combo["randomize_prover_stance"],
-            verifier_decision_scale=combo["verifier.decision_scale"],
+            verifier_decision_spectrum=combo["verifier.decision_spectrum"],
             prover_invalid_response_penalty=combo["prover.invalid_response_penalty"],
         ),
         nip_protocol=NipProtocolParameters(

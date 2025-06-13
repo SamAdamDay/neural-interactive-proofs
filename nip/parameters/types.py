@@ -126,7 +126,7 @@ multi_channel_test
     A protocol for testing multi-channel communication.
 """
 
-VerifierDecisionScaleType: TypeAlias = Literal[
+VerifierDecisionSpectrumType: TypeAlias = Literal[
     "accept_reject",
     "likert_scale_4",
     "likert_scale_5",

@@ -946,16 +946,16 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                     raise AgentNotActiveInChannelError
 
             if replace_last_message_with_true_label:
-                verifier_decision_scale_handler = (
-                    self.protocol_handler.verifier_decision_scale_handler
+                verifier_decision_spectrum_handler = (
+                    self.protocol_handler.verifier_decision_spectrum_handler
                 )
                 if y == 0:
                     decision_text = (
-                        verifier_decision_scale_handler.strongest_reject_decision_text
+                        verifier_decision_spectrum_handler.strongest_reject_decision_text
                     )
                 else:
                     decision_text = (
-                        verifier_decision_scale_handler.strongest_accept_decision_text
+                        verifier_decision_spectrum_handler.strongest_accept_decision_text
                     )
                 chat_messages[-1]["content"] = f"Decision: {decision_text}"
 
@@ -1095,11 +1095,11 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         if self.is_verifier:
 
             if random.uniform(0, 1) <= 0.2:
-                verifier_decision_scale_handler = (
-                    self.protocol_handler.verifier_decision_scale_handler
+                verifier_decision_spectrum_handler = (
+                    self.protocol_handler.verifier_decision_spectrum_handler
                 )
                 decision = random.choice(
-                    verifier_decision_scale_handler.possible_decision_texts
+                    verifier_decision_spectrum_handler.possible_decision_texts
                 )
                 return f"Decision: {decision}"
             else:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from nip.parameters.parameters_base import SubParameters, register_parameter_class
-from nip.parameters.types import GuessType, VerifierDecisionScaleType
+from nip.parameters.types import GuessType, VerifierDecisionSpectrumType
 
 
 @register_parameter_class
@@ -35,9 +35,9 @@ class CommonProtocolParameters(SubParameters):
         The reward given to the verifier when it neither accepts nor rejects. If
         ``None``, the mid-point between ``verifier_reward`` and
         ``verifier_incorrect_penalty`` is used. This value is only relevant for
-        text-based scenarios. Note that when using a verifier decision scale (see
-        ``verifier_decision_scale``), reward for intermediate decisions is computed by
-        interpolating piece-wise linearly between ``verifier_incorrect_penalty``,
+        text-based scenarios. Note that when using a verifier decision spectrum (see
+        ``verifier_decision_spectrum``), reward for intermediate decisions is computed
+        by interpolating piece-wise linearly between ``verifier_incorrect_penalty``,
         ``verifier_neither_accept_nor_reject_reward`` and ``verifier_reward``. So in
         this case you probably want to set this to ``None``.
     verifier_terminated_penalty : float
@@ -52,7 +52,7 @@ class CommonProtocolParameters(SubParameters):
         guess using its policy.
     zero_knowledge: bool
         Whether to use a zero-knowledge version of the protocol.
-    verifier_decision_scale : VerifierDecisionScaleType
+    verifier_decision_spectrum : VerifierDecisionSpectrumType
         The scale used by the verifier to make its decision. This allows for more
         nuanced decisions than just "accept" or "reject". This is only relevant for
         text-based scenarios.
@@ -74,7 +74,7 @@ class CommonProtocolParameters(SubParameters):
 
     zero_knowledge: bool = False
 
-    verifier_decision_scale: VerifierDecisionScaleType = "accept_reject"
+    verifier_decision_spectrum: VerifierDecisionSpectrumType = "accept_reject"
 
 
 @dataclass
