@@ -466,12 +466,12 @@ class PureTextAgentParameters(AgentParameters):
         The scheme and host of the language model server. If the model provider is
         "SelfHosted", this controls the vLLM server and open-weight fine-tuning.
     language_model_server_port : int
-        The port of the language model server. If the model provider is "SelfHosted", this
-        controls the vLLM server and open-weight fine-tuning.
+        The port of the language model server. If the model provider is "SelfHosted",
+        this controls the vLLM server and open-weight fine-tuning.
     vllm_server_port : int
-        The port of the vLLM server. This is used when the model provider is "SelfHosted".
-        Models are served by vLLM, which uses the ``language_model_server_scheme_host``
-        scheme and host, and this port.
+        The port of the vLLM server. This is used when the model provider is
+        "SelfHosted". Models are served by vLLM, which uses the
+        ``language_model_server_scheme_host`` scheme and host, and this port.
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
@@ -503,6 +503,31 @@ class PureTextAgentParameters(AgentParameters):
         The beta parameter for to use when training the model with DPO. This is a float
         between 0 and 2, which controls how strictly the new model will adhere to its
         previous behaviour. If ``None``, the value is configured by the model provider.
+    use_lora : bool
+        Whether to a LoRA adapter when training the model :cite:p:`Yu2023`. A LoRA
+        adapter adds extra trainable parameters to the model, which are trained
+        separately from the base model. This allows faster training and smaller
+        checkpoints. Only relevant when using a self-hosted model.
+    lora_rank : int
+        The rank of the LoRA adapter, controlling the number of trainable parameters.
+        Usually a power of 2 between 4 and 256. This is a key hyperparameter to tune
+        when using LoRA. A higher rank means more capacity to learn new skills, but
+        requires higher quality data and more training time.
+    lora_alpha : int | None
+        The scaling factor for the LoRA adapter, for the strength of the adapter.
+        Typically either the same as the LoRA rank, or two times the LoRA rank. If
+        ``None``, the value is computed as ``lora_rank * lora_alpha_scale``. One of this
+        and ``lora_alpha_scale`` must be set, but not both.
+    lora_alpha_scale : float | None
+        Used to compute the LoRA alpha value. If ``lora_alpha`` is not set, this is
+        multiplied by the LoRA rank to compute the LoRA alpha value. One of this and
+        ``lora_alpha`` must be set, but not both.
+    lora_dropout : float
+        The dropout rate for the LoRA layers. This is applied to the LoRA layers in the
+        model, and is used to prevent overfitting.
+    stack_lora_adapters : bool
+        When training a model multiple times with LoRA, whether to stack the LoRA
+        adapters on top of each other, or to reuse the existing LoRA adapter.
     system_prompt_template_path : str | None
         This option allows specifying a custom system prompt template. If not provided,
         the default system prompt template is used.
@@ -542,7 +567,15 @@ class PureTextAgentParameters(AgentParameters):
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
+
     dpo_beta: Optional[float] = None
+
+    use_lora: bool = True
+    lora_rank: int = 64
+    lora_alpha: Optional[int] = None
+    lora_alpha_scale: Optional[float] = 1.0
+    lora_dropout: float = 0.05
+    stack_lora_adapters: bool = False
 
     system_prompt_template_path: str | None = None
 

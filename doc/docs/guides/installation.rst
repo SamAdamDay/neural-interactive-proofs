@@ -18,10 +18,6 @@ Prerequisites
   signing up at `OpenAI <https://platform.openai.com>`_. Note that in general the use of
   the OpenAI API is not free.
 
-We recommend using a `virtual environment
-<https://docs.python.org/3/library/venv.html>`_ to install the library, to avoid
-conflicts with other Python packages.
-
 
 .. _installation_steps:
 
@@ -48,27 +44,31 @@ Installation Steps
      
       .. code-tab:: bash Just Running Experiments
 
-         pip install wheel
-         pip install -r requirements.txt
+         uv sync --no-dev
      
       .. code-tab:: bash Also Development
 
+         uv sync
+     
+      .. code-tab:: bash Hosting the Language Model Server
+
+         uv sync --extra lm-server
+     
+      .. code-tab:: bash Using ``pip``
+
+         pip -m venv .venv
+         source .venv/bin/activate
          pip install wheel
-         pip install -r requirements_dev.txt
+         pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
+         pip install -e --group dev .
 
-4. Install the library locally in edit mode:
-
-   .. code-block:: bash
-
-      pip install -e .
-
-5. Log in to Weights & Biases:
+4. Log in to Weights & Biases:
 
    .. code-block:: bash
 
       wandb login
 
-6. Copy the template secrets file:
+5. Copy the template secrets file:
 
    .. code-block:: bash
 

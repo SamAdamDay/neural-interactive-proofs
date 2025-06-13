@@ -49,7 +49,7 @@ from nip.scenario_base.agents import (
     Agent,
     PureTextSharedModelGroupState,
 )
-from nip.scenario_base.environment import PromptMessage, PureTextEnvironment
+from nip.scenario_base.environment import PureTextEnvironment
 from nip.parameters import (
     HyperParameters,
     CodeValidationAgentParameters,
@@ -59,8 +59,20 @@ from nip.experiment_settings import ExperimentSettings
 from nip.factory import register_scenario_class
 from nip.protocols import ProtocolHandler
 from nip.language_model_server.client import LanguageModelClient
+from nip.language_model_server.types import (
+    LmTrainingConfig,
+    LmDpoTrainingConfig,
+    LmLoraAdapterConfig,
+    TrainingJobInfo as LmTrainingJobInfo,
+)
 from nip.utils.nested_array_dict import NestedArrayDict
-from nip.utils.types import NumpyStringDtype, String
+from nip.utils.types import (
+    NumpyStringDtype,
+    String,
+    PromptMessage,
+    DpoDatasetItem,
+    SupervisedDatasetItem,
+)
 from nip.utils.env import load_env_once, get_env_var
 from nip.utils.string import random_string
 from nip.utils.api import (
@@ -75,7 +87,6 @@ from nip.utils.api import (
     UnknownFinishReasonError,
 )
 from nip.utils.hyper_params import check_use_supervisor_message
-from nip.utils.asyncio import run_coroutine_sync
 from nip.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
@@ -255,12 +266,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             self.hyper_params.rl.num_iterations > 1
             and not self.agent_params.freeze_agent
         ):
-            if self.agent_params.model_provider == "SelfHosted":
-                raise NotImplementedError(
-                    "It is not possible to fine-tune a model hosted using the vLLM "
-                    "OpenAI-compatible server"
-                )
-            elif self.agent_params.model_provider == "OpenRouter":
+            if self.agent_params.model_provider == "OpenRouter":
                 raise NotImplementedError(
                     "It is not possible to fine-tune a model hosted using the "
                     "OpenRouter API"
@@ -284,7 +290,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         ensure_last_message_is_assistant: bool = True,
         replace_verifier_guess_with_true_label: bool = False,
         use_next_message_history: bool = True,
-    ) -> list[dict[Literal["messages"], list[PromptMessage]]]:
+    ) -> list[SupervisedDatasetItem]:
         """Build the dataset for fine-tuning the agent given sampled timesteps.
 
         A 'timestep' is just a single step in the environment. This holds all
@@ -339,7 +345,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
         Returns
         -------
-        fine_tune_dataset : list[dict[Literal["messages"], list[PromptMessage]]]
+        fine_tune_dataset : list[SupervisedDatasetItem]
             The dataset for fine-tuning the agent. This is a list of examples, where
             each example is a dictionary with key "messages", whose value is a list of
             dictionaries with keys "role" and "content".
@@ -354,9 +360,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 "`ensure_last_message_is_assistant` must also be set to True."
             )
 
-        fine_tune_dataset: list[dict[Literal["messages"], list[PromptMessage, str]]] = (
-            []
-        )
+        fine_tune_dataset: list[SupervisedDatasetItem] = []
 
         for batch_id in range(timesteps.batch_size[0]):
 
@@ -694,7 +698,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             except RateLimitError as e:
                 sleep_seconds = 2**num_rate_limits
                 print(  # noqa: T201
-                    f"Rate limit error: {e}. Retrying in {sleep_seconds} seconds..."
+                    f"Rate limit error: {e!s}. Retrying in {sleep_seconds} seconds..."
                 )
                 num_rate_limits += 1
                 if num_rate_limits == self.settings.num_rate_limit_errors:
@@ -703,7 +707,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 
             except InsufficientCreditsError as e:
                 print(  # noqa: T201
-                    f"Insufficient credits error: {e}. Go top up! Retrying in 10 "
+                    f"Insufficient credits error: {e!s}. Go top up! Retrying in 10 "
                     f"minutes..."
                 )
                 sleep(600)
@@ -713,7 +717,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
             except ConnectionError as e:
                 sleep_seconds = 0.01 * 2**num_connection_errors
                 print(  # noqa: T201
-                    f"API Connection error: {e}. Retrying in {sleep_seconds} seconds..."
+                    f"API Connection error: {e!s}. Retrying in {sleep_seconds} seconds..."
                 )
                 num_connection_errors += 1
                 if num_connection_errors == self.settings.num_api_connection_errors:
@@ -1007,7 +1011,7 @@ class OpenAiWholeAgent(PureTextWholeAgent):
         except OpenAiRateLimitError as e:
             raise RateLimitError(message=e.message) from e
         except OpenAiConnectionError as e:
-            raise GenericConnectionError(message=e.message, code=e.status_code) from e
+            raise GenericConnectionError(message=e.message) from e
         except OpenAiApiStatusError as e:
             if e.status_code == 402:
                 raise InsufficientCreditsError(message=e.message) from e
@@ -1123,6 +1127,9 @@ class OpenAiWholeAgent(PureTextWholeAgent):
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenAI"}
 )
+@register_scenario_class(
+    "code_validation", PureTextSharedModelGroup, {"model_provider": "SelfHosted"}
+)
 class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     """A group of code validation OpenAI SDK agents sharing a model.
 
@@ -1135,6 +1142,16 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
     )
 
     agent_wholes: dict[str, OpenAiWholeAgent]
+
+    @property
+    def training_client_type(self) -> Literal["openai", "lm_server", "none"]:
+        """The type of client to use for training jobs."""
+        if self.shared_agent_params.model_provider == "OpenAI":
+            return "openai"
+        elif self.shared_agent_params.model_provider == "SelfHosted":
+            return "lm_server"
+        else:
+            return "none"
 
     @property
     def openai_client(self) -> AsyncOpenAI:
@@ -1188,21 +1205,37 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         load_env_once()
 
         self._openai_client: Optional[AsyncOpenAI] = None
+        self._language_model_client: Optional[LanguageModelClient] = None
 
     async def eval(self):
         """Set the agent group to evaluation mode."""
 
         if (
-            self.shared_agent_params.model_provider == "SelfHosted"
+            self.training_client_type == "lm_server"
             and not self.shared_agent_params.use_dummy_api
         ):
             await self.language_model_client.start_vllm_server(
-                model_name=self.base_model_name
+                model_name=self.model_name
             )
-            logger.info(
-                f"Waiting for vLLM server for model {self.base_model_name!r}..."
-            )
+            logger.info(f"Waiting for vLLM server for model {self.model_name!r}...")
             await self.language_model_client.wait_for_vllm_server()
+
+    async def train(self):
+        """Set the agent group to training mode.
+
+        This method stops the vLLM server if it is running, as it is not needed during
+        training and takes up resources.
+        """
+
+        if (
+            self.training_client_type == "lm_server"
+            and not self.shared_agent_params.use_dummy_api
+        ):
+            await self.language_model_client.stop_vllm_server(ignore_not_running=True)
+            logger.info(
+                f"Stopped vLLM server for model {self.base_model_name!r} "
+                f"successfully."
+            )
 
     async def create_supervised_fine_tune_job(
         self,
@@ -1251,9 +1284,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         # timestep from each rollout to fine-tune on. This means that we are fine-tuning
         # on the whole rollout (since the final step contains all the previous
         # messages).
-        fine_tune_datasets: dict[
-            str, list[dict[Literal["messages"], list[PromptMessage]]]
-        ] = {}
+        fine_tune_datasets: dict[str, list[SupervisedDatasetItem]] = {}
         for agent_name, agent_whole in self.agent_wholes.items():
             fine_tune_datasets[agent_name] = agent_whole.build_fine_tune_dataset(
                 rollouts_per_agent[agent_name][:, -1]
@@ -1307,7 +1338,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             self.fine_tune_job_id = "frozen_job_id"
             return
 
-        fine_tune_datasets = {}
+        fine_tune_datasets: dict[str, list[DpoDatasetItem]] = {}
         for agent_name, agent_whole in self.agent_wholes.items():
 
             message_histories = agent_whole.build_fine_tune_dataset(
@@ -1378,7 +1409,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             fine_tune_dataset, method="dpo", job_name=job_name
         )
 
-    def get_fine_tune_job_status(
+    async def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
         """Get the status of the fine-tune job."""
@@ -1392,17 +1423,39 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if self.fine_tune_job_id == "insufficient_data_job_id":
             return "succeeded"
 
-        fine_tune_job = self._get_fine_tune_job()
-        status = fine_tune_job.status
+        if self.training_client_type == "openai":
 
-        if status in ["validating_files", "queued"]:
-            return "pending"
-        elif status in ["running", "succeeded", "failed", "cancelled"]:
-            return status
+            fine_tune_job = await self._get_openai_fine_tune_job()
+            status = fine_tune_job.status
+
+            if status in ["validating_files", "queued"]:
+                return "pending"
+            elif status in ["running", "succeeded", "failed", "cancelled"]:
+                return status
+            else:
+                raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
+
+        elif self.training_client_type == "lm_server":
+
+            fine_tune_job = await self._get_lm_server_fine_tune_job()
+            status = fine_tune_job.status
+
+            if status == "starting":
+                return "pending"
+            elif status in ["crashed", "interrupted"]:
+                return "failed"
+            elif status in ["pending", "running", "succeeded", "cancelled"]:
+                return status
+            else:
+                raise ValueError(f"Unknown vLLM fine-tune job status {status!r}")
+
         else:
-            raise ValueError(f"Unknown OpenAI fine-tune job status {status!r}")
+            raise NotImplementedError(
+                f"Cannot get fine-tune job status for the "
+                f"{self.shared_agent_params.model_provider!r} model provider."
+            )
 
-    def get_fine_tune_job_error_repr(self) -> str:
+    async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job."""
 
         if self.shared_agent_params.use_dummy_api:
@@ -1414,19 +1467,33 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         if self.fine_tune_job_id == "insufficient_data_job_id":
             raise ValueError("Cannot get error for insufficient data job")
 
-        fine_tune_job = self._get_fine_tune_job()
-        error = fine_tune_job.error
+        if self.training_client_type == "openai":
 
-        output = f"Code: {error.code}. Message: {error.message}."
-        if error.param is not None:
-            output += f" Parameter: {error.param}."
+            fine_tune_job = await self._get_openai_fine_tune_job()
+            error = fine_tune_job.error
 
-        if isinstance(error, OpenAiApiStatusError):
-            output += f" Headers: {error.response.headers}."
+            output = f"Code: {error.code}. Message: {error.message}."
+            if error.param is not None:
+                output += f" Parameter: {error.param}."
+
+            if isinstance(error, OpenAiApiStatusError):
+                output += f" Headers: {error.response.headers}."
+
+        elif self.training_client_type == "lm_server":
+
+            fine_tune_job = await self._get_lm_server_fine_tune_job()
+            output = fine_tune_job.error_message
+
+        else:
+
+            raise NotImplementedError(
+                f"Cannot get fine-tune job error for the "
+                f"{self.shared_agent_params.model_provider!r} model provider."
+            )
 
         return output
 
-    def switch_to_next_model(self):
+    async def switch_to_next_model(self):
         """Switch to the next model after fine-tuning."""
 
         if self.fine_tune_job_id is None:
@@ -1444,18 +1511,32 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             self.fine_tuned_model_name = None
             return
 
-        fine_tune_job = self._get_fine_tune_job()
-
-        if fine_tune_job.status != "succeeded":
+        if await self.get_fine_tune_job_status() != "succeeded":
             raise ValueError(
-                f"Cannot switch to next model: fine-tune job status is "
-                f"{fine_tune_job.status!r}"
+                f"Cannot switch to next model: fine-tune job status is not "
+                f"succeeded. Current status: {await self.get_fine_tune_job_status()!r}"
             )
 
-        if fine_tune_job.fine_tuned_model is None:
-            raise ValueError("Fine-tuned model name not set in fine-tune job")
+        if self.training_client_type == "openai":
 
-        self.fine_tuned_model_name = fine_tune_job.fine_tuned_model
+            fine_tune_job = await self._get_openai_fine_tune_job()
+
+            if fine_tune_job.fine_tuned_model is None:
+                raise ValueError("Fine-tuned model name not set in fine-tune job")
+
+            self.fine_tuned_model_name = fine_tune_job.fine_tuned_model
+
+        elif self.training_client_type == "lm_server":
+
+            fine_tune_job = await self._get_lm_server_fine_tune_job()
+
+            self.fine_tuned_model_name = fine_tune_job.new_model_name
+
+        else:
+            raise NotImplementedError(
+                f"Cannot switch to next model for the "
+                f"{self.shared_agent_params.model_provider!r} model provider."
+            )
 
     def get_state_dict(self) -> dict:
         """Get the state dictionary of the agent.
@@ -1488,7 +1569,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
     async def _make_fine_tune_api_call(
         self,
-        fine_tune_dataset: list[dict],
+        fine_tune_dataset: list[SupervisedDatasetItem] | list[DpoDatasetItem],
         method: Literal["supervised", "dpo"],
         job_name: Optional[str] = None,
     ):
@@ -1496,7 +1577,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         Parameters
         ----------
-        fine_tune_dataset : list[dict]
+        fine_tune_dataset : list[SupervisedDatasetItem] | list[DpoDatasetItem]
             The dataset of examples to fine-tune the model with.
         method : Literal["supervised", "dpo"]
             The fine-tuning method to use.
@@ -1518,6 +1599,46 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             self.fine_tune_job_id = "dummy_job_id"
             return
 
+        if self.shared_agent_params.fine_tune_from_scratch:
+            model_name = self.base_model_name
+        else:
+            model_name = self.model_name
+
+        if self.training_client_type == "openai":
+            await self._make_fine_tune_api_call_openai(
+                fine_tune_dataset, method, model_name, job_name
+            )
+        elif self.training_client_type == "lm_server":
+            await self._make_fine_tune_api_call_lm_server(
+                fine_tune_dataset, method, model_name, job_name
+            )
+        else:
+            raise NotImplementedError(
+                f"Cannot make fine-tune API call for the "
+                f"{self.shared_agent_params.model_provider!r} model provider."
+            )
+
+    async def _make_fine_tune_api_call_openai(
+        self,
+        fine_tune_dataset: list[SupervisedDatasetItem] | list[DpoDatasetItem],
+        method: Literal["supervised", "dpo"],
+        model_name: str,
+        job_name: Optional[str] = None,
+    ):
+        """Make the OpenAI API call to fine-tune the model.
+
+        Parameters
+        ----------
+        fine_tune_dataset : list[SupervisedDatasetItem] | list[DpoDatasetItem]
+            The dataset of examples to fine-tune the model with.
+        method : Literal["supervised", "dpo"]
+            The fine-tuning method to use.
+        model_name : str
+            The name of the model to fine-tune.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
+        """
+
         with TemporaryDirectory() as temp_dir:
 
             # Write the dataset to a temporary file
@@ -1532,11 +1653,6 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             )
 
         file_id = uploaded_file.id
-
-        if self.shared_agent_params.fine_tune_from_scratch:
-            model_name = self.base_model_name
-        else:
-            model_name = self.model_name
 
         method_key = {"type": method}
         if method == "dpo":
@@ -1576,20 +1692,76 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         self.fine_tune_job_id = job.id
 
-    def _get_fine_tune_job(self) -> OpenAiFineTuningJob:
+    async def _make_fine_tune_api_call_lm_server(
+        self,
+        fine_tune_dataset: list[SupervisedDatasetItem] | list[DpoDatasetItem],
+        method: Literal["dpo"],
+        model_name: str,
+        job_name: Optional[str] = None,
+    ):
+        """Make an API call to fine-tune the model using the language model server.
+
+        Parameters
+        ----------
+        fine_tune_dataset : list[SupervisedDatasetItem] | list[DpoDatasetItem]
+            The dataset of examples to fine-tune the model with.
+        method : Literal["supervised", "dpo"]
+            The fine-tuning method to use.
+        model_name : str
+            The name of the model to fine-tune.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
+        """
+
+        if method != "dpo":
+            raise NotImplementedError(
+                "Fine-tuning with the language model server is only supported for DPO."
+            )
+
+        training_config = LmTrainingConfig(
+            model_name=model_name,
+            method=method,
+            dpo_config=LmDpoTrainingConfig(
+                beta=self.shared_agent_params.dpo_beta,
+                learning_rate=self.rl_learning_rate,
+            ),
+            training_lora_config=LmLoraAdapterConfig(
+                r=self.shared_agent_params.lora_rank,
+                lora_alpha=self.lora_alpha,
+                lora_dropout=self.shared_agent_params.lora_dropout,
+            ),
+            model_already_lora_strategy=(
+                "stack" if self.shared_agent_params.stack_lora_adapters else "reuse"
+            ),
+        )
+
+        training_job = await self.language_model_client.create_training_job(
+            training_config=training_config,
+            dataset=fine_tune_dataset,
+            job_id_suffix=job_name,
+        )
+
+        self.fine_tune_job_id = training_job.job_id
+
+    async def _get_openai_fine_tune_job(self) -> OpenAiFineTuningJob:
         """Get the fine-tune job from the OpenAI API."""
 
         if self.fine_tune_job_id is None:
             raise ValueError("Fine-tune job ID not set")
 
-        return run_coroutine_sync(
-            self.openai_client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
+        return await self.openai_client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
+
+    async def _get_lm_server_fine_tune_job(self) -> LmTrainingJobInfo:
+        """Get the fine-tune job from the language model server API."""
+
+        if self.fine_tune_job_id is None:
+            raise ValueError("Fine-tune job ID not set")
+
+        return await self.language_model_client.get_training_job(
+            job_id=self.fine_tune_job_id
         )
 
 
-@register_scenario_class(
-    "code_validation", PureTextSharedModelGroup, {"model_provider": "SelfHosted"}
-)
 @register_scenario_class(
     "code_validation", PureTextSharedModelGroup, {"model_provider": "OpenRouter"}
 )
@@ -1627,7 +1799,7 @@ class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
         """
         self._raise_not_implemented_error()
 
-    def get_fine_tune_job_status(
+    async def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
         """Get the status of the fine-tune job.
@@ -1636,14 +1808,14 @@ class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
         """
         self._raise_not_implemented_error()
 
-    def get_fine_tune_job_error_repr(self) -> str:
+    async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job.
 
         This method is not supported for non-fine-tunable models.
         """
         self._raise_not_implemented_error()
 
-    def switch_to_next_model(self):
+    async def switch_to_next_model(self):
         """Switch to the next model after fine-tuning.
 
         This method is not supported for non-fine-tunable models.

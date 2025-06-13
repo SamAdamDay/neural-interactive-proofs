@@ -30,7 +30,7 @@ from einops import repeat, rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from nip.parameters import HyperParameters, PureTextAgentParameters
+from nip.parameters import HyperParameters, PureTextAgentParameters, LrFactors
 from nip.experiment_settings import ExperimentSettings
 from nip.protocols import ProtocolHandler
 from nip.scenario_base.environment import PureTextEnvironment
@@ -485,15 +485,29 @@ class PureTextSharedModelGroup(ABC):
     class SharedAgentParams:
         """The parameters shared by all agents in the group."""
 
+        agent_lr_factor: Optional[LrFactors | dict]
+
         model_provider: Literal["OpenAI", "SelfHosted", "OpenRouter"]
         model_name: str
+
         language_model_server_scheme_host: str
         language_model_server_port: int
         vllm_server_port: int
+
         freeze_agent: bool
+
         use_dummy_api: bool
+
         fine_tune_from_scratch: bool
+
         dpo_beta: Optional[float]
+
+        use_lora: bool
+        lora_rank: int
+        lora_alpha: Optional[int]
+        lora_alpha_scale: Optional[float]
+        lora_dropout: float
+        stack_lora_adapters: bool
 
     @property
     def model_name(self) -> str:
@@ -507,6 +521,59 @@ class PureTextSharedModelGroup(ABC):
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
         return self.protocol_handler.max_message_rounds
+
+    @property
+    def rl_learning_rate(self) -> float:
+        """The learning rate for this group when using reinforcement learning.
+
+        The learning rate is determined by the base learning rate for RL multiplied by
+        the agent's learning rate factor, if it is set.
+        """
+
+        learning_rate = self.hyper_params.rl.lr
+
+        if self.shared_agent_params.agent_lr_factor is not None:
+            learning_rate *= self.shared_agent_params.agent_lr_factor.actor
+
+        return learning_rate
+
+    @property
+    def lora_alpha(self) -> float:
+        """The computed LoRA alpha value for the group.
+
+        One of ``lora_alpha`` or ``lora_alpha_scale`` must be set in the
+        ``shared_agent_params``, but not both. If ``lora_alpha`` is set, it is used
+        directly. If ``lora_alpha_scale`` is set, it is multiplied by the LoRA rank to
+        compute the LoRA alpha value.
+        """
+
+        if self.shared_agent_params.lora_alpha is not None:
+            if self.shared_agent_params.lora_alpha_scale is not None:
+                raise ValueError(
+                    "Both `lora_alpha` and `lora_alpha_scale` are set in "
+                    "the shared agent parameters. Only one of these should be set."
+                )
+            return self.shared_agent_params.lora_alpha
+        elif self.shared_agent_params.lora_alpha_scale is not None:
+            if not (
+                self.shared_agent_params.lora_alpha_scale
+                * self.shared_agent_params.lora_rank
+            ).is_integer():
+                raise ValueError(
+                    f"The product of `lora_alpha_scale` "
+                    f"({self.shared_agent_params.lora_alpha_scale}) and `lora_rank` "
+                    f"({self.shared_agent_params.lora_rank}) must be an integer, but "
+                    f"got a non-integer value."
+                )
+            return int(
+                self.shared_agent_params.lora_alpha_scale
+                * self.shared_agent_params.lora_rank
+            )
+        else:
+            raise ValueError(
+                "Neither `lora_alpha` nor `lora_alpha_scale` are set in "
+                "the shared agent parameters. One of these should be set."
+            )
 
     def __init__(
         self,
@@ -645,17 +712,17 @@ class PureTextSharedModelGroup(ABC):
         """
 
     @abstractmethod
-    def get_fine_tune_job_status(
+    async def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
         """Get the status of the fine-tune job."""
 
     @abstractmethod
-    def get_fine_tune_job_error_repr(self) -> str:
+    async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job."""
 
     @abstractmethod
-    def switch_to_next_model(self):
+    async def switch_to_next_model(self):
         """Switch to the next model after fine-tuning."""
 
     def set_state(self, checkpoint: PureTextSharedModelGroupState):
@@ -1527,7 +1594,8 @@ class Agent(ABC):
             != self.agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
-                "The agent learning rate factor for the actor and critic must be the same if the body is shared."
+                "The agent learning rate factor for the actor and critic must be the "
+                "same if the body is shared."
             )
         if (
             self.hyper_params.rl.use_shared_body
@@ -1535,7 +1603,8 @@ class Agent(ABC):
             != self.agent_params.body_lr_factor.critic
         ):
             raise ValueError(
-                "The body learning rate factor for the actor and critic must be the same if the body is shared."
+                "The body learning rate factor for the actor and critic must be the "
+                "same if the body is shared."
             )
 
         # The learning rate of the whole agent

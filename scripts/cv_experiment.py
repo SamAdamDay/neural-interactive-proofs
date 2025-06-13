@@ -62,42 +62,52 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         The hyperparameters object.
     """
 
-    verifier_model_provider, _, verifier_model_name = combo["verifier_model"].partition(
+    verifier_model_provider, _, verifier_model_name = combo["verifier.model"].partition(
         "/"
     )
-    prover_model_provider, _, prover_model_name = combo["prover_model"].partition("/")
+    prover_model_provider, _, prover_model_name = combo["prover.model"].partition("/")
 
     agents_params_dict = dict(
         verifier=CodeValidationAgentParameters(
             model_name=verifier_model_name,
             model_provider=verifier_model_provider,
-            system_prompt_template_path=combo["verifier_system_prompt_template"],
-            language_model_server_scheme_host=combo["verifier_lm_server_scheme_host"],
-            temperature=combo["verifier_temperature"],
-            top_p=combo["verifier_top_p"],
-            repetition_penalty=combo["verifier_repetition_penalty"],
+            system_prompt_template_path=combo["verifier.system_prompt_template"],
+            language_model_server_scheme_host=combo["verifier.lm_server_scheme_host"],
+            language_model_server_port=combo["verifier.lm_server_port"],
+            vllm_server_port=combo["verifier.vllm_server_port"],
+            temperature=combo["verifier.temperature"],
+            top_p=combo["verifier.top_p"],
+            repetition_penalty=combo["verifier.repetition_penalty"],
             use_dummy_api=cmd_args.use_dummy_api,
-            freeze_agent=combo["freeze_verifier"],
+            freeze_agent=combo["verifier.freeze"],
             fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-            use_supervisor_message=combo["verifier_supervisor_message"],
-            dpo_beta=combo["dpo_beta"],
+            use_supervisor_message=combo["verifier.supervisor_message"],
+            dpo_beta=combo["verifier.dpo_beta"],
+            lora_rank=combo["verifier.lora_rank"],
+            lora_alpha_scale=combo["verifier.lora_alpha_scale"],
+            lora_dropout=combo["verifier.lora_dropout"],
         ),
     )
 
     prover_params_dict = dict(
         model_name=prover_model_name,
         model_provider=prover_model_provider,
-        system_prompt_template_path=combo["prover_system_prompt_template"],
-        language_model_server_hostname=combo["prover_lm_server_scheme_host"],
-        temperature=combo["prover_temperature"],
-        top_p=combo["prover_top_p"],
-        repetition_penalty=combo["prover_repetition_penalty"],
+        system_prompt_template_path=combo["prover.system_prompt_template"],
+        language_model_server_scheme_host=combo["prover.lm_server_scheme_host"],
+        language_model_server_port=combo["prover.lm_server_port"],
+        vllm_server_port=combo["prover.vllm_server_port"],
+        temperature=combo["prover.temperature"],
+        top_p=combo["prover.top_p"],
+        repetition_penalty=combo["prover.repetition_penalty"],
         use_dummy_api=cmd_args.use_dummy_api,
-        freeze_agent=combo["freeze_prover"],
+        freeze_agent=combo["prover.freeze"],
         fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-        use_supervisor_message=combo["prover_supervisor_message"],
-        dpo_beta=combo["dpo_beta"],
-        max_response_words=combo["prover_max_words"],
+        use_supervisor_message=combo["prover.supervisor_message"],
+        dpo_beta=combo["prover.dpo_beta"],
+        max_response_words=combo["prover.max_words"],
+        lora_rank=combo["prover.lora_rank"],
+        lora_alpha_scale=combo["prover.lora_alpha_scale"],
+        lora_dropout=combo["prover.lora_dropout"],
     )
 
     if combo["provers_share_model"]:
@@ -143,6 +153,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         dataset=combo["dataset_name"],
         test_dataset_split=combo["test_dataset_split"],
         rl=RlTrainerParameters(
+            lr=combo["learning_rate"],
             rollouts_per_iteration=combo["rollouts_per_iteration"],
             frames_per_batch=None,
             num_iterations=combo["num_iterations"],
@@ -154,13 +165,13 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
                 "fine_tune_on_all_previous_rollouts"
             ],
             verifier_guess_replacement_proportion=combo[
-                "verifier_guess_replacement_proportion"
+                "verifier.guess_replacement_proportion"
             ],
             verifier_guess_replacement_annealing=combo[
-                "verifier_guess_replacement_annealing"
+                "verifier.guess_replacement_annealing"
             ],
             verifier_guess_replacement_annealing_rate=combo[
-                "verifier_guess_replacement_annealing_rate"
+                "verifier.guess_replacement_annealing_rate"
             ],
         ),
         pure_text_ei=PureTextEiParameters(
@@ -177,8 +188,8 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             shared_reward=combo["shared_reward"],
             verifier_first=combo["verifier_first"],
             randomize_prover_stance=combo["randomize_prover_stance"],
-            verifier_decision_scale=combo["verifier_decision_scale"],
-            prover_invalid_response_penalty=combo["prover_invalid_response_penalty"],
+            verifier_decision_scale=combo["verifier.decision_scale"],
+            prover_invalid_response_penalty=combo["prover.invalid_response_penalty"],
         ),
         nip_protocol=NipProtocolParameters(
             min_message_rounds=combo["min_message_rounds"],

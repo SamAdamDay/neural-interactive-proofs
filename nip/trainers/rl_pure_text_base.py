@@ -10,7 +10,6 @@ import pickle
 import dataclasses
 from dataclasses import dataclass
 import json
-from time import sleep
 from warnings import warn
 from asyncio import TaskGroup, Queue
 import asyncio
@@ -34,7 +33,7 @@ from tqdm import tqdm
 import wandb.errors
 
 from nip.scenario_base.data import NestedArrayDictDataLoader
-from nip.scenario_base.environment import PureTextEnvironment, PromptMessage
+from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import (
     PureTextWholeAgent,
     PureTextCombinedWhole,
@@ -54,7 +53,7 @@ from nip.utils.nested_array_dict import (
     concatenate_nested_array_dicts,
 )
 from nip.utils.rollouts import get_pretty_pure_text_round_message
-from nip.utils.types import String
+from nip.utils.types import String, PromptMessage
 from nip.constants import (
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
@@ -234,6 +233,11 @@ class PureTextRlTrainer(Trainer, ABC):
         the training loop is resumed from the last stage.
         """
 
+        asyncio.run(self._train())
+
+    async def _train(self):
+        """Run the actual training loop implementation, which is asynchronous."""
+
         rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
 
         if rerun_tests:
@@ -311,7 +315,13 @@ class PureTextRlTrainer(Trainer, ABC):
                     f"{self._get_iteration_begin_message()}"
                 )
 
-                rollouts = asyncio.run(self._stage_sample_rollouts())
+                # Make sure all the shared model groups are in evaluation mode. We can
+                # do this concurrently for each group
+                async with TaskGroup() as task_group:
+                    for shared_model_group in self.shared_model_groups.values():
+                        task_group.create_task(shared_model_group.eval())
+
+                rollouts = await self._stage_sample_rollouts()
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "log_stats"
@@ -351,7 +361,14 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 # Run the test loop if we're doing that this iteration
                 if self._check_if_run_test_loop():
-                    self._stage_run_test_loop()
+
+                    # Make sure all the shared model groups are in evaluation mode. We
+                    # can do this concurrently for each group
+                    async with TaskGroup() as task_group:
+                        for shared_model_group in self.shared_model_groups.values():
+                            task_group.create_task(shared_model_group.eval())
+
+                    await self._stage_run_test_loop()
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "create_fine_tune_jobs"
@@ -393,7 +410,13 @@ class PureTextRlTrainer(Trainer, ABC):
                 elif rollouts is None:
                     rollouts = self._load_rollouts(self.state.iteration)
 
-                asyncio.run(self._stage_create_fine_tune_jobs(rollouts))
+                # Make sure all the shared model groups are in training mode. We can
+                # do this concurrently for each group
+                async with TaskGroup() as task_group:
+                    for shared_model_group in self.shared_model_groups.values():
+                        task_group.create_task(shared_model_group.train())
+
+                await self._stage_create_fine_tune_jobs(rollouts)
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
@@ -406,7 +429,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 and not rerun_tests
             ):
 
-                self._stage_await_fine_tune_jobs()
+                await self._stage_await_fine_tune_jobs()
 
                 # Advance to the next iteration and stage
                 self.state.train_loop_stage = "sample_rollouts"
@@ -533,12 +556,6 @@ class PureTextRlTrainer(Trainer, ABC):
             The sampled rollouts.
         """
 
-        # Make sure all the shared model groups are in evaluation mode. We can do this
-        # concurrently for each group
-        async with TaskGroup() as task_group:
-            for shared_model_group in self.shared_model_groups.values():
-                task_group.create_task(shared_model_group.eval())
-
         rollouts = await self._sample_rollouts(
             self.train_environment,
             self.state.iteration,
@@ -572,46 +589,57 @@ class PureTextRlTrainer(Trainer, ABC):
             The rollouts sampled in this iteration.
         """
 
-    def _stage_await_fine_tune_jobs(self):
+    async def _stage_await_fine_tune_jobs(self):
         """Training stage: await the completion of the fine-tune jobs."""
 
         logger.info("Awaiting completion of fine-tune jobs...")
 
-        while True:
+        async def wait_for_fine_tune_job(
+            group_name: str, shared_model_group: PureTextSharedModelGroup
+        ):
+            """Wait for a fine-tune job to complete for a single shared model group.
 
-            num_successful_jobs = 0
-            for group_name, shared_model_group in self.shared_model_groups.items():
-                if (
-                    shared_model_group.shared_agent_params.freeze_agent
-                    or shared_model_group.get_fine_tune_job_status() == "succeeded"
-                ):
-                    num_successful_jobs += 1
-                elif shared_model_group.get_fine_tune_job_status() == "failed":
-                    raise RuntimeError(
-                        f"Fine-tune job for group {group_name!r} failed. "
-                        f"{shared_model_group.get_fine_tune_job_error_repr()}"
+            Once the fine-tune job is complete, switch to the fine-tuned model.
+            """
+
+            while True:
+
+                status = await shared_model_group.get_fine_tune_job_status()
+
+                if status == "succeeded":
+                    logger.info(
+                        f"Fine-tune job for group {group_name!r} succeeded. Switching "
+                        f"to next model."
                     )
+                    await shared_model_group.switch_to_next_model()
+                    return
 
-            if num_successful_jobs == len(self.shared_model_groups):
-                logger.info("All fine-tune jobs succeeded")
-                break
+                elif status == "failed":
+                    error_repr = await shared_model_group.get_fine_tune_job_error_repr()
+                    message = f"Fine-tune job for group {group_name!r} failed."
+                    if error_repr != "":
+                        message += f" Error: {error_repr}"
+                    raise RuntimeError(message)
 
-            # Wait for a minute before checking again
-            sleep(60)
+                # Wait for a minute before checking again
+                await asyncio.sleep(60)
 
-        # Make all the agents use the new, fine-tuned models
-        for shared_model_group in self.shared_model_groups.values():
-            if not shared_model_group.shared_agent_params.freeze_agent:
-                shared_model_group.switch_to_next_model()
+        async with TaskGroup() as task_group:
+            for group_name, shared_model_group in self.shared_model_groups.items():
+                if shared_model_group.shared_agent_params.freeze_agent:
+                    continue
+                task_group.create_task(
+                    wait_for_fine_tune_job(group_name, shared_model_group)
+                )
 
-    def _stage_run_test_loop(self):
+        logger.info("All fine-tune jobs succeeded.")
+
+    async def _stage_run_test_loop(self):
         """Training stage: run the test loop."""
 
         # Sample rollouts from the test environment
-        rollouts = asyncio.run(
-            self._sample_rollouts(
-                self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
-            )
+        rollouts = await self._sample_rollouts(
+            self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
         )
 
         # Log the statistics of the rollouts

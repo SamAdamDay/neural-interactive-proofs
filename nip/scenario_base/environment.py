@@ -1,7 +1,7 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Literal, TypedDict, NotRequired
+from typing import Optional, Any, Literal
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
@@ -36,7 +36,7 @@ from nip.protocols import ProtocolHandler
 from nip.parameters import HyperParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.data import VariableDataCycler
-from nip.utils.types import NumpyStringDtype, String
+from nip.utils.types import NumpyStringDtype, String, PromptMessage
 from nip.utils.nested_array_dict import (
     NestedArrayDict,
     NumpySpec,
@@ -821,27 +821,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
 
     def _set_seed(self, seed: int | None):
         self.rng = torch.manual_seed(seed)
-
-
-class PromptMessage(TypedDict):
-    """A message in the prompt for a language model API.
-
-    The prompt is a list of messages, where each message is a dictionary with keys as
-    follows.
-
-    Attributes
-    ----------
-    role : Literal["system", "assistant", "user"]
-        The role of the message sender.
-    content : str
-        The content of the message.
-    name : str, optional
-        The name of the message sender.
-    """
-
-    role: Literal["system", "assistant", "user"]
-    content: str
-    name: NotRequired[str]
 
 
 class PureTextEnvironment(Environment, ABC):

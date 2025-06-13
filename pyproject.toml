@@ -9,10 +9,9 @@ requires-python = ">= 3.11"
 dependencies = [
     "datasets==2.21.0",
     "einops==0.8.0",
-    "flask==3.1.1",
-    "gitpython==3.1.43",
+    "gitpython==3.1.44",
     "httpx==0.27.0",
-    "huggingface-hub==0.27.1",
+    "huggingface-hub==0.32.4",
     "ipykernel==6.29.4",
     "ipython==8.25.0",
     "ipywidgets==8.1.3",
@@ -26,6 +25,7 @@ dependencies = [
     "openai==1.59.8",
     "pandas==2.2.2",
     "plotly==5.22.0",
+    "pydantic==2.11.5",
     "python-dotenv==1.0.1",
     "pyyaml==6.0.2",
     "safetensors==0.4.3",
@@ -41,6 +41,19 @@ dependencies = [
     "tqdm-multiprocess==0.0.11",
     "wandb==0.17.2",
     "werkzeug==3.1.3",
+]
+
+[project.optional-dependencies]
+lm-server = [
+    "accelerate==1.7.0",
+    "bitsandbytes==0.46.0",
+    "deepspeed==0.17.1",
+    "fastapi==0.115.6",
+    "loralib==0.1.2",
+    "pydantic-settings==2.9.1",
+    "transformers==4.52.4",
+    "trl[peft]==0.15.2",
+    "vllm==0.9.0",
 ]
 
 [dependency-groups]
@@ -68,18 +81,21 @@ dev = [
     "torch-tb-profiler==0.4.3",
 ]
 
-[[tool.uv.index]]
-name = "pytorch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
-explicit = true
+[tool.uv]
+add-bounds = "exact"
 
-[tool.uv.sources]
-torch = [
-  { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-torchvision = [
-  { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
+# [[tool.uv.index]]
+# name = "pytorch-cu121"
+# url = "https://download.pytorch.org/whl/cu121"
+# explicit = true
+
+# [tool.uv.sources]
+# torch = [
+#   { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+# ]
+# torchvision = [
+#   { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+# ]
 
 [tool.black]
 extend-exclude = "nip/utils/runtime_module.py|doc/extensions"
@@ -123,7 +139,7 @@ exclude = [
 line-length = 88
 indent-width = 4
 
-# Assume Python 3.8
+# Assume Python 3.11
 target-version = "py311"
 
 [tool.ruff.lint]

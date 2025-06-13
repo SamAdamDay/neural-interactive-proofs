@@ -1,7 +1,7 @@
 """Utilities for dealing with this package's version number."""
 
 import importlib
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, overload
 
 VersionTupleType: TypeAlias = tuple[int, int, int] | tuple[int, int] | tuple[int]
 
@@ -18,12 +18,20 @@ def get_package_name() -> str:
     return __package__.partition(".")[0]
 
 
+@overload
+def get_version(as_tuple: Literal[True]) -> tuple[int, int, int]: ...
+
+
+@overload
+def get_version(as_tuple: Literal[False] = False) -> str: ...
+
+
 def get_version(as_tuple: bool = False) -> str | tuple[int, int, int]:
     """Get the package version number.
 
     Parameters
     ----------
-    as_tuple : bool, optional
+    as_tuple : bool, default=False
         If True, return the version number as a tuple of integers. If False, return the
         version number as a string. Default is False.
 

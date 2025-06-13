@@ -37,7 +37,7 @@ from nip.protocols.verifier_decision_scale import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.jinja_filters import capitalise_first_letter, add_s_plural
-from nip.constants import PACKAGE_ROOT
+from nip.constants import REPOSITORY_ROOT
 
 
 @dataclass

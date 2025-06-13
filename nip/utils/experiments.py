@@ -34,10 +34,11 @@ from sklearn.model_selection import ParameterGrid
 import torch
 
 import wandb
-
 from wandb import AlertLevel as WandbAlertLevel
 
 from tqdm import tqdm
+
+from pydantic import TypeAdapter
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
@@ -45,6 +46,8 @@ from tqdm_multiprocess.std import init_worker
 
 from nip.run import PreparedExperimentInfo
 from nip.utils.env import get_env_var
+from nip.utils.data import flatten_dict_keys
+from nip.utils.types import ExperimentConfig
 
 
 logger = logging.getLogger(__name__)
@@ -192,7 +195,10 @@ class HyperparameterExperiment(ABC):
                     return f"{experiment_name.lower()}"
                 return f"{experiment_name.lower()}_{combo_index}"
 
-        self.param_grid = param_grid
+        if param_grid is not None:
+            self.param_grid = flatten_dict_keys(param_grid, separator=".")
+        else:
+            self.param_grid = None
         self.experiment_fn = experiment_fn
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
@@ -328,14 +334,14 @@ class HyperparameterExperiment(ABC):
         return self.run_id_fn(None, self.cmd_args)
 
     @property
-    def combinations(self) -> Iterable[dict]:
+    def combinations(self) -> ParameterGrid:
         """An iterator over the combinations of hyperparameters."""
         return ParameterGrid(self.param_grid)
 
     @property
     def enumerated_combinations(self) -> Iterable[tuple[int, dict]]:
         """An iterator over the combinations of hyperparameters plus an enumeration."""
-        return enumerate(ParameterGrid(self.param_grid))
+        return enumerate(self.combinations)
 
     def check_no_extant_runs(self):
         """Make sure there are no runs with the same ID as any run in this experiment.
@@ -431,18 +437,20 @@ class HyperparameterExperiment(ABC):
 
         if extension == ".json":
             with open(file_path, "r") as f:
-                config = json.load(f)
+                config: ExperimentConfig = json.load(f)
         elif extension == ".json5":
             with open(file_path, "r") as f:
-                config = json5.load(f)
+                config: ExperimentConfig = json5.load(f)
         elif extension in (".yaml", ".yml"):
             with open(file_path, "r") as f:
-                config = yaml.safe_load(f)
+                config: ExperimentConfig = yaml.safe_load(f)
         else:
             raise ValueError(
                 f"Unsupported config file format: {extension!r}. "
                 f"Supported formats are: .json, .json5, .yaml, .yml"
             )
+
+        TypeAdapter(ExperimentConfig).validate_python(config)
 
         if "kind" not in config or "parameters" not in config:
             raise ValueError(
@@ -454,12 +462,14 @@ class HyperparameterExperiment(ABC):
                 "The 'parameters' key in the config file must be a dictionary."
             )
 
+        flattened_param_grid = flatten_dict_keys(config["parameters"], separator=".")
+
         if config["kind"] == "single_experiment":
             self.param_grid = {
-                key: [value] for key, value in config["parameters"].items()
+                key: [value] for key, value in flattened_param_grid.items()
             }
         elif config["kind"] == "grid":
-            self.param_grid = config["parameters"]
+            self.param_grid = flattened_param_grid
         else:
             raise ValueError(
                 f"Unsupported config file kind: {config['kind']!r}. "

@@ -160,6 +160,11 @@ experiment_checkpoints/*
 # Playground cache
 playground/cache/*
 
+# Directory for communicating status between processes
+status
+
+# Directory for Hugging Face trainer outputs
+hf_trainer_output
 
 # Generated and built docs
 doc/docs/reference/generated
