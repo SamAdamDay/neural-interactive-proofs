@@ -5,7 +5,7 @@ runs:
   steps:
     - name: Install pipx
       run: |
-        apt install -y pipx && pipx ensurepath
+        sudo apt install -y pipx && pipx ensurepath
       shell: bash
     - name: Install uv
       run: |
