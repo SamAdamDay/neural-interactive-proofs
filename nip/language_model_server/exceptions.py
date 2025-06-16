@@ -108,7 +108,7 @@ class BadResponseError(LanguageModelClientError):
         self.response = response
 
 
-class TimeoutError(LanguageModelClientError):
+class ClientTimeoutError(LanguageModelClientError):
     """Exception raised when a request to the language model server times out.
 
     Parameters

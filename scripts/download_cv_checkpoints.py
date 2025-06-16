@@ -21,7 +21,6 @@ parser.add_argument(
 parser.add_argument(
     "--wandb_entity",
     type=str,
-    default=get_env_var("WANDB_ENTITY"),
     help="The wandb entity to use.",
 )
 

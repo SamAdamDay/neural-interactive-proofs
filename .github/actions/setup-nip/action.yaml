@@ -13,6 +13,10 @@ runs:
       uses: actions/setup-python@v5
       with:
         python-version-file: ".python-version"
+    - name: Copy the .env template, so that default environment variables are set
+      run: |
+        cp .env.template .env
+      shell: bash
     - name: Install dependencies with uv
       run: |
         uv sync --locked --all-extras --dev

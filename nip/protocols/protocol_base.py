@@ -836,6 +836,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             A mask indicating whether the verifier has made a decision.
         verifier_decision : Int[Tensor, "..."]
             The verifier's (discrete) decision. This has the following possible values:
+            
             - 0: reject
             - 1: accept
             - 2: no decision
