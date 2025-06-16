@@ -26,15 +26,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v3
-        with:
-          python-version: "3.11"
       - name: Setup NIP
         uses: ./.github/actions/setup-nip
       - name: Build with Sphinx
         run: |
-          sphinx-build -b html doc doc/_build
+          uv run sphinx-build -b html doc doc/_build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

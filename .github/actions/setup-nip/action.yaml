@@ -3,15 +3,17 @@ description: Install the requirements and the nip package
 runs:
   using: "composite"
   steps:
-    - name: Install pipx
-      run: |
-        sudo apt install -y pipx && pipx ensurepath
-      shell: bash
     - name: Install uv
-      run: |
-        pipx install uv==0.7.13
-      shell: bash
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "0.7.13"
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    - name: "Set up Python"
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: ".python-version"
     - name: Install dependencies with uv
       run: |
-        uv sync
+        uv sync --locked --dev
       shell: bash
