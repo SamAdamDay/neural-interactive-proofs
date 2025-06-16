@@ -3,11 +3,15 @@ description: Install the requirements and the nip package
 runs:
   using: "composite"
   steps:
-    - name: Install dependencies
+    - name: Install pipx
       run: |
-        pip install -r requirements_dev.txt
+        apt install -y pipx && pipx ensurepath
       shell: bash
-    - name: Install the package locally
+    - name: Install uv
       run: |
-        pip install .
+        pipx install uv==0.7.13
+      shell: bash
+    - name: Install dependencies with uv
+      run: |
+        uv sync
       shell: bash
