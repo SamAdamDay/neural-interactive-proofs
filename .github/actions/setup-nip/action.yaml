@@ -15,5 +15,5 @@ runs:
         python-version-file: ".python-version"
     - name: Install dependencies with uv
       run: |
-        uv sync --locked --dev
+        uv sync --locked --all-extras --dev
       shell: bash
