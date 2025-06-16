@@ -23,7 +23,7 @@ import requests
 import multiprocessing
 from multiprocessing.managers import SyncManager, ListProxy
 import importlib.resources
-from logging import getLogger
+import logging
 from string import Template
 
 from tqdm import tqdm
@@ -36,6 +36,9 @@ from openai.types.chat.chat_completion import Choice as OpenAIChoice
 from nip.constants import CV_DATA_DIR, HF_BUGGY_APPS_REPO
 from nip.utils.apps_metric import check_correctness
 from nip.utils.env import load_env_once
+
+
+logger = logging.getLogger(__name__)
 
 ORDINALS = [
     "zeroth",
@@ -135,7 +138,7 @@ class CodeValidationDatasetConfig:
         if self.system_prompt is None:
 
             prompt_template_traversable = importlib.resources.files(
-                "nip.code_validation.prompt_templates.dataset_generation"
+                "nip.code_validation.templates.dataset_generation"
             )
 
             if not 0 <= self.num_problematic_inputs <= 10:
@@ -191,8 +194,6 @@ def generate_and_save_cv_dataset(
     ValueError
         If the number of buggy solutions generated is 0.
     """
-
-    logger = getLogger(__name__)
 
     load_env_once()
     hugging_face_token = os.getenv("HF_TOKEN")

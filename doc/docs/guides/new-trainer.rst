@@ -321,6 +321,10 @@ is pure-text-based (i.e. subclasses :class:`PureTextRlTrainer
 <nip.trainers.rl_pure_text_base.PureTextRlTrainer>`), the datasets are instances of
 :class:`NestedArrayDictDataset <nip.scenario_base.data.NestedArrayDictDataset>`.
 
+When testing on the validation split (controlled by ``hyper_params.test_dataset_split``;
+only supported for pure-text scenarios), ``self.scenario_instance.test_dataset`` is
+the validation split of the training dataset, rather than the test split.
+
 
 Environments
 ------------

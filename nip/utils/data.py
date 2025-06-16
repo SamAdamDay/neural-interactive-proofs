@@ -1,13 +1,26 @@
 """Utilities for working with data."""
 
-from typing import Optional, Any, Iterable, Iterator, TypeVar
+from abc import ABC
+from typing import (
+    Optional,
+    Any,
+    Iterable,
+    Iterator,
+    TypeVar,
+    Self,
+    Union,
+    get_origin,
+    get_args,
+)
+from types import UnionType
 from numbers import Number
+import dataclasses
 
 import torch
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from nip.utils.types import TorchDevice
+from nip.utils.types import TorchDevice, DpoDatasetItem, HuggingFaceDpoDatasetItem
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 
 T = TypeVar("T")
@@ -341,3 +354,117 @@ def dict_update_add(dictionary: dict, key: Any, value: Number) -> dict:
         dictionary[key] = value
 
     return dictionary
+
+
+def convert_dpo_item_to_hugging_face(
+    item: DpoDatasetItem,
+) -> HuggingFaceDpoDatasetItem:
+    """Convert a DPO dataset item to a Hugging Face DPO dataset format.
+
+    Parameters
+    ----------
+    item : DpoDatasetItem
+        The DPO dataset item to convert.
+
+    Returns
+    -------
+    converted_item : HuggingFaceDpoDatasetItem
+        The converted Hugging Face DPO dataset item.
+    """
+
+    return {
+        "prompt": item["input"]["messages"],
+        "chosen": item["preferred_output"],
+        "rejected": item["non_preferred_output"],
+    }
+
+
+def convert_dpo_dataset_to_hugging_face(
+    dataset: list[DpoDatasetItem],
+) -> list[HuggingFaceDpoDatasetItem]:
+    """Convert a DPO dataset to a Hugging Face DPO dataset format.
+
+    Parameters
+    ----------
+    dataset : list[DpoDatasetItem]
+        The DPO dataset to convert.
+
+    Returns
+    -------
+    list[HuggingFaceDpoDatasetItem]
+        The converted Hugging Face DPO dataset.
+    """
+
+    return [convert_dpo_item_to_hugging_face(item) for item in dataset]
+
+
+class FromDictDataClass(ABC):
+    """Base class for data classes that can be created recursively from a dictionary.
+
+    All subclasses should defined using the
+    :external+python:class:`dataclasses.dataclass` decorator.
+    """
+
+    @classmethod
+    def from_dict(cls, config_dict: dict) -> Self:
+        """Create an instance recursively from a dictionary.
+
+        If the type of any field in the data class has a `from_dict` method defined,
+        this method will call that method to create an instance of that type from the
+        corresponding dictionary value. This allows for nested data classes to be
+        created from a dictionary representation.
+
+        Parameters
+        ----------
+        config_dict : dict
+            A dictionary containing the configuration parameters.
+
+        Returns
+        -------
+        config : Config
+            An instance of the configuration class.
+        """
+
+        # Call `from_dict` on nested dataclasses if they have it defined
+        for data_field in dataclasses.fields(cls):
+            value = config_dict.get(data_field.name, None)
+            if not isinstance(value, dict) or value is None:
+                continue
+            origin_type = get_origin(data_field.type)
+            if origin_type is Union or origin_type is UnionType:
+                types_to_try = get_args(data_field.type)
+            else:
+                types_to_try = [data_field.type]
+            for data_type in types_to_try:
+                if hasattr(data_type, "from_dict"):
+                    config_dict[data_field.name] = data_type.from_dict(value)
+                    break
+
+        return cls(**config_dict)
+
+
+def flatten_dict_keys(data: dict, separator: str = ".", prefix: str = "") -> dict:
+    """Flatten a nested dictionary by joining keys with a separator recursively.
+
+    Parameters
+    ----------
+    data : dict
+        The nested dictionary to flatten.
+    separator : str, default="."
+        The separator to use between keys.
+    prefix : str, default=""
+        The prefix to add to the keys.
+
+    Returns
+    -------
+    flat_data : dict
+        The flattened dictionary with joined keys.
+    """
+    flat_data = {}
+    for key, value in data.items():
+        new_key = f"{prefix}{key}" if prefix else key
+        if isinstance(value, dict):
+            flat_data.update(flatten_dict_keys(value, separator, new_key + separator))
+        else:
+            flat_data[new_key] = value
+    return flat_data

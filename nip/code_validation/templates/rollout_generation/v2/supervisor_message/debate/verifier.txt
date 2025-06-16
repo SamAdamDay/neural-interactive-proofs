@@ -1,0 +1,7 @@
+{% extends "supervisor_message/_common/verifier_multi_round_base.txt" %}
+{% block either_ask %}
+Either ask a question to each prover, or make a decision.
+{% endblock either_ask %}
+{% block question_instructions %}
+To ask a question, write "Question for Expert_1: [question 1]" and "Question for Expert_2: [question 2]".
+{% endblock question_instructions %}

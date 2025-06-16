@@ -18,10 +18,10 @@ parser.add_argument(
     "--session", type=str, default="nip", help="Name of the tmux session."
 )
 parser.add_argument(
-    "--single-pane",
+    "--pane-per-gpu",
     "-p",
     action="store_true",
-    help="Create a single pane for running experiments, rather than one per GPU.",
+    help="Create a separate pane for each GPU.",
 )
 parser.add_argument(
     "--speed-test",
@@ -77,7 +77,7 @@ def main():
 
     # Create panes for running experiments
     experiment_panes = [window.active_pane]
-    if not cmd_args.single_pane:
+    if cmd_args.pane_per_gpu:
         num_gpus = torch.cuda.device_count()
         for i in range(0, num_gpus - 1):
             pane_size = f"{((num_gpus - i - 1) * 100) // (num_gpus - i)}%"
@@ -89,6 +89,10 @@ def main():
                 start_directory=cmd_args.base_directory,
             )
             experiment_panes.append(new_pane)
+
+    for pane in experiment_panes:
+        # Activate the virtual environment
+        pane.send_keys("source .venv/bin/activate")
 
     # Run speed tests in each pane, if requested
     if cmd_args.speed_test != "":

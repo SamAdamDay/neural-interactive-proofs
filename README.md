@@ -20,6 +20,8 @@ reference.
 
 - The library requires Python 3.11 or later. 
 - You need [git](https://git-scm.com) to clone the repository.
+- [`uv`](https://docs.astral.sh/uv/) is recommended for installing packages, but
+  [`pip`](https://pip.pypa.io/en/stable/installation/) also works.
 - To log experiment data, you will need a [Weights & Biases](https://wandb.ai/site)
   account.
 - To run experiments with OpenAI models, you need an OpenAI API key. You can get one by
@@ -40,26 +42,25 @@ for a more detailed installation guide.
 
 2. Change to the repository directory: `cd neural-interactive-proofs`
 
-3. Install the requirements (ideally inside a virtual environment). If you just want to
-   run experiments do:
+3. Install library and dependencies: `uv sync`.
+   
+   If you just want to run experiments and don't want to make changes to the codebase,
+   you can do `uv sync --no-dev`.
+
+   If you want to host open-weight language models on your machine, install the
+   `lm-server` optional dependencies: `uv sync --extra lm-server`.
+
+   If using `pip`, create a virtual environment, activate it, then run:
 
    ```bash
    pip install wheel
-   pip install -r requirements.txt
+   pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
+   pip install -e --group dev .
    ```
 
-   If you also want to make changes to the codebase, do:
+4. Log in to Weights & Biases: `wandb login`
 
-   ```bash
-   pip install wheel
-   pip install -r requirements_dev.txt
-   ```
-
-4. Install the library locally in edit mod: `pip install -e .`
-
-5. Log in to Weights & Biases: `wandb login`
-
-6. Copy the template secrets file: `cp .env.template .env`
+5. Copy the template secrets file: `cp .env.template .env`
 
    Edit the ``.env`` file and fill in the necessary information for your use case. The
    comments in the file should guide you on what to fill in.

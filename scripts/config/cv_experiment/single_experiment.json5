@@ -1,0 +1,82 @@
+// A configuration file for cv_experiment.py for running a single experiment.
+
+{
+    "kind": "single_experiment",
+    "parameters": {
+        "trainer": "pure_text_ei",
+        "interaction_protocol": "nip",
+        "dataset_name": "lrhammond/buggy-apps",
+        "apps_difficulty": "interview",
+        "num_iterations": 8,
+        "rollouts_per_iteration": 200,
+        "learning_rate": 1e-6,
+        "malt_num_initial_ei_iterations": 1,
+        "malt_pair_selection_method": "interval",
+        "verifier": {
+            "model": "OpenAI/gpt-4o-mini-2024-07-18",
+            "system_prompt_template": null,
+            "lm_server_scheme_host": "http://localhost",
+            "lm_server_port": 5000,
+            "vllm_server_port": 8000,
+            "temperature": null,
+            "dpo_beta": 0.1,
+            "lora_rank": 64,
+            "lora_alpha_scale": 1.0,
+            "lora_dropout": 0.05,
+            "top_p": null,
+            "repetition_penalty": null,
+            "guess_replacement_proportion": 0.0,
+            "guess_replacement_annealing": "linear",
+            "guess_replacement_annealing_rate": 0.1,
+            "decision_spectrum": "accept_reject",
+            "supervisor_message": "all",
+            "freeze": true,
+        },
+        "prover": {
+            "model": "OpenAI/gpt-4o-2024-08-06",
+            "system_prompt_template": null,
+            "lm_server_scheme_host": "http://localhost",
+            "lm_server_port": 5000,
+            "vllm_server_port": 8000,
+            "temperature": 1.0,
+            "dpo_beta": 0.1,
+            "lora_rank": 64,
+            "lora_alpha_scale": 1.0,
+            "lora_dropout": 0.05,
+            "top_p": null,
+            "repetition_penalty": null,
+            "supervisor_message": "all",
+            "max_words": 150,
+            "freeze": false,
+            "invalid_response_penalty": null,
+        },
+        "provers_share_model": true,
+        "fine_tune_from_scratch": false,
+        "fine_tune_on_all_previous_rollouts": false,
+        "rollout_selection_method": "threshold",
+        "weighting_use_replacement": true,
+        "shared_reward": false,
+        "randomize_prover_stance": false,
+        "min_message_rounds": 1,
+        "max_message_rounds": 9,
+        "verifier_first": true,
+        "debate_sequential": false,
+        "debate_prover0_first": true,
+        "max_train_size": null,
+        "max_test_size": null,
+        "test_scheme": "none",
+        "num_test_iterations": 1,
+        "test_dataset_split": "validation",
+        // If set, this should be the ID of a previous experiment. This experiment will
+        // be stepped through, running the tests as specified by "test_scheme" and other
+        // test parameters.
+        "rerun_tests": null,
+        // If set to true and the script is run with a run ID which already exists, the
+        // script will continue running the experiment from the last completed
+        // iteration, even if the previous had fewer iterations than specified
+        // in this configuration file. This is useful for continuing promising
+        // experiments which have already completed.
+        "force_more_iterations": false,
+        "seed": 6198,
+    }
+}

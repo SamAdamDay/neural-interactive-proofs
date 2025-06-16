@@ -50,13 +50,17 @@ class ExperimentSettings:
     base_wandb_run : wandb.apis.public.Run, optional
         The base W&B run, if using. This is an already complete run loaded using the W&B
         API.
+    force_more_iterations : bool, default=False
+        If set to True and ``run_id`` already exists, the trainer will be forced to
+        perform as many iterations as specified in the hyper-parameters, even if the
+        run has already been completed. This is useful for continuing training
+        experiments that have been officially completed, but where you want to
+        continue training for more iterations.
     stat_logger : StatLogger, optional
         The logger to use for logging statistics. If not provided, a dummy logger is
         used, which does nothing.
     tqdm_func : Callable, optional
         The tqdm function to use. Defaults to tqdm.
-    logger : logging.Logger | logging.LoggerAdapter, optional
-        The logger to log to. If None, the trainer will create a logger.
     profiler : torch.profiler.profile, optional
         The PyTorch profiler being used to profile the training, if any.
     ignore_cache : bool, default=False
@@ -72,9 +76,6 @@ class ExperimentSettings:
         RL training between each save of the models.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
-    num_rollout_workers : int, default=4
-        The number of workers to use for collecting rollout samples, when this is done
-        in parallel. If this is 0, the rollouts are collected in the main process.
     pin_memory : bool, default=True
         Whether to pin the memory of the tensors in the dataloader, and move them to the
         GPU with ``non_blocking=True``. This can speed up training. When the device is
@@ -97,14 +98,17 @@ class ExperimentSettings:
     num_api_generation_timeouts : int, default=100
         The number of timeouts to allow when generating API outputs. If the number of
         timeouts exceeds this value, the experiment will be stopped.
-    num_api_connection_errors : int, default=100
+    num_api_connection_errors : int, default=10
         The number of connection errors to allow when generating API outputs. The
-        generation request is retried with exponential back-off with the formual `0.01 *
-        2 ** num_attempts`, so this value should not be higher than around 12. This
+        generation request is retried with exponential back-off with the formula ``0.01
+        * 2 ** num_attempts``, so this value should not be higher than around 12. This
         error type is more general that timeouts, which have their own counter. If the
         number of connection errors exceeds this value, the experiment will be stopped.
-    do_not_load_checkpoint : bool, default=False
-        If True, the experiment will not load a checkpoint if one exists.
+    num_rate_limit_errors : int, default=14
+        The number of rate limit errors to allow when generating API outputs. The
+        generation request is retried with exponential back-off with the formula ``2 **
+        num_attempts``, so this value should not be too high. If True, the experiment
+        will not load a checkpoint if one exists.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -117,16 +121,15 @@ class ExperimentSettings:
     wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
     silence_wandb: bool = True
     base_wandb_run: Annotated[Optional[wandb.apis.public.Run], MarkUnpicklable] = None
+    force_more_iterations: bool = False
     stat_logger: Optional[StatLogger] = field(default_factory=DummyStatLogger)
     tqdm_func: callable = tqdm
-    logger: Optional[LoggingType] = None
     profiler: Optional[torch.profiler.profile] = None
     ignore_cache: bool = False
     num_rollout_samples: int = 10
     rollout_sample_period: int = 1000
     checkpoint_period: int = 1000
     num_dataset_threads: int = 8
-    num_rollout_workers: int = 4
     pin_memory: bool = True
     dataset_on_device: bool = False
     enable_efficient_attention: bool = False
@@ -136,6 +139,7 @@ class ExperimentSettings:
     pretrained_embeddings_batch_size: int = 256
     num_api_generation_timeouts: int = 100
     num_api_connection_errors: int = 10
+    num_rate_limit_errors: int = 14
     do_not_load_checkpoint: bool = False
     test_run: bool = False
 

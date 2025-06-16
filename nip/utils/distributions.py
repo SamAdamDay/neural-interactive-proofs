@@ -1,6 +1,6 @@
 """PyTorch distributions."""
 
-from typing import Callable
+from typing import Callable, Optional
 
 from torch.distributions import Categorical
 import torch
@@ -8,9 +8,9 @@ from torch import Tensor
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn.distributions import CompositeDistribution
-from tensordict.utils import NestedKey
 
 from nip.utils.tensordict import get_key_batch_size
+from nip.utils.types import NestedKey
 
 
 class CompositeCategoricalDistribution(CompositeDistribution):
@@ -53,31 +53,29 @@ class CompositeCategoricalDistribution(CompositeDistribution):
 
     dists: dict[str, Categorical]
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        key_transform: Optional[Callable[[str], NestedKey] | dict[str, NestedKey]],
+        log_prob_key="sample_log_prob",
+        **kwargs,
+    ):
         # Get the key transform
-        try:
 
-            key_transform: Callable[[str], NestedKey] | dict[str, NestedKey] = (
-                kwargs.pop("key_transform")
-            )
-
-            if isinstance(key_transform, dict):
-
-                key_transform_dict = key_transform
-
-                def key_transform(x):
-                    return key_transform_dict[x]
-
-            elif not callable(key_transform):
-                raise ValueError("key_transform must be a callable or a dict.")
-
-        except KeyError:
+        if key_transform is None:
 
             def key_transform(x):
                 return x
 
-        # Get the log-probability key
-        self.log_prob_key = kwargs.pop("log_prob_key", "sample_log_prob")
+        elif isinstance(key_transform, dict):
+
+            key_transform_dict = key_transform
+
+            def key_transform(x):
+                return key_transform_dict[x]
+
+        elif not callable(key_transform):
+
+            raise ValueError("key_transform must be a callable or a dict.")
 
         composite_params = {}
         name_suffixes = ("logits", "probs")
@@ -96,9 +94,12 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         super().__init__(
             params=composite_params_td,
             distribution_map={key: Categorical for key in composite_params},
+            log_prob_key=log_prob_key,
         )
 
-    def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
+    def log_prob(
+        self, sample: TensorDictBase, *, aggregate_probabilities: bool = False
+    ) -> TensorDictBase:
         """Compute the log probability of a sample for the composite distribution.
 
         Adapted from ``tensordict.nn.distributions.CompositeDistribution.log_prob``.
@@ -111,6 +112,10 @@ class CompositeCategoricalDistribution(CompositeDistribution):
         ----------
         sample: TensorDictBase
             A tensordict containing the sample
+        aggregate_probabilities: bool, default=False
+            An unused parameter, needed for compatibility with the tensordict package.
+            Note that this parameter is always set to ``False`` when called by
+            ``SafeProbabilisticModule``, and will be deprecated in tensordict 0.9.0.
 
         Returns
         -------

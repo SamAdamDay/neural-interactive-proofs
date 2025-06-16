@@ -275,7 +275,7 @@ class TextRlParameters(SubParameters):
         When to run the test loop during training. See :const:`TestSchemeType
         <nip.parameters.types.TestSchemeType>` for options.
     test_on_whole_dataset : bool
-        Whether to run the test loop on the whole dataset or only on a single
+        Whether to run the test loop on the whole test dataset or only on a single
         iteration-worth of rollouts.
     """
 
@@ -347,6 +347,44 @@ class PureTextMaltParameters(SubParameters):
     num_responses_per_timestep : int
         The number of responses to sample from the agents at each timestep. This yields
         a tree of size at most ``num_responses_per_timestep ** max_message_rounds``.
+    frozen_agents_generate_one_response : bool
+        If ``False``, when generating the tree of rollouts, we sample multiple responses
+        from the frozen agents. Since frozen agents are not trained, it is not really
+        necessary to sample multiple responses from them. However, having multiple
+        enriches the tree, meaning the preference pairs are likely of higher quality.
+        Currently this option does not apply if there is a round where both a frozen and
+        a non-frozen agent take actions. In this case, the frozen agent will
+        automatically sample multiple responses.
+    pair_selection_method : Literal["positive_negative", "interval"]
+        The method to use for selecting the pairs of responses for DPO training.
+        Possible values are:
+
+        - "positive_negative": Selects a response where the agent's expected reward is
+          above a certain threshold (by default the reward mid-point) and a response
+          where the agent's expected reward is below this threshold.
+        - "interval": Selects a pair of responses where the difference in expected
+          reward is above a certain threshold. This threshold is computed as
+          ``interval_threshold_proportion`` times the difference between the maximum and
+          minimum possible reward for the agent.
+
+    interval_threshold_proportion : float
+        When ``pair_selection_method`` is "interval", this value is used to compute the
+        threshold for the difference in expected reward. The threshold is computed as
+        ``interval_threshold_proportion`` times the difference between the maximum and
+        minimum possible reward for the agent.
+    num_initial_ei_iterations : int
+        The number of iterations to run the EI trainer for before switching to MALT.
+        This is used to warm-start the training process. These iterations count towards
+        the total number of iterations, so the number of iterations for MALT is
+        ``num_iterations - num_initial_ei_iterations``.
     """
 
     num_responses_per_timestep: int = 2
+    frozen_agents_generate_one_response: bool = True
+
+    pair_selection_method: Literal["positive_negative", "interval"] = (
+        "positive_negative"
+    )
+    interval_threshold_proportion: float = 0.1
+
+    num_initial_ei_iterations: int = 0

@@ -138,6 +138,5 @@ class PureTextRolloutAnalyser(RolloutAnalyser, ABC):
         evaluations : dict[tuple[str, str], ma.MaskedArray]
             The evaluations. A dictionary indexed by agent name and channel name, where
             ``evaluations[agent_name, channel_name]`` is an array of evaluations of
-            shape
-            (...)
+            shape (...)
         """

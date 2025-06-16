@@ -425,6 +425,7 @@ class MnipProtocol(NipProtocol):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: TensorDictBase | NestedArrayDict,
     ):
@@ -432,6 +433,10 @@ class MnipProtocol(NipProtocol):
 
         Both provers receive the same reward, which is the 1 if the verifier accepts and
         0 otherwise.
+
+        When the ``continuous_decision`` key is present in the environment tensor, a
+        continuous version of this is used instead, where the reward is a linear
+        transformation of the verifier's decision.
 
         The ``reward`` tensor is updated in place, adding in the rewards for the agents
         at the appropriate indices.
@@ -442,6 +447,11 @@ class MnipProtocol(NipProtocol):
             A boolean mask indicating whether the verifier has made a decision.
         verifier_decision : Int[Tensor, "..."]
             The verifier's decision.
+        verifier_float_decision : Float[Tensor, "..."] | None
+            The verifier's continuous decision. This is only used if the
+            ``continuous_decision`` key is present in the environment tensor. If not
+            ``None``, it is used to compute the reward for the provers instead of the
+            discrete decision.
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
             verifier.
@@ -453,6 +463,16 @@ class MnipProtocol(NipProtocol):
         if self.hyper_params.protocol_common.shared_reward:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = reward[..., self.verifier_index]
+
+        elif verifier_float_decision is not None:
+            for prover_index in self.prover_indices:
+                reward[..., prover_index][~verifier_decision_made] = 0.0
+                reward[..., prover_index][verifier_decision_made] = (
+                    verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+
         else:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = (
@@ -545,7 +565,9 @@ class SoloVerifierProtocol(DeterministicSingleVerifierProtocolHandler):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
     ):
         pass
 
@@ -598,6 +620,8 @@ class MultiChannelTestProtocol(DeterministicSingleVerifierProtocolHandler):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
+        env_td: TensorDictBase | NestedArrayDict,
     ):
         pass

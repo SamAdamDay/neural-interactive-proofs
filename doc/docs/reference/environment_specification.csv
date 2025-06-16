@@ -1,0 +1,32 @@
+"Key",Shape,Values,Availability,Description
+'y',rollout round,"{0, 1}",,The true label
+'datapoint_id',rollout round,non-negative integer,,The ID for the datapoint observed in the rollout
+'round',rollout round,non-negative integer,,The round number of the current timestep.
+'seed',rollout round,non-negative integer,,The per-rollout seed
+'done',rollout round,Boolean,,Whether the rollout is finished because the verifier made a decision
+'terminated',rollout round,Boolean,,Whether the rollout is finished because the time ran out
+'padding',rollout round,Boolean,Pure text,"Whether this timestep is used as padding, with dummy actions"
+'message_history',rollout round round channel {message_shape},any,,"The history of all messages up to the current timestep, in each channel; {message_shape} varies by scenario"
+'x',rollout round round channel {message_shape},float,TensorDict,A cloned copy of the message history
+'linear_message_history',rollout round round channel position message,"{0, 1}",TensorDict,"When using a linear message, this is the history of linear messages sent by each agent, one-hot encoded"
+'message_agent_id',rollout round round channel,non-negative integer,Pure text,The ID of the agent which each message in each channel
+'raw_message_history',rollout round round agent,string,Pure text,The history of raw messages sent by each agent
+'decision_restriction',rollout round,"{0, 1, 2}",TensorDict,"A restriction on what the verifier can do. 0: no restriction, 1: must continue sending messages, 2: must make a guess"
+'pretrained_embeddings',rollout round {pretrained_embeddings_shape},float,TensorDict,"The pretrained embeddings for the current datapoint, if using"
+'agents',rollout round agent,(sub-dictionary),,Sub-dictionary containing per-agent keys
+"'agents', 'decision'",rollout round agent,"{0, 1, 2, 3}",,"The decision made by each agent (only relevant for the verifier). 0: reject, 1: accept, 2: continue (default), 3: end without decision (only pure text)"
+"'agents', 'decision_logits'",rollout round agent 3,float,TensorDict,The output logits for each decision option
+"'agents', 'raw_decision'",rollout round agent,string,Pure text,The raw decision text sent by the agent
+"'agents', 'continuous_decision'",rollout round agent,"[-1, 1]",Pure text,"A float version of the decision, where -1 is reject and 1 is accept; used when the verifier can make more nuanced decisions"
+"'agents', 'message'",rollout round agent channel {message_shape},any,,The message sent by each agent to each channel
+"'agents', 'main_message_logits'",rollout round agent channel {message_shape},float,TensorDict,Logits for each possible message which could be sent by each agent
+"'agents', 'linear_message_selected'",rollout round agent channel position message,"{0, 1}",TensorDict,"When using a linear message, this is a one-hot representation of the linear messages sent by each agent to each channel"
+"'agents', 'raw_message'",rollout round agent,string,Pure text,"The raw, unprocessed message sent by the agent, before splitting by channel"
+"'agents', 'prompt'",rollout round agent message field,string,Pure text,Whether the rollout will be terminated in the next timestep
+"'agents', 'retry_count'",rollout round agent channel,non-negative integer,Pure text,The number of times the model generation was retried because of a bad generation
+"'agents', 'token_limit'",rollout round agent channel,non-negative integer,Pure text,The number of times the model generation was retried because the token limit was reached
+'next',rollout round,(sub-dictionary),,Sub-dictionary containing values for the next timestep
+"'next', 'done'",rollout round,Boolean,,Whether the rollout will be done in the next timestep
+"'next', 'terminated'",rollout round,Boolean,,Whether the rollout will be terminated in the next timestep
+"'next', 'agents'",rollout round agent,(sub-dictionary),,Sub-dictionary containing per-agent values for the next timestep
+"'next', 'agents', 'reward'",rollout round agent,float,,The reward for each agent at the end of the current timestep

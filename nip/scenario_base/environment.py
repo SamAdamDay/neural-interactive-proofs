@@ -1,7 +1,7 @@
 """Base class for the RL environment."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Literal, TypedDict, NotRequired
+from typing import Optional, Any, Literal
 from operator import mul
 from functools import reduce, cached_property
 from itertools import chain
@@ -14,13 +14,8 @@ import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    BinaryDiscreteTensorSpec,
-    DiscreteTensorSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import Categorical, UnboundedContinuous, Composite, Binary
+from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs import EnvBase
 
 import numpy as np
@@ -28,7 +23,7 @@ from numpy.typing import NDArray
 
 import einops
 
-from jaxtyping import Float, Int
+from jaxtyping import Int
 
 from nip.scenario_base import (
     TensorDictDataLoader,
@@ -41,7 +36,7 @@ from nip.protocols import ProtocolHandler
 from nip.parameters import HyperParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.data import VariableDataCycler
-from nip.utils.types import NumpyStringDtype, String
+from nip.utils.types import NumpyStringDtype, String, PromptMessage
 from nip.utils.nested_array_dict import (
     NestedArrayDict,
     NumpySpec,
@@ -66,8 +61,6 @@ class Environment(ABC):
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.
-    train : bool, optional
-        Whether the environment is used for training or evaluation.
     """
 
     @cached_property
@@ -157,19 +150,21 @@ class Environment(ABC):
     def done_spec(self) -> TensorSpec | NumpySpec:
         """The specification for the done keys (done and terminated)."""
 
+    @property
+    def split(self) -> Literal["train", "test", "validation"]:
+        """The split of the dataset used for the environment."""
+        return self.dataset.split
+
     def __init__(
         self,
         hyper_params: HyperParameters,
         settings: ExperimentSettings,
         dataset: Dataset,
         protocol_handler: ProtocolHandler,
-        *,
-        train: bool = True,
     ):
         self.hyper_params = hyper_params
         self.settings = settings
         self.protocol_handler = protocol_handler
-        self.train = train
         self.dataset = dataset
 
         self.num_agents = len(self.protocol_handler.agent_names)
@@ -233,8 +228,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         The dataset for the environment.
     protocol_handler : ProtocolHandler
         The protocol handler for the environment.
-    train : bool, optional
-        Whether the environment is used for training or evaluation.
     """
 
     dataset: TensorDictDataset
@@ -247,8 +240,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         settings: ExperimentSettings,
         dataset: TensorDictDataset,
         protocol_handler: ProtocolHandler,
-        *,
-        train: bool = True,
     ):
         super().__init__(device=settings.device)
 
@@ -258,7 +249,6 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             settings=settings,
             protocol_handler=protocol_handler,
             dataset=dataset,
-            train=train,
         )
 
         # Call the batch size property of ``Environment`` to set the batch size
@@ -337,31 +327,31 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The observation specification.
         """
 
-        observation_spec = CompositeSpec(
-            round=DiscreteTensorSpec(
+        observation_spec = Composite(
+            round=Categorical(
                 self.protocol_handler.max_message_rounds,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
             ),
-            decision_restriction=DiscreteTensorSpec(
+            decision_restriction=Categorical(
                 3,
                 shape=(self.num_envs,),
                 dtype=self._int_dtype,
                 device=self.device,
             ),
-            x=UnboundedContinuousTensorSpec(
+            x=UnboundedContinuous(
                 shape=self.message_history_shape,
                 dtype=torch.float,
                 device=self.device,
             ),
-            seed=DiscreteTensorSpec(
+            seed=Categorical(
                 2**16,
                 shape=(self.num_envs,),
                 dtype=torch.long,
                 device=self.device,
             ),
-            message_history=BinaryDiscreteTensorSpec(
+            message_history=Binary(
                 self.message_history_shape[-1],
                 shape=self.message_history_shape,
                 dtype=torch.float,
@@ -374,22 +364,18 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         # Add specifications for the pretrained embeddings, if any
         pretrained_model_names = self.dataset.pretrained_model_names
         for model_name in pretrained_model_names:
-            observation_spec["pretrained_embeddings", model_name] = (
-                UnboundedContinuousTensorSpec(
-                    shape=(
-                        self.num_envs,
-                        *self.dataset.get_pretrained_embedding_feature_shape(
-                            model_name
-                        ),
-                    ),
-                    dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
-                    device=self.device,
-                )
+            observation_spec["pretrained_embeddings", model_name] = UnboundedContinuous(
+                shape=(
+                    self.num_envs,
+                    *self.dataset.get_pretrained_embedding_feature_shape(model_name),
+                ),
+                dtype=self.dataset.get_pretrained_embedding_dtype(model_name),
+                device=self.device,
             )
 
         # Add the linear message history, if it is included
         if self.hyper_params.include_linear_message_space:
-            observation_spec["linear_message_history"] = BinaryDiscreteTensorSpec(
+            observation_spec["linear_message_history"] = Binary(
                 self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
@@ -416,15 +402,15 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
             The action specification.
         """
 
-        action_spec = CompositeSpec(
-            agents=CompositeSpec(
-                decision=DiscreteTensorSpec(
+        action_spec = Composite(
+            agents=Composite(
+                decision=Categorical(
                     3,
                     shape=(self.num_envs, self.num_agents),
                     dtype=self._int_dtype,
                     device=self.device,
                 ),
-                main_message_logits=UnboundedContinuousTensorSpec(
+                main_message_logits=UnboundedContinuous(
                     shape=(
                         self.num_envs,
                         self.num_agents,
@@ -434,7 +420,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                     ),
                     device=self.device,
                 ),
-                decision_logits=UnboundedContinuousTensorSpec(
+                decision_logits=UnboundedContinuous(
                     shape=(
                         self.num_envs,
                         self.num_agents,
@@ -450,7 +436,7 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         )
 
         if self.hyper_params.include_linear_message_space:
-            action_spec["agents"]["linear_message_selected"] = DiscreteTensorSpec(
+            action_spec["agents"]["linear_message_selected"] = Categorical(
                 self.hyper_params.d_linear_message_space,
                 shape=(
                     self.num_envs,
@@ -474,14 +460,14 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         state_spec : TensorSpec
             The state specification.
         """
-        return CompositeSpec(
-            y=BinaryDiscreteTensorSpec(
+        return Composite(
+            y=Binary(
                 1,
                 shape=(self.num_envs, 1),
                 dtype=torch.long,
                 device=self.device,
             ),
-            datapoint_id=DiscreteTensorSpec(
+            datapoint_id=Categorical(
                 len(self.dataset),
                 shape=(self.num_envs,),
                 dtype=torch.long,
@@ -499,9 +485,9 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         reward_spec : TensorSpec
             The reward specification.
         """
-        return CompositeSpec(
-            agents=CompositeSpec(
-                reward=UnboundedContinuousTensorSpec(
+        return Composite(
+            agents=Composite(
+                reward=UnboundedContinuous(
                     shape=(self.num_envs, self.num_agents),
                     device=self.device,
                 ),
@@ -524,11 +510,11 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         done_spec : TensorSpec
             The done specification.
         """
-        return CompositeSpec(
+        return Composite(
             # TODO: This may lead to issues because TorchRL calls ``any`` on the done
             # signal
-            agents=CompositeSpec(
-                done=BinaryDiscreteTensorSpec(
+            agents=Composite(
+                done=Binary(
                     self.num_agents,
                     shape=(self.num_envs, self.num_agents),
                     dtype=torch.bool,
@@ -537,13 +523,13 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
                 shape=(self.num_envs, self.num_agents),
                 device=self.device,
             ),
-            done=BinaryDiscreteTensorSpec(
+            done=Binary(
                 self.num_envs,
                 shape=(self.num_envs,),
                 dtype=torch.bool,
                 device=self.device,
             ),
-            terminated=BinaryDiscreteTensorSpec(
+            terminated=Binary(
                 self.num_envs,
                 shape=(self.num_envs,),
                 dtype=torch.bool,
@@ -837,29 +823,20 @@ class TensorDictEnvironment(EnvBase, Environment, ABC):
         self.rng = torch.manual_seed(seed)
 
 
-class PromptMessage(TypedDict):
-    """A message in the prompt for a language model API.
-
-    The prompt is a list of messages, where each message is a dictionary with keys as
-    follows.
-
-    Attributes
-    ----------
-    role : Literal["system", "assistant", "user"]
-        The role of the message sender.
-    content : str
-        The content of the message.
-    name : str, optional
-        The name of the message sender.
-    """
-
-    role: Literal["system", "assistant", "user"]
-    content: str
-    name: NotRequired[str]
-
-
 class PureTextEnvironment(Environment, ABC):
-    """Base for environments which handle non-tokenised text with nested array dicts."""
+    """Base for environments which handle non-tokenised text with nested array dicts.
+
+    Parameters
+    ----------
+    hyper_params : HyperParameters
+        The parameters of the experiment.
+    settings : ExperimentSettings
+        The settings of the experiment.
+    dataset : Dataset
+        The dataset for the environment.
+    protocol_handler : ProtocolHandler
+        The protocol handler for the environment.
+    """
 
     dataset: NestedArrayDictDataset
 
@@ -924,6 +901,12 @@ class PureTextEnvironment(Environment, ABC):
                 decision=IntArraySpec(
                     (*self.batch_size, self.num_agents), "batch agent"
                 ),
+                raw_decision=StringArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
+                ),
+                continuous_decision=FloatArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
+                ),
                 message=StringArraySpec(
                     (
                         *self.batch_size,
@@ -947,6 +930,9 @@ class PureTextEnvironment(Environment, ABC):
                         len(PromptMessage.__annotations__),
                     ),
                     "batch agent message field",
+                ),
+                valid_response=BoolArraySpec(
+                    (*self.batch_size, self.num_agents), "batch agent"
                 ),
                 retry_count=IntArraySpec(
                     (
@@ -1221,15 +1207,16 @@ class PureTextEnvironment(Environment, ABC):
 
         return state_env
 
+    @classmethod
     @abstractmethod
-    def get_datapoint_from_env_state_as_dict(self, env_state: NestedArrayDict) -> dict:
+    def get_datapoint_from_env_state_as_dict(cls, env_state: NestedArrayDict) -> dict:
         """Get the datapoint from a single-element environment state as a dictionary.
 
         This returns a dictionary which specifies the datapoint for the environment
         state.
 
         This method should be extended by base classes to include whatever additional
-        fields consistute the datapoint.
+        fields constitute the datapoint.
 
         Parameters
         ----------

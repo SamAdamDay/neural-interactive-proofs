@@ -38,8 +38,21 @@ The Code Validation Task
    :template: autosummary/script.rst
    :toctree: generated/scripts
 
-   ei_cv
+   cv_experiment
    create_cv_dataset
+   download_cv_checkpoints
+   visualise_malt_rollouts
+
+
+Language Model Server
+---------------------
+
+.. autosummary::
+   :template: autosummary/script.rst
+   :toctree: generated/scripts
+
+   run_lm_server
+
 
 
 Miscellaneous Scripts

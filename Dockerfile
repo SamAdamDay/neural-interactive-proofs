@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime AS base
+FROM nvidia/cuda:12.0.1-runtime-ubuntu20.04 AS base
 
 # Set the timezone environmental variable
 ENV TZ=Europe/London
@@ -7,21 +7,24 @@ ENV TZ=Europe/London
 # Update the apt sources
 RUN apt update
 
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Remove the Pytorch version from the image. We'll be installing our own version later
-RUN pip uninstall -y torch torchvision torchaudio
-
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
-RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git python3-venv build-essential curl git gnupg2 make cmake g++ python-dev-is-python3
+RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git build-essential curl git gnupg2 make cmake g++ python-dev-is-python3 pipx
+
+# Set up pipx, to allow installing a specific uv version
+RUN pipx ensurepath
+
+# Install uv
+RUN pipx install uv==0.7.13
+
+# Install nvitop for monitoring GPU usage
+RUN uv tool install nvitop
 
 # Move to the root home directory
 WORKDIR /root
 
 # Install Weights & Biases now so we we can log in
-RUN pip install wandb
+RUN uv tool install wandb
 
 # Invalidate the cache if this argument is different from the last build. Convention:
 # use: --build-arg CACHE_BUST=`git rev-parse main`
@@ -44,6 +47,9 @@ ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/b
 # Copy the scripts to the /usr/local/bin directory
 COPY docker/bin/* /usr/local/bin/
 
+# Copy the home config files to the home directory
+COPY docker/home/* /root/
+
 # Copy .env file to the project directory
 COPY .env /root/neural-interactive-proofs
 
@@ -58,32 +64,26 @@ RUN grep timm== requirements.txt \
     | xargs wget -qO- \
     | tar -xzC /root/neural-interactive-proofs/vendor
 
-# Install all the required packages
-RUN pip install wheel cython \
-    && pip install --extra-index-url https://download.pytorch.org/whl/cu118 -r requirements_dev.txt \
-    && pip install -e . \
-    && pip install nvitop
-
-
 # The default target doesn't do much else
 FROM base AS default
 
-# Go back to the root
-WORKDIR /root
-
-# Expose the default SSH port (inside the container)
-EXPOSE 22
-
-
-# The datasets target downloads all the datasets used in the project. This is slower to
-# download from the hub, but faster overall if you're using a large dataset
-FROM base AS datasets
-
-# Download all the datasets used in the project
-RUN python scripts/download_all_datasets.py
+# Install all the required packages
+RUN uv sync
 
 # Go back to the root
 WORKDIR /root
 
 # Expose the default SSH port (inside the container)
 EXPOSE 22
+
+# The default target doesn't do much else
+FROM base AS lm-server
+
+# Install all the required packages
+RUN uv sync --extra lm-server
+
+# Go back to the root
+WORKDIR /root
+
+# Expose the default SSH port (inside the container)
+EXPOSE 22 5000 8000

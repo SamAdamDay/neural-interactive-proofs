@@ -25,17 +25,16 @@ from numpy.typing import NDArray
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import NestedKey
 
 from einops import repeat, rearrange
 
 from jaxtyping import Float, Int, Bool
 
-from nip.parameters import HyperParameters, PureTextAgentParameters
+from nip.parameters import HyperParameters, PureTextAgentParameters, LrFactors
 from nip.experiment_settings import ExperimentSettings
 from nip.protocols import ProtocolHandler
 from nip.scenario_base.environment import PureTextEnvironment
-from nip.utils.types import TorchDevice
+from nip.utils.types import TorchDevice, NestedKey
 from nip.utils.hyper_params import get_agent_part_flags
 from nip.utils.torch import apply_orthogonal_initialisation
 from nip.utils.nested_array_dict import NestedArrayDict
@@ -379,7 +378,7 @@ class PureTextWholeAgent(WholeAgent, ABC):
         return super().visible_message_channel_mask.cpu().detach().numpy()
 
     @abstractmethod
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Forward pass through the agent.
@@ -414,10 +413,44 @@ class PureTextWholeAgent(WholeAgent, ABC):
             The dataset for fine-tuning the agent.
         """
 
-    def __call__(  # noqa: D102
+    async def __call__(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
-        return self.forward(data, environment)
+        """Run a forward pass through the agent, with some safety checks.
+
+        Parameters
+        ----------
+        data : NestedArrayDict
+            The input to the agent.
+        environment : PureTextEnvironment
+            The environment the agent is interacting with.
+
+        Returns
+        -------
+        output : NestedArrayDict
+            The output of the forward pass on the input.
+        """
+
+        output = await self.forward(data, environment)
+
+        for key in self.out_keys:
+            if key not in output.keys():
+                raise ValueError(
+                    f"Required output key {key!r} not found in agent "
+                    f"{self.agent_name!r} {type(self).__name__}.forward() output."
+                )
+
+        for key in output.keys():
+            if key not in self.out_keys:
+                raise ValueError(
+                    f"Key {key!r} found in agent {self.agent_name!r} "
+                    f"{type(self).__name__}.forward() output, but not in the "
+                    f"output key specification. This probably means that the key needs "
+                    f"to be added to either the `agent_level_out_keys` or "
+                    f"`env_level_out_keys` attribute of the agent part."
+                )
+
+        return output
 
 
 @dataclass
@@ -452,10 +485,29 @@ class PureTextSharedModelGroup(ABC):
     class SharedAgentParams:
         """The parameters shared by all agents in the group."""
 
+        agent_lr_factor: Optional[LrFactors | dict]
+
+        model_provider: Literal["OpenAI", "SelfHosted", "OpenRouter"]
         model_name: str
+
+        language_model_server_scheme_host: str
+        language_model_server_port: int
+        vllm_server_port: int
+
         freeze_agent: bool
+
         use_dummy_api: bool
+
         fine_tune_from_scratch: bool
+
+        dpo_beta: Optional[float]
+
+        use_lora: bool
+        lora_rank: int
+        lora_alpha: Optional[int]
+        lora_alpha_scale: Optional[float]
+        lora_dropout: float
+        stack_lora_adapters: bool
 
     @property
     def model_name(self) -> str:
@@ -469,6 +521,59 @@ class PureTextSharedModelGroup(ABC):
     def max_message_rounds(self) -> int:
         """The maximum number of message rounds in the protocol."""
         return self.protocol_handler.max_message_rounds
+
+    @property
+    def rl_learning_rate(self) -> float:
+        """The learning rate for this group when using reinforcement learning.
+
+        The learning rate is determined by the base learning rate for RL multiplied by
+        the agent's learning rate factor, if it is set.
+        """
+
+        learning_rate = self.hyper_params.rl.lr
+
+        if self.shared_agent_params.agent_lr_factor is not None:
+            learning_rate *= self.shared_agent_params.agent_lr_factor.actor
+
+        return learning_rate
+
+    @property
+    def lora_alpha(self) -> float:
+        """The computed LoRA alpha value for the group.
+
+        One of ``lora_alpha`` or ``lora_alpha_scale`` must be set in the
+        ``shared_agent_params``, but not both. If ``lora_alpha`` is set, it is used
+        directly. If ``lora_alpha_scale`` is set, it is multiplied by the LoRA rank to
+        compute the LoRA alpha value.
+        """
+
+        if self.shared_agent_params.lora_alpha is not None:
+            if self.shared_agent_params.lora_alpha_scale is not None:
+                raise ValueError(
+                    "Both `lora_alpha` and `lora_alpha_scale` are set in "
+                    "the shared agent parameters. Only one of these should be set."
+                )
+            return self.shared_agent_params.lora_alpha
+        elif self.shared_agent_params.lora_alpha_scale is not None:
+            if not (
+                self.shared_agent_params.lora_alpha_scale
+                * self.shared_agent_params.lora_rank
+            ).is_integer():
+                raise ValueError(
+                    f"The product of `lora_alpha_scale` "
+                    f"({self.shared_agent_params.lora_alpha_scale}) and `lora_rank` "
+                    f"({self.shared_agent_params.lora_rank}) must be an integer, but "
+                    f"got a non-integer value."
+                )
+            return int(
+                self.shared_agent_params.lora_alpha_scale
+                * self.shared_agent_params.lora_rank
+            )
+        else:
+            raise ValueError(
+                "Neither `lora_alpha` nor `lora_alpha_scale` are set in "
+                "the shared agent parameters. One of these should be set."
+            )
 
     def __init__(
         self,
@@ -544,8 +649,22 @@ class PureTextSharedModelGroup(ABC):
         self.fine_tune_job_id: Optional[str] = None
         self.fine_tuned_model_name: Optional[str] = None
 
+    async def eval(self):
+        """Set the agent group to evaluation mode.
+
+        This method may be overridden by subclasses if anything needs to be done when
+        the agent group is set to evaluation mode.
+        """
+
+    async def train(self):
+        """Set the agent group to training mode.
+
+        This method may be overridden by subclasses if anything needs to be done when
+        the agent group is set to training mode.
+        """
+
     @abstractmethod
-    def create_supervised_fine_tune_job(
+    async def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
         guess_replaced_rollouts: dict[str, NestedArrayDict] = {},
@@ -568,9 +687,8 @@ class PureTextSharedModelGroup(ABC):
         """
 
     @abstractmethod
-    def create_dpo_fine_tune_job(
+    async def create_dpo_fine_tune_job(
         self,
-        timesteps_per_agent: dict[str, NestedArrayDict],
         positive_examples_per_agent: dict[str, NestedArrayDict],
         negative_examples_per_agent: dict[str, NestedArrayDict],
         job_name: Optional[str] = None,
@@ -579,29 +697,32 @@ class PureTextSharedModelGroup(ABC):
 
         Parameters
         ----------
-        timesteps_per_agent : dict[str, NestedArrayDict]
-            The data for each agent in the group. Each agent's data is a nested
-            dictionary of arrays, which are timesteps selected from the rollouts.
         positive_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the preferred response for each of the timesteps in
-            ``timesteps_per_agent``.
+            ``timesteps_per_agent``. Each is a nested array dict with batch size
+            (timestep, ) rather than the usual (batch, round), because we have selected
+            timesteps from the first two dimensions of the batch.
         negative_examples_per_agent : dict[str, NestedArrayDict]
             The next timestep in the non-preferred response for each of the timesteps in
-            ``timesteps_per_agent``.
+            ``timesteps_per_agent``. Each is a nested array dict with batch size
+            (timestep, ) rather than the usual (batch, round), because we have selected
+            timesteps from the first two dimensions of the batch.
+        job_name : str, optional
+            A name for the job, to make it more easily identifiable.
         """
 
     @abstractmethod
-    def get_fine_tune_job_status(
+    async def get_fine_tune_job_status(
         self,
     ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
         """Get the status of the fine-tune job."""
 
     @abstractmethod
-    def get_fine_tune_job_error_repr(self) -> str:
+    async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job."""
 
     @abstractmethod
-    def switch_to_next_model(self):
+    async def switch_to_next_model(self):
         """Switch to the next model after fine-tuning."""
 
     def set_state(self, checkpoint: PureTextSharedModelGroupState):
@@ -904,10 +1025,16 @@ class PureTextCombinedWhole(CombinedWhole, ABC):
     """Base class for modules which combine whole pure-text agents together."""
 
     @abstractmethod
-    def forward(
+    async def forward(
         self, data: NestedArrayDict, environment: PureTextEnvironment
     ) -> NestedArrayDict:
         """Run a forward pass through all the agents and combine the output."""
+
+    async def __call__(
+        self, data: NestedArrayDict, environment: PureTextEnvironment
+    ) -> NestedArrayDict:
+        """Run a forward pass through all the agents and combine the output."""
+        return await self.forward(data, environment)
 
 
 class CombinedTensorDictAgentPart(CombinedAgentPart, TensorDictModuleBase, ABC):
@@ -1467,7 +1594,8 @@ class Agent(ABC):
             != self.agent_params.agent_lr_factor.critic
         ):
             raise ValueError(
-                "The agent learning rate factor for the actor and critic must be the same if the body is shared."
+                "The agent learning rate factor for the actor and critic must be the "
+                "same if the body is shared."
             )
         if (
             self.hyper_params.rl.use_shared_body
@@ -1475,7 +1603,8 @@ class Agent(ABC):
             != self.agent_params.body_lr_factor.critic
         ):
             raise ValueError(
-                "The body learning rate factor for the actor and critic must be the same if the body is shared."
+                "The body learning rate factor for the actor and critic must be the "
+                "same if the body is shared."
             )
 
         # The learning rate of the whole agent

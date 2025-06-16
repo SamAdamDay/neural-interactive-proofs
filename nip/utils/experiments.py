@@ -22,16 +22,23 @@ import logging
 from functools import partial
 import multiprocessing
 from dataclasses import dataclass
+from pathlib import Path
+import json
+
+import json5
+
+import yaml
 
 from sklearn.model_selection import ParameterGrid
 
 import torch
 
 import wandb
-
 from wandb import AlertLevel as WandbAlertLevel
 
 from tqdm import tqdm
+
+from pydantic import TypeAdapter
 
 from tqdm_multiprocess.logger import setup_logger_tqdm
 from tqdm_multiprocess import TqdmMultiProcessPool
@@ -39,6 +46,11 @@ from tqdm_multiprocess.std import init_worker
 
 from nip.run import PreparedExperimentInfo
 from nip.utils.env import get_env_var
+from nip.utils.data import flatten_dict_keys
+from nip.utils.types import ExperimentConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 def _identity(string: str) -> str:
@@ -139,8 +151,10 @@ class ExperimentFunctionArguments:
         A name for the experiment that is common to all runs.
     tqdm_func : callable
         A function used to create a tqdm progress bar.
-    child_logger_adapter : logging.Logger
-        The logger adapter to use for logging.
+    global_tqdm_step_fn : callable
+        A function used to update the global progress bar.
+    log_level : int
+        The log level to use for the experiment. Can be used with ``logging.setLevel``.
     """
 
     combo: dict
@@ -148,8 +162,8 @@ class ExperimentFunctionArguments:
     cmd_args: Namespace
     common_run_name: str
     tqdm_func: callable
-    child_logger_adapter: logging.Logger
     global_tqdm_step_fn: callable = lambda: ...
+    log_level: int = logging.INFO
 
 
 class HyperparameterExperiment(ABC):
@@ -160,14 +174,16 @@ class HyperparameterExperiment(ABC):
 
     def __init__(
         self,
-        param_grid: dict,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
+        param_grid: Optional[dict] = None,
         run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         experiment_name: str = "EXPERIMENT",
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         arg_parser_description: str = "Run hyperparameter experiments",
+        default_config_filename: Optional[str] = None,
+        config_file_base_path: Optional[str | Path] = None,
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
         add_run_infix_argument: bool = True,
@@ -179,12 +195,19 @@ class HyperparameterExperiment(ABC):
                     return f"{experiment_name.lower()}"
                 return f"{experiment_name.lower()}_{combo_index}"
 
-        self.param_grid = param_grid
+        if param_grid is not None:
+            self.param_grid = flatten_dict_keys(param_grid, separator=".")
+        else:
+            self.param_grid = None
         self.experiment_fn = experiment_fn
         self.run_id_fn = run_id_fn
         self.experiment_name = experiment_name
         self.run_preparer_fn = run_preparer_fn
         self.allow_resuming_wandb_run = allow_resuming_wandb_run
+
+        if config_file_base_path is None:
+            config_file_base_path = Path.cwd()
+        self.config_file_base_path = Path(config_file_base_path)
 
         if default_wandb_project is None:
             default_wandb_project = get_env_var("WANDB_PROJECT", "")
@@ -195,20 +218,44 @@ class HyperparameterExperiment(ABC):
             formatter_class=ArgumentDefaultsHelpFormatter,
         )
 
+        if self.param_grid is None:
+
+            if default_config_filename is not None:
+                default_kwarg = {"default": default_config_filename}
+            else:
+                default_kwarg = {}
+
+            if config_file_base_path is not None:
+                relative_text = f" (relative to {str(config_file_base_path)!r})"
+            else:
+                relative_text = ""
+
+            self.parser.add_argument(
+                "--config-file",
+                "-c",
+                type=str,
+                help=f"The path to the file containing the hyperparameter grid"
+                f"{relative_text}",
+                **default_kwarg,
+            )
+
+            self.parser.epilog = (
+                "The config file should be a JSON, JSON5, or YAML file containing a "
+                "dictionary with keys 'kind' and 'parameters'. If 'kind' is "
+                "'single_experiment', then 'parameters' should be a dictionary "
+                "with the hyperparameters to use. If 'kind' is 'grid', then "
+                "'parameters' should be a dictionary with keys as hyperparameter names "
+                "and values as lists of values to try."
+            )
+
         # Add parser arguments for controlling logging output
         self.parser.add_argument(
             "-d", "--debug", help="Print debug messages", action="store_true"
         )
         self.parser.add_argument(
-            "-v",
-            "--verbose",
-            help="Print additional info messages",
-            action="store_true",
-        )
-        self.parser.add_argument(
             "-q",
             "--quiet",
-            help="Print less output",
+            help="Print less output (set log level to WARNING)",
             action="store_true",
         )
 
@@ -271,7 +318,7 @@ class HyperparameterExperiment(ABC):
         self.cmd_args: Optional[Namespace] = None
 
     @abstractmethod
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         """Run the experiment.
 
         This is the function that actually runs the experiment, and should be
@@ -287,14 +334,14 @@ class HyperparameterExperiment(ABC):
         return self.run_id_fn(None, self.cmd_args)
 
     @property
-    def combinations(self) -> Iterable[dict]:
+    def combinations(self) -> ParameterGrid:
         """An iterator over the combinations of hyperparameters."""
         return ParameterGrid(self.param_grid)
 
     @property
     def enumerated_combinations(self) -> Iterable[tuple[int, dict]]:
         """An iterator over the combinations of hyperparameters plus an enumeration."""
-        return enumerate(ParameterGrid(self.param_grid))
+        return enumerate(self.combinations)
 
     def check_no_extant_runs(self):
         """Make sure there are no runs with the same ID as any run in this experiment.
@@ -332,26 +379,23 @@ class HyperparameterExperiment(ABC):
     def run(self):
         """Run the experiment."""
 
-        # Get the arguments
         self.cmd_args = self.parser.parse_args()
 
-        # Check that no runs with the same ID already exist
+        if "config_file" in self.cmd_args:
+            self._load_param_grid(self.cmd_args.config_file)
+
         self.check_no_extant_runs()
 
-        # Set up the logger
-        base_logger = logging.getLogger(__name__)
         setup_logger_tqdm(formatter=self.logging_formatter)
 
-        # Set the log level inside the experiment function
         if self.cmd_args.debug:
             self.experiment_log_level = logging.DEBUG
-        elif self.cmd_args.verbose:
+        elif not self.cmd_args.quiet:
             self.experiment_log_level = logging.INFO
         else:
             self.experiment_log_level = logging.WARNING
 
-        # Run the experiment
-        self._run(base_logger)
+        self._run()
 
         # Send a W&B alert to say the experiment is finished
         if self.cmd_args.use_wandb:
@@ -364,12 +408,103 @@ class HyperparameterExperiment(ABC):
             wandb.alert(
                 title=f"{self.common_run_name} finished",
                 text=(
-                    f"This hyperparameter experiment for {self.experiment_name}"
+                    f"The hyperparameter experiment for {self.experiment_name!r}"
                     f" has finished."
                 ),
                 level=WandbAlertLevel.INFO,
             )
             dummy_run.finish()
+
+    def _load_param_grid(self, config_filename: str):
+        """Load the hyperparameter grid from a config file.
+
+        Parameters
+        ----------
+        config_filename : str
+            The path to the config file given as a command line argument. If this is an
+            absolute path, it will be used as is. If it is a relative path, it will be
+            resolved relative to the config_file_base_path given in the constructor.
+
+        Raises
+        ------
+        ValueError
+            If the config file format is not supported, or the content of the file
+            does not match the expected format.
+        """
+
+        file_path = self.config_file_base_path / config_filename
+        extension = file_path.suffix.lower()
+
+        if extension == ".json":
+            with open(file_path, "r") as f:
+                config: ExperimentConfig = json.load(f)
+        elif extension == ".json5":
+            with open(file_path, "r") as f:
+                config: ExperimentConfig = json5.load(f)
+        elif extension in (".yaml", ".yml"):
+            with open(file_path, "r") as f:
+                config: ExperimentConfig = yaml.safe_load(f)
+        else:
+            raise ValueError(
+                f"Unsupported config file format: {extension!r}. "
+                f"Supported formats are: .json, .json5, .yaml, .yml"
+            )
+
+        TypeAdapter(ExperimentConfig).validate_python(config)
+
+        if "kind" not in config or "parameters" not in config:
+            raise ValueError(
+                "The config file must contain a dictionary with keys 'kind' and "
+                "'parameters'."
+            )
+        if not isinstance(config["parameters"], dict):
+            raise ValueError(
+                "The 'parameters' key in the config file must be a dictionary."
+            )
+
+        flattened_param_grid = flatten_dict_keys(config["parameters"], separator=".")
+
+        if config["kind"] == "single_experiment":
+            self.param_grid = {
+                key: [value] for key, value in flattened_param_grid.items()
+            }
+        elif config["kind"] == "grid":
+            self.param_grid = flattened_param_grid
+        else:
+            raise ValueError(
+                f"Unsupported config file kind: {config['kind']!r}. "
+                "Supported kinds are: 'single_experiment', 'grid'."
+            )
+
+    def _setup_logger(self, combo_index: int, num_combos: int):
+        """Set up the logger for a single run.
+
+        Parameters
+        ----------
+        combo_index : int
+            The index of the current combination in the list of combinations.
+        num_combos : int
+            The total number of combinations.
+        """
+
+        # The root logger is set to WARNING, so that we don't get too much output from
+        # other packages. The package-level logger is configured separately.
+        logging.getLogger().setLevel(logging.WARNING)
+
+        package_logger = logging.getLogger(__name__.partition(".")[0])
+        package_logger.setLevel(self.experiment_log_level)
+        package_logger.propagate = False
+
+        handler = logging.StreamHandler()
+
+        info_prefix = f"[{combo_index+1}/{num_combos}]"
+        formatter = MultiLineFormatter(
+            fmt=f"[%(asctime)s %(levelname)s] {info_prefix} %(message)s",
+            datefmt="%x %X",
+        )
+        handler.setFormatter(formatter)
+
+        package_logger.addHandler(handler)
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):
@@ -389,12 +524,14 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
 
     Parameters
     ----------
-    param_grid : dict
-        A dictionary mapping hyperparameter names to lists of values to try.
     experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
         experiment. The arguments are specified in the ``ExperimentFunctionArguments``
         dataclass.
+    param_grid : dict, optional
+        A dictionary mapping hyperparameter names to lists of values to try. If not
+        given, a positional argument "config_file" will be added to the parser,
+        and this will be used to load the hyperparameter grid from a config file.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
@@ -421,6 +558,15 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         The name of the experiment.
     arg_parser_description : str, default="Run hyperparameter experiments sequentially"
         The description of the argument parser.
+    default_config_filename : Optional[str], default=None
+        The default config filename to use if the param_grid is not given. If None, no
+        default is set, and the user must provide a config file as a command line
+        argument.
+    config_file_base_path : Optional[str | Path], default=None
+        The base path to use for the config file. If None, the current working
+        directory is used. If the config file is specified as a relative path, it
+        will be resolved relative to this base path. If this is an absolute path, it
+        will be used as is.
     default_wandb_project : Optional[str], default=None
         The default W&B project to use. If None, the default is to use the WANDB_PROJECT
         environment variable.
@@ -435,16 +581,18 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
 
     def __init__(
         self,
-        param_grid: dict,
         experiment_fn: Callable[
             [dict, str, Namespace, Callable, logging.LoggerAdapter, str], None
         ],
+        param_grid: Optional[dict] = None,
         run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
         arg_parser_description: str = "Run hyperparameter experiments sequentially",
+        default_config_filename: Optional[str] = None,
+        config_file_base_path: Optional[str | Path] = None,
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
         add_run_infix_argument: bool = True,
@@ -457,6 +605,8 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
             arg_parser_description=arg_parser_description,
+            config_file_base_path=config_file_base_path,
+            default_config_filename=default_config_filename,
             default_wandb_project=default_wandb_project,
             allow_resuming_wandb_run=allow_resuming_wandb_run,
             add_run_infix_argument=add_run_infix_argument,
@@ -490,35 +640,22 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         combo: dict,
         combo_index: int,
         cmd_args: Namespace,
-        base_logger: logging.Logger,
     ) -> bool:
         """Run an experiment for a single combination of hyperparameters."""
-
-        info_prefix = f"[{combo_index}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
 
-        # Set up the logger
-        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
-        child_logger.setLevel(self.experiment_log_level)
-        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
-
-        # The tqdm function to use
-        tqdm_func = partial(
-            tqdm,
-            bar_format=info_prefix + "{desc}: {percentage:3.0f}%|{bar}{r_bar}",
-        )
+        self._setup_logger(combo_index, len(combinations))
 
         # Print the run_id and the hyper-parameters
-        if not cmd_args.quiet:
-            base_logger.info("")
-            base_logger.info("=" * self.output_width)
-            title = f"| {self.experiment_name} | Run ID: {run_id}"
-            title += (" " * (self.output_width - 1 - len(title))) + "|"
-            title = textwrap.fill(title, self.output_width)
-            base_logger.info(title)
-            base_logger.info("=" * self.output_width)
+        logger.info("")
+        logger.info("=" * self.output_width)
+        title = f"| {self.experiment_name} | Run ID: {run_id}"
+        title += (" " * (self.output_width - 1 - len(title))) + "|"
+        title = textwrap.fill(title, self.output_width)
+        logger.info(title)
+        logger.info("=" * self.output_width)
 
         # Run the experiment
         self.experiment_fn(
@@ -526,15 +663,15 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 combo=combo,
                 run_id=run_id,
                 cmd_args=cmd_args,
-                tqdm_func=tqdm_func,
-                child_logger_adapter=child_logger_adapter,
+                tqdm_func=tqdm,
                 common_run_name=self.common_run_name,
+                log_level=self.experiment_log_level,
             )
         )
 
         return True
 
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         cmd_args = self.cmd_args
 
         # Filter to combos
@@ -560,30 +697,25 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
                 # Set the status of the current run to failed until proven otherwise
                 run_results[i] = "FAILED"
 
-                self._run_single_experiment(
-                    combinations, combo, combo_index, cmd_args, base_logger
-                )
+                self._run_single_experiment(combinations, combo, combo_index, cmd_args)
 
                 run_results[i] = "SUCCEEDED"
 
         finally:
             # Print a summary of the experiment results
-            if not cmd_args.quiet:
-                base_logger.info("")
-                base_logger.info("")
-                base_logger.info("=" * self.output_width)
-                title = (
-                    f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
-                )
-                title += (" " * (self.output_width - 1 - len(title))) + "|"
-                title = textwrap.fill(title, self.output_width)
-                base_logger.info(title)
-                base_logger.info("=" * self.output_width)
-                for result, (combo_num, combo) in zip(run_results, combinations):
-                    base_logger.info("")
-                    base_logger.info(f"COMBO {combo_num}")
-                    base_logger.info(textwrap.fill(str(combo)))
-                    base_logger.info(result)
+            logger.info("")
+            logger.info("")
+            logger.info("=" * self.output_width)
+            title = f"| SUMMARY | GROUP {cmd_args.combo_num}/{cmd_args.combo_groups}"
+            title += (" " * (self.output_width - 1 - len(title))) + "|"
+            title = textwrap.fill(title, self.output_width)
+            logger.info(title)
+            logger.info("=" * self.output_width)
+            for result, (combo_num, combo) in zip(run_results, combinations):
+                logger.info("")
+                logger.info(f"COMBO {combo_num}")
+                logger.info(textwrap.fill(str(combo)))
+                logger.info(result)
 
 
 class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
@@ -601,12 +733,14 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
     Parameters
     ----------
-    param_grid : dict
-        A dictionary mapping hyperparameter names to lists of values to try.
     experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
         experiment. The arguments are specified in the ``ExperimentFunctionArguments``
         dataclass.
+    param_grid : dict, optional
+        A dictionary mapping hyperparameter names to lists of values to try. If not
+        given, a positional argument "config_file" will be added to the parser,
+        and this will be used to load the hyperparameter grid from a config file.
     run_id_fn : Callable[[int, Namespace], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
@@ -633,6 +767,15 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         The name of the experiment.
     arg_parser_description : str, default="Run hyperparameter experiments in parallel"
         The description of the argument parser.
+    default_config_filename : Optional[str], default=None
+        The default config filename to use if the param_grid is not given. If None, no
+        default is set, and the user must provide a config file as a command line
+        argument.
+    config_file_base_path : Optional[str | Path], default=None
+        The base path to use for the config file. If None, the current working
+        directory is used. If the config file is specified as a relative path, it
+        will be resolved relative to this base path. If this is an absolute path, it
+        will be used as is.
     default_wandb_project : Optional[str], default=None
         The default W&B project to use. If None, the default is to use the WANDB_PROJECT
         environment variable.
@@ -647,14 +790,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
 
     def __init__(
         self,
-        param_grid: dict,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
+        param_grid: Optional[dict] = None,
         run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
         experiment_name: str = "EXPERIMENT",
         arg_parser_description: str = "Run hyperparameter experiments in parallel",
+        default_config_filename: Optional[str] = None,
+        config_file_base_path: Optional[str | Path] = None,
         default_wandb_project: Optional[str] = None,
         allow_resuming_wandb_run: bool = False,
         add_run_infix_argument: bool = True,
@@ -667,6 +812,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             experiment_name=experiment_name,
             run_preparer_fn=run_preparer_fn,
             arg_parser_description=arg_parser_description,
+            config_file_base_path=config_file_base_path,
+            default_config_filename=default_config_filename,
             default_wandb_project=default_wandb_project,
             allow_resuming_wandb_run=allow_resuming_wandb_run,
             add_run_infix_argument=add_run_infix_argument,
@@ -703,7 +850,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         combinations: list[dict],
         combo_index: int,
         cmd_args: Namespace,
-        base_logger: logging.Logger,
         fine_grained_global_tqdm: bool,
         tqdm_func: Callable,
         global_tqdm: tqdm,
@@ -718,8 +864,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             The index of the current combination.
         cmd_args : Namespace
             The command line arguments.
-        base_logger : logging.Logger
-            The base logger.
         fine_grained_global_tqdm : bool
             Whether to update the global progress bar after each iteration. If False,
             the global progress bar is only updated after each experiment is finished.
@@ -729,19 +873,16 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         global_tqdm : tqdm
             The global progress bar. This argument is provided by ``tqdm_multiprocess``.
         """
-        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
 
         # Create a unique run_id for this run
         run_id = self.run_id_fn(combo_index, cmd_args)
 
-        # Set up the logger
-        child_logger = logging.getLogger(f"{base_logger.name}.{run_id}")
-        child_logger.setLevel(self.experiment_log_level)
-        child_logger_adapter = PrefixLoggerAdapter(child_logger, info_prefix)
+        self._setup_logger(combo_index, len(combinations))
 
         # The tqdm function to use. Set the leave argument to False because otherwise
         # tqdm doesn't display multiple progress bars properly due to a bug
         # https://github.com/tqdm/tqdm/issues/1496
+        info_prefix = f"[{combo_index+1}/{len(combinations)}] "
         tqdm_func = partial(
             tqdm_func,
             leave=False,
@@ -765,9 +906,9 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
                 run_id=run_id,
                 cmd_args=cmd_args,
                 tqdm_func=tqdm_func,
-                child_logger_adapter=child_logger_adapter,
                 global_tqdm_step_fn=global_tqdm_step_fn,
                 common_run_name=self.common_run_name,
+                log_level=self.experiment_log_level,
             )
         )
 
@@ -776,11 +917,11 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
             global_tqdm.update(1)
 
         # Log that this run is finished
-        base_logger.info(f"{info_prefix}{run_id} finished")
+        logger.info(f"{info_prefix}{run_id} finished")
 
         return True
 
-    def _run(self, base_logger: logging.Logger):
+    def _run(self):
         cmd_args = self.cmd_args
 
         # Set the torch multiprocessing start method to spawn, to avoid issues with CUDA
@@ -813,7 +954,6 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
                     combinations,
                     combo_index,
                     cmd_args,
-                    base_logger,
                     fine_grained_global_tqdm,
                 ),
             )

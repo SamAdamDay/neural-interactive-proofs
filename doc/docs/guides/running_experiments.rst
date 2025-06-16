@@ -98,8 +98,6 @@ not (in theory) affect the results of the experiment. The most important ones ar
        default.
    * - ``run_id``
      - The ID of the run to log the experiment to.
-   * - ``num_rollout_workers``
-     - The number of workers to use for collecting rollout samples in text-based tasks.
 
 See the documentation for :func:`run_experiment <nip.run.run_experiment>` for the full
 list of arguments.
@@ -133,40 +131,52 @@ API reference :doc:`../reference/scripts` for a complete list of scripts.
    * - :doc:`solo_agents_ic.py <../reference/generated/scripts/solo_agents_ic>`
      - Do supervised training of a single agent on the :term:`image classification
        <image classification scenario>` task.
-   * - :doc:`ei_cv.py <../reference/generated/scripts/ei_cv>`
-     - Run an expert iteration (EI) experiment with the :term:`code validation <code
-       validation scenario>` task.
+   * - :doc:`cv_experiment.py <../reference/generated/scripts/cv_experiment>`
+     - Run an experiment with the :term:`code validation <code validation scenario>`
+       task using a configuration file.
 
-Let's consider the :doc:`ei_cv.py <../reference/generated/scripts/ei_cv>` script. This
-script contains the variable ``param_grid``, which is a dictionary, where the keys are
-hyper-parameters and the values are lists of values for those hyper-parameters. The
-script will run an experiment for each combination of hyper-parameters in the grid.
+Let's consider the :doc:`cv_experiment.py
+<../reference/generated/scripts/cv_experiment>` script. This script takes the
+``-config-file`` argument, which is a path to a JSON, JSON5, or YAML file. This file
+should contain a dictionary with keys "kind" and "parameters". If "kind" is
+"single_experiment", then "parameters" should be a dictionary with the hyperparameters
+to use. If "kind" is "grid", then "parameters" should be a dictionary with keys as
+hyperparameter names and values as lists of values to try. The script will run an
+experiment for each combination of hyper-parameters in the grid.
 
-For example, the following grid will run 4 experiments, running the NIP and Debate
-protocols with the "introductory" and "interview" level code validation datasets:
+For example, the following JSON file defines a grid will run 4 expert iteration (EI)
+experiments, running the NIP and Debate protocols with the "introductory" and
+"interview" level code validation datasets:
 
-.. code-block:: python
+.. code-block:: json
+    :caption: ``scripts/config/cv_experiment/config.json``
 
-    param_grid = dict(
-      interaction_protocol=["nip", "debate"],
-      dataset_name=["lrhammond/buggy-apps"],
-      apps_difficulty=["introductory", "interview"],
-      num_iterations=[8],
-      rollouts_per_iteration=[200],
-      ...
-    )
+    {
+      "kind": "grid",
+      "parameters": {
+        "trainer": ["pure_text_ei"],
+        "interaction_protocol": ["nip", "debate"],
+        "dataset_name": ["lrhammond/buggy-apps"],
+        "apps_difficulty": ["introductory", "interview"],
+        "num_iterations": [8],
+        "rollouts_per_iteration": [200]
+      }
+    }
 
-The experiment (which we'll call ``test_difficulty_levels``) can now be run by calling the script with the following command:
+The experiment (which we'll call ``test_difficulty_levels``) can now be run by calling
+the script with the following command:
 
 .. code-block:: bash
 
-    python scripts/ei_cv.py --use_wandb test_difficulty_levels
+    python scripts/cv_experiment.py --use-wandb --config-file config.json test_difficulty_levels
 
 This will run the experiments sequentially, logging data to Weights & Biases
-with run IDs ``test_difficulty_levels_0``, ``test_difficulty_levels_1``, etc.
+with run IDs ``cv_test_difficulty_levels_0``, ``cv_test_difficulty_levels_1``, etc.
 
-See the :doc:`documentation for the script <../reference/generated/scripts/ei_cv>` for more information on how to run it, or run:
+See the :doc:`documentation for the script
+<../reference/generated/scripts/cv_experiment>` for more information on how to run it,
+or run:
 
 .. code-block:: bash
 
-    python scripts/ei_cv.py --help
+    python scripts/cv_experiment.py --help

@@ -18,7 +18,11 @@ from nip.parameters.parameters_base import (
     register_parameter_class,
     register_parameter_value_class,
 )
-from nip.parameters.types import ActivationType, ImageBuildingBlockType
+from nip.parameters.types import (
+    ActivationType,
+    ImageBuildingBlockType,
+    UseSupervisorType,
+)
 from nip.parameters.update_schedule import (
     AgentUpdateSchedule,
     ConstantUpdateSchedule,
@@ -454,10 +458,20 @@ class PureTextAgentParameters(AgentParameters):
 
     Parameters
     ----------
-    model_provider : Literal["OpenAI"]
+    model_provider : Literal["OpenAI", "SelfHosted", "OpenRouter"]
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.
+    language_model_server_scheme_host : str
+        The scheme and host of the language model server. If the model provider is
+        "SelfHosted", this controls the vLLM server and open-weight fine-tuning.
+    language_model_server_port : int
+        The port of the language model server. If the model provider is "SelfHosted",
+        this controls the vLLM server and open-weight fine-tuning.
+    vllm_server_port : int
+        The port of the vLLM server. This is used when the model provider is
+        "SelfHosted". Models are served by vLLM, which uses the
+        ``language_model_server_scheme_host`` scheme and host, and this port.
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
@@ -475,11 +489,59 @@ class PureTextAgentParameters(AgentParameters):
         The top-p value to use when sampling from the model. A value 0.1 means only the
         top 10% of tokens are considered when sampling. If ``None``, the model uses the
         default top-p value. Only one of ``temperature`` and ``top_p`` should be set.
+    repetition_penalty : float | None
+        Float that penalizes new tokens based on whether they appear in the prompt and
+        the generated text so far. Values > 1 encourage the model to use new tokens,
+        while values < 1 encourage the model to repeat tokens. Not all models support
+        this parameter.
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    dpo_beta : float | None
+        The beta parameter for to use when training the model with DPO. This is a float
+        between 0 and 2, which controls how strictly the new model will adhere to its
+        previous behaviour. If ``None``, the value is configured by the model provider.
+    use_lora : bool
+        Whether to a LoRA adapter when training the model :cite:p:`Yu2023`. A LoRA
+        adapter adds extra trainable parameters to the model, which are trained
+        separately from the base model. This allows faster training and smaller
+        checkpoints. Only relevant when using a self-hosted model.
+    lora_rank : int
+        The rank of the LoRA adapter, controlling the number of trainable parameters.
+        Usually a power of 2 between 4 and 256. This is a key hyperparameter to tune
+        when using LoRA. A higher rank means more capacity to learn new skills, but
+        requires higher quality data and more training time.
+    lora_alpha : int | None
+        The scaling factor for the LoRA adapter, for the strength of the adapter.
+        Typically either the same as the LoRA rank, or two times the LoRA rank. If
+        ``None``, the value is computed as ``lora_rank * lora_alpha_scale``. One of this
+        and ``lora_alpha_scale`` must be set, but not both.
+    lora_alpha_scale : float | None
+        Used to compute the LoRA alpha value. If ``lora_alpha`` is not set, this is
+        multiplied by the LoRA rank to compute the LoRA alpha value. One of this and
+        ``lora_alpha`` must be set, but not both.
+    lora_dropout : float
+        The dropout rate for the LoRA layers. This is applied to the LoRA layers in the
+        model, and is used to prevent overfitting.
+    stack_lora_adapters : bool
+        When training a model multiple times with LoRA, whether to stack the LoRA
+        adapters on top of each other, or to reuse the existing LoRA adapter.
+    system_prompt_template_path : str | None
+        This option allows specifying a custom system prompt template. If not provided,
+        the default system prompt template is used.
+    use_supervisor_message : UseSupervisorType
+        Whether and when to use a 'supervisor' message when generating responses. This
+        is a message which is appended to the chat history, with instructions for the
+        model. These instructions are already included in the system prompt, but this
+        can help improve the quality of the generated responses. Some models also
+        require at least one user message to be able to generate a response, and this
+        can be used to work around that. The options are listed in the
+        :const:`UseSupervisorType <nip.parameters.types.UseSupervisorType>` enum, and
+        specify when to use the supervisor message.
+    supervisor_name : str
+        The name of the user who sends the supervisor message.
     max_response_words : int
         In the system prompt, we say that the agent should respond with a message of at
         most this many words.
@@ -491,16 +553,34 @@ class PureTextAgentParameters(AgentParameters):
         invalid response.
     """
 
-    model_provider: Literal["OpenAI"] = "OpenAI"
+    model_provider: Literal["OpenAI", "SelfHosted", "OpenRouter"] = "OpenAI"
     model_name: str = "gpt-4o-mini-2024-07-18"
+    language_model_server_scheme_host: str = "http://localhost"
+    language_model_server_port: int = 5000
+    vllm_server_port: int = 8000
     use_dummy_api: bool = False
     shared_model_group: Optional[str] = None
 
     temperature: float | None = None
     top_p: float | None = None
+    repetition_penalty: float | None = None
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
+
+    dpo_beta: Optional[float] = None
+
+    use_lora: bool = True
+    lora_rank: int = 64
+    lora_alpha: Optional[int] = None
+    lora_alpha_scale: Optional[float] = 1.0
+    lora_dropout: float = 0.05
+    stack_lora_adapters: bool = False
+
+    system_prompt_template_path: str | None = None
+
+    use_supervisor_message: UseSupervisorType = "none"
+    supervisor_name: str = "Supervisor"
 
     max_response_words: int = 150
 
@@ -529,10 +609,12 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
 
     Parameters
     ----------
-    model_provider : Literal["OpenAI"]
+    model_provider : Literal["OpenAI", "SelfHosted", "OpenRouter"]
         The provider of the model and API to use.
     model_name : str
         The name of the model to use.
+    vllm_openai_base_url : str
+        When using vLLM's OpenAI-compatible server, this is the URL of the server
     use_dummy_api : bool
         Whether to use a dummy API instead of the real API. This is useful for testing
         the agent without making real API requests.
@@ -540,7 +622,8 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
         The group of agents which share the same model. When two agents share this
         value, they will use the same model inference. For fine-tuning, this model is
         trained on a copy of the rollouts and rewards for each agent in the group. When
-        this is ``None``, the agent is in a group on its own.
+        this is ``None``, the agent is in a group whose name is the same as the agent's
+        name.
     temperature : float | None
         The temperature to use when sampling from the model. If ``None``, the model uses
         the default temperature. Only one of ``temperature`` and ``top_p`` should be
@@ -549,11 +632,34 @@ class CodeValidationAgentParameters(PureTextAgentParameters):
         The top-p value to use when sampling from the model. A value 0.1 means only the
         top 10% of tokens are considered when sampling. If ``None``, the model uses the
         default top-p value. Only one of ``temperature`` and ``top_p`` should be set.
+    repetition_penalty : float | None
+        Float that penalizes new tokens based on whether they appear in the prompt and
+        the generated text so far. Values > 1 encourage the model to use new tokens,
+        while values < 1 encourage the model to repeat tokens. Not all models support
+        this parameter.
     fine_tune_from_scratch : bool
         Whether to fine-tune the model from scratch each iteration, or continue
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    dpo_beta : float | None
+        The beta parameter for to use when training the model with DPO. This is a float
+        between 0 and 2, which controls how strictly the new model will adhere to its
+        previous behaviour. If ``None``, the value is configured by the model provider.
+    system_prompt_template_path : str | None
+        This option allows specifying a custom system prompt template. If not provided,
+        the default system prompt template is used.
+    use_supervisor_message : UseSupervisorType
+        Whether and when to use a 'supervisor' message when generating responses. This
+        is a message which is appended to the chat history, with instructions for the
+        model. These instructions are already included in the system prompt, but this
+        can help improve the quality of the generated responses. Some models also
+        require at least one user message to be able to generate a response, and this
+        can be used to work around that. The options are listed in the
+        :const:`UseSupervisorType <nip.parameters.types.UseSupervisorType>` enum, and
+        specify when to use the supervisor message.
+    supervisor_name : str
+        The name of the user who sends the supervisor message.
     max_response_words : int
         In the system prompt, we say that the agent should respond with a message of at
         most this many words.
@@ -633,6 +739,10 @@ class AgentsParameters(dict[str, AgentParameters], ParameterValue):
             class_name: AgentParameters = cls._get_param_class_from_dict(
                 agent_params_dict
             )
+            if class_name is None:
+                raise ValueError(
+                    f"Cannot find class for agent parameters {agent_params_dict!r}"
+                )
             agent_params = class_name.from_dict(
                 agent_params_dict, ignore_extra_keys=ignore_extra_keys
             )

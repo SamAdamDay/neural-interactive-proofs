@@ -42,7 +42,6 @@ from torch import Tensor
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
-from tensordict.utils import NestedKey
 
 from einops import rearrange
 from einops.layers.torch import Rearrange, Reduce
@@ -91,7 +90,7 @@ from nip.utils.torch import (
     Print,
     TensorDictPrint,
 )
-from nip.utils.types import TorchDevice
+from nip.utils.types import TorchDevice, NestedKey
 from nip.image_classification.data import DATASET_WRAPPER_CLASSES
 from nip.image_classification.pretrained_models import PretrainedImageModel
 

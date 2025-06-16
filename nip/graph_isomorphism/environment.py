@@ -1,7 +1,6 @@
 """The graph isomorphism RL environment."""
 
 from typing import Optional
-from functools import cached_property
 from math import prod
 
 import torch
@@ -9,18 +8,12 @@ from torch import Tensor
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    BinaryDiscreteTensorSpec,
-    TensorSpec,
-    Box,
-)
+from torchrl.data import Categorical, Composite, Binary
+from torchrl.data.tensor_specs import TensorSpec, Box
 
 from einops import rearrange
 
-from nip.parameters import ScenarioType
-from nip.scenario_base import Environment, TensorDictEnvironment, TensorDictDataset
+from nip.scenario_base import Environment, TensorDictEnvironment
 from nip.factory import register_scenario_class
 from nip.utils.types import TorchDevice
 
@@ -243,7 +236,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
         """
         return (2, self.max_num_nodes)
 
-    def _get_observation_spec(self) -> CompositeSpec:
+    def _get_observation_spec(self) -> Composite:
         """Get the specification of the agent observations.
 
         Agents see the adjacency matrix and the messages sent so far. The "message"
@@ -251,7 +244,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
 
         Returns
         -------
-        observation_spec : CompositeSpec
+        observation_spec : Composite
             The observation specification.
         """
         observation_spec = super()._get_observation_spec()
@@ -266,7 +259,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
             dtype=self._int_dtype,
             device=self.device,
         )
-        observation_spec["node_mask"] = BinaryDiscreteTensorSpec(
+        observation_spec["node_mask"] = Binary(
             self.max_num_nodes,
             shape=(
                 self.num_envs,
@@ -276,7 +269,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
             dtype=torch.bool,
             device=self.device,
         )
-        observation_spec["message"] = DiscreteTensorSpec(
+        observation_spec["message"] = Categorical(
             self.max_num_nodes,
             shape=(
                 self.num_envs,
@@ -290,7 +283,7 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
         )
         return observation_spec
 
-    def _get_action_spec(self) -> CompositeSpec:
+    def _get_action_spec(self) -> Composite:
         """Get the specification of the agent actions.
 
         Each action space has shape (batch_size, num_agents). Each agent chooses both a
@@ -301,11 +294,11 @@ class GraphIsomorphismEnvironment(TensorDictEnvironment):
 
         Returns
         -------
-        action_spec : CompositeSpec
+        action_spec : Composite
             The action specification.
         """
         action_spec = super()._get_action_spec()
-        action_spec["agents"]["node_selected"] = DiscreteTensorSpec(
+        action_spec["agents"]["node_selected"] = Categorical(
             prod(self.main_message_space_shape),
             shape=(
                 self.num_envs,

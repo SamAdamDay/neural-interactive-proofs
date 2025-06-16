@@ -36,14 +36,16 @@ for scenario, analyser in ROLLOUT_ANALYSERS.keys():
         available_analysers.append(analyser)
 
 parser = ArgumentParser(
-    description=__doc__,
+    description=__doc__.partition("\n\n")[0],
+    epilog=__doc__.partition("\n\n")[2],
     formatter_class=ArgumentDefaultsHelpFormatter,
 )
 
 parser.add_argument(
-    "checkpoint_name",
+    "checkpoint_names",
     type=str,
-    help="The name of the checkpoint to analyse.",
+    nargs="+",
+    help="The name of the checkpoints to analyse.",
 )
 
 parser.add_argument(
@@ -77,20 +79,38 @@ parser.add_argument(
     default=False,
 )
 
-if __name__ == "__main__":
 
-    # Get the arguments
-    cmd_args = parser.parse_args()
+def analyse_checkpoint(
+    checkpoint_name: str,
+    analysers: list[str],
+    model_name: str,
+    overwrite: bool,
+    dry_run: bool,
+    wandb_api: wandb.Api,
+):
+    """Analyse a checkpoint.
 
-    # Try to download the checkpoint state
-    wandb_api = wandb.Api()
+    Parameters
+    ----------
+    checkpoint_name : str
+        The name of the checkpoint to analyse.
+    analysers : list[str]
+        The analysers to run.
+    model_name : str
+        The name of the model to use for the analysis.
+    overwrite : bool
+        Whether to overwrite existing analysis if extant.
+    dry_run : bool
+        Whether to do a dry run using a dummy API.
+    """
+
     checkpoint_dir = PureTextEiTrainer.get_checkpoint_base_dir_from_run_id(
-        cmd_args.checkpoint_name
+        checkpoint_name
     )
     artifact_name = (
         f"{wandb_entity}"
         f"/{wandb_cv_project}"
-        f"/{CHECKPOINT_STATE_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
+        f"/{CHECKPOINT_STATE_ARTIFACT_PREFIX}{checkpoint_name}"
         f":latest"
     )
     try:
@@ -111,7 +131,7 @@ if __name__ == "__main__":
     artifact_name = (
         f"{wandb_entity}"
         f"/{wandb_cv_project}"
-        f"/{ROLLOUTS_ARTIFACT_PREFIX}{cmd_args.checkpoint_name}"
+        f"/{ROLLOUTS_ARTIFACT_PREFIX}{checkpoint_name}"
         f":latest"
     )
     try:
@@ -135,9 +155,7 @@ if __name__ == "__main__":
     hyper_params = HyperParameters.from_dict(params_dict, ignore_extra_keys=True)
 
     # Build the experiment
-    settings = ExperimentSettings(
-        run_id=cmd_args.checkpoint_name, do_not_load_checkpoint=True
-    )
+    settings = ExperimentSettings(run_id=checkpoint_name, do_not_load_checkpoint=True)
     scenario_instance = build_scenario_instance(hyper_params, settings)
     trainer = build_trainer(hyper_params, scenario_instance, settings)
 
@@ -146,8 +164,31 @@ if __name__ == "__main__":
 
     # Do the analysis
     trainer.run_analysers(
-        cmd_args.analysers,
-        model_name=cmd_args.model_name,
-        overwrite=cmd_args.overwrite,
-        dry_run=cmd_args.dry_run,
+        analysers, model_name=model_name, overwrite=overwrite, dry_run=dry_run
     )
+
+
+if __name__ == "__main__":
+
+    # Get the arguments
+    cmd_args = parser.parse_args()
+
+    # Try to download the checkpoint state
+    wandb_api = wandb.Api()
+
+    num_checkpoints = len(cmd_args.checkpoint_names)
+    for checkpoint_id, checkpoint_name in enumerate(cmd_args.checkpoint_names):
+        print("=" * 80)  # noqa: T201
+        print(  # noqa: T201
+            f"[{checkpoint_id+1}/{num_checkpoints}] Analysing checkpoint "
+            f"{checkpoint_name!r}"
+        )
+        print("=" * 80)  # noqa: T201
+        analyse_checkpoint(
+            checkpoint_name,
+            cmd_args.analysers,
+            cmd_args.model_name,
+            cmd_args.overwrite,
+            cmd_args.dry_run,
+            wandb_api,
+        )

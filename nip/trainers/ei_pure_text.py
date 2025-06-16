@@ -3,11 +3,18 @@
 See :cite:t:`Anthony2017` for more information on EI.
 """
 
+from asyncio import TaskGroup
+import logging
+
 import numpy as np
 
 from nip.trainers.rl_pure_text_base import PureTextRlTrainer
 from nip.trainers.registry import register_trainer
+from nip.scenario_base.agents import PureTextSharedModelGroup
 from nip.utils.nested_array_dict import NestedArrayDict
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_trainer("pure_text_ei")
@@ -15,6 +22,11 @@ class PureTextEiTrainer(PureTextRlTrainer):
     """Expert Iteration (EI) trainer for text-based environments that only use APIs.
 
     See :cite:t:`Anthony2017` for more information on EI.
+
+    This implementation also includes a 'stabilised' version of EI
+    :cite:p:`Hammond2018`, which in a proportion of the rollouts replaces the verifier
+    guess with the true label (this proportion can be annealed over time). This helps
+    correct verifier bias towards either accepting or rejecting.
 
     Parameters
     ----------
@@ -26,7 +38,7 @@ class PureTextEiTrainer(PureTextRlTrainer):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
-    def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
+    async def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
         """Training stage: create fine-tune jobs for each agent.
 
         Parameters
@@ -35,16 +47,38 @@ class PureTextEiTrainer(PureTextRlTrainer):
             The rollouts sampled in this iteration.
         """
 
-        for group_name, shared_model_group in self.shared_model_groups.items():
+        async def create_fine_tune_job(
+            shared_model_group: PureTextSharedModelGroup,
+            group_name: str,
+            selected_rollouts_per_agent: dict[str, NestedArrayDict],
+            guess_replaced_rollouts: dict[str, NestedArrayDict],
+        ):
+            await shared_model_group.create_supervised_fine_tune_job(
+                selected_rollouts_per_agent,
+                guess_replaced_rollouts,
+                job_name=self._get_fine_tune_job_name(shared_model_group),
+            )
+            logger.info(f"Created fine-tune job for group {group_name!r}")
 
-            # Select the rollouts to fine-tune on for each agent in the shared model
-            # group. If the agent is a verifier, we take a proportion of the rollouts
-            # and replace the verifier guess with the true label.
-            selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
-            guess_replaced_rollouts: dict[str, NestedArrayDict] = {}
-            for agent_name in shared_model_group.agent_names:
+        async with TaskGroup() as task_group:
 
-                if agent_name in self.protocol_handler.verifier_names:
+            for group_name, shared_model_group in self.shared_model_groups.items():
+
+                if shared_model_group.shared_agent_params.freeze_agent:
+                    continue
+
+                # Select the rollouts to fine-tune on for each agent in the shared model
+                # group. If the agent is a verifier, we take a proportion of the
+                # rollouts and replace the verifier guess with the true label.
+                selected_rollouts_per_agent: dict[str, NestedArrayDict] = {}
+                guess_replaced_rollouts: dict[str, NestedArrayDict] = {}
+                for agent_name in shared_model_group.agent_names:
+
+                    if agent_name not in self.protocol_handler.verifier_names:
+                        selected_rollouts_per_agent[agent_name] = (
+                            self._select_rollouts_for_fine_tuning(rollouts, agent_name)
+                        )
+                        continue
 
                     replace_proportion = (
                         self._get_verifier_guess_replacement_proportion(
@@ -79,20 +113,14 @@ class PureTextEiTrainer(PureTextRlTrainer):
                         )
                     )
 
-                else:
-                    selected_rollouts_per_agent[agent_name] = (
-                        self._select_rollouts_for_fine_tuning(rollouts, agent_name)
+                task_group.create_task(
+                    create_fine_tune_job(
+                        shared_model_group,
+                        group_name,
+                        selected_rollouts_per_agent,
+                        guess_replaced_rollouts,
                     )
-
-            self.settings.logger.info(
-                f"Creating fine-tune job for group {group_name!r}"
-            )
-
-            shared_model_group.create_supervised_fine_tune_job(
-                selected_rollouts_per_agent,
-                guess_replaced_rollouts,
-                job_name=self._get_fine_tune_job_name(shared_model_group),
-            )
+                )
 
     def _select_rollouts_for_fine_tuning(
         self, rollouts: NestedArrayDict, agent_name: str

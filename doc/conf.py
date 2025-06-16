@@ -56,6 +56,7 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinxcontrib.autoprogram",
     "sphinxcontrib.mermaid",
+    "sphinxcontrib.httpdomain",
     "sphinx_math_dollar",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
@@ -98,6 +99,7 @@ intersphinx_mapping = {
     "torchvision": ("https://pytorch.org/vision/stable", None),
     "tensordict": ("https://pytorch.org/tensordict/stable", None),
     "torchrl": ("https://pytorch.org/rl/stable", None),
+    "jinja2": ("https://jinja.palletsprojects.com/en/stable/", None),
 }
 
 # -- Options for sphinxcontrib-bibtex ----------------------------------------------

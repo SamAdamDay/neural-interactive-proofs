@@ -9,7 +9,6 @@ from typing import ClassVar, Literal
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import random_split
 from torch.optim import Adam, Optimizer
 
 from tensordict import TensorDict
@@ -25,6 +24,8 @@ from nip.trainers.trainer_base import (
 from nip.trainers.registry import register_trainer
 from nip.parameters import AgentsParameters
 from nip.utils.maths import set_seed
+
+logger = logging.getLogger(__name__)
 
 
 @register_trainer("solo_agent")
@@ -56,18 +57,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         set_seed(self.hyper_params.seed)
         torch_generator = torch.Generator().manual_seed(self.hyper_params.seed)
 
-        if self.settings.logger is None:
-            self.settings.logger = logging.getLogger(__name__)
-
-        logger = self.settings.logger
-
         logger.info("Loading dataset and agents...")
-
-        dataset = self.scenario_instance.train_dataset
-        train_dataset, test_dataset = random_split(
-            dataset,
-            (1 - self.hyper_params.test_size, self.hyper_params.test_size),
-        )
 
         # Select the non-random agents
         agents_params = AgentsParameters(
@@ -100,7 +90,7 @@ class SoloAgentTrainer(TensorDictTrainer):
         with ExitStack() as stack:
             self._build_train_context(stack)
             self._run_train_loop(
-                train_dataset,
+                self.scenario_instance.train_dataset,
                 agents_params,
                 agents,
                 agent_models,
@@ -112,12 +102,11 @@ class SoloAgentTrainer(TensorDictTrainer):
         with ExitStack() as stack:
             self._build_train_context(stack)
             self._run_test_loop(
-                test_dataset,
+                self.scenario_instance.test_dataset,
                 agents_params,
                 agents,
                 agent_models,
                 as_pretraining,
-                logger,
             )
 
     @attach_progress_bar(lambda self: self.hyper_params.solo_agent.num_epochs)
@@ -234,7 +223,6 @@ class SoloAgentTrainer(TensorDictTrainer):
         agents: dict[str, Agent],
         agent_models: dict[str, TensorDictSequential],
         as_pretraining: bool,
-        logger: logging.Logger,
     ):
         """Run the testing loop.
 
@@ -250,8 +238,6 @@ class SoloAgentTrainer(TensorDictTrainer):
             A dictionary of the actual models we're testing.
         as_pretraining : bool
             Whether we're testing the agents as a pretraining step.
-        logger : logging.Logger
-            The logger to use.
         """
 
         test_loader = TensorDictDataLoader(

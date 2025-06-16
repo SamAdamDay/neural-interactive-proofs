@@ -20,7 +20,6 @@ from torchrl.objectives import (
 
 from tensordict import TensorDictBase, TensorDict
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.utils import NestedKey
 
 from nip.parameters import SpgVariantType, LrFactors
 from nip.scenario_base.agents import Agent
@@ -33,6 +32,7 @@ from nip.utils.torch import flatten_batch_dims
 from nip.utils.distributions import CompositeCategoricalDistribution
 from nip.utils.tensordict import get_key_batch_size
 from nip.utils.data import dict_update_add
+from nip.utils.types import NestedKey
 
 
 class Objective(LossModule, ABC):

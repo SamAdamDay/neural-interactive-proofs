@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from nip.parameters.parameters_base import SubParameters, register_parameter_class
-from nip.parameters.types import GuessType
+from nip.parameters.types import GuessType, VerifierDecisionSpectrumType
 
 
 @register_parameter_class
@@ -23,10 +23,23 @@ class CommonProtocolParameters(SubParameters):
         protocol.
     prover_reward : float
         The reward given to the prover when the verifier guesses "accept".
+    prover_invalid_response_penalty : float | None
+        The reward given to a prover when it gives an invalid response. If ``None``,
+        provers are not penalized for invalid responses. This is only relevant in
+        pure-text scenarios, where the prover is expected to give a text response.
     verifier_reward : float
         The reward given to the verifier when it guesses correctly.
     verifier_incorrect_penalty : float
         The penalty given to the verifier when it guesses incorrectly.
+    verifier_neither_accept_nor_reject_reward : float | None
+        The reward given to the verifier when it neither accepts nor rejects. If
+        ``None``, the mid-point between ``verifier_reward`` and
+        ``verifier_incorrect_penalty`` is used. This value is only relevant for
+        text-based scenarios. Note that when using a verifier decision spectrum (see
+        ``verifier_decision_spectrum``), reward for intermediate decisions is computed
+        by interpolating piece-wise linearly between ``verifier_incorrect_penalty``,
+        ``verifier_neither_accept_nor_reject_reward`` and ``verifier_reward``. So in
+        this case you probably want to set this to ``None``.
     verifier_terminated_penalty : float
         The reward given to the verifier if the episode terminates before it guesses.
     verifier_no_guess_reward : float
@@ -39,14 +52,20 @@ class CommonProtocolParameters(SubParameters):
         guess using its policy.
     zero_knowledge: bool
         Whether to use a zero-knowledge version of the protocol.
+    verifier_decision_spectrum : VerifierDecisionSpectrumType
+        The scale used by the verifier to make its decision. This allows for more
+        nuanced decisions than just "accept" or "reject". This is only relevant for
+        text-based scenarios.
     """
 
     verifier_first: bool = True
     randomize_prover_stance: bool = False
 
     prover_reward: float = 1.0
+    prover_invalid_response_penalty: float | None = None
     verifier_reward: float = 1.0
     verifier_incorrect_penalty: float = -1.0
+    verifier_neither_accept_nor_reject_reward: float | None = None
     verifier_terminated_penalty: float = -1.0
     verifier_no_guess_reward: float = 0.0
     shared_reward: bool = False
@@ -54,6 +73,8 @@ class CommonProtocolParameters(SubParameters):
     force_guess: Optional[GuessType] = None
 
     zero_knowledge: bool = False
+
+    verifier_decision_spectrum: VerifierDecisionSpectrumType = "accept_reject"
 
 
 @dataclass
@@ -109,7 +130,7 @@ class DebateProtocolParameters(LongProtocolParameters):
         When the provers send messages sequentially, whether prover 0 goes first.
     randomize_channel_order : bool
         Whether to randomize the order of the channels when prompting the verifier. Only
-        relevant in text-based protocols.
+        relevant in text-based scenarios.
     """
 
     sequential: bool = False
@@ -137,7 +158,7 @@ class MnipProtocolParameters(LongProtocolParameters):
         When the provers send messages sequentially, whether prover 0 goes first.
     randomize_channel_order : bool
         Whether to randomize the order of the channels when prompting the verifier. Only
-        relevant in text-based protocols.
+        relevant in text-based scenarios.
     """
 
     sequential: bool = False

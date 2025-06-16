@@ -6,10 +6,8 @@ protocol.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Iterator
-import importlib.resources
-from string import Template
-from functools import cache
+from typing import Optional, Iterator, Literal
+from functools import cache, cached_property
 from collections import OrderedDict
 from random import Random
 
@@ -17,6 +15,14 @@ from torch import Tensor, as_tensor
 
 from jaxtyping import Bool, Int, Float
 
+from jinja2 import (
+    Environment as JinjaEnvironment,
+    PackageLoader,
+    Template,
+    StrictUndefined,
+)
+
+from nip.parameters.agents import CodeValidationAgentParameters
 from nip.protocols.protocol_base import ProtocolHandler
 from nip.protocols.registry import register_protocol_handler
 from nip.protocols.main_protocols import (
@@ -27,8 +33,11 @@ from nip.protocols.main_protocols import (
     MnipProtocol,
     SoloVerifierProtocol,
 )
+from nip.protocols.verifier_decision_spectrum import VerifierDecisionParseError
 from nip.utils.api import InvalidDecisionError, NotAllActiveChannelsInResponseError
 from nip.utils.nested_array_dict import NestedArrayDict
+from nip.utils.jinja_filters import capitalise_first_letter, add_s_plural
+from nip.constants import REPOSITORY_ROOT
 
 
 @dataclass
@@ -58,7 +67,9 @@ class CodeValidationAgentSpec:
     last_round_system_message : str, optional
         If set, this message will be sent as a system message at the beginning of the
         last round of the interaction to the agent. This can be used to tell the agent
-        to make a decision.
+        to make a decision. NOTE: This functionality overlaps with the 'supervisor
+        message'. If the supervisor message would be sent in the last round, this
+        setting is ignored.
     use_raw_message_for_self_prompt : bool, default=True
         When prompting the agent for a message, whether messages sent from this agent
         should be included in the chat history as raw messages (rather than being split
@@ -92,10 +103,13 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
     def agent_specs(self) -> dict[str, CodeValidationAgentSpec]:
         """A dictionary mapping agent names to specifications."""
 
-    def modify_system_prompt_variables(
-        self, agent_name: str, current_variables: dict
-    ) -> dict:
-        """Modify the system prompt variables for a given agent.
+    @property
+    def agent_params(self) -> dict[str, CodeValidationAgentParameters]:
+        """A dictionary mapping agent names to parameters."""
+        return self.hyper_params.agents
+
+    def modify_system_prompt_context(self, agent_name: str, context: dict) -> dict:
+        """Modify the template context for a system prompt for a given agent.
 
         This method can be overridden by any protocol handler which needs to include
         additional variables in the system prompts.
@@ -104,25 +118,58 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         ----------
         agent_name : str
             The name of the agent.
-        current_variables : dict
+        context : dict
             The current variables to include in the system prompts.
 
         Returns
         -------
-        dict
+        system_prompt_variables : dict
             A dictionary mapping variable names to values. To add new variables, return
-            ``current_variables`` with the new variables added.
+            ``context`` with the new variables added.
         """
 
-        return current_variables
+        return context
 
-    @property
-    def system_prompt_directory(self) -> str:
-        """The dot-separated path to the directory containing the system prompts."""
+    @cached_property
+    def jinja_filters(self) -> dict[str, callable]:
+        """The custom Jinja2 filters for this protocol handler."""
+        return {
+            "capitalise_first_letter": capitalise_first_letter,
+            "add_s_plural": add_s_plural,
+        }
 
-        return (
-            f"nip.code_validation.prompt_templates.system_prompts"
-            f".{self.hyper_params.interaction_protocol}"
+    @cached_property
+    def jinja_environment(self) -> JinjaEnvironment:
+        """The Jinja2 environment for loading templates."""
+
+        environment = JinjaEnvironment(
+            loader=PackageLoader(
+                "nip",
+                f"code_validation/templates/rollout_generation"
+                f"/{self.hyper_params.code_validation.system_prompt_version}",
+            ),
+            autoescape=True,
+            trim_blocks=True,
+            lstrip_blocks=True,
+            undefined=StrictUndefined,
+        )
+
+        # Add custom filters to the Jinja2 environment
+        for filter_name, filter_func in self.jinja_filters.items():
+            environment.filters[filter_name] = filter_func
+
+        return environment
+
+    @cached_property
+    def verifier_decision_instructions_prompt_template(self) -> Template:
+        """The template containing the instructions for the verifier decision."""
+
+        if self.hyper_params.code_validation.system_prompt_version == "v1":
+            return self.jinja_environment.from_string("")
+
+        return self.jinja_environment.get_template(
+            f"verifier_decision_instructions/"
+            f"{self.hyper_params.protocol_common.verifier_decision_spectrum}.txt"
         )
 
     @cache
@@ -139,26 +186,23 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         Returns
         -------
-        Template
+        system_prompt_template : jinja2.Template
             The system prompt template for the agent.
         """
 
-        try:
-            prompt_template_traversable = importlib.resources.files(
-                self.system_prompt_directory
-            )
-        except ModuleNotFoundError:
-            raise NotImplementedError(
-                f"System prompt directory for protocol "
-                f"{self.hyper_params.interaction_protocol!s} not found."
+        if self.agent_params[agent_name].system_prompt_template_path is not None:
+            with open(
+                self.agent_params[agent_name].system_prompt_template_path, "r"
+            ) as f:
+                template_string = f.read()
+            return self.jinja_environment.from_string(template_string)
+        else:
+            return self.jinja_environment.get_template(
+                f"main_system_prompt/{self.hyper_params.interaction_protocol}"
+                f"/{agent_name}.txt"
             )
 
-        template_filename = f"{agent_name}.txt"
-        return Template(
-            prompt_template_traversable.joinpath(template_filename).read_text()
-        )
-
-    def get_agent_system_prompt(self, agent_name: str, **prompt_variables) -> str:
+    def get_agent_system_prompt(self, agent_name: str, **context) -> str:
         """Get the system prompt for a given agent.
 
         This prompt is used to generate system prompts at the beginning of the chat
@@ -169,32 +213,83 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         agent_name : str
             The name of the agent.
         kwargs
-            Additional keyword arguments to pass to the template.
+            Additional keyword arguments to pass to the template as context.
 
         Returns
         -------
-        str
+        system_prompt : str
             The system prompt for the agent.
         """
 
-        # Determine the stance of the agent as a string, if it can be randomized
-        if (
-            self.prover_stance_can_be_randomized
-            and self.hyper_params.protocol_common.randomize_prover_stance
-        ):
-            agent_stance: int = prompt_variables.pop(
-                "agent_stance", self.agent_specs[agent_name].default_stance
-            )
-        else:
-            agent_stance = self.agent_specs[agent_name].default_stance
-        agent_stance_string = "accept" if agent_stance == 1 else "reject"
+        context = self.modify_system_prompt_context(agent_name, context)
 
-        prompt_variables = self.modify_system_prompt_variables(
-            agent_name, prompt_variables
+        verifier_decision_instructions = (
+            self.verifier_decision_instructions_prompt_template.render(**context)
         )
 
-        return self.get_agent_system_prompt_template(agent_name).substitute(
-            **prompt_variables, agent_stance_string=agent_stance_string
+        return self.get_agent_system_prompt_template(agent_name).render(
+            **context,
+            agent_stance_string=self._get_agent_stance_string(agent_name, context),
+            verifier_decision_instructions=verifier_decision_instructions,
+        )
+
+    @cache
+    def get_agent_supervisor_message_template(self, agent_name: str) -> Template:
+        """Get the supervisor message template for a given agent.
+
+        This template is used to generate a message appended to the chat history before
+        it is passed to the agent model.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+
+        Returns
+        -------
+        supervisor_message_template : jinja2.Template
+            The supervisor message template for the agent.
+        """
+        return self.jinja_environment.get_template(
+            f"supervisor_message/{self.hyper_params.interaction_protocol}"
+            f"/{agent_name}.txt"
+        )
+
+    def get_agent_supervisor_message(
+        self,
+        agent_name: str,
+        round_id: int,
+        num_questions_left: int,
+        **context,
+    ) -> str:
+        """Get the supervisor message for a given agent.
+
+        This message is appended to the chat history before it is passed to the agent
+        model.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        kwargs
+            Additional keyword arguments to pass to the template as context.
+
+        Returns
+        -------
+        supervisor_message : str
+            The system prompt for the agent.
+        """
+
+        verifier_decision_instructions = (
+            self.verifier_decision_instructions_prompt_template.render(**context)
+        )
+
+        return self.get_agent_supervisor_message_template(agent_name).render(
+            round_id=round_id,
+            num_questions_left=num_questions_left,
+            agent_stance_string=self._get_agent_stance_string(agent_name, context),
+            verifier_decision_instructions=verifier_decision_instructions,
+            **context,
         )
 
     def get_agent_ordered_channels(self, agent_name: str, seed: int) -> Iterator[str]:
@@ -231,7 +326,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
     def parse_chat_completion(
         self, completion_text: str, agent_name: str, round_id: int
-    ) -> tuple[OrderedDict[str, str] | None, int]:
+    ) -> tuple[OrderedDict[str, str] | None, Literal[0, 1, 2, 3], float, str]:
         """Parse a chat completion into a message to each channel and a decision.
 
         Parameters
@@ -248,9 +343,21 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         channel_messages : OrderedDict[str, str] | None
             A dictionary mapping channel names to messages, ordered by channel order. If
             the model has made a decision, this will be None.
-        decision : int
-            The decision made by the model. This is either 0 (reject), 1 (accept) or 2
-            (no decision).
+        discrete_decision : Literal[0, 1, 2, 3]
+            The discrete decision from the verifier model, with the following meanings:
+
+            - 0: reject
+            - 1: accept
+            - 2: no decision
+            - 3: end with neither accept nor reject
+
+        continuous_decision : float
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            version of ``discrete_decision``.
+        raw_decision : str
+            The raw decision text from the verifier model. This is the text which
+            appears after "Decision: " in the completion text.
 
         Raises
         ------
@@ -261,9 +368,11 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """
 
         # First check if the completion contains a decision
-        decision = self._parse_decision(completion_text)
-        if decision != 2:
-            return None, decision
+        discrete_decision, continuous_decision, raw_decision = self._parse_decision(
+            completion_text
+        )
+        if discrete_decision != 2:
+            return None, discrete_decision, continuous_decision, raw_decision
 
         # Get the channels where the agent can be active
         active_channels = [
@@ -274,15 +383,17 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         if len(active_channels) == 0:
             raise ValueError(
-                f"Tried to parse response for {agent_name!r} in round {round_id}, but it "
-                f"is not active in any channel."
+                f"Tried to parse response for {agent_name!r} in round {round_id}, but "
+                f"it is not active in any channel."
             )
 
         # If the agent is active in only one channel, parse the message for that channel
         if len(active_channels) == 1:
             return (
                 self._parse_single_channel_message(completion_text, active_channels[0]),
-                2,
+                discrete_decision,
+                continuous_decision,
+                raw_decision,
             )
 
         # Otherwise, parse the message for all active channels
@@ -290,7 +401,9 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             self._parse_multi_channel_message(
                 completion_text, agent_name, active_channels
             ),
-            2,
+            discrete_decision,
+            continuous_decision,
+            raw_decision,
         )
 
     @property
@@ -304,7 +417,43 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
             [(channel_name, "") for channel_name in self.message_channel_names]
         )
 
-    def _parse_decision(self, completion_text: str) -> int:
+    def _get_agent_stance_string(self, agent_name: str, context: dict) -> str:
+        """Get the stance of the agent as a string, when substituting a template.
+
+        The stance is either "accept" or "reject", and tells the agent what to argue
+        for. This is only relevant for provers.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent.
+        context : dict
+            The template variables to use for rendering the template.
+
+        Returns
+        -------
+        agent_stance_string : str
+            The stance of the agent as a string.
+        """
+
+        if (
+            self.prover_stance_can_be_randomized
+            and self.hyper_params.protocol_common.randomize_prover_stance
+        ):
+            agent_stance: int = context.pop(
+                "agent_stance", self.agent_specs[agent_name].default_stance
+            )
+        else:
+            agent_stance = self.agent_specs[agent_name].default_stance
+
+        if agent_stance == 0:
+            return "reject"
+        else:
+            return "accept"
+
+    def _parse_decision(
+        self, completion_text: str
+    ) -> tuple[Literal[0, 1, 2, 3], float, str]:
         """Parse a completion text to extract the decision.
 
         Parameters
@@ -314,9 +463,21 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
 
         Returns
         -------
-        decision : int
-            The decision extracted from the completion text. This is either 0 (reject),
-            1 (accept) or 2 (no decision).
+        discrete_decision : Literal[0, 1, 2, 3]
+            The discrete decision from the verifier model, with the following meanings:
+
+            - 0: reject
+            - 1: accept
+            - 2: no decision
+            - 3: end with neither accept nor reject
+
+        continuous_decision : float
+            The continuous decision from the verifier model. This is a number between -1
+            and 1, where -1 is "reject" and 1 is "accept". This is a more fine-grained
+            version of ``discrete_decision``.
+        raw_decision : str
+            The raw decision text from the verifier model. This is the text which
+            appears after "Decision: " in the completion text.
 
         Raises
         ------
@@ -325,14 +486,16 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         """
 
         if "decision:" in completion_text.lower():
-            if "decision: accept" in completion_text.lower():
-                return 1
-            elif "decision: reject" in completion_text.lower():
-                return 0
-            else:
-                raise InvalidDecisionError(response_text=completion_text)
+            first_decision_index = completion_text.lower().index("decision:")
+            decision_text = completion_text[first_decision_index + len("decision:") :]
+            try:
+                return self.verifier_decision_spectrum_handler.extract_decision(
+                    decision_text
+                )
+            except VerifierDecisionParseError as e:
+                raise InvalidDecisionError(response_text=completion_text) from e
         else:
-            return 2
+            return 2, 0.0, ""
 
     def _parse_single_channel_message(
         self, completion_text: str, active_channel_name: str
@@ -439,6 +602,7 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: NestedArrayDict,
     ):
@@ -466,8 +630,10 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
         if self.hyper_params.protocol_common.shared_reward:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = reward[..., self.verifier_index]
+
         else:
             if len(self.prover_names) == 1:
+
                 if (
                     self.prover_stance_can_be_randomized
                     and self.hyper_params.protocol_common.randomize_prover_stance
@@ -477,16 +643,45 @@ class CodeValidationProtocolHandler(ProtocolHandler, ABC):
                     prover_stance = self.agent_specs[
                         self.prover_names[0]
                     ].default_stance
-                reward[..., self.prover_indices[0]] = (
-                    verifier_decision_made & (verifier_decision == prover_stance)
-                ).float() * self.hyper_params.protocol_common.prover_reward
+
+                if verifier_float_decision is not None:
+                    reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                        (verifier_float_decision / 2 + 0.5)[verifier_decision_made]
+                        * self.hyper_params.protocol_common.prover_reward
+                        * (2 * prover_stance - 1)
+                    )
+
+                else:
+                    reward[..., self.prover_indices[0]] = (
+                        verifier_decision_made & (verifier_decision == prover_stance)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
+
             else:
-                reward[..., self.prover_indices[0]] = (
-                    verifier_decision_made & (verifier_decision == 0)
-                ).float() * self.hyper_params.protocol_common.prover_reward
-                reward[..., self.prover_indices[1]] = (
-                    verifier_decision_made & (verifier_decision == 1)
-                ).float() * self.hyper_params.protocol_common.prover_reward
+
+                if verifier_float_decision is not None:
+
+                    reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                        verifier_float_decision / 2 + 0.5
+                    )[
+                        verifier_decision_made
+                    ] * self.hyper_params.protocol_common.prover_reward
+
+                    reward[..., self.prover_indices[1]][~verifier_decision_made] = 0.0
+                    reward[..., self.prover_indices[1]][verifier_decision_made] = (
+                        -verifier_float_decision / 2 + 0.5
+                    )[
+                        verifier_decision_made
+                    ] * self.hyper_params.protocol_common.prover_reward
+
+                else:
+                    reward[..., self.prover_indices[0]] = (
+                        verifier_decision_made & (verifier_decision == 0)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
+                    reward[..., self.prover_indices[1]] = (
+                        verifier_decision_made & (verifier_decision == 1)
+                    ).float() * self.hyper_params.protocol_common.prover_reward
 
 
 @register_protocol_handler("nip", "code_validation")
@@ -605,6 +800,22 @@ class MnipCodeValidationProtocol(CodeValidationProtocolHandler, MnipProtocol):
             ),
         }
 
+    def _include_prover_rewards(
+        self,
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
+        reward: Float[Tensor, "... agent"],
+        env_td: NestedArrayDict,
+    ):
+        super(CodeValidationProtocolHandler, self)._include_prover_rewards(
+            verifier_decision_made=verifier_decision_made,
+            verifier_decision=verifier_decision,
+            verifier_float_decision=verifier_float_decision,
+            reward=reward,
+            env_td=env_td,
+        )
+
 
 @register_protocol_handler("solo_verifier", "code_validation")
 class SoloVerifierCodeValidationProtocol(
@@ -618,6 +829,7 @@ class SoloVerifierCodeValidationProtocol(
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: NestedArrayDict,
     ):

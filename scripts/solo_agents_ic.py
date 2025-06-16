@@ -15,7 +15,6 @@ Run the script with the ``--help`` flag to see all available arguments.
 
 from argparse import Namespace
 import os
-from typing import Callable
 import logging
 
 import torch
@@ -37,8 +36,10 @@ from nip.utils.experiments import (
     ExperimentFunctionArguments,
 )
 
+script_name = os.path.basename(__file__)
+logger = logging.getLogger(f"nip.scripts.{script_name}")
+
 MULTIPROCESS = True
-TEST_SIZE = 0.2
 
 param_grid = dict(
     dataset_name=["cifar10"],
@@ -115,7 +116,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
 
     combo = arguments.combo
     cmd_args = arguments.cmd_args
-    logger = arguments.child_logger_adapter
 
     logger.info(f"Starting run {arguments.run_id}")
     logger.debug(f"Combo: {combo}")
@@ -137,7 +137,6 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     run_experiment(
         hyper_params,
         device=device,
-        logger=logger,
         dataset_on_device=cmd_args.dataset_on_device,
         tqdm_func=arguments.tqdm_func,
         ignore_cache=cmd_args.ignore_cache,

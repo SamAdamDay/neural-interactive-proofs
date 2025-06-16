@@ -28,7 +28,8 @@ class ScenarioInstance:
     train_dataset : Dataset
         The train dataset for the experiment.
     test_dataset : Dataset
-        The test dataset for the experiment.
+        The dataset used for testing. Note that this can be either the "test" or
+        "validation" split, depending on the hyperparameters.
     protocol_handler : ProtocolHandler
         The interaction protocol handler for the experiment.
     message_regressor : MessageRegressor
@@ -40,7 +41,9 @@ class ScenarioInstance:
     train_environment : Optional[Environment]
         The train environment for the experiment, if the experiment is RL.
     test_environment : Optional[Environment]
-        The environment for testing the agents, which uses the test dataset.
+        The environment for testing the agents, which uses ``test_dataset``. Note that
+        this can be either the "test" or "validation" split, depending on the
+        hyperparameters.
     combined_whole : Optional[CombinedWholeAgent]
         If the agents are not split into parts, this holds the combination of the whole
         agents.

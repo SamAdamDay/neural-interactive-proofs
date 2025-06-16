@@ -43,17 +43,22 @@ class GraphIsomorphismDataset(TensorDictDataset):
     @property
     def raw_dir(self) -> str:
         """The path to the directory containing the raw data."""
-        sub_dir = "train" if self.train else "test"
-        return os.path.join(GI_DATA_DIR, self.hyper_params.dataset, "raw", sub_dir)
+        return os.path.join(GI_DATA_DIR, self.hyper_params.dataset, "raw", self.split)
 
     @property
     def processed_dir(self) -> str:
         """The path to the directory containing the processed data."""
 
-        sub_dir = "train" if self.train else "test"
-
-        if self.train and self.hyper_params.dataset_options.max_train_size is not None:
+        if (
+            self.split == "train"
+            and self.hyper_params.dataset_options.max_train_size is not None
+        ):
             max_size_suffix = f"_{self.hyper_params.dataset_options.max_train_size}"
+        elif (
+            self.split == "test"
+            and self.hyper_params.dataset_options.max_test_size is not None
+        ):
+            max_size_suffix = f"_{self.hyper_params.dataset_options.max_test_size}"
         else:
             max_size_suffix = ""
 
@@ -65,7 +70,7 @@ class GraphIsomorphismDataset(TensorDictDataset):
             f"_{self.protocol_handler.num_message_channels}"
             f"_{self.hyper_params.message_size}"
             f"{max_size_suffix}",
-            sub_dir,
+            self.split,
         )
 
     def build_tensor_dict(self) -> TensorDict:
@@ -76,6 +81,12 @@ class GraphIsomorphismDataset(TensorDictDataset):
         dataset : TensorDict
             The dataset as a tensor dict.
         """
+
+        if self.split == "validation":
+            raise NotImplementedError(
+                "Validation set is not implemented for the graph isomorphism dataset."
+            )
+
         data_dict = torch.load(os.path.join(self.raw_dir, "data.pt"))
 
         num_graph_pairs = len(data_dict["wl_scores"])

@@ -1,0 +1,1 @@
+{% extends "supervisor_message/_common/prover_base.txt" %}

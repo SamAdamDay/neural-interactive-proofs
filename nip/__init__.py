@@ -20,6 +20,7 @@ from .parameters import (
     ReinforceParameters,
     TextRlParameters,
     PureTextEiParameters,
+    PureTextMaltParameters,
     ImageClassificationParameters,
     CodeValidationParameters,
     DatasetParameters,

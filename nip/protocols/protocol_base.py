@@ -11,14 +11,18 @@ from typing import ClassVar
 
 import torch
 from torch import Tensor, as_tensor
+import torch.nn.functional as F
 
 from tensordict.tensordict import TensorDictBase
 
 from jaxtyping import Int, Bool, Float
 
-from nip.parameters import HyperParameters
+from nip.parameters import HyperParameters, CommonProtocolParameters
 from nip.experiment_settings import ExperimentSettings
 from nip.utils.nested_array_dict import NestedArrayDict
+from nip.protocols.verifier_decision_spectrum import (
+    build_verifier_decision_spectrum_handler,
+)
 
 
 class ProtocolHandler(ABC):
@@ -46,8 +50,8 @@ class ProtocolHandler(ABC):
     - ``get_verifier_guess_mask_from_rounds_and_seed`` (method): Get a boolean mask of
       the verifier's guesses for a batch of rounds.
     - ``step_interaction_protocol`` (method): Take a step in the interaction protocol.
-    - ``reward_mid_point_estimate`` (method): Get an estimate of the expected reward if
-      all agents play randomly.
+    - ``max_reward`` (method): Get the maximum possible reward for an agent.
+    - ``min_reward`` (method): Get the minimum possible reward for an agent.
 
     Parameters
     ----------
@@ -60,6 +64,9 @@ class ProtocolHandler(ABC):
     def __init__(self, hyper_params: HyperParameters, settings: ExperimentSettings):
         self.hyper_params = hyper_params
         self.settings = settings
+        self.verifier_decision_spectrum_handler = (
+            build_verifier_decision_spectrum_handler(hyper_params)
+        )
 
     @property
     @abstractmethod
@@ -384,6 +391,35 @@ class ProtocolHandler(ABC):
         """
 
     @abstractmethod
+    def max_reward(self, agent_name: str) -> float:
+        """Get the maximum possible reward for an agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the maximum reward for.
+
+        Returns
+        -------
+        max_reward : float
+            The maximum possible reward for the agent.
+        """
+
+    @abstractmethod
+    def min_reward(self, agent_name: str) -> float:
+        """Get the minimum possible reward for an agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the minimum reward for.
+
+        Returns
+        -------
+        min_reward : float
+            The minimum possible reward for the agent.
+        """
+
     def reward_mid_point_estimate(self, agent_name: str) -> float:
         """Get an estimate of the expected reward if all agents play randomly.
 
@@ -403,10 +439,12 @@ class ProtocolHandler(ABC):
             The expected reward for the agent if all agents play randomly.
         """
 
+        return (self.max_reward(agent_name) + self.min_reward(agent_name)) / 2
+
     def _get_agent_decision_made_mask(
         self,
         round_id: Int[Tensor, "..."],
-        y: Int[Tensor, "... 1"],
+        y: Int[Tensor, "..."],
         guess_mask: Bool[Tensor, "..."],
         decision: Int[Tensor, "..."],
         *,
@@ -418,7 +456,7 @@ class ProtocolHandler(ABC):
         ----------
         round_id : Int[Tensor, "..."]
             The round number.
-        y : Int[Tensor, "... 1"]
+        y : Int[Tensor, "..."]
             The target value.
         guess_mask : Bool[Tensor, "..."]
             A mask indicating whether the agent is allowed to make a guess.
@@ -427,6 +465,11 @@ class ProtocolHandler(ABC):
         follow_force_guess : bool, default=True
             Whether to follow the ``force_guess`` parameter, which forces the agent to
             make a certain decision.
+
+        Returns
+        -------
+        decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the agent has made a decision.
         """
 
         if follow_force_guess:
@@ -435,14 +478,12 @@ class ProtocolHandler(ABC):
             elif self.hyper_params.protocol_common.force_guess == "zero":
                 decision = torch.zeros_like(decision)
             elif self.hyper_params.protocol_common.force_guess == "y":
-                decision = y.squeeze(-1)
+                decision = y
 
-        verifier_decision_made = guess_mask & (decision != 2)
-        verifier_decision_made = verifier_decision_made & (
-            round_id >= self.min_message_rounds - 1
-        )
+        decision_made = guess_mask & (decision != 2)
+        decision_made = decision_made & (round_id >= self.min_message_rounds - 1)
 
-        return verifier_decision_made
+        return decision_made
 
 
 class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
@@ -490,6 +531,11 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         self.verifier_name = verifier_name
 
     @property
+    def protocol_common(self) -> CommonProtocolParameters:
+        """The common protocol parameters."""
+        return self.hyper_params.protocol_common
+
+    @property
     def verifier_index(self) -> int:
         """The index of the verifier in the list of agent names."""
         return self.agent_names.index(self.verifier_name)
@@ -498,6 +544,16 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
     def verifier_names(self) -> list[str]:
         """The names of the verifiers in the protocol."""
         return [self.verifier_name]
+
+    @property
+    def verifier_neither_accept_nor_reject_reward(self) -> float:
+        """The reward for the verifier when they neither accept nor reject."""
+        if self.protocol_common.verifier_neither_accept_nor_reject_reward is not None:
+            return self.protocol_common.verifier_neither_accept_nor_reject_reward
+        return (
+            self.protocol_common.verifier_reward
+            + self.protocol_common.verifier_incorrect_penalty
+        ) / 2
 
     def get_verifier_guess_mask_from_rounds_and_seed(
         self, round_id: Int[Tensor, "..."], seed: Int[Tensor, "..."]
@@ -551,6 +607,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             - "y" (... 1): The target value.
             - "round" (...): The current round.
             - ("agents", "decision") (... agent): The decision of each agent.
+            - ("agents", "continuous_decision") (... agent): (Optional) A more
+              fine-grained version of the decision, which is a float between -1 and 1.
+            - ("agents", "valid_response") (... agent): (Optional) A boolean mask
+              indicating whether the agent's response is valid.
             - "done" (...): A boolean mask indicating whether the episode is done.
             - ("agents", "done") (... agent): A boolean mask indicating whether each
                 agent is done.
@@ -573,9 +633,7 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
             The reward for the agents.
         """
 
-        protocol_params = self.hyper_params.protocol_common
-
-        y: Int[Tensor, "... 1"] = as_tensor(env_td["y"])
+        y: Int[Tensor, "..."] = as_tensor(env_td["y"]).squeeze(-1)
         round_id: Int[Tensor, "..."] = as_tensor(env_td["round"])
         seed: Int[Tensor, "..."] = as_tensor(env_td["seed"])
         decision: Int[Tensor, "... agent"] = as_tensor(env_td["agents", "decision"])
@@ -599,74 +657,139 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         # When the verifier has made a decision, the shared done is set to ``True``.
         shared_done = shared_done | verifier_decision_made
 
-        # Compute the reward for the verifier when they make a guess
-        verifier_idx = (..., self.verifier_index)
-        reward = torch.empty(
+        reward = torch.zeros(
             (*shared_done.shape, len(self.agent_names)),
             dtype=torch.float,
             device=shared_done.device,
         )
-        reward[verifier_idx] = torch.zeros_like(shared_done, dtype=torch.float)
-        reward[verifier_idx][
-            verifier_decision_made & (decision[verifier_idx] == y.squeeze(-1))
-        ] = protocol_params.verifier_reward
-        reward[verifier_idx][
-            verifier_decision_made & (decision[verifier_idx] != y.squeeze(-1))
-        ] = protocol_params.verifier_incorrect_penalty
+
+        # Compute the reward for the verifier when they make a guess
+        if isinstance(env_td, TensorDictBase):
+            nested_keys = env_td.keys(include_nested=True)
+        else:
+            nested_keys = env_td.keys()
+        if ("agents", "continuous_decision") in nested_keys:
+            verifier_float_decision = as_tensor(
+                env_td["agents", "continuous_decision"]
+            )[..., self.verifier_index]
+            self._get_verifier_guess_reward_continuous(
+                reward,
+                y=y,
+                verifier_decision_made=verifier_decision_made,
+                verifier_float_decision=verifier_float_decision,
+            )
+        else:
+            verifier_float_decision = None
+            self._get_verifier_guess_reward_discrete(
+                reward,
+                y=y,
+                verifier_decision_made=verifier_decision_made,
+                verifier_decision=decision[..., self.verifier_index],
+            )
 
         # If we reach the end of the episode and the verifier has not made a guess,
         # terminate it with a negative reward for the verifier
         terminated = terminated | (
             self._get_new_terminated_mask(round_id, verifier_decision_made)
         )
-        reward[verifier_idx][
+        reward[..., self.verifier_index][
             self._get_new_terminated_mask(round_id, verifier_decision_made)
-        ] = protocol_params.verifier_terminated_penalty
+        ] = self.protocol_common.verifier_terminated_penalty
 
         # If the verifier has not made a guess and it's their turn, given them a small
         # reward for continuing
-        reward[verifier_idx][
+        reward[..., self.verifier_index][
             verifier_guess_mask & ~shared_done & ~terminated
-        ] = protocol_params.verifier_no_guess_reward
+        ] = self.protocol_common.verifier_no_guess_reward
 
         # Compute the rewards for the other agents and add them
         self._include_prover_rewards(
-            verifier_decision_made, decision[verifier_idx], reward, env_td
+            verifier_decision_made=verifier_decision_made,
+            verifier_decision=decision[..., self.verifier_index],
+            verifier_float_decision=verifier_float_decision,
+            reward=reward,
+            env_td=env_td,
         )
+
+        # If the ``prover_invalid_response_penalty`` hyper-parameter is set, any prover
+        # which produces an invalid response is given a penalty and the episode is
+        # terminated.
+        if (
+            self.hyper_params.protocol_common.prover_invalid_response_penalty
+            is not None
+            and ("agents", "valid_response") in env_td.keys()
+        ):
+            valid_response = as_tensor(env_td["agents", "valid_response"])
+            for prover_index in self.prover_indices:
+                reward[..., prover_index][
+                    ~valid_response[..., prover_index]
+                ] = self.hyper_params.protocol_common.prover_invalid_response_penalty
+                terminated[~valid_response[..., prover_index]] = True
 
         # The agent-specific done signal is the same as the shared done signal
         agent_done = agent_done | shared_done[..., None]
 
         return shared_done, agent_done, terminated, reward
 
-    def reward_mid_point_estimate(self, agent_name: str) -> float:
-        """Get an estimate of the expected reward if all agents play randomly.
+    def max_reward(self, agent_name: str) -> float:
+        """Get the maximum possible reward for an agent.
 
-        This is used to compute the mid-point of the reward range for the agent.
+        For the verifier, this is the maximum reward it gets for guessing plus the bonus
+        for not guessing in each round (if positive).
 
-        For the verifier, the mid-point is the average of the verifier reward and the
-        verifier incorrect penalty. For the prover, the mid-point is the prover reward
-        divided by 2 (because the prover gets 0 when it is not rewarded).
+        For the prover, this is the reward it gets for being accepted by the verifier.
 
         Parameters
         ----------
         agent_name : str
-            The name of the agent to get the reward mid-point for.
+            The name of the agent to get the maximum reward for.
 
         Returns
         -------
-        reward_mid_point : float
-            An estimate of the expected reward for ``agent_name`` if all agents play
-            randomly.
+        max_reward : float
+            The maximum possible reward for the agent.
         """
 
         if agent_name == self.verifier_name:
-            return (
-                self.hyper_params.protocol_common.verifier_reward
-                + self.hyper_params.protocol_common.verifier_incorrect_penalty
-            ) / 2
+            return max(
+                self.hyper_params.protocol_common.verifier_reward,
+                self.hyper_params.protocol_common.verifier_incorrect_penalty,
+                self.verifier_neither_accept_nor_reject_reward,
+            ) + max(0, self.hyper_params.protocol_common.verifier_no_guess_reward) * (
+                self.max_verifier_questions - 1
+            )
         else:
-            return self.hyper_params.protocol_common.prover_reward / 2
+            return self.hyper_params.protocol_common.prover_reward
+
+    def min_reward(self, agent_name: str) -> float:
+        """Get the minimum possible reward for an agent.
+
+        For the verifier, this is the minimum reward it gets for guessing plus the bonus
+        for not guessing in each round (if negative).
+
+        For the prover, this 0.
+
+        Parameters
+        ----------
+        agent_name : str
+            The name of the agent to get the maximum reward for.
+
+        Returns
+        -------
+        min_reward : float
+            The minimum possible reward for the agent.
+        """
+
+        if agent_name == self.verifier_name:
+            return min(
+                self.hyper_params.protocol_common.verifier_reward,
+                self.hyper_params.protocol_common.verifier_incorrect_penalty,
+                self.verifier_neither_accept_nor_reject_reward,
+            ) + min(0, self.hyper_params.protocol_common.verifier_no_guess_reward) * (
+                self.max_verifier_questions - 1
+            )
+        else:
+            return 0.0
 
     def _get_new_terminated_mask(
         self, round_id: Int[Tensor, "..."], verifier_decision_made: Bool[Tensor, "..."]
@@ -691,10 +814,109 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         """
         return (round_id >= self.max_message_rounds - 1) & ~verifier_decision_made
 
+    def _get_verifier_guess_reward_discrete(
+        self,
+        reward: Float[Tensor, "... agent"],
+        y: Int[Tensor, "..."],
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_decision: Int[Tensor, "..."],
+    ) -> Float[Tensor, "... agent"]:
+        """Compute the guess reward for the verifier, without ``continuous_decision``.
+
+        This computes the reward for the verifier when they make a guess, when the more
+        fine-grained decision is not used.
+
+        Parameters
+        ----------
+        reward : Float[Tensor, "... agent"]
+            The tensor of rewards for the agents, which is updated in place.
+        y : Int[Tensor, "..."]
+            The target value.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+        verifier_decision : Int[Tensor, "..."]
+            The verifier's (discrete) decision. This has the following possible values:
+            - 0: reject
+            - 1: accept
+            - 2: no decision
+            - 3: end with neither accept nor reject (only relevant for text-based
+              scenarios)
+        """
+
+        # When the verifier decides to neither accept nor reject
+        reward[..., self.verifier_index][
+            verifier_decision_made & (verifier_decision == 3)
+        ] = self.verifier_neither_accept_nor_reject_reward
+
+        # When the verifier guesses correctly
+        reward[..., self.verifier_index][
+            verifier_decision_made & (verifier_decision == y)
+        ] = self.protocol_common.verifier_reward
+
+        # When the verifier guesses incorrectly
+        reward[..., self.verifier_index][
+            verifier_decision_made & (verifier_decision != y) & (verifier_decision != 3)
+        ] = self.protocol_common.verifier_incorrect_penalty
+
+    def _get_verifier_guess_reward_continuous(
+        self,
+        reward: Float[Tensor, "... agent"],
+        y: Int[Tensor, "..."],
+        verifier_decision_made: Bool[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."],
+    ) -> Float[Tensor, "... agent"]:
+        """Compute the guess reward for the verifier, with ``continuous_decision``.
+
+        This computes the reward for the verifier when they make a guess, when the more
+        fine-grained decision is used.
+
+        Parameters
+        ----------
+        reward : Float[Tensor, "... agent"]
+            The tensor of rewards for the agents, which is updated in place.
+        y : Int[Tensor, "..."]
+            The target value.
+        verifier_decision_made : Bool[Tensor, "..."]
+            A mask indicating whether the verifier has made a decision.
+        verifier_float_decision : Float[Tensor, "..."]
+            The verifier's (continuous) decision.
+        """
+
+        y_transformed = y * 2 - 1
+
+        # First compute the reward as a value in [-1, 1]
+        reward[..., self.verifier_index][verifier_decision_made] = (
+            verifier_float_decision * y_transformed
+        )
+
+        def transform_to_reward(x: Tensor):
+            return torch.where(
+                x < 0,
+                x
+                * (
+                    self.verifier_neither_accept_nor_reject_reward
+                    - self.protocol_common.verifier_incorrect_penalty
+                )
+                + self.verifier_neither_accept_nor_reject_reward,
+                x
+                * (
+                    self.protocol_common.verifier_reward
+                    - self.verifier_neither_accept_nor_reject_reward
+                )
+                + self.verifier_neither_accept_nor_reject_reward,
+            )
+
+        # Then perform a piecewise-linear transformation with extremes
+        # `verifier_reward`, `verifier_neither_accept_nor_reject_reward` and `verifier_incorrect_penalty`
+        reward[..., self.verifier_index][verifier_decision_made] = transform_to_reward(
+            reward[..., self.verifier_index][verifier_decision_made]
+        )
+
     def _include_prover_rewards(
         self,
         verifier_decision_made: Bool[Tensor, "..."],
         verifier_decision: Int[Tensor, "..."],
+        verifier_float_decision: Float[Tensor, "..."] | None,
         reward: Float[Tensor, "... agent"],
         env_td: TensorDictBase | NestedArrayDict,
     ):
@@ -705,6 +927,10 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         - If there is one prover, they are rewarded when the verifier guesses "accept".
         - If there are two provers, the first is rewarded when the verifier guesses
           "reject" and the second is rewarded when the verifier guesses "accept".
+
+        When the ``continuous_decision`` key is present in the environment tensor, a
+        continuous version of this is used instead, where the reward is a linear
+        transformation of the verifier's decision.
 
         Implement a custom method for protocols with more than two provers, or for
         protocols with different reward schemes.
@@ -717,10 +943,15 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         verifier_decision_made : Bool[Tensor, "..."]
             A boolean mask indicating whether the verifier has made a decision.
         verifier_decision : Int[Tensor, "..."]
-            The verifier's decision.
+            The verifier's discrete decision.
+        verifier_float_decision : Float[Tensor, "..."] | None
+            The verifier's continuous decision. This is only used if the
+            ``continuous_decision`` key is present in the environment tensor. If not
+            ``None``, it is used to compute the reward for the provers instead of the
+            discrete decision.
         reward : Float[Tensor, "... agent"]
             The currently computed reward, which should include the reward for the
-            verifier.
+            verifier. This is updated in place.
         env_td : TensorDictBase | NestedArrayDict
             The current observation and state. If a ``NestedArrayDict``, it is converted
             to a ``TensorDictBase``.
@@ -736,7 +967,33 @@ class SingleVerifierProtocolHandler(ProtocolHandler, ABC):
         if self.hyper_params.protocol_common.shared_reward:
             for prover_index in self.prover_indices:
                 reward[..., prover_index] = reward[..., self.verifier_index]
+
+        elif verifier_float_decision is not None:
+
+            if len(self.prover_names) == 1:
+                reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                    verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+
+            else:
+                reward[..., self.prover_indices[0]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[0]][verifier_decision_made] = (
+                    verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+                reward[..., self.prover_indices[1]][~verifier_decision_made] = 0.0
+                reward[..., self.prover_indices[1]][verifier_decision_made] = (
+                    -verifier_float_decision / 2 + 0.5
+                )[
+                    verifier_decision_made
+                ] * self.hyper_params.protocol_common.prover_reward
+
         else:
+
             if len(self.prover_names) == 1:
                 reward[..., self.prover_indices[0]] = (
                     verifier_decision_made & (verifier_decision == 1)

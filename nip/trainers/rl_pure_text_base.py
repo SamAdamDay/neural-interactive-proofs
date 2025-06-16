@@ -1,22 +1,26 @@
 """Base classes for RL trainers for text-based environments that only use APIs."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Literal, Iterable, Iterator
+from typing import Optional, Literal, Iterable
 from multiprocessing import Pool
 from functools import cached_property
+from itertools import chain
 from pathlib import Path
 import pickle
 import dataclasses
 from dataclasses import dataclass
 import json
-from time import sleep
 from warnings import warn
+from asyncio import TaskGroup, Queue
+import asyncio
+import logging
 
 import yaml
 
 import torch
 
 import numpy as np
+from numpy.typing import NDArray
 
 from einops import reduce
 
@@ -28,9 +32,8 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
-from nip.parameters import HyperParameters
 from nip.scenario_base.data import NestedArrayDictDataLoader
-from nip.scenario_base.environment import PureTextEnvironment, PromptMessage
+from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import (
     PureTextWholeAgent,
     PureTextCombinedWhole,
@@ -41,15 +44,16 @@ from nip.scenario_base.rollout_analysis import (
     PureTextRolloutAnalyser,
     ROLLOUT_ANALYSERS,
 )
-from nip.protocols.protocol_base import ProtocolHandler
 from nip.trainers.trainer_base import Trainer, CheckPointNotFoundError
-from nip.utils.maths import aggregate_mean_grouped_by_class
+from nip.utils.maths import aggregate_mean_grouped_by_class, entropy_numpy
 from nip.utils.data import VariableDataCycler, truncated_iterator
 from nip.utils.nested_array_dict import (
     NestedArrayDict,
     stack_nested_array_dicts,
     concatenate_nested_array_dicts,
 )
+from nip.utils.rollouts import get_pretty_pure_text_round_message
+from nip.utils.types import String, PromptMessage
 from nip.constants import (
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
@@ -60,6 +64,8 @@ from nip.constants import (
     PROMPTS_ARTIFACT_PREFIX,
     PROMPTS_ARTIFACT_TYPE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PureTextRlTrainer(Trainer, ABC):
@@ -227,10 +233,15 @@ class PureTextRlTrainer(Trainer, ABC):
         the training loop is resumed from the last stage.
         """
 
+        asyncio.run(self._train())
+
+    async def _train(self):
+        """Run the actual training loop implementation, which is asynchronous."""
+
         rerun_tests = self.hyper_params.base_run.base_run_type == "rerun_tests"
 
         if rerun_tests:
-            self.settings.logger.info(
+            logger.info(
                 f"Rerunning tests from base run {self.hyper_params.base_run.run_id!r}. "
                 f"Loading the state from the base run."
             )
@@ -245,6 +256,26 @@ class PureTextRlTrainer(Trainer, ABC):
             and self.hyper_params.base_run.rerun_tests_force_test_during_training_state
         )
 
+        # This condition happens when resuming a previously completed run but with more
+        # iterations
+        if (
+            self.state.iteration < self.hyper_params.rl.num_iterations
+            and self.state.train_loop_stage == "done"
+        ):
+            if self.settings.force_more_iterations:
+                logger.info(
+                    "Forcing more iterations to be run, even though the state "
+                    "indicates that the training is done."
+                )
+                self.state.train_loop_stage = "sample_rollouts"
+                self.save_checkpoint()
+            else:
+                logger.info(
+                    "Training is already done. If you want to run more iterations, "
+                    "set `force_more_iterations=True` in the experiment settings."
+                )
+                return
+
         rollouts: Optional[NestedArrayDict] = None
 
         while self.state.iteration < self.hyper_params.rl.num_iterations:
@@ -256,7 +287,7 @@ class PureTextRlTrainer(Trainer, ABC):
                         version=f"v{base_run_state_artifact_version}",
                     )
                 except CheckPointNotFoundError:
-                    self.settings.logger.info(
+                    logger.info(
                         f"Reached the end of the base run. Iteration: "
                         f"{self.state.iteration}, stage: "
                         f"{self.state.train_loop_stage!r}."
@@ -267,7 +298,7 @@ class PureTextRlTrainer(Trainer, ABC):
                     base_run_state_artifact_version
                 )
 
-                self.settings.logger.info(
+                logger.info(
                     f"Loaded state artifact version "
                     f"'v{self.state.base_run_state_artifact_version}'. Iteration: "
                     f"{self.state.iteration}, stage: "
@@ -279,12 +310,18 @@ class PureTextRlTrainer(Trainer, ABC):
             # Sample rollouts from the training environment
             if self.state.train_loop_stage == "sample_rollouts" and not rerun_tests:
 
-                self.settings.logger.info(
+                logger.info(
                     f"[{self.state.iteration+1}/{self.hyper_params.rl.num_iterations}] "
-                    f"Iteration begins."
+                    f"{self._get_iteration_begin_message()}"
                 )
 
-                rollouts = self._stage_sample_rollouts()
+                # Make sure all the shared model groups are in evaluation mode. We can
+                # do this concurrently for each group
+                async with TaskGroup() as task_group:
+                    for shared_model_group in self.shared_model_groups.values():
+                        task_group.create_task(shared_model_group.eval())
+
+                rollouts = await self._stage_sample_rollouts()
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "log_stats"
@@ -317,14 +354,21 @@ class PureTextRlTrainer(Trainer, ABC):
             ):
 
                 if test_during_log_stats_stage:
-                    self.settings.logger.info(
+                    logger.info(
                         "Testing during 'log_stats' stage for compatibility with older "
                         "runs without a 'test_during_training' stage."
                     )
 
                 # Run the test loop if we're doing that this iteration
                 if self._check_if_run_test_loop():
-                    self._stage_run_test_loop()
+
+                    # Make sure all the shared model groups are in evaluation mode. We
+                    # can do this concurrently for each group
+                    async with TaskGroup() as task_group:
+                        for shared_model_group in self.shared_model_groups.values():
+                            task_group.create_task(shared_model_group.eval())
+
+                    await self._stage_run_test_loop()
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "create_fine_tune_jobs"
@@ -354,14 +398,25 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 # Load all the rollouts if we are fine-tuning on all previous rollouts
                 if self.hyper_params.text_rl.fine_tune_on_all_previous_rollouts:
-                    rollouts = self._load_rollouts(range(self.state.iteration + 1))
+                    rollouts = self._load_rollouts(
+                        chain(
+                            self._previous_compatible_iterations(),
+                            (self.state.iteration,),
+                        )
+                    )
 
                 # Load the rollouts if they are not already set (i.e. if we are resuming
                 # this stage)
                 elif rollouts is None:
                     rollouts = self._load_rollouts(self.state.iteration)
 
-                self._stage_create_fine_tune_jobs(rollouts)
+                # Make sure all the shared model groups are in training mode. We can
+                # do this concurrently for each group
+                async with TaskGroup() as task_group:
+                    for shared_model_group in self.shared_model_groups.values():
+                        task_group.create_task(shared_model_group.train())
+
+                await self._stage_create_fine_tune_jobs(rollouts)
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
@@ -374,7 +429,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 and not rerun_tests
             ):
 
-                self._stage_await_fine_tune_jobs()
+                await self._stage_await_fine_tune_jobs()
 
                 # Advance to the next iteration and stage
                 self.state.train_loop_stage = "sample_rollouts"
@@ -393,7 +448,7 @@ class PureTextRlTrainer(Trainer, ABC):
         # Save the final checkpoint
         self.save_checkpoint()
 
-        self.settings.logger.info("Training complete.")
+        logger.info("Training complete.")
 
     def run_analysers(
         self,
@@ -457,12 +512,12 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 if analysis_file.exists():
                     if not overwrite:
-                        self.settings.logger.warning(
+                        logger.warning(
                             f"Analysis file {analysis_file!r} already exists. Skipping."
                         )
                         continue
                     else:
-                        self.settings.logger.warning(
+                        logger.warning(
                             f"Overwriting existing analysis file {analysis_file!r}"
                         )
                     if not dry_run:
@@ -471,7 +526,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 try:
                     rollouts = self._load_rollouts(iteration)
                 except FileNotFoundError:
-                    self.settings.logger.warning(
+                    logger.warning(
                         f"No rollouts found for iteration {iteration+1}. Skipping."
                     )
                     continue
@@ -482,7 +537,17 @@ class PureTextRlTrainer(Trainer, ABC):
                     with open(analysis_file, "wb") as f:
                         pickle.dump(evaluations, f)
 
-    def _stage_sample_rollouts(self) -> NestedArrayDict:
+    def _get_iteration_begin_message(self) -> str:
+        """Get the message to log at the beginning of each iteration.
+
+        Returns
+        -------
+        message : str
+            The message to log at the beginning of each iteration.
+        """
+        return "Iteration begins."
+
+    async def _stage_sample_rollouts(self) -> NestedArrayDict:
         """Training stage: sample rollouts from the training environment.
 
         Returns
@@ -491,8 +556,7 @@ class PureTextRlTrainer(Trainer, ABC):
             The sampled rollouts.
         """
 
-        # Sample rollouts
-        rollouts = self._sample_rollouts(
+        rollouts = await self._sample_rollouts(
             self.train_environment,
             self.state.iteration,
             use_tqdm=not self.settings.test_run,
@@ -516,7 +580,7 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats, self.state.iteration)
 
     @abstractmethod
-    def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
+    async def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
         """Training stage: create fine-tune jobs for each agent.
 
         Parameters
@@ -525,39 +589,56 @@ class PureTextRlTrainer(Trainer, ABC):
             The rollouts sampled in this iteration.
         """
 
-    def _stage_await_fine_tune_jobs(self):
+    async def _stage_await_fine_tune_jobs(self):
         """Training stage: await the completion of the fine-tune jobs."""
 
-        self.settings.logger.info("Awaiting completion of fine-tune jobs...")
+        logger.info("Awaiting completion of fine-tune jobs...")
 
-        while True:
+        async def wait_for_fine_tune_job(
+            group_name: str, shared_model_group: PureTextSharedModelGroup
+        ):
+            """Wait for a fine-tune job to complete for a single shared model group.
 
-            num_successful_jobs = 0
-            for group_name, shared_model_group in self.shared_model_groups.items():
-                if shared_model_group.get_fine_tune_job_status() == "succeeded":
-                    num_successful_jobs += 1
-                elif shared_model_group.get_fine_tune_job_status() == "failed":
-                    raise RuntimeError(
-                        f"Fine-tune job for group {group_name!r} failed. "
-                        f"{shared_model_group.get_fine_tune_job_error_repr()}"
+            Once the fine-tune job is complete, switch to the fine-tuned model.
+            """
+
+            while True:
+
+                status = await shared_model_group.get_fine_tune_job_status()
+
+                if status == "succeeded":
+                    logger.info(
+                        f"Fine-tune job for group {group_name!r} succeeded. Switching "
+                        f"to next model."
                     )
+                    await shared_model_group.switch_to_next_model()
+                    return
 
-            if num_successful_jobs == len(self.shared_model_groups):
-                self.settings.logger.info("All fine-tune jobs succeeded")
-                break
+                elif status == "failed":
+                    error_repr = await shared_model_group.get_fine_tune_job_error_repr()
+                    message = f"Fine-tune job for group {group_name!r} failed."
+                    if error_repr != "":
+                        message += f" Error: {error_repr}"
+                    raise RuntimeError(message)
 
-            # Wait for a minute before checking again
-            sleep(60)
+                # Wait for a minute before checking again
+                await asyncio.sleep(60)
 
-        # Make all the agents use the new, fine-tuned models
-        for shared_model_group in self.shared_model_groups.values():
-            shared_model_group.switch_to_next_model()
+        async with TaskGroup() as task_group:
+            for group_name, shared_model_group in self.shared_model_groups.items():
+                if shared_model_group.shared_agent_params.freeze_agent:
+                    continue
+                task_group.create_task(
+                    wait_for_fine_tune_job(group_name, shared_model_group)
+                )
 
-    def _stage_run_test_loop(self):
+        logger.info("All fine-tune jobs succeeded.")
+
+    async def _stage_run_test_loop(self):
         """Training stage: run the test loop."""
 
         # Sample rollouts from the test environment
-        rollouts = self._sample_rollouts(
+        rollouts = await self._sample_rollouts(
             self.test_environment, "test", use_tqdm=True, tqdm_desc="Testing"
         )
 
@@ -593,7 +674,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 f"Invalid test scheme {self.hyper_params.text_rl.test_scheme!r}"
             )
 
-    def _sample_rollouts(
+    async def _sample_rollouts(
         self,
         environment: PureTextEnvironment,
         iteration: int | Literal["test"],
@@ -653,59 +734,37 @@ class PureTextRlTrainer(Trainer, ABC):
         else:
             num_rollouts = environment.num_envs
 
-        arg_iterator = (
-            (
-                self.hyper_params,
-                self.protocol_handler,
-                environment,
-                self.combined_agent,
-                data_batch,
+        sample_queue = Queue()
+        if use_tqdm:
+            progress_bar = tqdm(total=num_rollouts, desc=tqdm_desc)
+
+        async def sample_task(
+            data_batch: Optional[NestedArrayDict],
+        ):
+            sample = await self._sample_rollouts_for_single_environment(
+                environment, data_batch
             )
-            for data_batch in truncated_iterator(data_cycler, num_rollouts)
-        )
-
-        def get_rollouts(
-            rollout_iterator: Iterator[list[NestedArrayDict]],
-        ) -> list[NestedArrayDict]:
-
+            await sample_queue.put(sample)
             if use_tqdm:
-                rollout_iterator = tqdm(
-                    rollout_iterator,
-                    total=num_rollouts,
-                    desc=tqdm_desc,
-                )
+                progress_bar.update(1)
 
-            return sum(rollout_iterator, [])
+        async with TaskGroup() as task_group:
+            for data_batch in truncated_iterator(data_cycler, num_rollouts):
+                task_group.create_task(sample_task(data_batch))
 
-        # When the number of rollout workers is set to 0, we sample the rollouts
-        # sequentially, without using a pool
-        if self.settings.num_rollout_workers == 0:
-            rollout_iterator = map(
-                self._sample_rollouts_for_single_environment, arg_iterator
-            )
-            rollout_list = get_rollouts(rollout_iterator)
-
-        # If we have multiple workers, we can use a pool to parallelize the rollouts
-        else:
-            with Pool(self.settings.num_rollout_workers) as pool:
-                rollout_iterator = pool.imap_unordered(
-                    self._sample_rollouts_for_single_environment, arg_iterator
-                )
-                rollout_list = get_rollouts(rollout_iterator)
+        rollout_list = []
+        while not sample_queue.empty():
+            sample = await sample_queue.get()
+            rollout_list.extend(sample)
 
         rollouts_stacked = stack_nested_array_dicts(rollout_list, dim=0)
 
         return rollouts_stacked
 
-    @staticmethod
-    def _sample_rollouts_for_single_environment(
-        args: tuple[
-            HyperParameters,
-            ProtocolHandler,
-            PureTextEnvironment,
-            PureTextCombinedWhole,
-            Optional[NestedArrayDict],
-        ],
+    async def _sample_rollouts_for_single_environment(
+        self,
+        environment: PureTextEnvironment,
+        data_batch: Optional[NestedArrayDict] = None,
     ) -> list[NestedArrayDict]:
         """Sample rollouts for a single environment.
 
@@ -717,21 +776,10 @@ class PureTextRlTrainer(Trainer, ABC):
         environment until it is done, and then padding the rollout with zero states up
         to the maximum number of message rounds.
 
-        Notes
-        -----
-        This function is intended to be applied by a pool of workers. As such it must be
-        a static function and take all trainer attributes required as arguments.
-
         Parameters
         ----------
-        hyper_params : HyperParameters
-            The parameters of the experiment.
-        protocol_handler : ProtocolHandler
-            The interaction protocol handler for the experiment.
         environment : PureTextEnvironment
-            The environment to sample a rollout in.
-        combined_agent : PureTextCombinedWhole
-            The combined agent to use for the rollout.
+            The environment to sample rollouts in.
         data_batch : NestedArrayDict, optional
             The data batch to use for the rollout. If None, the data batch will be
             sampled from the dataset.
@@ -743,17 +791,15 @@ class PureTextRlTrainer(Trainer, ABC):
             batch size (max_message_rounds, )
         """
 
-        _, protocol_handler, environment, combined_agent, data_batch = args
-
         ended = False
         env_state = environment.reset(data_batch=data_batch)
         env_states = []
 
-        for _ in range(protocol_handler.max_message_rounds):
+        for _ in range(self.max_message_rounds):
             if not ended:
 
                 # Run the forward pass on all agents to sample actions
-                env_state = combined_agent.forward(env_state, environment)
+                env_state = await self.combined_agent(env_state, environment)
 
                 # Step the environment to get the next state. This writes the next state
                 # in the "next" sub-dictionary.
@@ -783,6 +829,21 @@ class PureTextRlTrainer(Trainer, ABC):
         sampled_rollout = concatenate_nested_array_dicts(env_states, dim=0)
 
         return [sampled_rollout]
+
+    def _previous_compatible_iterations(self) -> Iterable[int]:
+        """Get the previous iterations which are combinable with the current iteration.
+
+        The method is used when combining rollouts from different iterations, and
+        returns an iterable of the previous iteration numbers which are able to be
+        combined with the current iteration.
+
+        Returns
+        -------
+        previous_iterations : Iterable[int]
+            The previous iterations which are combinable with the current iteration.
+        """
+
+        return range(self.state.iteration)
 
     def _get_verifier_guess_replacement_proportion(self, iteration: int) -> float:
         """Get the proportion of rollouts to replace the guess with the true label.
@@ -847,8 +908,10 @@ class PureTextRlTrainer(Trainer, ABC):
         if iteration is None:
             iteration = self.state.iteration
 
-        if environment.train:
+        if environment.split == "train":
             base_name = f"{iteration}"
+        elif environment.split == "validation":
+            base_name = f"validation_{iteration}"
         else:
             base_name = f"test_{iteration}"
 
@@ -961,6 +1024,8 @@ class PureTextRlTrainer(Trainer, ABC):
 
         if isinstance(iterations, int):
             iterations = [iterations]
+        else:
+            iterations = list(iterations)
 
         self.checkpoint_rollouts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1026,7 +1091,7 @@ class PureTextRlTrainer(Trainer, ABC):
         if train:
             prefix = ""
         else:
-            prefix = "test_"
+            prefix = f"{self.test_environment.split}_"
 
         reward: Float[np.ndarray, "rollout round agent"] = rollouts[
             "next", "agents", "reward"
@@ -1038,6 +1103,12 @@ class PureTextRlTrainer(Trainer, ABC):
         ]
         padding: Bool[np.ndarray, "rollout round"] = rollouts["padding"]
         datapoint_id: Int[np.ndarray, "rollout"] = rollouts["datapoint_id"][..., 0]
+        verifier_decision = rollouts["agents", "decision"][
+            ..., self.agent_names.index("verifier")
+        ]
+        verifier_continuous_decision = rollouts["agents", "continuous_decision"][
+            ..., self.agent_names.index("verifier")
+        ]
 
         last_timestep = (next_done | next_terminated) & ~padding
 
@@ -1077,9 +1148,6 @@ class PureTextRlTrainer(Trainer, ABC):
         )
 
         # Get the mean and std accuracy of the verifier
-        verifier_decision = rollouts["agents", "decision"][
-            ..., self.agent_names.index("verifier")
-        ]
         accuracy = verifier_decision[last_timestep] == rollouts["y"][last_timestep]
         log_stats[f"{prefix}mean_accuracy"] = accuracy.mean().item()
         log_stats[f"{prefix}std_accuracy"] = accuracy.std().item()
@@ -1107,11 +1175,26 @@ class PureTextRlTrainer(Trainer, ABC):
             )
 
         # Get the mean and std verifier decision
-        log_stats[f"{prefix}mean_decision"] = (
-            verifier_decision[last_timestep].mean().item()
+        verifier_last_decision = verifier_decision[last_timestep][
+            verifier_decision[last_timestep] != 2
+        ]
+        log_stats[f"{prefix}mean_decision"] = verifier_last_decision.mean().item()
+        log_stats[f"{prefix}std_decision"] = verifier_last_decision.std().item()
+
+        # Get the proportion of rollouts where the verifier does not make a decision
+        log_stats[f"{prefix}no_decision_proportion"] = (
+            (verifier_decision[last_timestep] == 2).mean().item()
         )
-        log_stats[f"{prefix}std_decision"] = (
-            verifier_decision[last_timestep].std().item()
+
+        # Get the proportion of rollouts where the verifier decides to neither accept
+        # nor reject
+        log_stats[f"{prefix}neither_agree_nor_disagree_proportion"] = (
+            (verifier_decision[last_timestep] == 3).mean().item()
+        )
+
+        # Get Shannon entropy of the verifier decision
+        log_stats[f"{prefix}verifier_decision_entropy"] = entropy_numpy(
+            verifier_continuous_decision
         )
 
         # Get the precision and recall of the verifier
@@ -1156,17 +1239,19 @@ class PureTextRlTrainer(Trainer, ABC):
         rollouts : NestedArrayDict
             The rollouts to extract the transcripts from. A NestedArrayDict with keys:
 
-            - "message_history" (batch round round channel) : The message history for
-              each rollout. In each timestep this gives the history of all messages
-              generated up to that point.
-            - "message_agent_id" (batch round round channel) : The ID of the agent that
-              generated each message in the message history.
+            - ("agents", "message") (batch round agent channel) : The processed message
+              sent by each agent to each channel in each timestep.
             - ("agents", "raw_message") (batch round agent) : The raw message generated
               by each model in each timestep.
             - ("agents", "prompt") (batch round agent message field) : The prompt used
               by to generate the message for each agent in each timestep.
             - ("agents", "decision") (batch round agent) : The decision made by each
               agent in each timestep.
+            - ("agents", "continuous_decision") (batch round agent) : A float version of
+              the decision made by each agent at each timestep, which is a value between
+              -1 and 1.
+            - ("agents", "raw_decision") (batch round agent) : The raw decision text
+              sent by each agent in each timestep.
             - ("agents", "reward") (batch round agent) : The reward received by each
               agent in each timestep.
 
@@ -1198,11 +1283,22 @@ class PureTextRlTrainer(Trainer, ABC):
             specified by the ``PromptMessage`` class.
         """
 
-        message_history = rollouts["message_history"]
-        message_agent_id = rollouts["message_agent_id"]
-        raw_message = rollouts["agents", "raw_message"]
-        prompt = rollouts["agents", "prompt"]
-        decision = rollouts["agents", "decision"]
+        message: String[NDArray, "batch round agent channel"] = rollouts[
+            "agents", "message"
+        ]
+        raw_message: String[NDArray, "batch round agent"] = rollouts[
+            "agents", "raw_message"
+        ]
+        prompt: String[NDArray, "batch round agent message field"] = rollouts[
+            "agents", "prompt"
+        ]
+        decision: Int[NDArray, "batch round agent"] = rollouts["agents", "decision"]
+        continuous_decision: Float[NDArray, "batch round agent"] = rollouts[
+            "agents", "continuous_decision"
+        ]
+        raw_decision: String[NDArray, "batch round agent"] = rollouts[
+            "agents", "raw_decision"
+        ]
         reward = reduce(
             rollouts["next", "agents", "reward"],
             "batch round agent -> batch agent",
@@ -1210,7 +1306,6 @@ class PureTextRlTrainer(Trainer, ABC):
         )
         num_rollouts = rollouts.batch_size[0]
 
-        channel_names = self.protocol_handler.message_channel_names
         agent_names = self.protocol_handler.agent_names
 
         raw_transcripts = []
@@ -1239,46 +1334,13 @@ class PureTextRlTrainer(Trainer, ABC):
 
                 raw_transcript.append(raw_transcript_round)
 
-                processed_transcript_round = {}
-
-                # We first check the decision made by a verifier, and if it is made, we
-                # set the processed transcript to "Accept" or "Reject" based on the
-                # decision.
-                for verifier_name in self.protocol_handler.verifier_names:
-                    key = f"{verifier_name}.decision"
-                    verifier_index = agent_names.index(verifier_name)
-                    if decision[rollout_id, round_id, verifier_index] == 0:
-                        processed_transcript_round[key] = "Reject"
-                        break
-                    elif decision[rollout_id, round_id, verifier_index] == 1:
-                        processed_transcript_round[key] = "Accept"
-                        break
-
-                # Otherwise, we look at the last message history in the rollout. The key
-                # is the active agent name and channel name, with an "@" in between.
-                else:
-                    for channel_id, channel_name in enumerate(channel_names):
-
-                        # Get the id of the agent who messaged in this channel
-                        agent_id = message_agent_id[
-                            rollout_id, -1, round_id, channel_id
-                        ]
-
-                        # If the agent id is -1, it means no agent messaged in this
-                        # channel in this round
-                        if agent_id == -1:
-                            continue
-
-                        agent_name = agent_names[
-                            message_agent_id[rollout_id, -1, round_id, channel_id]
-                        ]
-
-                        # Add the message to the processed transcript with the key
-                        # "{agent_name}@{channel_name}"
-                        key = f"{agent_name}@{channel_name}"
-                        processed_transcript_round[key] = message_history[
-                            rollout_id, -1, round_id, channel_id
-                        ]
+                processed_transcript_round = get_pretty_pure_text_round_message(
+                    protocol_handler=self.protocol_handler,
+                    decision=decision[rollout_id, round_id],
+                    raw_decision=raw_decision[rollout_id, round_id],
+                    continuous_decision=continuous_decision[rollout_id, round_id],
+                    message=message[rollout_id, round_id],
+                )
 
                 if processed_transcript_round:
                     processed_transcript.append(processed_transcript_round)

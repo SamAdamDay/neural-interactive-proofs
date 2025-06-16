@@ -126,6 +126,48 @@ multi_channel_test
     A protocol for testing multi-channel communication.
 """
 
+VerifierDecisionSpectrumType: TypeAlias = Literal[
+    "accept_reject",
+    "likert_scale_4",
+    "likert_scale_5",
+    "likert_scale_6",
+    "likert_scale_7",
+    "likert_scale",
+    "likert_scale_no_undecided",
+    "out_of_10",
+    "out_of_100",
+]
+"""Type for the scale of the verifier's decision. Only relevant for text-based tasks.
+
+accept_reject
+    The verifier's decision is either "accept" or "reject".
+likert_scale_4
+    The verifier's decision is one of 4 options: "strongly agree", "agree", "disagree",
+    "strongly disagree".
+likert_scale_5
+    The verifier's decision is one of 5 options: "strongly agree", "agree", "neither
+    agree nor disagree", "disagree", "strongly disagree".
+likert_scale_6
+    The verifier's decision is one of 6 options: "strongly agree", "agree", "somewhat
+    agree", "disagree", "somewhat disagree", "strongly disagree".
+likert_scale_7
+    The verifier's decision is one of 7 options: "strongly agree", "agree", "somewhat
+    agree", "neither agree nor disagree", "somewhat disagree", "disagree", "strongly
+    disagree".
+likert_int_scale_11
+    Decisions are specified as integers between 0 and 10, where some integers have
+    special names given by the Likert scale, as follows:
+
+    - 0: strongly disagree
+    - 5: neither agree nor disagree
+    - 10: strongly agree
+    
+out_of_10
+    The verifier's decision is a number between 0 and 10.
+out_of_100
+    The verifier's decision is a number between 0 and 100.
+"""
+
 ImageBuildingBlockType: TypeAlias = Literal["conv2d", "residual_basic"]
 """Type for the type of building block to use in the image classification network.
 
@@ -156,4 +198,24 @@ parameters
 rerun_tests
     Rerun the tests of a previous run. The hyper-parameters controlling the tests
     can be different.
+"""
+
+UseSupervisorType: TypeAlias = Literal["none", "all", "first", "all_but_first"]
+"""Type for specifying when to use a supervisor message in pure-text tasks.
+
+A supervisor message is appended to each chat history before being sent to the model.
+
+Values
+------
+none
+    Do not use a supervisor message.
+all
+    Use a supervisor message for all rounds.
+first
+    Use a supervisor message only for the first round. This is useful for models that
+    require at least one user message to be able to generate a response.
+all_but_first
+    Use a supervisor message for all rounds except the first one. The supervisor message
+    is somewhat superfluous for the first round, because the system message already
+    contains all the instructions.
 """
