@@ -398,51 +398,6 @@ def convert_dpo_dataset_to_hugging_face(
     return [convert_dpo_item_to_hugging_face(item) for item in dataset]
 
 
-class FromDictDataClass(ABC):
-    """Base class for data classes that can be created recursively from a dictionary.
-
-    All subclasses should defined using the
-    :external+python:class:`dataclasses.dataclass` decorator.
-    """
-
-    @classmethod
-    def from_dict(cls, config_dict: dict) -> Self:
-        """Create an instance recursively from a dictionary.
-
-        If the type of any field in the data class has a `from_dict` method defined,
-        this method will call that method to create an instance of that type from the
-        corresponding dictionary value. This allows for nested data classes to be
-        created from a dictionary representation.
-
-        Parameters
-        ----------
-        config_dict : dict
-            A dictionary containing the configuration parameters.
-
-        Returns
-        -------
-        config : Config
-            An instance of the configuration class.
-        """
-
-        # Call `from_dict` on nested dataclasses if they have it defined
-        for data_field in dataclasses.fields(cls):
-            value = config_dict.get(data_field.name, None)
-            if not isinstance(value, dict) or value is None:
-                continue
-            origin_type = get_origin(data_field.type)
-            if origin_type is Union or origin_type is UnionType:
-                types_to_try = get_args(data_field.type)
-            else:
-                types_to_try = [data_field.type]
-            for data_type in types_to_try:
-                if hasattr(data_type, "from_dict"):
-                    config_dict[data_field.name] = data_type.from_dict(value)
-                    break
-
-        return cls(**config_dict)
-
-
 def flatten_dict_keys(data: dict, separator: str = ".", prefix: str = "") -> dict:
     """Flatten a nested dictionary by joining keys with a separator recursively.
 

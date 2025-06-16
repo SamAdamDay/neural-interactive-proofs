@@ -29,7 +29,7 @@ from nip.language_model_server.types import (
 )
 from nip.language_model_server.exceptions import (
     BadResponseError,
-    TimeoutError,
+    ClientTimeoutError,
     VllmServerError,
 )
 
@@ -209,7 +209,7 @@ class LanguageModelClient:
 
         Raises
         ------
-        TimeoutError
+        ClientTimeoutError
             If the vLLM server does not become online within the specified timeout.
         """
 
@@ -226,7 +226,7 @@ class LanguageModelClient:
                 raise VllmServerError(status)
 
             if asyncio.get_event_loop().time() - start_time > timeout:
-                raise TimeoutError(
+                raise ClientTimeoutError(
                     f"Timed out waiting for vLLM server to be online after {timeout}s."
                 )
 

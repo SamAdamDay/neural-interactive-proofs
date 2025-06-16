@@ -17,20 +17,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v3
-        with:
-          python-version: "3.11"
       - name: Setup NIP
         uses: ./.github/actions/setup-nip
       - name: Test with pytest
         run: |
-          python -m pytest
+          uv run pytest
       - name: Check formatting with black
         run: |
           # stop the build if there are black formatting errors
-          black --check .
+          uv run black --check .
       - name: Check linting with ruff
         run: |
           # stop the build if there are ruff linting errors
-          ruff check .
+          uv run ruff check .
