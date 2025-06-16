@@ -26,7 +26,8 @@ are guaranteed to be compatible, but not if it differs by a `MAJOR` version.
 Similarly, it ensures that a client and server which agree on `MAJOR` version are able
 to communicate reliably.
 
-## Unreleased
+
+## [2.0.0] - 2025-06-16
 
 ### Changed
 
