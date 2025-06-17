@@ -258,6 +258,8 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         hub_model_id=new_model_name,
         run_name=job_id,
         output_dir=HF_TRAINER_OUTPUT_DIR,
+        fp16=config.mixed_precision == "fp16",
+        bf16=config.mixed_precision == "bf16",
     )
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)

@@ -184,6 +184,14 @@ class LmTrainingConfig(BaseModel):
       multiple LoRA adapters to be applied sequentially.
     """
 
+    mixed_precision: Literal["fp16", "bf16", "no"] = "fp16"
+    """The mixed precision to use during training.
+
+    - "fp16": Use 16-bit floating point precision.
+    - "bf16": Use bfloat16 precision.
+    - "no": Use full 32-bit floating point precision.
+    """
+
 
 class CreateTrainingJobRequest(BaseModel):
     """A request to create a new training job."""

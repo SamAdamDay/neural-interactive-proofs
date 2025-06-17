@@ -414,9 +414,16 @@ class TrainingJob:
 
         num_gpus = torch.cuda.device_count()
 
+        # bfloat16 mixed precision is only available on NVIDIA GPUs with compute
+        # capability 8.0 or higher.
+        if torch.cuda.get_device_capability()[0] >= 8:
+            mixed_precision = "bf16"
+        else:
+            mixed_precision = "fp16"
+
         rendered_path = self.temporary_directory_path.joinpath("accelerate_config.yaml")
         with open(rendered_path, "w") as f:
-            f.write(template.render(num_gpus=num_gpus))
+            f.write(template.render(num_gpus=num_gpus, mixed_precision=mixed_precision))
 
         return rendered_path
 
