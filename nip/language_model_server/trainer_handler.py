@@ -9,6 +9,8 @@ from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from tempfile import TemporaryDirectory
 import json
 
+import torch
+
 from filelock import FileLock
 
 from jinja2 import (
@@ -179,8 +181,8 @@ class TrainingJob:
 
         self.process = await create_subprocess_exec(
             "accelerate",
-            *accelerate_args,
             "launch",
+            *accelerate_args,
             str(PACKAGE_ROOT / "language_model_server" / "trainers" / "dpo.py"),
             "--training-config-path",
             str(self.hyperparameters_filepath),
@@ -410,9 +412,11 @@ class TrainingJob:
                     self.settings.accelerate_config_path
                 )
 
+        num_gpus = torch.cuda.device_count()
+
         rendered_path = self.temporary_directory_path.joinpath("accelerate_config.yaml")
         with open(rendered_path, "w") as f:
-            f.write(template.render())
+            f.write(template.render(num_gpus=num_gpus))
 
         return rendered_path
 
