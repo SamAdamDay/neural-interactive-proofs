@@ -140,7 +140,9 @@ class LanguageModelClient:
 
         return data.message
 
-    async def stop_vllm_server(self, ignore_not_running: bool = False):
+    async def stop_vllm_server(
+        self, ignore_not_running: bool = False, timeout: float = 15.0
+    ):
         """Stop the vLLM language model server.
 
         Parameters
@@ -149,6 +151,11 @@ class LanguageModelClient:
             If True, the server will not raise an error if it is not running. Instead,
             it will log a warning and return a success message indicating that the
             server was not running and is being ignored.
+        timeout : float, default=15.0
+            The maximum time to wait for the vLLM server to stop, in seconds. If the
+            server does not stop within this time, a timeout error will be raised. The
+            server will attempt to terminate gracefully for `max(timeout - 5.0, 1.0)`
+            seconds, after which it will be forcefully killed if it is still running.
 
         Raises
         ------
@@ -160,8 +167,10 @@ class LanguageModelClient:
             response = await httpx_client.post(
                 f"{self.server_url}/vllm/stop",
                 json=VllmStopRequest(
-                    ignore_not_running=ignore_not_running
+                    ignore_not_running=ignore_not_running,
+                    terminate_timeout=max(1.0, timeout - 5.0),
                 ).model_dump(),
+                timeout=timeout,
             )
         response.raise_for_status()
 

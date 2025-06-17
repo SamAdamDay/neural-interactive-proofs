@@ -44,7 +44,7 @@ Server API
     
     :reqjson bool ignore_not_running: If True, will not raise an error if the server is
         not running.
-    :resjson string message: A message indicating that the vLLM server has stopped.
+    :reqjson float timeout: The timeout in seconds to wait for the server to terminate gracefully.
 
 
 .. http:get:: /vllm/status
@@ -55,7 +55,7 @@ Server API
         
         - "online": The server is running and accepting connections.
         - "not_started": The server has not been started.
-        - "exited": The server has exited unexpectedly.
+        - "crashed": The server has exited unexpectedly.
         - "not_accepting_connections": The server is running but not accepting
           connections. This can happen if the server is still starting up or if it has
           crashed.

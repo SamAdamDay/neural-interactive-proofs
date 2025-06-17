@@ -166,7 +166,7 @@ async def stop_vllm_server(request: VllmStopRequest):
     """
 
     try:
-        await vllm_server_handler.stop_server()
+        await vllm_server_handler.stop_server(timeout=request.terminate_timeout)
     except VllmServerNotRunningError as e:
         if request.ignore_not_running:
             logger.warning("vLLM server was not running, not stopping.")

@@ -95,6 +95,12 @@ class VllmStopRequest(BaseModel):
     server was not running and is being ignored.
     """
 
+    terminate_timeout: float = 10.0
+    """The timeout in seconds to wait for the server to terminate gracefully.
+
+    If the server does not terminate within this time, it will be forcefully killed.
+    """
+
 
 class VllmStatusResponse(BaseModel):
     """A response obtained when checking the vLLM server status."""
