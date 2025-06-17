@@ -28,8 +28,13 @@ If you want to push the image to `Docker Hub <https://hub.docker.com/>`_, you wi
 Building and Pushing the Image
 ------------------------------
 
-Once you have filled in the appropriate values in your ``.env`` file, you can build the
-Docker image using the following command:
+First make sure you have filled in the appropriate values in your ``.env`` file.
+
+You also need to authenticate to the GitHub Container Registry (GHCR), which you can do
+by following `this guide in the GitHub documentation
+<https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic>`_.
+
+Then, you can build the Docker image using the following command:
 
 .. code-block:: bash
 
@@ -39,14 +44,13 @@ replacing ``DOCKER_USER`` with your Docker Hub username, and ``DOCKER_REPO`` and
 ``DOCKER_TAG`` suitable Docker repository and tag names (e.g.
 "neural-interactive-proofs/default").
 
-Alternatively, you can build an image with all of the datasets already downloaded. This
-will result in a much larger image, but can make the process of spinning up and running
-a new instance faster overall, if using a large dataset. To do this, use the "datasets"
-target as follows:
+If you want to host language models for inference and training, you can build the
+image using the `lm-server` target instead of `default`. This will include
+the necessary dependencies for running language models
 
 .. code-block:: bash
 
-    docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target datasets --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
+    docker build -t DOCKER_USER/DOCKER_REPO:DOCKER_TAG --target lm-server --secret id=my_env,src=.env --build-arg CACHE_BUST=`git rev-parse main` .
 
 To push the image to Docker Hub, use the following command:
 
