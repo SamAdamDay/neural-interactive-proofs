@@ -59,6 +59,8 @@ Server API
         - "not_accepting_connections": The server is running but not accepting
           connections. This can happen if the server is still starting up or if it has
           crashed.
+        - "timeout": A timeout occurred when trying to connect to the server. Retrying
+          may help.
         - "server_error": A 5xx error occurred when trying to connect to the server.
         - "other_error": Any other error occurred when trying to connect to the server.
 

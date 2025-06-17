@@ -8,6 +8,7 @@ tasks.
 from typing import Optional
 import asyncio
 from warnings import warn
+import logging
 
 from httpx import AsyncClient
 
@@ -32,6 +33,8 @@ from nip.language_model_server.exceptions import (
     ClientTimeoutError,
     VllmServerError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class LanguageModelClient:
@@ -233,6 +236,9 @@ class LanguageModelClient:
 
             elif status in ["crashed", "server_error", "other_error"]:
                 raise VllmServerError(status)
+
+            elif status == "timeout":
+                logger.warning("vLLM server status is 'timeout'. Will keep waiting...")
 
             if asyncio.get_event_loop().time() - start_time > timeout:
                 raise ClientTimeoutError(

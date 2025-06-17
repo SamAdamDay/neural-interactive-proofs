@@ -12,7 +12,7 @@ from asyncio import wait_for, TimeoutError, Lock
 from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from contextlib import nullcontext
 
-from httpx import HTTPStatusError, ConnectError, AsyncClient
+from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
 import torch
 
@@ -158,7 +158,7 @@ class VllmServerHandler:
                 "--port",
                 str(self.port),
                 "--tensor-parallel-size",
-                str(num_gpus),
+                "2",
                 **output_kwargs,
             )
 
@@ -215,12 +215,14 @@ class VllmServerHandler:
 
             logger.info("vLLM server stopped.")
 
-    async def get_status(self, timeout: float = 0.5) -> VllmServerStatus:
+    async def get_status(
+        self, timeout: float = 0.5
+    ) -> tuple[VllmServerStatus, str | None]:
         """Get the status of the vLLM server by trying to list available models.
 
         Parameters
         ----------
-        timeout : float, default=5.0
+        timeout : float, default=0.5
             The timeout to use when trying to connect to the server.
 
         Returns
@@ -250,6 +252,8 @@ class VllmServerHandler:
                 )
             response.raise_for_status()
             return "online", None
+        except ConnectTimeout:
+            return "timeout", "Connection to vLLM server timed out."
         except ConnectError as e:
             return "not_accepting_connections", str(e)
         except HTTPStatusError as e:
