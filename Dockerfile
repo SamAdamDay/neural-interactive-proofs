@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.0.1-runtime-ubuntu20.04 AS base
+FROM nvidia/cuda:12.0.1-devel-ubuntu20.04 AS base
+
+# Ports for the language model server and vLLM server
+ARG LM_SERVER_PORT=5000
+ARG VLLM_SERVER_PORT=8000
 
 # Set the timezone environmental variable
 ENV TZ=Europe/London
@@ -9,19 +13,19 @@ RUN apt update
 
 # Unminimize Ubunutu, and install a bunch of necessary/helpful packages
 RUN yes | unminimize
-RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git build-essential curl git gnupg2 make cmake g++ python-dev-is-python3 pipx
+RUN DEBIAN_FRONTEND=noninteractive apt install -y ubuntu-server openssh-server python-is-python3 git build-essential curl git gnupg2 make cmake g++ python-dev-is-python3
 
-# Set up pipx, to allow installing a specific uv version
-RUN pipx ensurepath
-
-# Install uv
-RUN pipx install uv==0.7.13
+# Install uv version 0.7.13
+COPY --from=ghcr.io/astral-sh/uv:0.7.13 /uv /uvx /bin/
 
 # Install nvitop for monitoring GPU usage
 RUN uv tool install nvitop
 
 # Move to the root home directory
 WORKDIR /root
+
+# Add /root/.local/bin to the path
+ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Install Weights & Biases now so we we can log in
 RUN uv tool install wandb
@@ -41,9 +45,6 @@ RUN --mount=type=secret,id=my_env,mode=0444 /bin/bash -c 'source /run/secrets/my
     && mkdir -p .ssh \
     && echo "${SSH_PUBKEY}" > .ssh/authorized_keys'
 
-# Add /root/.local/bin to the path
-ENV PATH=/root/.local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
 # Copy the scripts to the /usr/local/bin directory
 COPY docker/bin/* /usr/local/bin/
 
@@ -59,16 +60,16 @@ WORKDIR /root/neural-interactive-proofs
 # Download the source code for PyTorch Image Models (timm), so we can use the training
 # scripts
 RUN mkdir -p vendor
-RUN grep timm== requirements.txt \
-    | sed -E --expression='s#timm==(.*)#https://github.com/huggingface/pytorch-image-models/archive/refs/tags/v\1.tar.gz#' \
+RUN grep timm== pyproject.toml \
+    | sed -E --expression='s#\s*"timm==(.*)\s*",#https://github.com/huggingface/pytorch-image-models/archive/refs/tags/v\1.tar.gz#' \
     | xargs wget -qO- \
     | tar -xzC /root/neural-interactive-proofs/vendor
 
+# Install all the required packages
+RUN uv sync --locked --extra lm-server
+
 # The default target doesn't do much else
 FROM base AS default
-
-# Install all the required packages
-RUN uv sync
 
 # Go back to the root
 WORKDIR /root
@@ -79,11 +80,12 @@ EXPOSE 22
 # The default target doesn't do much else
 FROM base AS lm-server
 
-# Install all the required packages
-RUN uv sync --extra lm-server
+# Make sure the log directory exists
+RUN mkdir -p /root/neural-interactive-proofs/log
 
-# Go back to the root
-WORKDIR /root
+# Expose the default SSH port and ports for the language model server (inside the
+# container)
+EXPOSE 22 ${LM_SERVER_PORT} ${VLLM_SERVER_PORT}
 
-# Expose the default SSH port (inside the container)
-EXPOSE 22 5000 8000
+# Run the language model server
+ENTRYPOINT uv run python scripts/run_lm_server.py --external 2>&1 | tee /root/neural-interactive-proofs/log/lm_server.log
