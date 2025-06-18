@@ -13,6 +13,8 @@ Claude 3,Sonnet,Anthropic,OpenRouter/anthropic/claude-3-sonnet,,,3,15,0.58
 Claude 3,Opus,Anthropic,OpenRouter/anthropic/claude-3-opus,,164.0001,15,75,0.7
 Claude 3.5,Sonnet,Anthropic,OpenRouter/anthropic/claude-3.5-sonnet,,365.0001,0.8,4,0.77
 Claude 3.7,Sonnet,Anthropic,OpenRouter/anthropic/claude-3.7-sonnet,,335,3,15,0.8
+Claude 4,Sonnet,Anthropic,OpenRouter/anthropic/claude-sonnet-4,,,3,15,0.87
+Claude 4,Opus,Anthropic,OpenRouter/anthropic/claude-sonnet-4,,,15,75,0.89
 Command,R7B,Cohere,OpenRouter/cohere/command-r7b-12-2024,7,,0.0375,0.15,0.29
 Command,R,Cohere,OpenRouter/cohere/command-r,35,,0.15,0.6,0.34
 Command,R+,Cohere,OpenRouter/cohere/command-r-plus,104,,3,15,0.43
@@ -50,5 +52,12 @@ Mixtral Instruct (8 Experts),8x7B,Mistral,OpenRouter/mistralai/mixtral-8x7b-inst
 Mixtral Instruct (8 Experts),8x22B,Mistral,OpenRouter/mistralai/mixtral-8x22b-instruct,176,,0.9,0.9,
 Mistral Large 2,,Mistral,OpenRouter/mistralai/mistral-large-2411,123,213,2,6,
 Mistral Small 3,,Mistral,OpenRouter/mistralai/mistral-small-24b-instruct-2501,24,11.52,0.1,0.3,
-GPT 4o,Mini,OpenAI,OpenAI/gpt-4o-mini-2024-07-18,,381.0001,2.5,10,0.63
+GPT 4o,mini,OpenAI,OpenAI/gpt-4o-mini-2024-07-18,,381.0001,2.5,10,0.63
 GPT 4o,,OpenAI,OpenAI/gpt-4o-2024-08-06,,73.6001,0.150,0.6,0.75
+GPT 4.1,nano,OpenAI,OpenAI/gpt-4.1-nano-2025-04-14,,,0.1,0.4,0.8
+GPT 4.1,mini,OpenAI,OpenAI/gpt-4.1-mini-2025-04-14,,,0.4,1.6,0.88
+GPT 4.1,,OpenAI,OpenAI/gpt-4.1-2025-04-14,,,2,8,0.9
+GPT o1,,OpenAI,OpenAI/o1-2024-12-17,,,15,60,0.89
+GPT o3,,OpenAI,OpenAI/o3-2025-04-16,,,2,8,0.85
+GPT o3,mini,OpenAI,OpenAI/o3-mini-2025-01-31,,,1.1,4.4,0.87
+GPT o4,mini,OpenAI,OpenAI/o4-mini-2025-04-16,,,1.1,4.4,0.83
