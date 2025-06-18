@@ -252,7 +252,6 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         training_lora_config = None
     else:
         training_lora_config = LoraConfig(**config.training_lora_config.model_dump())
-
     dpo_config = DPOConfig(
         **config.dpo_config.model_dump(),
         hub_model_id=new_model_name,

@@ -1738,7 +1738,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         training_job = await self.language_model_client.create_training_job(
             training_config=training_config,
             dataset=fine_tune_dataset,
-            job_id_suffix=job_name,
+            job_name=job_name,
         )
 
         self.fine_tune_job_id = training_job.job_id

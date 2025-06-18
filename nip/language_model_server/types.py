@@ -209,8 +209,8 @@ class CreateTrainingJobRequest(BaseModel):
     information for training, such as prompts and completions.
     """
 
-    job_id_suffix: Optional[str] = None
-    """An optional suffix to append to the job ID, to make it more recognizable."""
+    job_name: Optional[str] = None
+    """An optional name for the job, to make it more recognizable."""
 
 
 class TrainingJobInfo(BaseModel):

@@ -326,7 +326,7 @@ class LanguageModelClient:
         self,
         training_config: LmTrainingConfig,
         dataset: list[DpoDatasetItem],
-        job_id_suffix: Optional[str] = None,
+        job_name: Optional[str] = None,
     ) -> TrainingJobInfo:
         """Create a new training job with the specified configuration.
 
@@ -338,8 +338,8 @@ class LanguageModelClient:
         dataset : list[DpoDatasetItem]
             The dataset to be used for training. This should be a list of dictionaries
             where each dictionary represents a single data point in the dataset.
-        job_id_suffix : Optional[str], default=None
-            An optional suffix to append to the job ID, to make it more recognizable.
+        job_name : Optional[str], default=None
+            An optional name for the job, to make it more recognizable.
 
         Returns
         -------
@@ -359,7 +359,7 @@ class LanguageModelClient:
         request = CreateTrainingJobRequest(
             config=training_config,
             dataset=dataset,
-            job_id_suffix=job_id_suffix,
+            job_name=job_name,
         )
 
         async with AsyncClient() as httpx_client:
