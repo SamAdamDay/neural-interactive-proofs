@@ -276,6 +276,11 @@ class PureTextRlTrainer(Trainer, ABC):
                 )
                 return
 
+        async with TaskGroup() as task_group:
+            # Make sure all the shared model groups are ready
+            for shared_model_group in self.shared_model_groups.values():
+                task_group.create_task(shared_model_group.wait_for_ready())
+
         rollouts: Optional[NestedArrayDict] = None
 
         while self.state.iteration < self.hyper_params.rl.num_iterations:

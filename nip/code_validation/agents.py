@@ -65,6 +65,7 @@ from nip.language_model_server.types import (
     LmLoraAdapterConfig,
     TrainingJobInfo as LmTrainingJobInfo,
 )
+from nip.language_model_server.exceptions import ClientTimeoutError
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.types import (
     NumpyStringDtype,
@@ -1236,6 +1237,54 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 f"Stopped vLLM server for model {self.base_model_name!r} "
                 f"successfully."
             )
+
+    async def wait_for_ready(self, timeout: float = 300.0):
+        """Wait for the agent group to be ready.
+
+        When using the language model server, this method will wait for it to start
+        accepting requests, outputting a message to the log if it is not already
+        running. It will then validate the server version to ensure it is compatible
+        with the package version.
+
+        Parameters
+        ----------
+        timeout : float, default=300.0
+            The maximum time to wait for the agent group to be ready, in seconds.
+
+        Raises
+        ------
+        TimeoutError
+            If the agent group is not ready within the timeout period.
+        """
+
+        if self.training_client_type == "lm_server":
+
+            if self.shared_agent_params.use_dummy_api:
+                logger.info(
+                    "Using dummy API, no need to wait for the language model server."
+                )
+                return
+
+            if not self.language_model_client.is_lm_server_accepting_connections():
+
+                logger.warning(
+                    "Language model server is not yet ready, waiting for it to start "
+                    "accepting connections..."
+                )
+
+                try:
+                    lm_client = self.language_model_client
+                    # Wait for the language model server to start accepting connections
+                    await lm_client.wait_for_lm_server_to_accept_connections(
+                        timeout=timeout
+                    )
+                except ClientTimeoutError:
+                    raise TimeoutError(
+                        f"Language model server did not start accepting connections "
+                        f"within {timeout} seconds."
+                    )
+
+            await self.language_model_client.validate_server_version()
 
     async def create_supervised_fine_tune_job(
         self,

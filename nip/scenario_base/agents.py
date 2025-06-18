@@ -663,6 +663,20 @@ class PureTextSharedModelGroup(ABC):
         the agent group is set to training mode.
         """
 
+    async def wait_for_ready(self, timeout: float = 300.0):
+        """Wait for the agent group to be ready.
+
+        Parameters
+        ----------
+        timeout : float, default=300.0
+            The maximum time to wait for the agent group to be ready, in seconds.
+
+        Raises
+        ------
+        TimeoutError
+            If the agent group is not ready within the timeout period.
+        """
+
     @abstractmethod
     async def create_supervised_fine_tune_job(
         self,

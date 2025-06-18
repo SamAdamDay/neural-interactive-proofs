@@ -5,17 +5,16 @@ allowing for controlling the vLLM server and performing language model training
 tasks.
 """
 
-from typing import Optional
+from typing import Optional, Literal
 import asyncio
 from warnings import warn
 import logging
 
-from httpx import AsyncClient
+from httpx import AsyncClient, ConnectError
 
 from pydantic import ValidationError
 
 from nip.utils.types import DpoDatasetItem
-from nip.utils.asyncio import run_coroutine_sync
 from nip.utils.version import get_version, compare_versions
 from nip.language_model_server.types import (
     ServerVersionResponse,
@@ -53,23 +52,58 @@ class LanguageModelClient:
     def __init__(self, server_url: str = "http://localhost:5000"):
         self.server_url = server_url
 
-        server_version = run_coroutine_sync(self.get_server_version())
-        _, difference = compare_versions(server_version, get_version())
-        if difference == "major":
-            raise RuntimeError(
-                f"Language model server version {server_version!r} differs from "
-                f"client version {get_version()!r} by a major version. For "
-                f"compatibility reasons, the client and server must have the same "
-                f"major version."
-            )
-        elif difference == "minor":
-            warn(
-                f"Language model server version {server_version!r} differs from "
-                f"client version {get_version()!r} by a minor version. This may be ok "
-                f"but is not guaranteed to be compatible. If you encounter issues, "
-                f"please ensure that the client and server versions match.",
-                UserWarning,
-            )
+    async def is_lm_server_accepting_connections(self) -> bool:
+        """Check if the language model server is accepting connections.
+
+        This method will attempt to make a request to the server's version endpoint.
+        If the server is online and responds successfully, it returns True. If the
+        server is not online or if there is a connection error, it returns False.
+
+        Returns
+        -------
+        accepting_connections : bool
+            True if the language model server is accepting connections, False otherwise.
+        """
+
+        try:
+            await self.get_server_version()
+            return True
+        except ConnectError:
+            return False
+
+    async def wait_for_lm_server_to_accept_connections(self, timeout: float = 300):
+        """Wait for the language model server to start accepting connections.
+
+        This method will repeatedly check if the server is online by making a request to
+        the server's version endpoint. If the server is not online, it will raise a
+        `ClientTimeoutError` after the specified timeout period.
+
+        Parameters
+        ----------
+        timeout : float, default=300
+            The maximum time to wait for the language model server to start accepting
+            connections, in seconds.
+
+        Raises
+        ------
+        ClientTimeoutError
+            If the language model server does not become online within the specified
+            timeout.
+        """
+
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            if await self.is_lm_server_accepting_connections():
+                return
+
+            if asyncio.get_event_loop().time() - start_time > timeout:
+                raise ClientTimeoutError(
+                    f"Timed out waiting for language model server to be online after "
+                    f"{timeout}s."
+                )
+
+            await asyncio.sleep(5)
 
     async def get_server_version(self) -> str:
         """Get the version of the language model server.
@@ -101,6 +135,65 @@ class LanguageModelClient:
             ) from e
 
         return data.version
+
+    async def check_server_version(self) -> Literal["ok", "major", "minor", "patch"]:
+        """Check the server version against the client version.
+
+        Returns
+        -------
+        status : str
+            A string indicating the status of the server version:
+
+            - "ok" if the server version matches the client version.
+            - "major" if the server version differs by a major version.
+            - "minor" if the server version differs by a minor version.
+            - "patch" if the server version differs by a patch version.
+
+        Raises
+        ------
+        BadResponseError
+            If the server returns an invalid response or if the response does not
+            contain the expected 'version' field.
+        """
+
+        server_version = await self.get_server_version()
+        _, difference = compare_versions(server_version, get_version())
+
+        if difference == "none":
+            return "ok"
+        else:
+            return difference
+
+    async def validate_server_version(self):
+        """Validate the server version against the client version.
+
+        This method checks if the server version matches the client version. If they
+        differ by a major version, it raises a RuntimeError. If they differ by a minor
+        or patch version, it issues a warning.
+
+        Raises
+        ------
+        RuntimeError
+            If the server version differs from the client version by a major version.
+        UserWarning
+            If the server version differs from the client version by a minor or patch
+            version.
+        """
+
+        status = await self.check_server_version()
+        if status == "major":
+            raise RuntimeError(
+                "The server and client versions differ by a major version. "
+                "For compatibility reasons, they must match."
+            )
+        elif status in ["minor", "patch"]:
+            warn(
+                f"The server and client versions differ by a {status} version. "
+                "This may be ok but is not guaranteed to be compatible. "
+                "If you encounter issues, please ensure that the client and server "
+                "versions match.",
+                UserWarning,
+            )
 
     async def start_vllm_server(self, model_name: str) -> str:
         """Start the vLLM language model server with the specified model.
