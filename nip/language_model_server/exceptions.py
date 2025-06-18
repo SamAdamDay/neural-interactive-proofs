@@ -34,6 +34,19 @@ class VllmNoGpusError(LanguageModelServerError):
         )
 
 
+class VllmModelNotFoundError(LanguageModelServerError):
+    """Exception raised when the specified vLLM model is not found."""
+
+    status_code = 404
+
+    def __init__(self, model_name: str, error: Optional[Exception] = None):
+        message = f"vLLM model '{model_name}' not found on Hugging Face."
+        if error:
+            message += f" Error: {error!s}"
+        super().__init__(message)
+        self.model_name = model_name
+
+
 class VllmServerNotRunningError(LanguageModelServerError):
     """Exception raised when trying to stop a vLLM server that is not running."""
 

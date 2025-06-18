@@ -26,9 +26,13 @@ class Settings(BaseSettings):
     """The maximum number of concurrent training jobs allowed."""
 
     vllm_num_gpus: int | Literal["auto"] = "auto"
-    """The number of GPUs to use for the vLLM server. 
+    """The maximum number of GPUs to use for the vLLM server. 
 
-    If set to 'auto', it will use all available GPUs."""
+    If set to 'auto', it will use all available GPUs.
+    
+    The actual number of GPUs used may be less than this value, because it must divide
+    the number of attention heads in the model.
+    """
 
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.

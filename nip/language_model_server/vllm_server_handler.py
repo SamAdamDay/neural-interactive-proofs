@@ -16,6 +16,8 @@ from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
 import torch
 
+from transformers import AutoConfig, PretrainedConfig
+
 from nip.constants import VLLM_LOG_DIR
 from nip.language_model_server.types import (
     VllmServerStatus,
@@ -25,8 +27,10 @@ from nip.language_model_server.exceptions import (
     VllmNotInstalledError,
     VllmNoGpusError,
     VllmServerNotRunningError,
+    VllmModelNotFoundError,
 )
 from nip.language_model_server.config import Settings
+from nip.utils.maths import greatest_divisor_up_to_max
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +131,11 @@ class VllmServerHandler:
                 return "vLLM server is already running with the specified model."
 
             try:
+                model_config: PretrainedConfig = AutoConfig.from_pretrained(model_name)
+            except OSError as e:
+                raise VllmModelNotFoundError(model_name, error=e)
+
+            try:
                 await self.stop_server(ignore_lock=True)
             except VllmServerNotRunningError:
                 pass
@@ -151,6 +160,13 @@ class VllmServerHandler:
             else:
                 num_gpus = self.settings.vllm_num_gpus
 
+            # The tensor parallel size must be a divisor of the number attention heads.
+            # We pick the greatest divisor of the number of attention heads which is
+            # less than or equal to the number of GPUs.
+            tensor_parallel_size = greatest_divisor_up_to_max(
+                model_config.num_attention_heads, num_gpus
+            )
+
             self.server_process = await create_subprocess_exec(
                 "vllm",
                 "serve",
@@ -158,7 +174,7 @@ class VllmServerHandler:
                 "--port",
                 str(self.port),
                 "--tensor-parallel-size",
-                "2",
+                str(tensor_parallel_size),
                 **output_kwargs,
             )
 
