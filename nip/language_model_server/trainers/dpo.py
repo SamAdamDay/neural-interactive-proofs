@@ -260,6 +260,7 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         output_dir=HF_TRAINER_OUTPUT_DIR,
         fp16=config.mixed_precision == "fp16",
         bf16=config.mixed_precision == "bf16",
+        gradient_checkpointing=config.gradient_checkpointing,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)

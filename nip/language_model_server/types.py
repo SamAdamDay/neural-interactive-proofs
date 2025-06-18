@@ -192,6 +192,9 @@ class LmTrainingConfig(BaseModel):
     - "no": Use full 32-bit floating point precision.
     """
 
+    gradient_checkpointing: bool = True
+    """Whether to use gradient checkpointing to save memory during training."""
+
 
 class CreateTrainingJobRequest(BaseModel):
     """A request to create a new training job."""
