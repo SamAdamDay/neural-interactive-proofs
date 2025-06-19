@@ -371,12 +371,11 @@ class Trainer(ABC):
         # If there are warnings, prompt the user to continue
         initial_message = "Resuming existing experiment from checkpoint."
         initial_message += "".join([f"\nWarning: {warning}" for warning in warnings])
-        option_selected = yes_no_user_prompt(
+        if not yes_no_user_prompt(
             initial_message=initial_message,
             query_message="Do you want to continue?",
             default_answer=default_answer,
-        )
-        if option_selected == "n":
+        ):
             sys.exit(1)
 
         with open(self.checkpoint_state_path, "r") as f:

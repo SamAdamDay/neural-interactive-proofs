@@ -31,6 +31,7 @@ from nip.language_model_server.exceptions import (
     BadResponseError,
     ClientTimeoutError,
     VllmServerError,
+    TrainingJobNotFoundClientError,
 )
 
 logger = logging.getLogger(__name__)
@@ -390,6 +391,8 @@ class LanguageModelClient:
 
         Raises
         ------
+        TrainingJobNotFoundClientError
+            If the training job with the specified ID does not exist on the server.
         HTTPStatusError
             If the server returns an error status code while creating the training job.
         BadResponseError
@@ -401,6 +404,10 @@ class LanguageModelClient:
             response = await httpx_client.get(
                 f"{self.server_url}/training/jobs/{job_id}"
             )
+
+        if response.status_code == 404:
+            raise TrainingJobNotFoundClientError(job_id)
+
         response.raise_for_status()
 
         data = response.json()

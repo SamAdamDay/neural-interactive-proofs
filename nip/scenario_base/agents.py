@@ -728,12 +728,23 @@ class PureTextSharedModelGroup(ABC):
     @abstractmethod
     async def get_fine_tune_job_status(
         self,
-    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled", "not_found"]:
         """Get the status of the fine-tune job."""
 
     @abstractmethod
     async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job."""
+
+    async def fine_tune_job_failed(self) -> bool:
+        """Check if the fine-tune job has failed.
+
+        Returns
+        -------
+        failed : bool
+            True if the fine-tune job has failed, False otherwise.
+        """
+        status = await self.get_fine_tune_job_status()
+        return status in ("failed", "cancelled", "not_found")
 
     @abstractmethod
     async def switch_to_next_model(self):

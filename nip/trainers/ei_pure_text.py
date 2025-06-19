@@ -38,13 +38,19 @@ class PureTextEiTrainer(PureTextRlTrainer):
         The instance-specific settings of the experiment, like device, logging, etc.
     """
 
-    async def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
+    async def _stage_create_fine_tune_jobs(
+        self, rollouts: NestedArrayDict, only_failed: bool = False
+    ):
         """Training stage: create fine-tune jobs for each agent.
 
         Parameters
         ----------
         rollouts : NestedArrayDict, optional
             The rollouts sampled in this iteration.
+        only_failed : bool, default=False
+            Whether to only create fine-tune jobs for shared model groups whose previous
+            fine-tune job failed or was cancelled. If False, fine-tune jobs are created
+            for all shared model groups.
         """
 
         async def create_fine_tune_job(
@@ -58,13 +64,21 @@ class PureTextEiTrainer(PureTextRlTrainer):
                 guess_replaced_rollouts,
                 job_name=self._get_fine_tune_job_name(shared_model_group),
             )
-            logger.info(f"Created fine-tune job for group {group_name!r}")
+            if only_failed:
+                logger.info(
+                    f"Created fine-tune job for previously failed group {group_name!r}"
+                )
+            else:
+                logger.info(f"Created fine-tune job for group {group_name!r}")
 
         async with TaskGroup() as task_group:
 
             for group_name, shared_model_group in self.shared_model_groups.items():
 
                 if shared_model_group.shared_agent_params.freeze_agent:
+                    continue
+
+                if only_failed and not await shared_model_group.fine_tune_job_failed():
                     continue
 
                 # Select the rollouts to fine-tune on for each agent in the shared model

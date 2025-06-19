@@ -54,6 +54,7 @@ from nip.utils.nested_array_dict import (
 )
 from nip.utils.rollouts import get_pretty_pure_text_round_message
 from nip.utils.types import String, PromptMessage
+from nip.utils.io import yes_no_user_prompt
 from nip.constants import (
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
@@ -66,6 +67,10 @@ from nip.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class FineTuneJobError(Exception):
+    """Exception raised when a fine-tune job fails."""
 
 
 class PureTextRlTrainer(Trainer, ABC):
@@ -99,6 +104,9 @@ class PureTextRlTrainer(Trainer, ABC):
             - "create_fine_tune_jobs": Create fine-tune jobs for each shared agent
               group.
             - "await_fine_tune_jobs": Await the completion of the fine-tune jobs.
+            - "recreate_fine_tune_jobs": Create fine-tune jobs for each shared agent
+              group whose previous fine-tune job failed or was cancelled. This stage is
+              only used when one of the fine-tune jobs fails or is cancelled.
             - "test_during_training": Run the test loop during training.
             - "test": Run the test loop after training.
             - "done": The training is complete.
@@ -398,8 +406,8 @@ class PureTextRlTrainer(Trainer, ABC):
             # Create fine-tune jobs for each agent
             elif (
                 self.state.train_loop_stage == "create_fine_tune_jobs"
-                and not rerun_tests
-            ):
+                or self.state.train_loop_stage == "recreate_fine_tune_jobs"
+            ) and not rerun_tests:
 
                 # Load all the rollouts if we are fine-tuning on all previous rollouts
                 if self.hyper_params.text_rl.fine_tune_on_all_previous_rollouts:
@@ -415,13 +423,23 @@ class PureTextRlTrainer(Trainer, ABC):
                 elif rollouts is None:
                     rollouts = self._load_rollouts(self.state.iteration)
 
-                # Make sure all the shared model groups are in training mode. We can
-                # do this concurrently for each group
+                # Make sure all the shared model groups are in training mode. We can do
+                # this concurrently for each group. When recreating fine-tune jobs, we
+                # only do this for groups that have failed.
                 async with TaskGroup() as task_group:
                     for shared_model_group in self.shared_model_groups.values():
-                        task_group.create_task(shared_model_group.train())
+                        if (
+                            self.state.train_loop_stage == "create_fine_tune_jobs"
+                            or await shared_model_group.fine_tune_job_failed()
+                        ):
+                            task_group.create_task(shared_model_group.train())
 
-                await self._stage_create_fine_tune_jobs(rollouts)
+                await self._stage_create_fine_tune_jobs(
+                    rollouts,
+                    only_failed=(
+                        self.state.train_loop_stage == "recreate_fine_tune_jobs"
+                    ),
+                )
 
                 # Advance to the next stage
                 self.state.train_loop_stage = "await_fine_tune_jobs"
@@ -434,13 +452,30 @@ class PureTextRlTrainer(Trainer, ABC):
                 and not rerun_tests
             ):
 
-                await self._stage_await_fine_tune_jobs()
+                try:
+                    await self._stage_await_fine_tune_jobs()
 
-                # Advance to the next iteration and stage
-                self.state.train_loop_stage = "sample_rollouts"
-                self.state.iteration += 1
+                except* FineTuneJobError as exception_group:
+                    if yes_no_user_prompt(
+                        "Do you want to re-submit all failed fine-tune jobs? (If any "
+                        "other fine-tune jobs fail between now and the resubmission "
+                        "stage, they will be re-submitted as well.)",
+                        initial_message="\n".join(
+                            [str(exception) for exception in exception_group.exceptions]
+                        ),
+                        default_answer="n",
+                    ):
+                        self.state.train_loop_stage = "recreate_fine_tune_jobs"
+                        self.save_checkpoint()
+                    else:
+                        raise exception_group
 
-                self.save_checkpoint()
+                else:
+                    # Advance to the next iteration and stage
+                    self.state.train_loop_stage = "sample_rollouts"
+                    self.state.iteration += 1
+
+                    self.save_checkpoint()
 
             # If we're rerunning tests, step the state artifact version number so that
             # we get the next state in the base run
@@ -585,17 +620,42 @@ class PureTextRlTrainer(Trainer, ABC):
         self.settings.stat_logger.log(log_stats, self.state.iteration)
 
     @abstractmethod
-    async def _stage_create_fine_tune_jobs(self, rollouts: NestedArrayDict):
+    async def _stage_create_fine_tune_jobs(
+        self, rollouts: NestedArrayDict, only_failed: bool = False
+    ):
         """Training stage: create fine-tune jobs for each agent.
 
         Parameters
         ----------
         rollouts : NestedArrayDict, optional
             The rollouts sampled in this iteration.
+        only_failed : bool, default=False
+            Whether to only create fine-tune jobs for shared model groups whose previous
+            fine-tune job failed or was cancelled. If False, fine-tune jobs are created
+            for all shared model groups.
         """
 
     async def _stage_await_fine_tune_jobs(self):
-        """Training stage: await the completion of the fine-tune jobs."""
+        """Training stage: await the completion of the fine-tune jobs.
+
+        Raises
+        ------
+        ExceptionGroup[FineTuneJobError]
+            If any of the fine-tune jobs fail or are cancelled. Note that since we use a
+            task group to await the fine-tune jobs, the exceptions are raised as an
+            :py:class:`ExceptionGroup`. This can be caught using an ``except*``
+            statement. If ``exception_group`` is caught, then
+            ``exception_group.exceptions`` will contain the individual exceptions for
+            each fine-tune job that failed.
+
+        Example
+        -------
+        >>> try:
+        >>>     await trainer._stage_await_fine_tune_jobs()
+        >>> except* FineTuneJobError as exception_group:
+        >>>     for exception in exception_group.exceptions:
+        >>>         logger.error(exception)
+        """
 
         logger.info("Awaiting completion of fine-tune jobs...")
 
@@ -624,7 +684,18 @@ class PureTextRlTrainer(Trainer, ABC):
                     message = f"Fine-tune job for group {group_name!r} failed."
                     if error_repr != "":
                         message += f" Error: {error_repr}"
-                    raise RuntimeError(message)
+                    raise FineTuneJobError(message)
+
+                elif status == "cancelled":
+                    message = f"Fine-tune job for group {group_name!r} was cancelled."
+                    raise FineTuneJobError(message)
+
+                elif status == "not_found":
+                    message = (
+                        f"Fine-tune job for group {group_name!r} not found. This may "
+                        "happen if the job was never created or if it was deleted."
+                    )
+                    raise FineTuneJobError(message)
 
                 # Wait for a minute before checking again
                 await asyncio.sleep(60)

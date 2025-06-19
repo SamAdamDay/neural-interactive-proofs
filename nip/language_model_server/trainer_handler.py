@@ -36,7 +36,7 @@ from nip.language_model_server.types import (
 from nip.utils.env import get_env_var
 from nip.language_model_server.exceptions import (
     MaxTrainingJobsReachedError,
-    TrainingJobNotFoundError,
+    TrainingJobNotFoundServerError,
     AccelerateConfigNotFoundError,
 )
 from nip.language_model_server.config import Settings
@@ -519,7 +519,7 @@ class TrainerHandler:
         """
 
         if job_id not in self.jobs:
-            raise TrainingJobNotFoundError(job_id)
+            raise TrainingJobNotFoundServerError(job_id)
 
         return await self.jobs[job_id].get_info()
 
@@ -542,7 +542,7 @@ class TrainerHandler:
         try:
             job = self.jobs[job_id]
         except KeyError:
-            raise TrainingJobNotFoundError(job_id)
+            raise TrainingJobNotFoundServerError(job_id)
         await job.cancel(timeout)
 
     async def get_training_job_infos(self) -> list[TrainingJobInfo]:
