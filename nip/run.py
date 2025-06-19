@@ -41,6 +41,7 @@ def run_experiment(
     wandb_project: Optional[str] = None,
     wandb_entity: Optional[str] = None,
     run_id: Optional[str] = None,
+    resume_if_safe: bool = False,
     allow_auto_generated_run_id: bool = False,
     allow_resuming_wandb_run: bool = False,
     allow_overriding_wandb_config: bool = False,
@@ -82,6 +83,10 @@ def run_experiment(
     run_id : str, optional
         The ID of the run. Required if use_wandb is True and allow_auto_generated_run_id
         is False.
+    resume_if_safe : bool, default=False
+        If True, If the run already exists and the major version in the run is the same
+        as the package version, the run will be resumed. If False, the user will be
+        prompted to confirm resuming the run.
     allow_auto_generated_run_id : bool, default=False
         If True, the run ID can be auto-generated if not specified.
     allow_resuming_wandb_run : bool, default=False
@@ -97,10 +102,10 @@ def run_experiment(
         together in the UI. This is useful for doing multiple runs on the same machine.
     force_more_iterations : bool, default=False
         If set to True and ``run_id`` already exists, the trainer will be forced to
-        perform as many iterations as specified in the hyper-parameters, even if the
-        run has already been completed. This is useful for continuing training
-        experiments that have been officially completed, but where you want to
-        continue training for more iterations.
+        perform as many iterations as specified in the hyper-parameters, even if the run
+        has already been completed. This is useful for continuing training experiments
+        that have been officially completed, but where you want to continue training for
+        more iterations.
     num_dataset_threads : int, default=8
         The number of threads to use for saving the memory-mapped tensordict.
     pin_memory : bool, default=True
@@ -170,6 +175,7 @@ def run_experiment(
         ignore_cache=ignore_cache,
         base_wandb_run=base_run,
         force_more_iterations=force_more_iterations,
+        resume_if_safe=resume_if_safe,
         num_dataset_threads=num_dataset_threads,
         pin_memory=pin_memory,
         dataset_on_device=dataset_on_device,

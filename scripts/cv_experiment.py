@@ -254,6 +254,7 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
         force_more_iterations=combo["force_more_iterations"],
+        resume_if_safe=cmd_args.resume_if_safe,
     )
 
 
@@ -335,6 +336,14 @@ experiment.parser.add_argument(
     action="store_true",
     dest="use_dummy_api",
     help="Whether to use the dummy API for the agents. Useful for testing.",
+)
+
+experiment.parser.add_argument(
+    "--resume-if-safe",
+    action="store_true",
+    dest="resume_if_safe",
+    help="If the run already exists, whether to resume it if major version numbers "
+    "match.",
 )
 
 # Set the ``parser`` module attribute to enable the script auto-documented by Sphinx
