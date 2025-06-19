@@ -48,6 +48,7 @@ from nip.run import PreparedExperimentInfo
 from nip.utils.env import get_env_var
 from nip.utils.data import flatten_dict_keys
 from nip.utils.types import ExperimentConfig
+from nip.utils.logging import set_logger_handler
 
 
 logger = logging.getLogger(__name__)
@@ -504,7 +505,7 @@ class HyperparameterExperiment(ABC):
         )
         handler.setFormatter(formatter)
 
-        package_logger.addHandler(handler)
+        set_logger_handler(package_logger, handler)
 
 
 class SequentialHyperparameterExperiment(HyperparameterExperiment):

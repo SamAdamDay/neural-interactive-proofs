@@ -34,6 +34,19 @@ class VllmNoGpusError(LanguageModelServerError):
         )
 
 
+class VllmModelNotFoundError(LanguageModelServerError):
+    """Exception raised when the specified vLLM model is not found."""
+
+    status_code = 404
+
+    def __init__(self, model_name: str, error: Optional[Exception] = None):
+        message = f"vLLM model '{model_name}' not found on Hugging Face."
+        if error:
+            message += f" Error: {error!s}"
+        super().__init__(message)
+        self.model_name = model_name
+
+
 class VllmServerNotRunningError(LanguageModelServerError):
     """Exception raised when trying to stop a vLLM server that is not running."""
 
@@ -77,7 +90,7 @@ class MaxTrainingJobsReachedError(LanguageModelServerError):
         self.max_jobs = max_jobs
 
 
-class TrainingJobNotFoundError(LanguageModelServerError):
+class TrainingJobNotFoundServerError(LanguageModelServerError):
     """Exception raised when a training job is not found."""
 
     status_code = 404
@@ -106,6 +119,14 @@ class BadResponseError(LanguageModelClientError):
     def __init__(self, message: str, response: Optional[Response] = None):
         super().__init__(message)
         self.response = response
+
+
+class TrainingJobNotFoundClientError(LanguageModelClientError):
+    """Exception raised when a training job is not found."""
+
+    def __init__(self, job_id: str):
+        super().__init__(f"Training job with ID '{job_id}' not found.")
+        self.job_id = job_id
 
 
 class ClientTimeoutError(LanguageModelClientError):

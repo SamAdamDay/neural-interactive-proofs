@@ -15,16 +15,13 @@ from trl.trainer.utils import SIMPLE_CHAT_TEMPLATE
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from peft import LoraConfig, AutoPeftModelForCausalLM
-from peft.utils.constants import CONFIG_NAME as PEFT_CONFIG_NAME
-
-from huggingface_hub import hf_hub_download
-from huggingface_hub.errors import EntryNotFoundError
 
 from filelock import FileLock
 
 from nip.constants import LM_SERVER_TRAINING_STATUS_DIR, HF_TRAINER_OUTPUT_DIR
 from nip.utils.env import get_env_var
 from nip.utils.types import HuggingFaceDpoDatasetItem
+from nip.utils.hugging_face import is_model_peft
 from nip.language_model_server.types import (
     LmTrainingConfig,
     LmLoraAdapterConfig,
@@ -211,11 +208,7 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
 
     ignore_training_lora_config = False
 
-    try:
-        # If we can download the PEFT config, the model is LoRA-adapted.
-        hf_hub_download(config.model_name, PEFT_CONFIG_NAME)
-
-    except EntryNotFoundError:
+    if not is_model_peft(config.model_name):
         model = AutoModelForCausalLM.from_pretrained(config.model_name)
 
     else:
@@ -252,12 +245,15 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         training_lora_config = None
     else:
         training_lora_config = LoraConfig(**config.training_lora_config.model_dump())
-
     dpo_config = DPOConfig(
         **config.dpo_config.model_dump(),
         hub_model_id=new_model_name,
         run_name=job_id,
         output_dir=HF_TRAINER_OUTPUT_DIR,
+        fp16=config.mixed_precision == "fp16",
+        bf16=config.mixed_precision == "bf16",
+        gradient_checkpointing=config.gradient_checkpointing,
+        per_device_train_batch_size=config.per_device_train_batch_size,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)

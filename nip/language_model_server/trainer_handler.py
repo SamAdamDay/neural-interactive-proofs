@@ -36,7 +36,7 @@ from nip.language_model_server.types import (
 from nip.utils.env import get_env_var
 from nip.language_model_server.exceptions import (
     MaxTrainingJobsReachedError,
-    TrainingJobNotFoundError,
+    TrainingJobNotFoundServerError,
     AccelerateConfigNotFoundError,
 )
 from nip.language_model_server.config import Settings
@@ -97,15 +97,6 @@ class TrainingJob:
         """The path to the dataset file for the training script."""
         return self.temporary_directory_path.joinpath("dataset.jsonl")
 
-    @property
-    def new_model_name(self) -> str:
-        """The name to be given to the model after training is complete."""
-        return (
-            f"{get_env_var('HF_SELF_HOSTED_FINETUNE_NAMESPACE')}"
-            f"/{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}"
-            f"_{self.id}"
-        )
-
     def __init__(
         self,
         request: CreateTrainingJobRequest,
@@ -116,7 +107,7 @@ class TrainingJob:
 
         self.config = request.config
         self.dataset = convert_dpo_dataset_to_hugging_face(request.dataset)
-        self.id_suffix = request.job_id_suffix
+        self.job_name = request.job_name
         self.subprocess_output_destination = subprocess_output_destination
 
         self.jinja_environment = JinjaEnvironment(
@@ -128,8 +119,15 @@ class TrainingJob:
         time_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         sanitised_model_name = self.config.model_name.replace("/", "_")
         self.id = f"{sanitised_model_name}_{self.config.method}_{time_string}"
-        if self.id_suffix:
-            self.id += f"_{self.id_suffix}"
+        self.repo_name = f"{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}{self.config.method}"
+        if self.job_name:
+            self.id += f"_{self.job_name}"
+            self.repo_name += f"_{self.job_name}"
+        self.repo_name += f"_{time_string}_{sanitised_model_name}"
+        self.repo_name = self.repo_name[:96]  # Ensure the repo name is within the limit
+        self.new_model_name = (
+            f"{get_env_var('HF_SELF_HOSTED_FINETUNE_NAMESPACE')}/{self.repo_name}"
+        )
 
         if self.subprocess_output_destination == "log_file":
             LM_SERVER_TRAINING_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -414,9 +412,16 @@ class TrainingJob:
 
         num_gpus = torch.cuda.device_count()
 
+        # bfloat16 mixed precision is only available on NVIDIA GPUs with compute
+        # capability 8.0 or higher.
+        if torch.cuda.get_device_capability()[0] >= 8:
+            mixed_precision = "bf16"
+        else:
+            mixed_precision = "fp16"
+
         rendered_path = self.temporary_directory_path.joinpath("accelerate_config.yaml")
         with open(rendered_path, "w") as f:
-            f.write(template.render(num_gpus=num_gpus))
+            f.write(template.render(num_gpus=num_gpus, mixed_precision=mixed_precision))
 
         return rendered_path
 
@@ -514,7 +519,7 @@ class TrainerHandler:
         """
 
         if job_id not in self.jobs:
-            raise TrainingJobNotFoundError(job_id)
+            raise TrainingJobNotFoundServerError(job_id)
 
         return await self.jobs[job_id].get_info()
 
@@ -537,7 +542,7 @@ class TrainerHandler:
         try:
             job = self.jobs[job_id]
         except KeyError:
-            raise TrainingJobNotFoundError(job_id)
+            raise TrainingJobNotFoundServerError(job_id)
         await job.cancel(timeout)
 
     async def get_training_job_infos(self) -> list[TrainingJobInfo]:

@@ -11,6 +11,7 @@ VllmServerStatus: TypeAlias = Literal[
     "not_started",
     "crashed",
     "not_accepting_connections",
+    "timeout",
     "server_error",
     "other_error",
 ]
@@ -21,6 +22,7 @@ VllmServerStatus: TypeAlias = Literal[
 - "crashed": The server has exited unexpectedly.
 - "not_accepting_connections": The server is running but not accepting connections. This
   can happen if the server is still starting up or if it has crashed.
+- "timeout": A timeout occurred when trying to connect to the server. Retrying may help.
 - "server_error": A 5xx error occurred when trying to connect to the server.
 - "other_error": Any other error occurred when trying to connect to the server.
 """
@@ -95,6 +97,12 @@ class VllmStopRequest(BaseModel):
     server was not running and is being ignored.
     """
 
+    terminate_timeout: float = 10.0
+    """The timeout in seconds to wait for the server to terminate gracefully.
+
+    If the server does not terminate within this time, it will be forcefully killed.
+    """
+
 
 class VllmStatusResponse(BaseModel):
     """A response obtained when checking the vLLM server status."""
@@ -163,6 +171,9 @@ class LmTrainingConfig(BaseModel):
     If ``None``, no LoRA adapter will be applied during training.
     """
 
+    per_device_train_batch_size: int = 2
+    """The batch size per device (GPU) for training."""
+
     model_already_lora_strategy: Literal["reuse", "stack"] = "reuse"
     """Strategy for handling models that are already LoRA-adapted.
 
@@ -175,6 +186,17 @@ class LmTrainingConfig(BaseModel):
     - "stack": Stack the new LoRA adapter on top of the existing one, allowing for
       multiple LoRA adapters to be applied sequentially.
     """
+
+    mixed_precision: Literal["fp16", "bf16", "no"] = "fp16"
+    """The mixed precision to use during training.
+
+    - "fp16": Use 16-bit floating point precision.
+    - "bf16": Use bfloat16 precision.
+    - "no": Use full 32-bit floating point precision.
+    """
+
+    gradient_checkpointing: bool = True
+    """Whether to use gradient checkpointing to save memory during training."""
 
 
 class CreateTrainingJobRequest(BaseModel):
@@ -190,8 +212,8 @@ class CreateTrainingJobRequest(BaseModel):
     information for training, such as prompts and completions.
     """
 
-    job_id_suffix: Optional[str] = None
-    """An optional suffix to append to the job ID, to make it more recognizable."""
+    job_name: Optional[str] = None
+    """An optional name for the job, to make it more recognizable."""
 
 
 class TrainingJobInfo(BaseModel):

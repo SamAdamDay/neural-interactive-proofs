@@ -35,6 +35,7 @@ from openai import (
     APIStatusError as OpenAiApiStatusError,
     RateLimitError as OpenAiRateLimitError,
     APIConnectionError as OpenAiConnectionError,
+    NotFoundError as OpenAiNotFoundError,
 )
 from openai.types.fine_tuning import FineTuningJob as OpenAiFineTuningJob
 from openai.types.chat.chat_completion import ChatCompletion as OpenAiChatCompletion
@@ -64,6 +65,10 @@ from nip.language_model_server.types import (
     LmDpoTrainingConfig,
     LmLoraAdapterConfig,
     TrainingJobInfo as LmTrainingJobInfo,
+)
+from nip.language_model_server.exceptions import (
+    ClientTimeoutError,
+    TrainingJobNotFoundClientError,
 )
 from nip.utils.nested_array_dict import NestedArrayDict
 from nip.utils.types import (
@@ -1237,6 +1242,54 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 f"successfully."
             )
 
+    async def wait_for_ready(self, timeout: float = 300.0):
+        """Wait for the agent group to be ready.
+
+        When using the language model server, this method will wait for it to start
+        accepting requests, outputting a message to the log if it is not already
+        running. It will then validate the server version to ensure it is compatible
+        with the package version.
+
+        Parameters
+        ----------
+        timeout : float, default=300.0
+            The maximum time to wait for the agent group to be ready, in seconds.
+
+        Raises
+        ------
+        TimeoutError
+            If the agent group is not ready within the timeout period.
+        """
+
+        if self.training_client_type == "lm_server":
+
+            if self.shared_agent_params.use_dummy_api:
+                logger.info(
+                    "Using dummy API, no need to wait for the language model server."
+                )
+                return
+
+            if not await self.language_model_client.lm_server_accepting_connections():
+
+                logger.warning(
+                    "Language model server is not yet ready, waiting for it to start "
+                    "accepting connections..."
+                )
+
+                try:
+                    lm_client = self.language_model_client
+                    # Wait for the language model server to start accepting connections
+                    await lm_client.wait_for_lm_server_to_accept_connections(
+                        timeout=timeout
+                    )
+                except ClientTimeoutError:
+                    raise TimeoutError(
+                        f"Language model server did not start accepting connections "
+                        f"within {timeout} seconds."
+                    )
+
+            await self.language_model_client.validate_server_version()
+
     async def create_supervised_fine_tune_job(
         self,
         rollouts_per_agent: dict[str, NestedArrayDict],
@@ -1411,7 +1464,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
     async def get_fine_tune_job_status(
         self,
-    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled", "not_found"]:
         """Get the status of the fine-tune job."""
 
         if (
@@ -1425,7 +1478,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         if self.training_client_type == "openai":
 
-            fine_tune_job = await self._get_openai_fine_tune_job()
+            try:
+                fine_tune_job = await self._get_openai_fine_tune_job()
+            except OpenAiNotFoundError:
+                return "not_found"
+
             status = fine_tune_job.status
 
             if status in ["validating_files", "queued"]:
@@ -1437,7 +1494,11 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
 
         elif self.training_client_type == "lm_server":
 
-            fine_tune_job = await self._get_lm_server_fine_tune_job()
+            try:
+                fine_tune_job = await self._get_lm_server_fine_tune_job()
+            except TrainingJobNotFoundClientError:
+                return "not_found"
+
             status = fine_tune_job.status
 
             if status == "starting":
@@ -1718,6 +1779,10 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 "Fine-tuning with the language model server is only supported for DPO."
             )
 
+        per_device_train_batch_size = (
+            self.shared_agent_params.per_device_train_batch_size
+        )
+
         training_config = LmTrainingConfig(
             model_name=model_name,
             method=method,
@@ -1730,6 +1795,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 lora_alpha=self.lora_alpha,
                 lora_dropout=self.shared_agent_params.lora_dropout,
             ),
+            per_device_train_batch_size=per_device_train_batch_size,
             model_already_lora_strategy=(
                 "stack" if self.shared_agent_params.stack_lora_adapters else "reuse"
             ),
@@ -1738,7 +1804,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         training_job = await self.language_model_client.create_training_job(
             training_config=training_config,
             dataset=fine_tune_dataset,
-            job_id_suffix=job_name,
+            job_name=job_name,
         )
 
         self.fine_tune_job_id = training_job.job_id
@@ -1752,7 +1818,18 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         return await self.openai_client.fine_tuning.jobs.retrieve(self.fine_tune_job_id)
 
     async def _get_lm_server_fine_tune_job(self) -> LmTrainingJobInfo:
-        """Get the fine-tune job from the language model server API."""
+        """Get the fine-tune job from the language model server API.
+
+        Returns
+        -------
+        job : LmTrainingJobInfo
+            The fine-tune job information.
+
+        Raises
+        ------
+        TrainingJobNotFoundClientError
+            If the fine-tune job ID is not set or the job does not exist.
+        """
 
         if self.fine_tune_job_id is None:
             raise ValueError("Fine-tune job ID not set")
@@ -1801,7 +1878,7 @@ class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
 
     async def get_fine_tune_job_status(
         self,
-    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled", "not_found"]:
         """Get the status of the fine-tune job.
 
         This method is not supported for non-fine-tunable models.

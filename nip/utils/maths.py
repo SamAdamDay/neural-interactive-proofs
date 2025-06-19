@@ -747,3 +747,27 @@ def _zero_grad(params: dict[str, Tensor | Parameter]):
     for param in params.values():
         if param.grad is not None:
             param.grad.zero_()
+
+
+def greatest_divisor_up_to_max(value: int, maximum: int) -> int:
+    """Find the greatest divisor of a value that is less than or equal to a maximum.
+
+    Parameters
+    ----------
+    value : int
+        The value to find the divisor for.
+    maximum : int
+        The maximum value for the divisor.
+
+    Returns
+    -------
+    greatest_divisor : int
+        The greatest divisor of `value` that is less than or equal to `maximum`.
+    """
+
+    if value <= 0 or maximum <= 0:
+        raise ValueError("Both value and maximum must be positive integers.")
+
+    for i in range(min(value, maximum), 0, -1):
+        if value % i == 0:
+            return i

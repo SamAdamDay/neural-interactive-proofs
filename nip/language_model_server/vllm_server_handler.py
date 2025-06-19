@@ -11,10 +11,15 @@ import logging
 from asyncio import wait_for, TimeoutError, Lock
 from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from contextlib import nullcontext
+import json
 
-from httpx import HTTPStatusError, ConnectError, AsyncClient
+from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
 import torch
+
+from transformers import AutoConfig, PretrainedConfig
+
+from peft import PeftConfig
 
 from nip.constants import VLLM_LOG_DIR
 from nip.language_model_server.types import (
@@ -25,8 +30,11 @@ from nip.language_model_server.exceptions import (
     VllmNotInstalledError,
     VllmNoGpusError,
     VllmServerNotRunningError,
+    VllmModelNotFoundError,
 )
 from nip.language_model_server.config import Settings
+from nip.utils.maths import greatest_divisor_up_to_max
+from nip.utils.hugging_face import is_model_peft
 
 
 logger = logging.getLogger(__name__)
@@ -120,11 +128,35 @@ class VllmServerHandler:
 
         async with self.server_process_lock:
 
-            if self.model_name == model_name and self.server_process is not None:
+            if self.model_name == model_name and await self.get_status() not in [
+                "not_started",
+                "crashed",
+                "server_error",
+                "other_error",
+            ]:
                 logger.info(
                     f"vLLM server is already running with model '{model_name}'."
                 )
                 return "vLLM server is already running with the specified model."
+
+            is_peft = is_model_peft(model_name)
+
+            if is_peft:
+                try:
+                    peft_config = PeftConfig.from_pretrained(model_name)
+                except OSError as e:
+                    raise VllmModelNotFoundError(model_name, error=e)
+                else:
+                    base_model_name = peft_config.base_model_name_or_path
+            else:
+                base_model_name = model_name
+
+            try:
+                base_model_config: PretrainedConfig = AutoConfig.from_pretrained(
+                    base_model_name
+                )
+            except OSError as e:
+                raise VllmModelNotFoundError(model_name, error=e)
 
             try:
                 await self.stop_server(ignore_lock=True)
@@ -138,28 +170,54 @@ class VllmServerHandler:
             if num_available_gpus == 0:
                 raise VllmNoGpusError
 
-            if self.subprocess_output_destination == "log_file":
-                output_kwargs = {
-                    "stdout": self.log_file,
-                    "stderr": STDOUT,
-                }
-            else:
-                output_kwargs = {}
-
             if self.settings.vllm_num_gpus == "auto":
                 num_gpus = num_available_gpus
             else:
                 num_gpus = self.settings.vllm_num_gpus
 
+            # The tensor parallel size must be a divisor of the number attention heads.
+            # We pick the greatest divisor of the number of attention heads which is
+            # less than or equal to the number of GPUs.
+            tensor_parallel_size = greatest_divisor_up_to_max(
+                base_model_config.num_attention_heads, num_gpus
+            )
+
+            extra_args = []
+            if is_peft:
+                lora_modules = {
+                    "name": model_name,
+                    "path": model_name,
+                    "base_model_name": base_model_name,
+                }
+                extra_args.extend(
+                    [
+                        "--enable-lora",
+                        "--lora-modules",
+                        json.dumps(lora_modules),
+                        "--max-seq-len-to-capture",
+                        "128000",
+                    ]
+                )
+
+            extra_kwargs = {}
+            if self.subprocess_output_destination == "log_file":
+                extra_kwargs.update(
+                    {
+                        "stdout": self.log_file,
+                        "stderr": self.log_file,
+                    }
+                )
+
             self.server_process = await create_subprocess_exec(
                 "vllm",
                 "serve",
-                model_name,
+                base_model_name,
                 "--port",
                 str(self.port),
                 "--tensor-parallel-size",
-                str(num_gpus),
-                **output_kwargs,
+                str(tensor_parallel_size),
+                *extra_args,
+                **extra_kwargs,
             )
 
             self.model_name = model_name
@@ -212,15 +270,18 @@ class VllmServerHandler:
                 self.server_process.kill()
 
             self.server_process = None
+            self.model_name = None
 
             logger.info("vLLM server stopped.")
 
-    async def get_status(self, timeout: float = 0.5) -> VllmServerStatus:
+    async def get_status(
+        self, timeout: float = 0.5
+    ) -> tuple[VllmServerStatus, str | None]:
         """Get the status of the vLLM server by trying to list available models.
 
         Parameters
         ----------
-        timeout : float, default=5.0
+        timeout : float, default=0.5
             The timeout to use when trying to connect to the server.
 
         Returns
@@ -250,6 +311,8 @@ class VllmServerHandler:
                 )
             response.raise_for_status()
             return "online", None
+        except ConnectTimeout:
+            return "timeout", "Connection to vLLM server timed out."
         except ConnectError as e:
             return "not_accepting_connections", str(e)
         except HTTPStatusError as e:

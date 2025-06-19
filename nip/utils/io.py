@@ -7,7 +7,7 @@ def yes_no_user_prompt(
     query_message: str,
     initial_message: Optional[str] = None,
     default_answer: Optional[Literal["y", "n"]] = None,
-) -> Literal["y", "n"]:
+) -> bool:
     """Prompt the user with a yes or no questions.
 
     This function will keep prompting the user until a valid response is provided.
@@ -23,8 +23,8 @@ def yes_no_user_prompt(
 
     Returns
     -------
-    option_selected : Literal["y", "n"]
-        The option selected by the user.
+    selected_yes: bool
+        True if the user answered 'y', False if the user answered 'n'.
     """
 
     if initial_message is not None:
@@ -40,10 +40,10 @@ def yes_no_user_prompt(
     while True:
         response = input(f"{query_message} {yn_prompt}: ")
         if response.lower() == "y":
-            return "y"
+            return True
         elif response.lower() == "n":
-            return "n"
+            return False
         elif response == "" and default_answer is not None:
-            return default_answer
+            return default_answer == "y"
         else:
             print("Invalid response. Please enter 'y' or 'n'.")  # noqa: T201

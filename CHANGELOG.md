@@ -117,6 +117,10 @@ to communicate reliably.
   original hyper-parameters.
 - A self-hosting language model server and client. The server controls a vLLM process
   and HuggingFace trainer, allowing for convenient self-hosting of open-weight models.
+- When doing pure-text RL, if any fine-tune job fails the user is now prompted if they
+  want to re-submit the job
+- The `--resume-if-safe` flag for `cv_experiment.py`, which automatically resumes a
+  previous run if the major version numbers agree
 
 
 ### Removed

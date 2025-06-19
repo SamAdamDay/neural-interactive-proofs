@@ -509,6 +509,8 @@ class PureTextSharedModelGroup(ABC):
         lora_dropout: float
         stack_lora_adapters: bool
 
+        per_device_train_batch_size: int
+
     @property
     def model_name(self) -> str:
         """The current model name, which may be the base model or a fine-tuned model."""
@@ -663,6 +665,20 @@ class PureTextSharedModelGroup(ABC):
         the agent group is set to training mode.
         """
 
+    async def wait_for_ready(self, timeout: float = 300.0):
+        """Wait for the agent group to be ready.
+
+        Parameters
+        ----------
+        timeout : float, default=300.0
+            The maximum time to wait for the agent group to be ready, in seconds.
+
+        Raises
+        ------
+        TimeoutError
+            If the agent group is not ready within the timeout period.
+        """
+
     @abstractmethod
     async def create_supervised_fine_tune_job(
         self,
@@ -714,12 +730,23 @@ class PureTextSharedModelGroup(ABC):
     @abstractmethod
     async def get_fine_tune_job_status(
         self,
-    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled"]:
+    ) -> Literal["pending", "running", "succeeded", "failed", "cancelled", "not_found"]:
         """Get the status of the fine-tune job."""
 
     @abstractmethod
     async def get_fine_tune_job_error_repr(self) -> str:
         """Get a string representation of the error for the fine-tune job."""
+
+    async def fine_tune_job_failed(self) -> bool:
+        """Check if the fine-tune job has failed.
+
+        Returns
+        -------
+        failed : bool
+            True if the fine-tune job has failed, False otherwise.
+        """
+        status = await self.get_fine_tune_job_status()
+        return status in ("failed", "cancelled", "not_found")
 
     @abstractmethod
     async def switch_to_next_model(self):
