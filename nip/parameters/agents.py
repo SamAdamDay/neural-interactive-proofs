@@ -528,6 +528,8 @@ class PureTextAgentParameters(AgentParameters):
     stack_lora_adapters : bool
         When training a model multiple times with LoRA, whether to stack the LoRA
         adapters on top of each other, or to reuse the existing LoRA adapter.
+    per_device_train_batch_size : int
+        The batch size per device (GPU) for training.
     system_prompt_template_path : str | None
         This option allows specifying a custom system prompt template. If not provided,
         the default system prompt template is used.
@@ -576,6 +578,8 @@ class PureTextAgentParameters(AgentParameters):
     lora_alpha_scale: Optional[float] = 1.0
     lora_dropout: float = 0.05
     stack_lora_adapters: bool = False
+
+    per_device_train_batch_size: int = 2
 
     system_prompt_template_path: str | None = None
 

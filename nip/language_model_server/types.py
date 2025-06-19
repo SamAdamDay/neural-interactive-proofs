@@ -171,6 +171,9 @@ class LmTrainingConfig(BaseModel):
     If ``None``, no LoRA adapter will be applied during training.
     """
 
+    per_device_train_batch_size: int = 2
+    """The batch size per device (GPU) for training."""
+
     model_already_lora_strategy: Literal["reuse", "stack"] = "reuse"
     """Strategy for handling models that are already LoRA-adapted.
 

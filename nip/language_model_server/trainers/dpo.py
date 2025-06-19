@@ -253,6 +253,7 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         fp16=config.mixed_precision == "fp16",
         bf16=config.mixed_precision == "bf16",
         gradient_checkpointing=config.gradient_checkpointing,
+        per_device_train_batch_size=config.per_device_train_batch_size,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)

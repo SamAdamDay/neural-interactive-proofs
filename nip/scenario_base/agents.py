@@ -509,6 +509,8 @@ class PureTextSharedModelGroup(ABC):
         lora_dropout: float
         stack_lora_adapters: bool
 
+        per_device_train_batch_size: int
+
     @property
     def model_name(self) -> str:
         """The current model name, which may be the base model or a fine-tuned model."""
