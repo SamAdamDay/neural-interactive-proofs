@@ -1265,7 +1265,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 )
                 return
 
-            if not self.language_model_client.is_lm_server_accepting_connections():
+            if not await self.language_model_client.lm_server_accepting_connections():
 
                 logger.warning(
                     "Language model server is not yet ready, waiting for it to start "

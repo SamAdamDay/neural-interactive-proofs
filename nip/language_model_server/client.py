@@ -52,7 +52,7 @@ class LanguageModelClient:
     def __init__(self, server_url: str = "http://localhost:5000"):
         self.server_url = server_url
 
-    async def is_lm_server_accepting_connections(self) -> bool:
+    async def lm_server_accepting_connections(self) -> bool:
         """Check if the language model server is accepting connections.
 
         This method will attempt to make a request to the server's version endpoint.
@@ -94,7 +94,7 @@ class LanguageModelClient:
         start_time = asyncio.get_event_loop().time()
 
         while True:
-            if await self.is_lm_server_accepting_connections():
+            if await self.lm_server_accepting_connections():
                 return
 
             if asyncio.get_event_loop().time() - start_time > timeout:
