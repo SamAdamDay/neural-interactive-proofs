@@ -164,8 +164,8 @@ class VllmServerHandler:
 
                 hf_cache_info = scan_cache_dir()
 
-                repo_ids_to_delete = []
-                revisions_to_delete = []
+                repo_ids_to_delete: list[str] = []
+                revisions_to_delete: list[str] = []
                 for repo in hf_cache_info.repos:
                     if repo.repo_id in [base_model_name, model_name]:
                         continue
@@ -176,11 +176,12 @@ class VllmServerHandler:
                         [revision.commit_hash for revision in repo.revisions]
                     )
 
-                delete_strategy = hf_cache_info.delete_revisions(revisions_to_delete)
+                delete_strategy = hf_cache_info.delete_revisions(*revisions_to_delete)
 
                 logger.info(
                     f"Clearing Hugging Face model cache to free "
-                    f"{delete_strategy.expected_freed_size_str} of space."
+                    f"{delete_strategy.expected_freed_size_str} of space. Will delete "
+                    f"models: {', '.join(repo_ids_to_delete)}."
                 )
 
                 delete_strategy.execute()

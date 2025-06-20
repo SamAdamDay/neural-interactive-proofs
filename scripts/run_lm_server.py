@@ -106,6 +106,7 @@ def main():
         "MAX_TRAINING_JOBS": str(args.max_training_jobs),
         "VLLM_NUM_GPUS": args.vllm_num_gpus,
         "ACCELERATE_CONFIG_PATH": args.accelerate_config,
+        "VLLM_CLEAR_CACHE": str(args.vllm_clear_cache),
     }
 
     subprocess.run(
