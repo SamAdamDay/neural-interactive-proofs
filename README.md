@@ -34,7 +34,13 @@ reference.
 See [the installation docs](https://neural-interactive-proofs.com/docs/guides/installation.html) 
 for a more detailed installation guide.
 
-1. Clone the repository:
+1. Clone the repository. If you're just running experiments, you can download a specific release, e.g.:
+
+   ```bash
+   git clone https://github.com/SamAdamDay/neural-interactive-proofs.git --branch v2.0.0 --depth 1
+   ```
+
+   To get the latest version, run:
 
    ```bash
    git clone https://github.com/SamAdamDay/neural-interactive-proofs.git

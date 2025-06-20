@@ -26,9 +26,15 @@ Installation Steps
 
 1. Clone the repository:
 
-   .. code-block:: bash
+   .. tabs::
+     
+      .. code-tab:: bash A specific release
 
-      git clone https://github.com/SamAdamDay/neural-interactive-proofs.git
+         git clone https://github.com/SamAdamDay/neural-interactive-proofs.git --branch v2.0.0 --depth 1
+
+      .. code-tab:: bash Latest version
+
+         git clone https://github.com/SamAdamDay/neural-interactive-proofs.git
 
    Alternatively, you may wish to fork the repository and clone your fork.
 
@@ -46,15 +52,15 @@ Installation Steps
 
          uv sync --no-dev
      
-      .. code-tab:: bash Also Development
+      .. code-tab:: bash Development
 
          uv sync
      
-      .. code-tab:: bash Hosting the Language Model Server
+      .. code-tab:: bash Hosting the LM Server
 
          uv sync --extra lm-server
      
-      .. code-tab:: bash Using ``pip``
+      .. code-tab:: bash With ``pip``
 
          pip -m venv .venv
          source .venv/bin/activate
