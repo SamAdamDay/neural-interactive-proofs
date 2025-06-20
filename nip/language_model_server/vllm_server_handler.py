@@ -21,6 +21,8 @@ from transformers import AutoConfig, PretrainedConfig
 
 from peft import PeftConfig
 
+from huggingface_hub import scan_cache_dir
+
 from nip.constants import VLLM_LOG_DIR
 from nip.language_model_server.types import (
     VllmServerStatus,
@@ -157,6 +159,32 @@ class VllmServerHandler:
                 )
             except OSError as e:
                 raise VllmModelNotFoundError(model_name, error=e)
+
+            if self.settings.vllm_clear_cache:
+
+                hf_cache_info = scan_cache_dir()
+
+                repo_ids_to_delete: list[str] = []
+                revisions_to_delete: list[str] = []
+                for repo in hf_cache_info.repos:
+                    if repo.repo_id in [base_model_name, model_name]:
+                        continue
+                    if repo.repo_type != "model":
+                        continue
+                    repo_ids_to_delete.append(repo.repo_id)
+                    revisions_to_delete.extend(
+                        [revision.commit_hash for revision in repo.revisions]
+                    )
+
+                delete_strategy = hf_cache_info.delete_revisions(*revisions_to_delete)
+
+                logger.info(
+                    f"Clearing Hugging Face model cache to free "
+                    f"{delete_strategy.expected_freed_size_str} of space. Will delete "
+                    f"models: {', '.join(repo_ids_to_delete)}."
+                )
+
+                delete_strategy.execute()
 
             try:
                 await self.stop_server(ignore_lock=True)

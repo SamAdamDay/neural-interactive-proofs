@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     the number of attention heads in the model.
     """
 
+    vllm_clear_cache: bool = False
+    """Whether to clear the Hugging Face model cache before starting the server.
+
+    If ``True``, all cached models other than the one being loaded will be cleared
+    before starting the vLLM server.
+    """
+
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
     

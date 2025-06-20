@@ -29,6 +29,12 @@ to communicate reliably.
 
 ## Unreleased
 
+### Added
+
+- Option to clear the Hugging Face model cache before starting vLLM server, with
+  `--vllm-clear-cache`.
+
+
 ### Changed
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
