@@ -3,7 +3,7 @@
 This database holds metadata about each model, along with how to access them.
 """
 
-from typing import Annotated, Optional, get_args
+from typing import Annotated, Optional
 from dataclasses import dataclass
 import dataclasses
 
@@ -25,7 +25,8 @@ class LanguageModelDbEntry:
     model_series: Annotated[str, "Model Series"]
     model_name: Annotated[str, "Model Name"]
     developer: Annotated[str, "Developer"]
-    uri: Annotated[str, "URI"]
+    api_uri: Annotated[str, "API URI"]
+    self_hosted_uri: Annotated[str, "Self Hosted URI"]
     num_parameters: Annotated[Optional[float], "Parameters (10E+9)"] = None
     training_flops: Annotated[Optional[float], "FLOPs (10E+23)"] = None
     mmlu_pro_score: Annotated[Optional[float], "MMLU-Pro"] = None
@@ -122,9 +123,12 @@ class LanguageModelDatabase:
         """
 
         uri = f"{agent_params.model_provider}/{agent_params.model_name}"
-        if uri not in self._db["URI"].values:
+        if uri in self._db["API URI"].values:
+            entry = self._db[self._db["API URI"] == uri].iloc[0]
+        elif uri in self._db["Self Hosted URI"].values:
+            entry = self._db[self._db["Self Hosted URI"] == uri].iloc[0]
+        else:
             raise LanguageModelNotFound(uri)
-        entry = self._db[self._db["URI"] == uri].iloc[0]
 
         return LanguageModelDbEntry.from_row(entry)
 
