@@ -209,10 +209,14 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
     ignore_training_lora_config = False
 
     if not is_model_peft(config.model_name):
-        model = AutoModelForCausalLM.from_pretrained(config.model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            config.model_name, token=get_env_var("HF_TOKEN")
+        )
 
     else:
-        model_lora_config = LoraConfig.from_pretrained(config.model_name)
+        model_lora_config = LoraConfig.from_pretrained(
+            config.model_name, token=get_env_var("HF_TOKEN")
+        )
 
         # When reusing the LoRA adapter, make sure the model's LoRA configuration is
         # compatible with the training configuration.
@@ -234,7 +238,9 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
                         f"{getattr(model_lora_config, key)!r}."
                     )
 
-        model = AutoPeftModelForCausalLM.from_pretrained(config.model_name)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            config.model_name, token=get_env_var("HF_TOKEN")
+        )
 
         if config.model_already_lora_strategy == "reuse":
             # Ignore the LoRA training adapter configuration, because the model is
@@ -256,7 +262,9 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         per_device_train_batch_size=config.per_device_train_batch_size,
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.model_name, token=get_env_var("HF_TOKEN")
+    )
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token

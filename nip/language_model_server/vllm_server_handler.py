@@ -9,7 +9,7 @@ import shutil
 from datetime import datetime
 import logging
 from asyncio import wait_for, TimeoutError, Lock
-from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
+from asyncio.subprocess import create_subprocess_exec, Process
 from contextlib import nullcontext
 import json
 
@@ -37,6 +37,7 @@ from nip.language_model_server.exceptions import (
 from nip.language_model_server.config import Settings
 from nip.utils.maths import greatest_divisor_up_to_max
 from nip.utils.hugging_face import is_model_peft
+from nip.utils.env import get_env_var
 
 
 logger = logging.getLogger(__name__)
@@ -145,7 +146,9 @@ class VllmServerHandler:
 
             if is_peft:
                 try:
-                    peft_config = PeftConfig.from_pretrained(model_name)
+                    peft_config = PeftConfig.from_pretrained(
+                        model_name, token=get_env_var("HF_TOKEN")
+                    )
                 except OSError as e:
                     raise VllmModelNotFoundError(model_name, error=e)
                 else:
@@ -155,7 +158,7 @@ class VllmServerHandler:
 
             try:
                 base_model_config: PretrainedConfig = AutoConfig.from_pretrained(
-                    base_model_name
+                    base_model_name, token=get_env_var("HF_TOKEN")
                 )
             except OSError as e:
                 raise VllmModelNotFoundError(model_name, error=e)
@@ -245,6 +248,7 @@ class VllmServerHandler:
                 "--tensor-parallel-size",
                 str(tensor_parallel_size),
                 *extra_args,
+                env={"HF_TOKEN": get_env_var("HF_TOKEN")},
                 **extra_kwargs,
             )
 
