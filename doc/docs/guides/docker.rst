@@ -45,7 +45,7 @@ replacing ``DOCKER_USER`` with your Docker Hub username, and ``DOCKER_REPO`` and
 "neural-interactive-proofs/default").
 
 If you want to host language models for inference and training, you can build the
-image using the `lm-server` target instead of `default`. This will include
+image using the ``lm-server`` target instead of ``default``. This will include
 the necessary dependencies for running language models
 
 .. code-block:: bash
