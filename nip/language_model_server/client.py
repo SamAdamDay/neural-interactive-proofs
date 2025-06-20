@@ -305,12 +305,12 @@ class LanguageModelClient:
 
         return data.status
 
-    async def wait_for_vllm_server(self, timeout: float = 300):
+    async def wait_for_vllm_server(self, timeout: float = 900):
         """Wait for the vLLM server to be online.
 
         Parameters
         ----------
-        timeout : float, default=300
+        timeout : float, default=900
             The maximum time to wait for the vLLM server to be online, in seconds.
 
         Raises
