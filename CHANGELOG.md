@@ -27,6 +27,14 @@ Similarly, it ensures that a client and server which agree on `MAJOR` version ar
 to communicate reliably.
 
 
+## Unreleased
+
+### Added
+
+- Option to clear the Hugging Face model cache before starting vLLM server, with
+  `--vllm-clear-cache`.
+
+
 ## [2.0.0] - 2025-06-16
 
 ### Changed

@@ -49,6 +49,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--vllm-clear-cache",
+    action="store_true",
+    help="Whether to clear the Hugging Face model cache before starting the server. "
+    "This only removes cached models other than the one being loaded.",
+)
+
+parser.add_argument(
     "--accelerate-config",
     type=str,
     default="accelerate_config.yaml.jinja2",
