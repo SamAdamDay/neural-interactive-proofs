@@ -35,6 +35,11 @@ to communicate reliably.
   `--vllm-clear-cache`.
 
 
+### Changed
+
+- Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
+
+
 ## [2.0.0] - 2025-06-16
 
 ### Changed
