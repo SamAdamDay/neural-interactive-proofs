@@ -49,6 +49,7 @@ to communicate reliably.
   resbumitting a failed fine-tune job.
 - Rearranged trained model name so Hugging Face can always tell from the name what type
   of model it is.
+- Made sure that LoRA layers are trainable.
 
 
 ## [2.0.0] - 2025-06-16
