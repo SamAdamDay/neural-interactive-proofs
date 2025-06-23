@@ -124,7 +124,10 @@ class TrainingJob:
             self.id += f"_{self.job_name}"
             self.repo_name += f"_{self.job_name}"
         self.repo_name += f"_{time_string}_{sanitised_model_name}"
-        self.repo_name = self.repo_name[:96]  # Ensure the repo name is within the limit
+
+        # The maximum length for a Hugging Face repository name is 96 characters.
+        self.repo_name = self.repo_name[:96]
+
         self.new_model_name = (
             f"{get_env_var('HF_SELF_HOSTED_FINETUNE_NAMESPACE')}/{self.repo_name}"
         )

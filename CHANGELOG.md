@@ -47,6 +47,7 @@ to communicate reliably.
 
 - Bug where non-trainable shared model groups were queried for training status when
   resbumitting a failed fine-tune job.
+- Limiting W&B job names to 128 characters.
 
 
 ## [2.0.0] - 2025-06-16
