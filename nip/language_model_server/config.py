@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     trained.
     """
 
+    vllm_debug: bool = False
+    """Whether to enable debug mode for the vLLM server."""
+
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
     

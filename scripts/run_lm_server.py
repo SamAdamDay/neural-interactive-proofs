@@ -86,6 +86,12 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--debug",
+    action="store_true",
+    help="Whether to enable debug mode",
+)
+
+parser.add_argument(
     "--dev",
     action="store_true",
     help="Whether to run the FastAPI server in development mode, which enables "
@@ -113,6 +119,7 @@ def main():
         "VLLM_NUM_GPUS": args.vllm_num_gpus,
         "ACCELERATE_CONFIG_PATH": args.accelerate_config,
         "VLLM_CLEAR_CACHE": str(args.vllm_clear_cache),
+        "VLLM_DEBUG": str(args.debug).lower(),
     }
 
     if args.vllm_max_lora_rank is not None:

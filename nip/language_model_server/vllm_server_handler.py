@@ -12,6 +12,7 @@ from asyncio import wait_for, TimeoutError, Lock
 from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from contextlib import nullcontext
 import json
+import os
 
 from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
@@ -211,6 +212,9 @@ class VllmServerHandler:
             )
 
             extra_args = []
+            extra_kwargs = {}
+            new_env_variables = {}
+
             if is_peft:
                 lora_modules = {
                     "name": model_name,
@@ -227,7 +231,10 @@ class VllmServerHandler:
                     ]
                 )
 
-            extra_kwargs = {}
+            if self.settings.vllm_debug:
+                extra_args.extend(["--uvicorn-log-level", "debug"])
+                new_env_variables["VLLM_LOGGING_LEVEL"] = "DEBUG"
+
             if self.subprocess_output_destination == "log_file":
                 extra_kwargs.update(
                     {
@@ -245,9 +252,9 @@ class VllmServerHandler:
                 "--tensor-parallel-size",
                 str(tensor_parallel_size),
                 "--max-lora-rank",
-                str(self.settings.vllm_max_lora_rank),
                 *extra_args,
                 **extra_kwargs,
+                env=dict(os.environ, **new_env_variables),
             )
 
             self.model_name = model_name
