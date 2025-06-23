@@ -47,6 +47,9 @@ to communicate reliably.
 
 - Bug where non-trainable shared model groups were queried for training status when
   resbumitting a failed fine-tune job.
+- Rearranged trained model name so Hugging Face can always tell from the name what type
+  of model it is.
+- Made sure that LoRA layers are trainable.
 - Limiting W&B job names to 128 characters.
 
 

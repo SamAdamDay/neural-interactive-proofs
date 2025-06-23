@@ -234,7 +234,25 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
                         f"{getattr(model_lora_config, key)!r}."
                     )
 
-        model = AutoPeftModelForCausalLM.from_pretrained(config.model_name)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            config.model_name, is_trainable=True
+        )
+
+        # Sanity check: ensure that exactly the LoRA layers are trainable.
+        for name, param in model.named_parameters():
+            if param.requires_grad and "lora" not in name:
+                logger.warning(
+                    f"Parameter {name!r} is trainable (required grad), but it does not "
+                    f"have 'lora' in its name. This may mean that wrong parts of the "
+                    f"model are being trained, due to a misconfiguration."
+                )
+            elif not param.requires_grad and "lora" in name:
+                logger.warning(
+                    f"Parameter {name!r} is not trainable (does not require grad), but "
+                    f"it has 'lora' in its name (so probably it is a LoRA layer). This "
+                    f"may mean that the LoRA layer is not being trained, due to a "
+                    f"misconfiguration."
+                )
 
         if config.model_already_lora_strategy == "reuse":
             # Ignore the LoRA training adapter configuration, because the model is
