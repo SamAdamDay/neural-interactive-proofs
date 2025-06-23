@@ -41,6 +41,8 @@ to communicate reliably.
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
 - Using the experiment seed for training jobs.
+- Using the model base name for training job names on LoRA models, rather than the model
+  name itself.
 
 
 ### Fixed
@@ -50,6 +52,7 @@ to communicate reliably.
 - Rearranged trained model name so Hugging Face can always tell from the name what type
   of model it is.
 - Made sure that LoRA layers are trainable.
+- Limiting W&B job names to 128 characters.
 
 
 ## [2.0.0] - 2025-06-16

@@ -263,10 +263,14 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         training_lora_config = None
     else:
         training_lora_config = LoraConfig(**config.training_lora_config.model_dump())
+
+    # The maximum length for a W&B job name is 128 characters.
+    job_name = job_id[:127]
+
     dpo_config = DPOConfig(
         **config.dpo_config.model_dump(),
         hub_model_id=new_model_name,
-        run_name=job_id,
+        run_name=job_name,
         output_dir=HF_TRAINER_OUTPUT_DIR,
         fp16=config.mixed_precision == "fp16",
         bf16=config.mixed_precision == "bf16",
