@@ -40,6 +40,12 @@ to communicate reliably.
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
 
 
+### Fixed
+
+- Bug where non-trainable shared model groups were queried for training status when
+  resbumitting a failed fine-tune job.
+
+
 ## [2.0.0] - 2025-06-16
 
 ### Changed

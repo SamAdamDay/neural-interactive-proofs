@@ -428,9 +428,9 @@ class PureTextRlTrainer(Trainer, ABC):
                 # only do this for groups that have failed.
                 async with TaskGroup() as task_group:
                     for shared_model_group in self.shared_model_groups.values():
-                        if (
-                            self.state.train_loop_stage == "create_fine_tune_jobs"
-                            or await shared_model_group.fine_tune_job_failed()
+                        if self.state.train_loop_stage == "create_fine_tune_jobs" or (
+                            shared_model_group.is_trainable
+                            and await shared_model_group.fine_tune_job_failed()
                         ):
                             task_group.create_task(shared_model_group.train())
 
