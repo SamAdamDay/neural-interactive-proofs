@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     before starting the vLLM server.
     """
 
+    vllm_max_lora_rank: int = 64
+    """The maximum rank for LoRA layers permitted in the vLLM server.
+    
+    This should be set to the maximum rank of the LoRA layers in the model being
+    trained.
+    """
+
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
     
