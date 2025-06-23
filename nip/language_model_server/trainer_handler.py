@@ -8,8 +8,11 @@ from asyncio import wait_for, TimeoutError, TaskGroup, Queue, Lock
 from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from tempfile import TemporaryDirectory
 import json
+from functools import cached_property
 
 import torch
+
+from peft import PeftConfig
 
 from filelock import FileLock
 
@@ -26,20 +29,21 @@ from nip.constants import (
     PACKAGE_ROOT,
     HF_SELF_HOSTED_FINETUNED_REPO_PREFIX,
 )
-from nip.utils.data import convert_dpo_dataset_to_hugging_face
 from nip.language_model_server.types import (
     SubprocessOutputDestination,
     TrainingJobStatus,
     TrainingJobInfo,
     CreateTrainingJobRequest,
 )
-from nip.utils.env import get_env_var
 from nip.language_model_server.exceptions import (
     MaxTrainingJobsReachedError,
     TrainingJobNotFoundServerError,
     AccelerateConfigNotFoundError,
 )
 from nip.language_model_server.config import Settings
+from nip.utils.data import convert_dpo_dataset_to_hugging_face
+from nip.utils.env import get_env_var
+from nip.utils.hugging_face import is_model_peft
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +101,20 @@ class TrainingJob:
         """The path to the dataset file for the training script."""
         return self.temporary_directory_path.joinpath("dataset.jsonl")
 
+    @cached_property
+    def base_model_name(self) -> str:
+        """The name of the base model for this training job.
+
+        If the model is a PEFT model (LoRA, etc.), it retrieves the base model name from
+        the PEFT configuration. Otherwise, it uses the model name directly.
+        """
+
+        if is_model_peft(self.config.model_name):
+            peft_config = PeftConfig.from_pretrained(self.config.model_name)
+            return peft_config.base_model_name_or_path
+        else:
+            return self.config.model_name
+
     def __init__(
         self,
         request: CreateTrainingJobRequest,
@@ -117,7 +135,7 @@ class TrainingJob:
         )
 
         time_now = datetime.now().replace(microsecond=0)
-        sanitised_model_name = self.config.model_name.rpartition("/")[2]
+        sanitised_model_name = self.base_model_name.rpartition("/")[2]
         self.id = (
             f"{sanitised_model_name}"
             f"_{self.config.method}"

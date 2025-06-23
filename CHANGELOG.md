@@ -41,6 +41,8 @@ to communicate reliably.
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
 - Using the experiment seed for training jobs.
+- Using the model base name for training job names on LoRA models, rather than the model
+  name itself.
 
 
 ### Fixed
