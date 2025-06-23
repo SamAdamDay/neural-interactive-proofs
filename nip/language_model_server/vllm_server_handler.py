@@ -244,6 +244,8 @@ class VllmServerHandler:
                 str(self.port),
                 "--tensor-parallel-size",
                 str(tensor_parallel_size),
+                "--max-lora-rank",
+                str(self.settings.vllm_max_lora_rank),
                 *extra_args,
                 **extra_kwargs,
             )

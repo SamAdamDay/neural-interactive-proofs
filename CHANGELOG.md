@@ -33,6 +33,7 @@ to communicate reliably.
 
 - Option to clear the Hugging Face model cache before starting vLLM server, with
   `--vllm-clear-cache`.
+- Option to set the max LoRA rank which can be served by vLLM.
 
 
 ### Changed
