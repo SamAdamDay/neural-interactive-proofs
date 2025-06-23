@@ -1849,6 +1849,8 @@ class NonFinetunableSharedModelGroup(PureTextSharedModelGroup):
     fine-tuning.
     """
 
+    is_trainable: ClassVar[bool] = False
+
     def get_state_dict(self) -> dict:
         """Get the state of the shared model group as a dict.
 

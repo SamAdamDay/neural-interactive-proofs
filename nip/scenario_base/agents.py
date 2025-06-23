@@ -481,6 +481,8 @@ class PureTextSharedModelGroup(ABC):
         PureTextSharedModelGroupState
     )
 
+    is_trainable: ClassVar[bool] = True
+
     @dataclass
     class SharedAgentParams:
         """The parameters shared by all agents in the group."""
