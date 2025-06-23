@@ -198,6 +198,14 @@ class LmTrainingConfig(BaseModel):
     gradient_checkpointing: bool = True
     """Whether to use gradient checkpointing to save memory during training."""
 
+    distributed_type: Literal["DeepSpeed", "FSDP", "no"] = "DeepSpeed"
+    """The distributed training type to use, for multi-GPU training.
+
+    - "DeepSpeed": :cite:t:`Samyam2020`. ZeRO stage 3 is used by default.
+    - "FSDP": Pytorch's Fully Sharded Data Parallel :cite:p:`Zhao2022`.
+    - "no": No distributed training, run on a single device.
+    """
+
 
 class CreateTrainingJobRequest(BaseModel):
     """A request to create a new training job."""

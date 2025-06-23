@@ -421,7 +421,13 @@ class TrainingJob:
 
         rendered_path = self.temporary_directory_path.joinpath("accelerate_config.yaml")
         with open(rendered_path, "w") as f:
-            f.write(template.render(num_gpus=num_gpus, mixed_precision=mixed_precision))
+            f.write(
+                template.render(
+                    num_gpus=num_gpus,
+                    mixed_precision=mixed_precision,
+                    distributed_type=self.config.distributed_type.upper(),
+                )
+            )
 
         return rendered_path
 
