@@ -171,6 +171,9 @@ class LmTrainingConfig(BaseModel):
     If ``None``, no LoRA adapter will be applied during training.
     """
 
+    seed: int = 6198
+    """The random seed to use for training, for reproducibility."""
+
     per_device_train_batch_size: int = 2
     """The batch size per device (GPU) for training."""
 
