@@ -57,7 +57,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--vllm-max-lora-rank",
-    action="store_true",
+    type=int,
     help="Maximum rank for LoRA layers permitted in the vLLM server.",
 )
 
@@ -113,8 +113,10 @@ def main():
         "VLLM_NUM_GPUS": args.vllm_num_gpus,
         "ACCELERATE_CONFIG_PATH": args.accelerate_config,
         "VLLM_CLEAR_CACHE": str(args.vllm_clear_cache),
-        "VLLM_MAX_LORA_RANK": str(args.vllm_max_lora_rank),
     }
+
+    if args.vllm_max_lora_rank is not None:
+        new_env_variables["VLLM_MAX_LORA_RANK"] = str(args.vllm_max_lora_rank)
 
     subprocess.run(
         [
