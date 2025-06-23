@@ -38,6 +38,7 @@ to communicate reliably.
 ### Changed
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
+- Using the experiment seed for training jobs.
 
 
 ### Fixed

@@ -1795,6 +1795,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                 lora_alpha=self.lora_alpha,
                 lora_dropout=self.shared_agent_params.lora_dropout,
             ),
+            seed=self.hyper_params.seed,
             per_device_train_batch_size=per_device_train_batch_size,
             model_already_lora_strategy=(
                 "stack" if self.shared_agent_params.stack_lora_adapters else "reuse"
