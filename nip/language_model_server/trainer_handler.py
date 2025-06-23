@@ -116,14 +116,22 @@ class TrainingJob:
             undefined=StrictUndefined,
         )
 
-        time_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        sanitised_model_name = self.config.model_name.replace("/", "_")
-        self.id = f"{sanitised_model_name}_{self.config.method}_{time_string}"
-        self.repo_name = f"{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}{self.config.method}"
+        time_now = datetime.now().replace(microsecond=0)
+        sanitised_model_name = self.config.model_name.rpartition("/")[2]
+        self.id = (
+            f"{sanitised_model_name}"
+            f"_{self.config.method}"
+            f"_{time_now.strftime('%Y-%m-%d_%H-%M-%S')}"
+        )
+        self.repo_name = (
+            f"{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}"
+            f"{self.config.method}"
+            f"_{sanitised_model_name}"
+        )
         if self.job_name:
             self.id += f"_{self.job_name}"
             self.repo_name += f"_{self.job_name}"
-        self.repo_name += f"_{time_string}_{sanitised_model_name}"
+        self.repo_name += f"_{time_now.timestamp()}"
         self.repo_name = self.repo_name[:96]  # Ensure the repo name is within the limit
         self.new_model_name = (
             f"{get_env_var('HF_SELF_HOSTED_FINETUNE_NAMESPACE')}/{self.repo_name}"
