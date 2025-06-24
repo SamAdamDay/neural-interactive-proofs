@@ -176,6 +176,7 @@ class Trainer(ABC):
                 CHECKPOINT_STATE_ARTIFACT_TYPE,
             )
             artifact.add_file(self.checkpoint_state_path)
+            artifact.add_file(self.checkpoint_metadata_path)
             artifact.add_file(self.checkpoint_params_path)
             self.settings.wandb_run.log_artifact(artifact)
 
@@ -328,6 +329,15 @@ class Trainer(ABC):
                 metadata = json.load(f)
                 package_name = metadata.get("package_name", None)
                 package_version = metadata.get("package_version", None)
+
+        # Fall back to reading the hyper parameters file, which should contain the
+        # package name and version
+        elif self.checkpoint_params_path.exists():
+            with open(self.checkpoint_params_path, "r") as f:
+                hyper_params = json.load(f)
+                package_name = hyper_params.get("_package_name", None)
+                package_version = hyper_params.get("_package_version", None)
+
         else:
             package_name = None
             package_version = None
