@@ -13,6 +13,7 @@ from asyncio.subprocess import create_subprocess_exec, Process
 from contextlib import nullcontext
 import json
 import os
+import importlib.util
 
 from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
@@ -28,6 +29,7 @@ from nip.constants import VLLM_LOG_DIR
 from nip.language_model_server.types import (
     VllmServerStatus,
     SubprocessOutputDestination,
+    VllmQuantization,
 )
 from nip.language_model_server.exceptions import (
     VllmNotInstalledError,
@@ -35,6 +37,7 @@ from nip.language_model_server.exceptions import (
     VllmServerNotRunningError,
     VllmModelNotFoundError,
     VllmBadModelError,
+    VllmConfigError,
 )
 from nip.language_model_server.config import Settings
 from nip.utils.maths import greatest_divisor_up_to_max
@@ -104,7 +107,9 @@ class VllmServerHandler:
         if self.subprocess_output_destination == "log_file":
             self.log_file.close()
 
-    async def start_server(self, model_name: str) -> str:
+    async def start_server(
+        self, model_name: str, quantization: VllmQuantization = "none"
+    ) -> str:
         """Start the vLLM server with the specified model.
 
         If the server is already running with the current model, this method will do
@@ -115,6 +120,8 @@ class VllmServerHandler:
         ----------
         model_name : str
             The name of the model to serve with vLLM.
+        quantization : VllmQuantization, default="no"
+            The quantization method to use for the model.
 
         Raises
         ------
@@ -248,7 +255,16 @@ class VllmServerHandler:
                 else:
                     extra_args.append(str(self.settings.vllm_max_lora_rank))
 
-            if self.settings.vllm_debug:
+            if quantization == "bitsandbytes":
+                if importlib.util.find_spec("bitsandbytes") is None:
+                    raise VllmConfigError(
+                        "vLLM quantization is set to 'bitsandbytes', but the "
+                        "`bitsandbytes` package is not installed. Please install it "
+                        "to use this feature."
+                    )
+                extra_args.extend(["--quantization", "bitsandbytes"])
+
+            if self.settings.debug:
                 extra_args.extend(["--uvicorn-log-level", "debug"])
                 new_env_variables["VLLM_LOGGING_LEVEL"] = "DEBUG"
 

@@ -3,23 +3,34 @@
 from typing import Literal
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, CliSuppress
 
 from nip.language_model_server.types import SubprocessOutputDestination
 from nip.utils.env import get_env_var
 
 
-class Settings(BaseSettings):
+class Settings(
+    BaseSettings,
+    cli_kebab_case=True,
+    cli_ignore_unknown_args=True,
+    cli_implicit_flags=True,
+    use_attribute_docstrings=True,
+):
     """Configuration settings for the language model server.
 
     This class uses `pydantic_settings` to load settings from environment variables or
     a `.env` file.
     """
 
+    lm_server_port: int = get_env_var("DEFAULT_LM_SERVER_PORT")
+    """The port on which the main language model server will run."""
+
     vllm_port: int = get_env_var("DEFAULT_VLLM_SERVER_PORT")
     """The port on which the vLLM server will run."""
 
-    subprocess_output_destination: SubprocessOutputDestination = "stdout_std_err"
+    subprocess_output_destination: CliSuppress[SubprocessOutputDestination] = (
+        "stdout_std_err"
+    )
     """Where to send the output of the vLLM server subprocess."""
 
     max_training_jobs: int = 1
@@ -51,9 +62,6 @@ class Settings(BaseSettings):
     available. If no LoRA model is available, it will use the vLLM default value.
     """
 
-    vllm_debug: bool = False
-    """Whether to enable debug mode for the vLLM server."""
-
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
     
@@ -67,12 +75,28 @@ class Settings(BaseSettings):
     against the template directory: ``nip/language_model_server/templates/``.
     """
 
-    parent_script_cwd: str | None = None
+    parent_script_cwd: CliSuppress[str | None] = None
     """Path to the working directory of the script which called this process.
     
     The script may run the FastAPI process with a different working directory, but this
     would mess up any relative paths. So this setting records the original working
     directory for path resolution.
+    """
+
+    debug: bool = False
+    """Whether to enable debug mode."""
+
+    external: bool = False
+    """Whether to run the server in external mode, with host set to '0.0.0.0'.
+
+    This allows the server to be accessed from outside the local machine.
+    """
+
+    reload: bool = False
+    """Whether to enable auto-reload for the uvicorn server.
+    
+    This auto-reloads the server when any of the source files change, at the cost of
+    some performance.
     """
 
 

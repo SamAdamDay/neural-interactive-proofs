@@ -36,6 +36,7 @@ to communicate reliably.
 - Option to set the max LoRA rank which can be served by vLLM.
 - Ability to enable vLLM debug mode.
 - Ability to set vLLM max LoRA rank automatically.
+- Agent-level hyper-parameter to enable quantisation for self-hosted models.
 
 
 ### Changed

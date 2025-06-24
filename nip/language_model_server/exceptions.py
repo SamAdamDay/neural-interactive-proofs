@@ -34,6 +34,16 @@ class VllmNoGpusError(LanguageModelServerError):
         )
 
 
+class VllmConfigError(LanguageModelServerError):
+    """Exception raised when there is an error in the vLLM configuration."""
+
+    status_code = 503
+
+    def __init__(self, message: str):
+        super().__init__(f"vLLM configuration error: {message}")
+        self.message = message
+
+
 class VllmModelNotFoundError(LanguageModelServerError):
     """Exception raised when the specified vLLM model is not found."""
 
