@@ -41,6 +41,8 @@ to communicate reliably.
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
 - Using the experiment seed for training jobs.
+- Using the model base name for training job names on LoRA models, rather than the model
+  name itself.
 - Launching language model server with `uvicorn` directly (rather than using `fastapi
   run`), which has allowed displaying more log messages.
 
@@ -49,6 +51,10 @@ to communicate reliably.
 
 - Bug where non-trainable shared model groups were queried for training status when
   resbumitting a failed fine-tune job.
+- Rearranged trained model name so Hugging Face can always tell from the name what type
+  of model it is.
+- Made sure that LoRA layers are trainable.
+- Limiting W&B job names to 128 characters.
 
 
 ## [2.0.0] - 2025-06-16

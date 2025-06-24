@@ -8,8 +8,11 @@ from asyncio import wait_for, TimeoutError, TaskGroup, Queue, Lock
 from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
 from tempfile import TemporaryDirectory
 import json
+from functools import cached_property
 
 import torch
+
+from peft import PeftConfig
 
 from filelock import FileLock
 
@@ -26,20 +29,21 @@ from nip.constants import (
     PACKAGE_ROOT,
     HF_SELF_HOSTED_FINETUNED_REPO_PREFIX,
 )
-from nip.utils.data import convert_dpo_dataset_to_hugging_face
 from nip.language_model_server.types import (
     SubprocessOutputDestination,
     TrainingJobStatus,
     TrainingJobInfo,
     CreateTrainingJobRequest,
 )
-from nip.utils.env import get_env_var
 from nip.language_model_server.exceptions import (
     MaxTrainingJobsReachedError,
     TrainingJobNotFoundServerError,
     AccelerateConfigNotFoundError,
 )
 from nip.language_model_server.config import Settings
+from nip.utils.data import convert_dpo_dataset_to_hugging_face
+from nip.utils.env import get_env_var
+from nip.utils.hugging_face import is_model_peft
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +101,20 @@ class TrainingJob:
         """The path to the dataset file for the training script."""
         return self.temporary_directory_path.joinpath("dataset.jsonl")
 
+    @cached_property
+    def base_model_name(self) -> str:
+        """The name of the base model for this training job.
+
+        If the model is a PEFT model (LoRA, etc.), it retrieves the base model name from
+        the PEFT configuration. Otherwise, it uses the model name directly.
+        """
+
+        if is_model_peft(self.config.model_name):
+            peft_config = PeftConfig.from_pretrained(self.config.model_name)
+            return peft_config.base_model_name_or_path
+        else:
+            return self.config.model_name
+
     def __init__(
         self,
         request: CreateTrainingJobRequest,
@@ -116,15 +134,26 @@ class TrainingJob:
             undefined=StrictUndefined,
         )
 
-        time_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        sanitised_model_name = self.config.model_name.replace("/", "_")
-        self.id = f"{sanitised_model_name}_{self.config.method}_{time_string}"
-        self.repo_name = f"{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}{self.config.method}"
+        time_now = datetime.now().replace(microsecond=0)
+        sanitised_model_name = self.base_model_name.rpartition("/")[2]
+        self.id = (
+            f"{sanitised_model_name}"
+            f"_{self.config.method}"
+            f"_{time_now.strftime('%Y-%m-%d_%H-%M-%S')}"
+        )
+        self.repo_name = (
+            f"{HF_SELF_HOSTED_FINETUNED_REPO_PREFIX}"
+            f"{self.config.method}"
+            f"_{sanitised_model_name}"
+        )
         if self.job_name:
             self.id += f"_{self.job_name}"
             self.repo_name += f"_{self.job_name}"
-        self.repo_name += f"_{time_string}_{sanitised_model_name}"
-        self.repo_name = self.repo_name[:96]  # Ensure the repo name is within the limit
+        self.repo_name += f"_{time_now.timestamp()}"
+
+        # The maximum length for a Hugging Face repository name is 96 characters.
+        self.repo_name = self.repo_name[:96]
+
         self.new_model_name = (
             f"{get_env_var('HF_SELF_HOSTED_FINETUNE_NAMESPACE')}/{self.repo_name}"
         )
