@@ -9,7 +9,7 @@ import shutil
 from datetime import datetime
 import logging
 from asyncio import wait_for, TimeoutError, Lock
-from asyncio.subprocess import create_subprocess_exec, STDOUT, Process
+from asyncio.subprocess import create_subprocess_exec, Process
 from contextlib import nullcontext
 import json
 import os
@@ -20,7 +20,7 @@ import torch
 
 from transformers import AutoConfig, PretrainedConfig
 
-from peft import PeftConfig
+from peft import PeftConfig, LoraConfig, PeftType
 
 from huggingface_hub import scan_cache_dir
 
@@ -34,6 +34,7 @@ from nip.language_model_server.exceptions import (
     VllmNoGpusError,
     VllmServerNotRunningError,
     VllmModelNotFoundError,
+    VllmBadModelError,
 )
 from nip.language_model_server.config import Settings
 from nip.utils.maths import greatest_divisor_up_to_max
@@ -146,13 +147,21 @@ class VllmServerHandler:
 
             if is_peft:
                 try:
-                    peft_config = PeftConfig.from_pretrained(model_name)
+                    peft_config: LoraConfig = PeftConfig.from_pretrained(model_name)
                 except OSError as e:
                     raise VllmModelNotFoundError(model_name, error=e)
                 else:
+                    if peft_config.peft_type != PeftType.LORA:
+                        raise VllmBadModelError(
+                            model_name,
+                            f"Model '{model_name}' is a PEFT model, but it is not a "
+                            f"LoRA model. Found PEFT type: {peft_config.peft_type}.",
+                        )
                     base_model_name = peft_config.base_model_name_or_path
+                    lora_rank = peft_config.r
             else:
                 base_model_name = model_name
+                lora_rank = None
 
             try:
                 base_model_config: PretrainedConfig = AutoConfig.from_pretrained(
@@ -228,8 +237,16 @@ class VllmServerHandler:
                         json.dumps(lora_modules),
                         "--max-seq-len-to-capture",
                         "128000",
+                        "--max-lora-rank",
                     ]
                 )
+                if self.settings.vllm_max_lora_rank == "auto":
+                    logger.info(
+                        f"Using detected LoRA rank: {lora_rank} as max vLLM LoRA rank."
+                    )
+                    extra_args.append(str(lora_rank))
+                else:
+                    extra_args.append(str(self.settings.vllm_max_lora_rank))
 
             if self.settings.vllm_debug:
                 extra_args.extend(["--uvicorn-log-level", "debug"])
@@ -251,8 +268,6 @@ class VllmServerHandler:
                 str(self.port),
                 "--tensor-parallel-size",
                 str(tensor_parallel_size),
-                "--max-lora-rank",
-                str(self.settings.vllm_max_lora_rank),
                 *extra_args,
                 **extra_kwargs,
                 env=dict(os.environ, **new_env_variables),

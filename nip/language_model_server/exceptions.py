@@ -47,6 +47,16 @@ class VllmModelNotFoundError(LanguageModelServerError):
         self.model_name = model_name
 
 
+class VllmBadModelError(LanguageModelServerError):
+    """Exception raised when the vLLM model is not compatible with the server."""
+
+    status_code = 400
+
+    def __init__(self, model_name: str, message: str):
+        super().__init__(message)
+        self.model_name = model_name
+
+
 class VllmServerNotRunningError(LanguageModelServerError):
     """Exception raised when trying to stop a vLLM server that is not running."""
 

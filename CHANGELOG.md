@@ -35,6 +35,7 @@ to communicate reliably.
   `--vllm-clear-cache`.
 - Option to set the max LoRA rank which can be served by vLLM.
 - Ability to enable vLLM debug mode.
+- Ability to set vLLM max LoRA rank automatically.
 
 
 ### Changed
