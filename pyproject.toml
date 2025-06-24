@@ -49,6 +49,7 @@ lm-server = [
     "bitsandbytes==0.46.0",
     "deepspeed==0.17.1",
     "fastapi==0.115.6",
+    "liger-kernel==0.5.10",
     "loralib==0.1.2",
     "pydantic-settings==2.9.1",
     "transformers==4.52.4",
