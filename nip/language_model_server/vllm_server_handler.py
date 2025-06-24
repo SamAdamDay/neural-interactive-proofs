@@ -13,6 +13,7 @@ from asyncio.subprocess import create_subprocess_exec, Process
 from contextlib import nullcontext
 import json
 import os
+import importlib.util
 
 from httpx import HTTPStatusError, ConnectError, AsyncClient, ConnectTimeout
 
@@ -35,6 +36,7 @@ from nip.language_model_server.exceptions import (
     VllmServerNotRunningError,
     VllmModelNotFoundError,
     VllmBadModelError,
+    VllmConfigError,
 )
 from nip.language_model_server.config import Settings
 from nip.utils.maths import greatest_divisor_up_to_max
@@ -247,6 +249,15 @@ class VllmServerHandler:
                     extra_args.append(str(lora_rank))
                 else:
                     extra_args.append(str(self.settings.vllm_max_lora_rank))
+
+            if self.settings.vllm_quantization == "bitsandbytes":
+                if importlib.util.find_spec("bitsandbytes") is None:
+                    raise VllmConfigError(
+                        "vLLM quantization is set to 'bitsandbytes', but the "
+                        "`bitsandbytes` package is not installed. Please install it "
+                        "to use this feature."
+                    )
+                extra_args.extend(["--quantization", "bitsandbytes"])
 
             if self.settings.debug:
                 extra_args.extend(["--uvicorn-log-level", "debug"])

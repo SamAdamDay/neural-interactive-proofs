@@ -9,12 +9,21 @@ from nip.language_model_server.types import SubprocessOutputDestination
 from nip.utils.env import get_env_var
 
 
-class Settings(BaseSettings, cli_kebab_case=True, cli_ignore_unknown_args=True):
+class Settings(
+    BaseSettings,
+    cli_kebab_case=True,
+    cli_ignore_unknown_args=True,
+    cli_implicit_flags=True,
+    use_attribute_docstrings=True,
+):
     """Configuration settings for the language model server.
 
     This class uses `pydantic_settings` to load settings from environment variables or
     a `.env` file.
     """
+
+    lm_server_port: int = get_env_var("DEFAULT_LM_SERVER_PORT")
+    """The port on which the main language model server will run."""
 
     vllm_port: int = get_env_var("DEFAULT_VLLM_SERVER_PORT")
     """The port on which the vLLM server will run."""
@@ -36,7 +45,7 @@ class Settings(BaseSettings, cli_kebab_case=True, cli_ignore_unknown_args=True):
     the number of attention heads in the model.
     """
 
-    vllm_quantization: Literal["bitsandbytes"] | None = None
+    vllm_quantization: Literal["bitsandbytes", "no"] = "no"
     """The quantization method to use for the vLLM server.
 
     Quantization is the process of reducing the precision of the model weights to
@@ -60,9 +69,6 @@ class Settings(BaseSettings, cli_kebab_case=True, cli_ignore_unknown_args=True):
     available. If no LoRA model is available, it will use the vLLM default value.
     """
 
-    debug: CliSuppress[bool] = False
-    """Whether to enable debug mode."""
-
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
     
@@ -82,6 +88,22 @@ class Settings(BaseSettings, cli_kebab_case=True, cli_ignore_unknown_args=True):
     The script may run the FastAPI process with a different working directory, but this
     would mess up any relative paths. So this setting records the original working
     directory for path resolution.
+    """
+
+    debug: bool = False
+    """Whether to enable debug mode."""
+
+    external: bool = False
+    """Whether to run the server in external mode, with host set to '0.0.0.0'.
+
+    This allows the server to be accessed from outside the local machine.
+    """
+
+    reload: bool = False
+    """Whether to enable auto-reload for the uvicorn server.
+    
+    This auto-reloads the server when any of the source files change, at the cost of
+    some performance.
     """
 
 

@@ -8,11 +8,11 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import uvicorn
 
-from pydantic_settings import BaseSettings, CliApp, CliSettingsSource
+from pydantic_settings import CliApp, CliSettingsSource
 
 from nip.language_model_server.config import Settings
 from nip.constants import REPOSITORY_ROOT, PACKAGE_ROOT
-from nip.utils.env import get_env_var, set_env_variables
+from nip.utils.env import set_env_variables
 from nip.utils.os import change_directory
 
 
@@ -23,32 +23,9 @@ parser = ArgumentParser(
 )
 
 parser.add_argument(
-    "--lm-server-port",
-    type=int,
-    default=get_env_var("DEFAULT_LM_SERVER_PORT"),
-    help="The port on which the main language model server will run.",
-)
-
-parser.add_argument(
     "--log-to-file",
     action="store_true",
     help="Whether to log vLLM and trainer to files instead of stdout and stderr.",
-    default=False,
-)
-
-parser.add_argument(
-    "--external",
-    action="store_true",
-    help="Whether to run the server in external mode, allowing it to be accessed from "
-    "outside. Otherwise, it will only be accessible from localhost.",
-    default=False,
-)
-
-parser.add_argument(
-    "--dev",
-    action="store_true",
-    help="Whether to run the FastAPI server in development mode, which enables "
-    "auto-reload.",
     default=False,
 )
 
@@ -60,13 +37,13 @@ def main():
 
     args = parser.parse_args()
 
-    settings = CliApp.run(Settings, cli_args=args, cli_settings=cli_settings)
+    settings = CliApp.run(Settings, cli_args=args, cli_settings_source=cli_settings)
 
     settings.subprocess_output_destination = (
         "log_file" if args.log_to_file else "stdout_std_err"
     )
 
-    if args.external:
+    if settings.external:
         host = "0.0.0.0"
     else:
         host = "127.0.0.1"
@@ -81,8 +58,8 @@ def main():
             uvicorn.run(
                 "nip.language_model_server.server:app",
                 host=host,
-                port=args.lm_server_port,
-                log_level="debug" if args.debug else "info",
+                port=settings.lm_server_port,
+                log_level="debug" if settings.debug else "info",
                 log_config={
                     "version": 1,
                     "disable_existing_loggers": False,
@@ -122,12 +99,12 @@ def main():
                         },
                     },
                     "root": {
-                        "level": "DEBUG" if args.debug else "INFO",
+                        "level": "DEBUG" if settings.debug else "INFO",
                         "handlers": ["default"],
                         "propagate": False,
                     },
                 },
-                reload=args.dev,
+                reload=settings.reload,
                 reload_dirs=[str(PACKAGE_ROOT)],
             )
 
