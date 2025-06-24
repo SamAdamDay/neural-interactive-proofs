@@ -17,8 +17,9 @@ from pydantic import ValidationError
 from nip.utils.types import DpoDatasetItem
 from nip.utils.version import get_version, compare_versions
 from nip.language_model_server.types import (
-    ServerVersionResponse,
     VllmServerStatus,
+    VllmQuantization,
+    ServerVersionResponse,
     VllmStartRequest,
     VllmStartResponse,
     VllmStopRequest,
@@ -196,7 +197,9 @@ class LanguageModelClient:
                 UserWarning,
             )
 
-    async def start_vllm_server(self, model_name: str) -> str:
+    async def start_vllm_server(
+        self, model_name: str, quantization: VllmQuantization = "none"
+    ) -> str:
         """Start the vLLM language model server with the specified model.
 
         Parameters
@@ -204,6 +207,8 @@ class LanguageModelClient:
         model_name : str
             The name of the model to be served by vLLM. This should match a model that
             is available in the vLLM installation.
+        quantization : VllmQuantization, default="no"
+            The quantization method to use for the model.
 
         Returns
         -------
@@ -221,7 +226,9 @@ class LanguageModelClient:
         async with AsyncClient() as httpx_client:
             response = await httpx_client.post(
                 f"{self.server_url}/vllm/start",
-                json=VllmStartRequest(model_name=model_name).model_dump(),
+                json=VllmStartRequest(
+                    model_name=model_name, quantization=quantization
+                ).model_dump(),
             )
         response.raise_for_status()
 

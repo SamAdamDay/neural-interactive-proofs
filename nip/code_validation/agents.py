@@ -1220,7 +1220,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             and not self.shared_agent_params.use_dummy_api
         ):
             await self.language_model_client.start_vllm_server(
-                model_name=self.model_name
+                model_name=self.model_name,
+                quantization=self.shared_agent_params.quantization,
             )
             logger.info(f"Waiting for vLLM server for model {self.model_name!r}...")
             await self.language_model_client.wait_for_vllm_server()

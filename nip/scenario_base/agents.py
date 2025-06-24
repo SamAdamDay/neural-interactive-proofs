@@ -26,7 +26,7 @@ from numpy.typing import NDArray
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
-from einops import repeat, rearrange
+from einops import repeat
 
 from jaxtyping import Float, Int, Bool
 
@@ -38,6 +38,7 @@ from nip.utils.types import TorchDevice, NestedKey
 from nip.utils.hyper_params import get_agent_part_flags
 from nip.utils.torch import apply_orthogonal_initialisation
 from nip.utils.nested_array_dict import NestedArrayDict
+from nip.language_model_server.types import VllmQuantization
 
 
 @dataclass
@@ -499,6 +500,8 @@ class PureTextSharedModelGroup(ABC):
         freeze_agent: bool
 
         use_dummy_api: bool
+
+        quantization: VllmQuantization
 
         fine_tune_from_scratch: bool
 

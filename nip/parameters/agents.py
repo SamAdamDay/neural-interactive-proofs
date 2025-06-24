@@ -29,6 +29,7 @@ from nip.parameters.update_schedule import (
     AlternatingPeriodicUpdateSchedule,
 )
 from nip.utils.env import env_var_default_factory
+from nip.language_model_server.types import VllmQuantization
 
 
 @register_parameter_class
@@ -499,6 +500,10 @@ class PureTextAgentParameters(AgentParameters):
         fine-tuning from the previous iteration.
     freeze_agent : bool
         Whether to freeze the agent (i.e. not fine-tune it).
+    quantization : VllmQuantization
+        The quantization method to use for model inference. This is only relevant when
+        using a self-hosted model. It controls how the model weights are quantized to
+        reduce memory usage, at the cost of some accuracy.
     dpo_beta : float | None
         The beta parameter for to use when training the model with DPO. This is a float
         between 0 and 2, which controls how strictly the new model will adhere to its
@@ -569,6 +574,8 @@ class PureTextAgentParameters(AgentParameters):
 
     fine_tune_from_scratch: bool = True
     freeze_agent: bool = False
+
+    quantization: VllmQuantization = "none"
 
     dpo_beta: Optional[float] = None
 

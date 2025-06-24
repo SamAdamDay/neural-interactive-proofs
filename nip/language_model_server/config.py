@@ -45,7 +45,7 @@ class Settings(
     the number of attention heads in the model.
     """
 
-    vllm_quantization: Literal["bitsandbytes", "no"] = "no"
+    vllm_quantization: Literal["bitsandbytes", "no"] = "none"
     """The quantization method to use for the vLLM server.
 
     Quantization is the process of reducing the precision of the model weights to

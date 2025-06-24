@@ -31,6 +31,7 @@
             "decision_spectrum": "accept_reject",
             "supervisor_message": "all",
             "freeze": false,
+            "quantization": "none",
         },
         "prover": {
             "model": "OpenAI/gpt-4o-2024-08-06",
@@ -49,6 +50,7 @@
             "max_words": 150,
             "freeze": false,
             "invalid_response_penalty": null,
+            "quantization": "none",
         },
         "provers_share_model": true,
         "fine_tune_from_scratch": false,

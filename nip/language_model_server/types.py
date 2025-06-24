@@ -59,6 +59,9 @@ One of:
 - "log_file": Output is written to a log file.
 """
 
+VllmQuantization: TypeAlias = Literal["bitsandbytes", "none"]
+"""The quantization method to use for the vLLM server."""
+
 
 class ServerVersionResponse(BaseModel):
     """A response containing the version of the language model server."""
@@ -72,6 +75,15 @@ class VllmStartRequest(BaseModel):
 
     model_name: str
     """The name of the model to be served by the vLLM server."""
+
+    quantization: VllmQuantization = "none"
+    """The quantization method to use for the model.
+
+    Quantization is the process of reducing the precision of the model weights to
+    reduce memory usage, at the cost of some accuracy.
+
+    Currently, only "bitsandbytes" quantization is supported.
+    """
 
 
 class VllmStartResponse(BaseModel):

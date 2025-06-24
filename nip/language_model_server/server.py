@@ -139,7 +139,7 @@ async def start_vllm_server(request: VllmStartRequest) -> VllmStartResponse:
 
     try:
         success_message = await vllm_server_handler.start_server(
-            model_name=request.model_name
+            model_name=request.model_name, quantization=request.quantization
         )
     except LanguageModelServerError as e:
         _raise_server_error_as_http_exception(
