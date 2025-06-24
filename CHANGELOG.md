@@ -55,6 +55,8 @@ to communicate reliably.
   of model it is.
 - Made sure that LoRA layers are trainable.
 - Limiting W&B job names to 128 characters.
+- Fixed run metadata file not being saved in the W&B artifact, meaning the run package
+  version wasn't being determined correctly.
 
 
 ## [2.0.0] - 2025-06-16

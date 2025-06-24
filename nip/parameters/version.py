@@ -131,6 +131,9 @@ def convert_hyper_param_dict(hyper_param_dict: dict) -> dict:
         hyper_param_dict = conversion_func(hyper_param_dict)
         dict_version = next_version
 
+    # Finally, set the _package_version field to the current version
+    hyper_param_dict["_package_version"] = version_tuple_to_string(current_version)
+
     return hyper_param_dict
 
 
