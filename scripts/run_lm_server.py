@@ -9,8 +9,11 @@ import subprocess
 from shutil import which
 import os
 
-from nip.constants import REPOSITORY_ROOT
-from nip.utils.env import get_env_var
+import uvicorn
+
+from nip.constants import REPOSITORY_ROOT, PACKAGE_ROOT
+from nip.utils.env import get_env_var, set_env_variables
+from nip.utils.os import change_directory
 
 
 parser = ArgumentParser(
@@ -125,21 +128,60 @@ def main():
     if args.vllm_max_lora_rank is not None:
         new_env_variables["VLLM_MAX_LORA_RANK"] = str(args.vllm_max_lora_rank)
 
-    subprocess.run(
-        [
-            which("uv"),
-            "run",
-            "fastapi",
-            "dev" if args.dev else "run",
-            "--host",
-            host,
-            "--port",
-            str(args.lm_server_port),
-            "nip/language_model_server/server.py",
-        ],
-        env=dict(os.environ, **new_env_variables),
-        cwd=REPOSITORY_ROOT,
-    )
+    with change_directory(REPOSITORY_ROOT):
+        with set_env_variables(new_env_variables):
+            uvicorn.run(
+                "nip.language_model_server.server:app",
+                host=host,
+                port=args.lm_server_port,
+                log_level="debug" if args.debug else "info",
+                log_config={
+                    "version": 1,
+                    "disable_existing_loggers": False,
+                    "formatters": {
+                        "default": {
+                            "format": "\033[37;100m %(levelname)s \033[0m "
+                            "%(asctime)s %(message)s",
+                            "datefmt": "%d/%m/%y %H:%M:%S",
+                        },
+                        "access": {
+                            "format": "    \033[47m %(levelname)s \033[0m %(message)s",
+                            "datefmt": "%d/%m/%y %H:%M:%S",
+                        },
+                    },
+                    "handlers": {
+                        "default": {
+                            "formatter": "default",
+                            "class": "logging.StreamHandler",
+                            "stream": "ext://sys.stderr",
+                        },
+                        "access": {
+                            "formatter": "access",
+                            "class": "logging.StreamHandler",
+                            "stream": "ext://sys.stdout",
+                        },
+                    },
+                    "loggers": {
+                        "uvicorn.error": {
+                            "level": "INFO",
+                            "handlers": ["default"],
+                            "propagate": False,
+                        },
+                        "uvicorn.access": {
+                            "level": "INFO",
+                            "handlers": ["access"],
+                            "propagate": False,
+                        },
+                    },
+                    "root": {
+                        "level": "DEBUG" if args.debug else "INFO",
+                        "handlers": ["default"],
+                        "propagate": False,
+                    },
+                },
+                reload=args.dev,
+                reload_dirs=[str(PACKAGE_ROOT)],
+            )
 
 
 if __name__ == "__main__":

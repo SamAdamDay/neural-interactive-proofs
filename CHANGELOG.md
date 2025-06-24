@@ -43,6 +43,8 @@ to communicate reliably.
 - Using the experiment seed for training jobs.
 - Using the model base name for training job names on LoRA models, rather than the model
   name itself.
+- Launching language model server with `uvicorn` directly (rather than using `fastapi
+  run`), which has allowed displaying more log messages.
 
 
 ### Fixed

@@ -252,6 +252,7 @@ class VllmServerHandler:
                 "--tensor-parallel-size",
                 str(tensor_parallel_size),
                 "--max-lora-rank",
+                str(self.settings.vllm_max_lora_rank),
                 *extra_args,
                 **extra_kwargs,
                 env=dict(os.environ, **new_env_variables),
