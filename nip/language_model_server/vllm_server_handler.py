@@ -248,7 +248,7 @@ class VllmServerHandler:
                 else:
                     extra_args.append(str(self.settings.vllm_max_lora_rank))
 
-            if self.settings.vllm_debug:
+            if self.settings.debug:
                 extra_args.extend(["--uvicorn-log-level", "debug"])
                 new_env_variables["VLLM_LOGGING_LEVEL"] = "DEBUG"
 

@@ -3,13 +3,13 @@
 from typing import Literal
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, CliSuppress
 
 from nip.language_model_server.types import SubprocessOutputDestination
 from nip.utils.env import get_env_var
 
 
-class Settings(BaseSettings):
+class Settings(BaseSettings, cli_kebab_case=True, cli_ignore_unknown_args=True):
     """Configuration settings for the language model server.
 
     This class uses `pydantic_settings` to load settings from environment variables or
@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     vllm_port: int = get_env_var("DEFAULT_VLLM_SERVER_PORT")
     """The port on which the vLLM server will run."""
 
-    subprocess_output_destination: SubprocessOutputDestination = "stdout_std_err"
+    subprocess_output_destination: CliSuppress[SubprocessOutputDestination] = (
+        "stdout_std_err"
+    )
     """Where to send the output of the vLLM server subprocess."""
 
     max_training_jobs: int = 1
@@ -32,6 +34,13 @@ class Settings(BaseSettings):
     
     The actual number of GPUs used may be less than this value, because it must divide
     the number of attention heads in the model.
+    """
+
+    vllm_quantization: Literal["bitsandbytes"] | None = None
+    """The quantization method to use for the vLLM server.
+
+    Quantization is the process of reducing the precision of the model weights to
+    reduce memory usage, at the cost of some accuracy.
     """
 
     vllm_clear_cache: bool = False
@@ -51,8 +60,8 @@ class Settings(BaseSettings):
     available. If no LoRA model is available, it will use the vLLM default value.
     """
 
-    vllm_debug: bool = False
-    """Whether to enable debug mode for the vLLM server."""
+    debug: CliSuppress[bool] = False
+    """Whether to enable debug mode."""
 
     accelerate_config_path: str = "accelerate_config.yaml.jinja2"
     """Path to the configuration file for the accelerate library.
@@ -67,7 +76,7 @@ class Settings(BaseSettings):
     against the template directory: ``nip/language_model_server/templates/``.
     """
 
-    parent_script_cwd: str | None = None
+    parent_script_cwd: CliSuppress[str | None] = None
     """Path to the working directory of the script which called this process.
     
     The script may run the FastAPI process with a different working directory, but this
