@@ -45,13 +45,6 @@ class Settings(
     the number of attention heads in the model.
     """
 
-    vllm_quantization: Literal["bitsandbytes", "no"] = "none"
-    """The quantization method to use for the vLLM server.
-
-    Quantization is the process of reducing the precision of the model weights to
-    reduce memory usage, at the cost of some accuracy.
-    """
-
     vllm_clear_cache: bool = False
     """Whether to clear the Hugging Face model cache before starting the server.
 
