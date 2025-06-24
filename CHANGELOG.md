@@ -41,6 +41,8 @@ to communicate reliably.
 
 - Increased the default timeout for waiting for the vLLM server to load to 15 minutes.
 - Using the experiment seed for training jobs.
+- Launching language model server with `uvicorn` directly (rather than using `fastapi
+  run`), which has allowed displaying more log messages.
 
 
 ### Fixed
