@@ -59,12 +59,6 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--vllm-max-lora-rank",
-    type=int,
-    help="Maximum rank for LoRA layers permitted in the vLLM server.",
-)
-
-parser.add_argument(
     "--accelerate-config",
     type=str,
     default="accelerate_config.yaml.jinja2",
@@ -124,9 +118,6 @@ def main():
         "VLLM_CLEAR_CACHE": str(args.vllm_clear_cache),
         "VLLM_DEBUG": str(args.debug).lower(),
     }
-
-    if args.vllm_max_lora_rank is not None:
-        new_env_variables["VLLM_MAX_LORA_RANK"] = str(args.vllm_max_lora_rank)
 
     with change_directory(REPOSITORY_ROOT):
         with set_env_variables(new_env_variables):

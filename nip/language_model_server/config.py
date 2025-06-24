@@ -41,11 +41,14 @@ class Settings(BaseSettings):
     before starting the vLLM server.
     """
 
-    vllm_max_lora_rank: int = 64
+    vllm_max_lora_rank: int | Literal["auto"] = "auto"
     """The maximum rank for LoRA layers permitted in the vLLM server.
     
     This should be set to the maximum rank of the LoRA layers in the model being
     trained.
+
+    If set to 'auto', it will use the rank of the LoRA model to be served, if it is
+    available. If no LoRA model is available, it will use the vLLM default value.
     """
 
     vllm_debug: bool = False
