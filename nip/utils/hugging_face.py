@@ -119,19 +119,19 @@ def count_tokens(
         for i in range(prompt_flattened.shape[0])
     ]
     prompt_nonempty_mask = np.array(
-        [len(prompt) == 0 for prompt in prompt_list], dtype=bool
+        [len(prompt) != 0 for prompt in prompt_list], dtype=bool
     )
-    nonempty_prompt_list = list(filter(lambda x: len(x) > 0, prompt_list))
+    prompt_nonempty_list = list(filter(lambda x: len(x) > 0, prompt_list))
 
     # Apply the chat template and tokenizer to the non-empty prompts
-    nonempty_prompt_tokenized: list[list[int]] = tokenizer.apply_chat_template(
-        nonempty_prompt_list
+    prompt_nonempty_tokenized: list[list[int]] = tokenizer.apply_chat_template(
+        prompt_nonempty_list
     )
-    nonempty_prompt_lengths = [len(tokens) for tokens in nonempty_prompt_tokenized]
+    prompt_nonempty_lengths = [len(tokens) for tokens in prompt_nonempty_tokenized]
 
     # Fill in the lengths for empty prompts
     prompt_lengths = np.zeros_like(prompt_nonempty_mask, dtype=int)
-    prompt_lengths[prompt_nonempty_mask] = nonempty_prompt_lengths
+    prompt_lengths[prompt_nonempty_mask] = prompt_nonempty_lengths
 
     prompt_lengths = einops.rearrange(
         prompt_lengths,
