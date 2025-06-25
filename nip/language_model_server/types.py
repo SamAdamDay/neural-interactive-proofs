@@ -213,6 +213,12 @@ class LmTrainingConfig(BaseModel):
     gradient_checkpointing: bool = True
     """Whether to use gradient checkpointing to save memory during training."""
 
+    use_liger_kernel: bool = True
+    """Whether to use the Liger loss function during training.
+
+    This can improve training speed and lower memory usage.
+    """
+
 
 class CreateTrainingJobRequest(BaseModel):
     """A request to create a new training job."""

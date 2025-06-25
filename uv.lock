@@ -1875,6 +1875,19 @@ wheels = [
 ]
 
 [[package]]
+name = "liger-kernel"
+version = "0.5.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+    { name = "triton" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/2c/a0f815aa7aa062b09b76ce703de60dd55da379171f277067d04f7d8e170b/liger_kernel-0.5.10.tar.gz", hash = "sha256:f818e6c03315a8fc5e0648a2a7380778edad8ce84d69a315917975052ce8b1df", size = 3611086, upload-time = "2025-05-22T17:52:37.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/5f/1ef997fc773751e6a52fe3d60dc3c29bcceab52ec6ca97209acdd8d0a627/liger_kernel-0.5.10-py3-none-any.whl", hash = "sha256:dfda1e9640fbbd4a023c3bcaf9d6306a9de0ff60c48f966dfff6f298f3fe7390", size = 163071, upload-time = "2025-05-22T17:52:36.386Z" },
+]
+
+[[package]]
 name = "llguidance"
 version = "0.7.29"
 source = { registry = "https://pypi.org/simple" }
@@ -2422,6 +2435,7 @@ lm-server = [
     { name = "bitsandbytes" },
     { name = "deepspeed" },
     { name = "fastapi" },
+    { name = "liger-kernel" },
     { name = "loralib" },
     { name = "pydantic-settings" },
     { name = "transformers" },
@@ -2471,6 +2485,7 @@ requires-dist = [
     { name = "jaxtyping", specifier = "==0.2.30" },
     { name = "jinja2", specifier = "==3.1.4" },
     { name = "json5", specifier = "==0.9.25" },
+    { name = "liger-kernel", marker = "extra == 'lm-server'", specifier = "==0.5.10" },
     { name = "loralib", marker = "extra == 'lm-server'", specifier = "==0.1.2" },
     { name = "matplotlib", specifier = "==3.9.0" },
     { name = "nbformat", specifier = "==5.10.4" },
@@ -5037,8 +5052,8 @@ name = "triton"
 version = "3.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", version = "79.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux'" },
-    { name = "setuptools", version = "80.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux'" },
+    { name = "setuptools", version = "79.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "setuptools", version = "80.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3c/c5/4874a81131cc9e934d88377fbc9d24319ae1fb540f3333b4e9c696ebc607/triton-3.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3161a2bf073d6b22c4e2f33f951f3e5e3001462b2570e6df9cd57565bdec2984", size = 156528461, upload-time = "2025-04-09T20:27:32.599Z" },
