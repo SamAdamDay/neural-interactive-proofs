@@ -50,6 +50,7 @@ to communicate reliably.
   name itself.
 - Launching language model server with `uvicorn` directly (rather than using `fastapi
   run`), which has allowed displaying more log messages.
+- The Dockerfile now uses Ubuntu 22.04.
 
 
 ### Fixed
