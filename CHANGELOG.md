@@ -38,6 +38,7 @@ to communicate reliably.
 - Ability to set vLLM max LoRA rank automatically.
 - Agent-level hyper-parameter to enable quantisation for self-hosted models.
 - Using Liger kernel in DPO training for increased speed and lower memory usage.
+- Enabled optimiser and parameter offloading for DPO training.
 
 
 ### Changed

@@ -75,6 +75,18 @@ class Settings(
     against the template directory: ``nip/language_model_server/templates/``.
     """
 
+    offload_optimizer: bool = False
+    """Whether to offload the optimizer state to CPU memory when training.
+
+    This can reduce GPU memory usage, but may slow down training.
+    """
+
+    offload_parameters: bool = False
+    """Whether to offload the model parameters to CPU memory when training.
+
+    This can reduce GPU memory usage, but may slow down training.
+    """
+
     parent_script_cwd: CliSuppress[str | None] = None
     """Path to the working directory of the script which called this process.
     
