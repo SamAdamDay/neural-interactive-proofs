@@ -92,6 +92,7 @@ from nip.utils.api import (
     UnknownFinishReasonError,
 )
 from nip.utils.hyper_params import check_use_supervisor_message
+from nip.utils.data import prompt_list_to_array
 from nip.code_validation.protocols import (
     CodeValidationProtocolHandler,
     CodeValidationAgentSpec,
@@ -530,8 +531,8 @@ class OpenAiWholeAgent(PureTextWholeAgent):
                 batch_id
             ] = parsed_completion.continuous_decision
             output_data["raw_decision"][batch_id] = parsed_completion.raw_decision
-            output_data["prompt"][batch_id] = environment.prompt_list_to_array(
-                parsed_completion.prompt
+            output_data["prompt"][batch_id] = prompt_list_to_array(
+                parsed_completion.prompt, environment.max_prompt_messages
             )
             output_data["valid_response"][batch_id] = (
                 parsed_completion.warning == None  # noqa: E711

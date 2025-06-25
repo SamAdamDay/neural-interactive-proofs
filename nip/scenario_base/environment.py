@@ -1231,42 +1231,6 @@ class PureTextEnvironment(Environment, ABC):
 
         return dict(y=int(env_state["y"]))
 
-    def prompt_list_to_array(
-        self, prompt_list: list[PromptMessage]
-    ) -> String[NDArray, "message field"]:
-        """Convert a prompt in the form of a list of dictionaries to a numpy array.
-
-        Each element of the list is a dictionary with keys defined in ``PromptMessage``.
-        We convert this to a numpy array with columns corresponding to the keys in
-        ``PromptMessage``.
-
-        Parameters
-        ----------
-        prompt_list : list[PromptMessage]
-            The list of prompts to convert.
-        """
-
-        required_keys = sorted(PromptMessage.__required_keys__)
-        optional_keys = sorted(PromptMessage.__optional_keys__)
-
-        prompt_array = np.full(
-            (
-                self.max_prompt_messages,
-                len(required_keys) + len(optional_keys),
-            ),
-            None,
-            dtype=NumpyStringDtype,
-        )
-
-        for i, prompt in enumerate(prompt_list):
-            for j, key in enumerate(required_keys):
-                prompt_array[i, j] = prompt[key]
-            for j, key in enumerate(optional_keys):
-                if key in prompt:
-                    prompt_array[i, j + len(required_keys)] = prompt[key]
-
-        return prompt_array
-
     def _masked_reset(
         self,
         env_state: NestedArrayDict,

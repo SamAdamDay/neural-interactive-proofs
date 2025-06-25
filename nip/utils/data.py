@@ -3,6 +3,7 @@
 from typing import Optional, Any, Iterable, Iterator, TypeVar
 from numbers import Number
 
+import numpy as np
 from numpy.typing import NDArray
 
 import torch
@@ -15,6 +16,7 @@ from nip.utils.types import (
     HuggingFaceDpoDatasetItem,
     String,
     PromptMessage,
+    NumpyStringDtype,
 )
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 
@@ -469,3 +471,42 @@ def prompt_array_to_list(
         prompt_list.append(prompt)
 
     return prompt_list
+
+
+def prompt_list_to_array(
+    prompt_list: list[PromptMessage], max_prompt_messages: int
+) -> String[NDArray, "message field"]:
+    """Convert a prompt in the form of a list of dictionaries to a numpy array.
+
+    Each element of the list is a dictionary with keys defined in ``PromptMessage``.
+    We convert this to a numpy array with columns corresponding to the keys in
+    ``PromptMessage``.
+
+    Parameters
+    ----------
+    prompt_list : list[PromptMessage]
+        The list of prompts to convert.
+    max_prompt_messages : int
+        The maximum number messages which can be sent in a prompt to an agent.
+    """
+
+    required_keys = sorted(PromptMessage.__required_keys__)
+    optional_keys = sorted(PromptMessage.__optional_keys__)
+
+    prompt_array = np.full(
+        (
+            max_prompt_messages,
+            len(required_keys) + len(optional_keys),
+        ),
+        None,
+        dtype=NumpyStringDtype,
+    )
+
+    for i, prompt in enumerate(prompt_list):
+        for j, key in enumerate(required_keys):
+            prompt_array[i, j] = prompt[key]
+        for j, key in enumerate(optional_keys):
+            if key in prompt:
+                prompt_array[i, j + len(required_keys)] = prompt[key]
+
+    return prompt_array
