@@ -32,6 +32,7 @@ import wandb
 from tqdm import tqdm
 import wandb.errors
 
+from nip.parameters import PureTextAgentParameters
 from nip.scenario_base.data import NestedArrayDictDataLoader
 from nip.scenario_base.environment import PureTextEnvironment
 from nip.scenario_base.agents import (
@@ -46,7 +47,7 @@ from nip.scenario_base.rollout_analysis import (
 )
 from nip.trainers.trainer_base import Trainer, CheckPointNotFoundError
 from nip.utils.maths import aggregate_mean_grouped_by_class, entropy_numpy
-from nip.utils.data import VariableDataCycler, truncated_iterator
+from nip.utils.data import VariableDataCycler, truncated_iterator, prompt_array_to_list
 from nip.utils.nested_array_dict import (
     NestedArrayDict,
     stack_nested_array_dicts,
@@ -55,6 +56,7 @@ from nip.utils.nested_array_dict import (
 from nip.utils.rollouts import get_pretty_pure_text_round_message
 from nip.utils.types import String, PromptMessage
 from nip.utils.io import yes_no_user_prompt
+from nip.utils.hugging_face import count_tokens
 from nip.constants import (
     ROLLOUTS_ARTIFACT_PREFIX,
     ROLLOUTS_ARTIFACT_TYPE,
@@ -1293,6 +1295,43 @@ class PureTextRlTrainer(Trainer, ABC):
             true_positives + false_negatives
         )
 
+        # Count the number of tokens in the prompts and messages, if using a self-hosted
+        # model
+        for agent_index, agent_name in enumerate(self.agent_names):
+
+            agent_params: PureTextAgentParameters = self.hyper_params.agents[agent_name]
+            if agent_params.model_provider != "SelfHosted":
+                continue
+
+            token_counts = count_tokens(rollouts, agent_index, agent_params.model_name)
+            log_stats[f"{agent_name}.{prefix}mean_prompt_tokens"] = (
+                token_counts.prompt.mean().item()
+            )
+            log_stats[f"{agent_name}.{prefix}std_prompt_tokens"] = (
+                token_counts.prompt.std().item()
+            )
+            log_stats[f"{agent_name}.{prefix}max_prompt_tokens"] = (
+                token_counts.prompt.max().item()
+            )
+            log_stats[f"{agent_name}.{prefix}mean_completion_tokens"] = (
+                token_counts.completion.mean().item()
+            )
+            log_stats[f"{agent_name}.{prefix}std_completion_tokens"] = (
+                token_counts.completion.std().item()
+            )
+            log_stats[f"{agent_name}.{prefix}max_completion_tokens"] = (
+                token_counts.completion.max().item()
+            )
+            log_stats[f"{agent_name}.{prefix}mean_total_tokens"] = (
+                token_counts.total.mean().item()
+            )
+            log_stats[f"{agent_name}.{prefix}std_total_tokens"] = (
+                token_counts.total.std().item()
+            )
+            log_stats[f"{agent_name}.{prefix}max_total_tokens"] = (
+                token_counts.total.max().item()
+            )
+
         return log_stats
 
     def _extract_transcripts_and_prompts(
@@ -1425,7 +1464,7 @@ class PureTextRlTrainer(Trainer, ABC):
                 # an agent, it means the agent did not message in this round.
                 prompt_round = {}
                 for agent_id, agent_name in enumerate(agent_names):
-                    agent_prompt = environment.prompt_array_to_list(
+                    agent_prompt = prompt_array_to_list(
                         prompt[rollout_id, round_id, agent_id]
                     )
                     if len(agent_prompt) > 0:

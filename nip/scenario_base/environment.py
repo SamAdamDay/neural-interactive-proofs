@@ -1267,56 +1267,6 @@ class PureTextEnvironment(Environment, ABC):
 
         return prompt_array
 
-    def prompt_array_to_list(
-        self, prompt_array: String[NDArray, "message field"]
-    ) -> list[PromptMessage]:
-        """Convert a prompt in the form of a numpy array to a list of dictionaries.
-
-        Each row of the numpy array corresponds to a message in the prompt, and each
-        column corresponds to a field of the message.
-
-        The prompt array has a fixed number of rows, but the prompt may be shorter. If
-        any required field is None in a row, we take that to indicate the end of the
-        prompt.
-
-        Parameters
-        ----------
-        prompt_array : String[NDArray, "message field"]
-            The numpy array to convert.
-
-        Returns
-        -------
-        prompt_list : list[PromptMessage]
-            The list of prompts.
-        """
-
-        required_keys = sorted(PromptMessage.__required_keys__)
-        optional_keys = sorted(PromptMessage.__optional_keys__)
-
-        prompt_list = []
-        for row in prompt_array:
-            prompt = {}
-
-            any_none = False
-            for key, value in zip(required_keys, row[: len(required_keys)]):
-                prompt[key] = value
-                if value is None:
-                    any_none = True
-                    break
-
-            # If any of the required keys are None, we have reached the end of the
-            # prompt messages
-            if any_none:
-                break
-
-            for key, value in zip(optional_keys, row[len(required_keys) :]):
-                if value is not None:
-                    prompt[key] = value
-
-            prompt_list.append(prompt)
-
-        return prompt_list
-
     def _masked_reset(
         self,
         env_state: NestedArrayDict,
