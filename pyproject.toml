@@ -49,6 +49,7 @@ lm-server = [
     "bitsandbytes==0.46.0",
     "deepspeed==0.17.1",
     "fastapi==0.115.6",
+    "flash-attn==2.8.0.post2",
     "liger-kernel==0.5.10",
     "loralib==0.1.2",
     "pydantic-settings==2.9.1",
@@ -84,19 +85,7 @@ dev = [
 
 [tool.uv]
 add-bounds = "exact"
-
-# [[tool.uv.index]]
-# name = "pytorch-cu121"
-# url = "https://download.pytorch.org/whl/cu121"
-# explicit = true
-
-# [tool.uv.sources]
-# torch = [
-#   { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-# ]
-# torchvision = [
-#   { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-# ]
+no-build-isolation-package = ["flash-attn"]
 
 [tool.black]
 extend-exclude = "nip/utils/runtime_module.py|doc/extensions"

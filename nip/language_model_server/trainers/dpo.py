@@ -9,6 +9,8 @@ from pydantic import TypeAdapter
 
 from datasets import Dataset
 
+import torch
+
 from trl import DPOConfig, DPOTrainer
 from trl.trainer.utils import SIMPLE_CHAT_TEMPLATE
 
@@ -22,6 +24,7 @@ from nip.constants import LM_SERVER_TRAINING_STATUS_DIR, HF_TRAINER_OUTPUT_DIR
 from nip.utils.env import get_env_var
 from nip.utils.types import HuggingFaceDpoDatasetItem
 from nip.utils.hugging_face import is_model_peft
+from nip.utils.language_model_database import LanguageModelDatabase
 from nip.language_model_server.types import (
     LmTrainingConfig,
     LmLoraAdapterConfig,
@@ -209,6 +212,33 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
     # The maximum length for a W&B job name is 128 characters.
     job_name = job_id[:127]
 
+    language_model_db = LanguageModelDatabase()
+
+    is_peft = is_model_peft(config.model_name)
+
+    if is_peft:
+        model_lora_config = LoraConfig.from_pretrained(config.model_name)
+        base_model_name = model_lora_config.base_model_name_or_path
+    else:
+        base_model_name = config.model_name
+
+    lm_db_entry = language_model_db.get_by_model_provider_and_name(
+        "SelfHosted", base_model_name
+    )
+
+    torch_dtype = None
+    use_flash_attention_2 = (
+        lm_db_entry.has_flash_attention_2 and config.mixed_precision in ("fp16", "bf16")
+    )
+    if use_flash_attention_2:
+        logger.info(f"Using Flash Attention 2 for {base_model_name!r}.")
+        if config.mixed_precision == "fp16":
+            torch_dtype = torch.float16
+        elif config.mixed_precision == "bf16":
+            torch_dtype = torch.bfloat16
+
+    # Only use padding-free batching if Flash Attention 2 is available, to avoid batch
+    # contamination issues.
     dpo_config = DPOConfig(
         **config.dpo_config.model_dump(),
         hub_model_id=new_model_name,
@@ -220,15 +250,12 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         per_device_train_batch_size=config.per_device_train_batch_size,
         use_liger_kernel=config.use_liger_kernel,
         seed=config.seed,
+        padding_free=use_flash_attention_2,
     )
 
     ignore_training_lora_config = False
 
-    if not is_model_peft(config.model_name):
-        model = AutoModelForCausalLM.from_pretrained(config.model_name)
-
-    else:
-        model_lora_config = LoraConfig.from_pretrained(config.model_name)
+    if is_peft:
 
         # When reusing the LoRA adapter, make sure the model's LoRA configuration is
         # compatible with the training configuration.
@@ -251,7 +278,10 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
                     )
 
         model = AutoPeftModelForCausalLM.from_pretrained(
-            config.model_name, is_trainable=True
+            config.model_name,
+            is_trainable=True,
+            torch_dtype=torch_dtype,
+            use_flash_attention_2=use_flash_attention_2,
         )
 
         # Sanity check: ensure that exactly the LoRA layers are trainable.
@@ -274,6 +304,14 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
             # Ignore the LoRA training adapter configuration, because the model is
             # already LoRA-adapted and the trainer will train the existing adapter.
             ignore_training_lora_config = True
+
+    else:
+
+        model = AutoModelForCausalLM.from_pretrained(
+            config.model_name,
+            torch_dtype=torch_dtype,
+            use_flash_attention_2=use_flash_attention_2,
+        )
 
     if ignore_training_lora_config or config.training_lora_config is None:
         training_lora_config = None

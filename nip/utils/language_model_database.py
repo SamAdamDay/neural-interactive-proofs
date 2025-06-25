@@ -3,7 +3,7 @@
 This database holds metadata about each model, along with how to access them.
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Union, get_origin, get_args
 from dataclasses import dataclass
 import dataclasses
 
@@ -32,6 +32,7 @@ class LanguageModelDbEntry:
     mmlu_pro_score: Annotated[Optional[float], "MMLU-Pro"] = None
     openrouter_input_cost: Annotated[Optional[float], "OpenRouter Input Cost"] = None
     openrouter_output_cost: Annotated[Optional[float], "OpenRouter Output Cost"] = None
+    flash_attention_2: Annotated[Optional[bool], "Flash Attention 2"] = None
 
     @property
     def provider(self) -> str:
@@ -49,6 +50,11 @@ class LanguageModelDbEntry:
         if self.model_name != "":
             return f"{self.model_series} {self.model_name}"
         return self.model_series
+
+    @property
+    def has_flash_attention_2(self) -> bool:
+        """Whether the model supports Flash Attention 2."""
+        return bool(self.flash_attention_2)
 
     @classmethod
     def from_row(cls, row: pd.Series) -> "LanguageModelDbEntry":
@@ -68,12 +74,18 @@ class LanguageModelDbEntry:
         arguments = {}
         for field in dataclasses.fields(cls):
             header = field.type.__metadata__[0]
+            field_type = field.type.__origin__
             value = row[header]
             if pd.isna(value):
-                if field.type.__origin__ is str:
+                if field_type is str:
                     arguments[field.name] = ""
                 else:
                     arguments[field.name] = None
+            elif get_origin(field_type) is Union and bool in get_args(field_type):
+                if value == "yes":
+                    arguments[field.name] = True
+                else:
+                    arguments[field.name] = False
             elif isinstance(value, np.floating):
                 arguments[field.name] = float(value)
             else:
@@ -101,6 +113,39 @@ class LanguageModelDatabase:
     def __init__(self):
         self._db = pd.read_csv(LANGUAGE_MODEL_DB_DIR)
 
+    def get_by_model_provider_and_name(
+        self, model_provider: str, model_name: str
+    ) -> LanguageModelDbEntry:
+        """Find a language model entry by its provider and name.
+
+        Parameters
+        ----------
+        model_provider : str
+            The provider of the model (e.g., "OpenAI", "OpenRouter", "SelfHosted")
+        model_name : str
+            The name of the model (e.g., "qwen/qwen2.5-32b-instruct")
+
+        Returns
+        -------
+        LanguageModelDbEntry
+            The language model entry corresponding to the provider and name
+
+        Raises
+        ------
+        LanguageModelNotFound
+            If no entry is found in the database for the given provider and name
+        """
+
+        uri = f"{model_provider}/{model_name}"
+        if uri in self._db["API URI"].values:
+            entry = self._db[self._db["API URI"] == uri].iloc[0]
+        elif uri in self._db["Self Hosted URI"].values:
+            entry = self._db[self._db["Self Hosted URI"] == uri].iloc[0]
+        else:
+            raise LanguageModelNotFound(uri)
+
+        return LanguageModelDbEntry.from_row(entry)
+
     def get_by_agent_params(
         self, agent_params: PureTextAgentParameters
     ) -> LanguageModelDbEntry:
@@ -122,15 +167,9 @@ class LanguageModelDatabase:
             If no entry is found in the database for the given hyper-parameters
         """
 
-        uri = f"{agent_params.model_provider}/{agent_params.model_name}"
-        if uri in self._db["API URI"].values:
-            entry = self._db[self._db["API URI"] == uri].iloc[0]
-        elif uri in self._db["Self Hosted URI"].values:
-            entry = self._db[self._db["Self Hosted URI"] == uri].iloc[0]
-        else:
-            raise LanguageModelNotFound(uri)
-
-        return LanguageModelDbEntry.from_row(entry)
+        return self.get_by_model_provider_and_name(
+            agent_params.model_provider, agent_params.model_name
+        )
 
     def get_by_hyper_params(
         self, hyper_params: HyperParameters, agent_name: str

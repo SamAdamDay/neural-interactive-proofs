@@ -66,6 +66,7 @@ RUN grep timm== pyproject.toml \
     | tar -xzC /root/neural-interactive-proofs/vendor
 
 # Install all the required packages
+RUN uv sync --locked
 RUN uv sync --locked --extra lm-server
 
 # The default target doesn't do much else
