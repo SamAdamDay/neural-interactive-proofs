@@ -118,29 +118,42 @@ def count_tokens(
         prompt_array_to_list(prompt_flattened[i])
         for i in range(prompt_flattened.shape[0])
     ]
-
-    prompt_tokenized: list[list[int]] = tokenizer.apply_chat_template(prompt_list)
-    prompt_lengths: Int[np.ndarray, "(rollout round)"] = np.array(
-        [len(tokens) for tokens in prompt_tokenized]
+    prompt_nonempty_mask = np.array(
+        [len(prompt) == 0 for prompt in prompt_list], dtype=bool
     )
+    nonempty_prompt_list = list(filter(lambda x: len(x) > 0, prompt_list))
+
+    # Apply the chat template and tokenizer to the non-empty prompts
+    nonempty_prompt_tokenized: list[list[int]] = tokenizer.apply_chat_template(
+        nonempty_prompt_list
+    )
+    nonempty_prompt_lengths = [len(tokens) for tokens in nonempty_prompt_tokenized]
+
+    # Fill in the lengths for empty prompts
+    prompt_lengths = np.zeros_like(prompt_nonempty_mask, dtype=int)
+    prompt_lengths[prompt_nonempty_mask] = nonempty_prompt_lengths
+
     prompt_lengths = einops.rearrange(
         prompt_lengths,
         "(rollout round) -> rollout round",
-        rollout=rollouts.shape[0],
-        round=rollouts.shape[1],
+        rollout=prompt.shape[0],
+        round=prompt.shape[1],
     )
 
-    completion_tokenized: list[list[int]] = tokenizer(raw_message_flattened.tolist())[
-        "input_ids"
+    completion_list: list[str | None] = raw_message_flattened.tolist()
+    completion_list: list[str] = [
+        message if message is not None else "" for message in completion_list
     ]
+
+    completion_tokenized: list[list[int]] = tokenizer(completion_list)["input_ids"]
     completion_lengths: Int[np.ndarray, "(rollout round)"] = np.array(
         [len(tokens) for tokens in completion_tokenized]
     )
     completion_lengths = einops.rearrange(
         completion_lengths,
         "(rollout round) -> rollout round",
-        rollout=rollouts.shape[0],
-        round=rollouts.shape[1],
+        rollout=prompt.shape[0],
+        round=prompt.shape[1],
     )
 
     return TokenCounts(
