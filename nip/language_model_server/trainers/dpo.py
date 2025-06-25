@@ -212,8 +212,6 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
     # The maximum length for a W&B job name is 128 characters.
     job_name = job_id[:127]
 
-    language_model_db = LanguageModelDatabase()
-
     is_peft = is_model_peft(config.model_name)
 
     if is_peft:
@@ -222,20 +220,25 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
     else:
         base_model_name = config.model_name
 
+    language_model_db = LanguageModelDatabase()
     lm_db_entry = language_model_db.get_by_model_provider_and_name(
         "SelfHosted", base_model_name
     )
-
-    torch_dtype = None
     use_flash_attention_2 = (
         lm_db_entry.has_flash_attention_2 and config.mixed_precision in ("fp16", "bf16")
     )
+
+    extra_model_kwargs = {}
+
     if use_flash_attention_2:
+
         logger.info(f"Using Flash Attention 2 for {base_model_name!r}.")
+
+        extra_model_kwargs["attn_implementation"] = "flash_attention_2"
         if config.mixed_precision == "fp16":
-            torch_dtype = torch.float16
+            extra_model_kwargs["torch_dtype"] = torch.float16
         elif config.mixed_precision == "bf16":
-            torch_dtype = torch.bfloat16
+            extra_model_kwargs["torch_dtype"] = torch.bfloat16
 
     # Only use padding-free batching if Flash Attention 2 is available, to avoid batch
     # contamination issues.
@@ -278,10 +281,7 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
                     )
 
         model = AutoPeftModelForCausalLM.from_pretrained(
-            config.model_name,
-            is_trainable=True,
-            torch_dtype=torch_dtype,
-            use_flash_attention_2=use_flash_attention_2,
+            config.model_name, is_trainable=True, **extra_model_kwargs
         )
 
         # Sanity check: ensure that exactly the LoRA layers are trainable.
@@ -308,9 +308,7 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
     else:
 
         model = AutoModelForCausalLM.from_pretrained(
-            config.model_name,
-            torch_dtype=torch_dtype,
-            use_flash_attention_2=use_flash_attention_2,
+            config.model_name, **extra_model_kwargs
         )
 
     if ignore_training_lora_config or config.training_lora_config is None:
