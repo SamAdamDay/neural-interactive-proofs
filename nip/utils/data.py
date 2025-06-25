@@ -1,26 +1,23 @@
 """Utilities for working with data."""
 
-from abc import ABC
-from typing import (
-    Optional,
-    Any,
-    Iterable,
-    Iterator,
-    TypeVar,
-    Self,
-    Union,
-    get_origin,
-    get_args,
-)
-from types import UnionType
+from typing import Optional, Any, Iterable, Iterator, TypeVar
 from numbers import Number
-import dataclasses
+
+import numpy as np
+from numpy.typing import NDArray
 
 import torch
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from nip.utils.types import TorchDevice, DpoDatasetItem, HuggingFaceDpoDatasetItem
+from nip.utils.types import (
+    TorchDevice,
+    DpoDatasetItem,
+    HuggingFaceDpoDatasetItem,
+    String,
+    PromptMessage,
+    NumpyStringDtype,
+)
 from nip.utils.nested_array_dict import NestedArrayDict, concatenate_nested_array_dicts
 
 T = TypeVar("T")
@@ -423,3 +420,93 @@ def flatten_dict_keys(data: dict, separator: str = ".", prefix: str = "") -> dic
         else:
             flat_data[new_key] = value
     return flat_data
+
+
+def prompt_array_to_list(
+    prompt_array: String[NDArray, "message field"],
+) -> list[PromptMessage]:
+    """Convert a prompt in the form of a numpy array to a list of dictionaries.
+
+    Each row of the numpy array corresponds to a message in the prompt, and each
+    column corresponds to a field of the message.
+
+    The prompt array has a fixed number of rows, but the prompt may be shorter. If
+    any required field is None in a row, we take that to indicate the end of the
+    prompt.
+
+    Parameters
+    ----------
+    prompt_array : String[NDArray, "message field"]
+        The numpy array to convert.
+
+    Returns
+    -------
+    prompt_list : list[PromptMessage]
+        The list of prompts.
+    """
+
+    required_keys = sorted(PromptMessage.__required_keys__)
+    optional_keys = sorted(PromptMessage.__optional_keys__)
+
+    prompt_list = []
+    for row in prompt_array:
+        prompt = {}
+
+        any_none = False
+        for key, value in zip(required_keys, row[: len(required_keys)]):
+            prompt[key] = value
+            if value is None:
+                any_none = True
+                break
+
+        # If any of the required keys are None, we have reached the end of the
+        # prompt messages
+        if any_none:
+            break
+
+        for key, value in zip(optional_keys, row[len(required_keys) :]):
+            if value is not None:
+                prompt[key] = value
+
+        prompt_list.append(prompt)
+
+    return prompt_list
+
+
+def prompt_list_to_array(
+    prompt_list: list[PromptMessage], max_prompt_messages: int
+) -> String[NDArray, "message field"]:
+    """Convert a prompt in the form of a list of dictionaries to a numpy array.
+
+    Each element of the list is a dictionary with keys defined in ``PromptMessage``.
+    We convert this to a numpy array with columns corresponding to the keys in
+    ``PromptMessage``.
+
+    Parameters
+    ----------
+    prompt_list : list[PromptMessage]
+        The list of prompts to convert.
+    max_prompt_messages : int
+        The maximum number messages which can be sent in a prompt to an agent.
+    """
+
+    required_keys = sorted(PromptMessage.__required_keys__)
+    optional_keys = sorted(PromptMessage.__optional_keys__)
+
+    prompt_array = np.full(
+        (
+            max_prompt_messages,
+            len(required_keys) + len(optional_keys),
+        ),
+        None,
+        dtype=NumpyStringDtype,
+    )
+
+    for i, prompt in enumerate(prompt_list):
+        for j, key in enumerate(required_keys):
+            prompt_array[i, j] = prompt[key]
+        for j, key in enumerate(optional_keys):
+            if key in prompt:
+                prompt_array[i, j + len(required_keys)] = prompt[key]
+
+    return prompt_array
