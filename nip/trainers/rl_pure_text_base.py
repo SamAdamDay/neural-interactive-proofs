@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Literal, Iterable
-from multiprocessing import Pool
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
@@ -21,6 +20,8 @@ import torch
 
 import numpy as np
 from numpy.typing import NDArray
+
+import pandas as pd
 
 from einops import reduce
 
@@ -1304,32 +1305,18 @@ class PureTextRlTrainer(Trainer, ABC):
                 continue
 
             token_counts = count_tokens(rollouts, agent_index, agent_params.model_name)
-            log_stats[f"{agent_name}.{prefix}mean_prompt_tokens"] = (
-                token_counts.prompt.mean().item()
-            )
-            log_stats[f"{agent_name}.{prefix}std_prompt_tokens"] = (
-                token_counts.prompt.std().item()
-            )
-            log_stats[f"{agent_name}.{prefix}max_prompt_tokens"] = (
-                token_counts.prompt.max().item()
-            )
-            log_stats[f"{agent_name}.{prefix}mean_completion_tokens"] = (
-                token_counts.completion.mean().item()
-            )
-            log_stats[f"{agent_name}.{prefix}std_completion_tokens"] = (
-                token_counts.completion.std().item()
-            )
-            log_stats[f"{agent_name}.{prefix}max_completion_tokens"] = (
-                token_counts.completion.max().item()
-            )
-            log_stats[f"{agent_name}.{prefix}mean_total_tokens"] = (
-                token_counts.total.mean().item()
-            )
-            log_stats[f"{agent_name}.{prefix}std_total_tokens"] = (
-                token_counts.total.std().item()
-            )
-            log_stats[f"{agent_name}.{prefix}max_total_tokens"] = (
-                token_counts.total.max().item()
+            log_stats[f"{agent_name}.{prefix}num_tokens_by_round"] = pd.DataFrame(
+                {
+                    "prompt.max": token_counts.prompt.max(axis=0),
+                    "prompt.mean": token_counts.prompt.mean(axis=0),
+                    "prompt.std": token_counts.prompt.std(axis=0),
+                    "completion.max": token_counts.completion.max(axis=0),
+                    "completion.mean": token_counts.completion.mean(axis=0),
+                    "completion.std": token_counts.completion.std(axis=0),
+                    "total.max": token_counts.total.max(axis=0),
+                    "total.mean": token_counts.total.mean(axis=0),
+                    "total.std": token_counts.total.std(axis=0),
+                }
             )
 
         return log_stats
