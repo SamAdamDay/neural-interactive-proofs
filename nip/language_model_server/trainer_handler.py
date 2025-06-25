@@ -448,9 +448,32 @@ class TrainingJob:
         else:
             mixed_precision = "fp16"
 
+        # For multi-GPU training or when offloading optimizer/parameters, use DeepSpeed
+        # as the distributed type. Otherwise we don't do distributed training, becuase
+        # it slows down training
+        if (
+            num_gpus > 1
+            or self.settings.offload_optimizer
+            or self.settings.offload_parameters
+        ):
+            distributed_type = "DEEPSPEED"
+        else:
+            distributed_type = "NO"
+
+        offload_optimizer_device = "cpu" if self.settings.offload_optimizer else "none"
+        offload_param_device = "cpu" if self.settings.offload_parameters else "none"
+
         rendered_path = self.temporary_directory_path.joinpath("accelerate_config.yaml")
         with open(rendered_path, "w") as f:
-            f.write(template.render(num_gpus=num_gpus, mixed_precision=mixed_precision))
+            f.write(
+                template.render(
+                    num_gpus=num_gpus,
+                    mixed_precision=mixed_precision,
+                    distributed_type=distributed_type,
+                    offload_optimizer_device=offload_optimizer_device,
+                    offload_param_device=offload_param_device,
+                )
+            )
 
         return rendered_path
 

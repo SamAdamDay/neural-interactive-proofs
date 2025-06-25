@@ -2,17 +2,17 @@ compute_environment: LOCAL_MACHINE
 debug: false
 deepspeed_config:
   gradient_accumulation_steps: 1
-  offload_optimizer_device: none
-  offload_param_device: none
+  offload_optimizer_device: '{{ offload_optimizer_device }}'
+  offload_param_device: '{{ offload_param_device }}'
   zero3_init_flag: false
   zero_stage: 2
-  mixed_precision: {{ mixed_precision }}
-distributed_type: DEEPSPEED
+  mixed_precision: '{{ mixed_precision }}'
+distributed_type: '{{ distributed_type }}'
 downcast_bf16: 'no'
 enable_cpu_affinity: false
 machine_rank: 0
 main_training_function: main
-mixed_precision: {{ mixed_precision }}
+mixed_precision: '{{ mixed_precision }}'
 num_machines: 1
 num_processes: {{ num_gpus }}
 rdzv_backend: static
