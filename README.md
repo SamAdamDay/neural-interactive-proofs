@@ -54,7 +54,7 @@ for a more detailed installation guide.
    you can do `uv sync --no-dev`.
 
    If you want to host open-weight language models on your machine, install the
-   `lm-server` optional dependencies: `uv sync --extra lm-server`.
+   `lm-server` optional dependencies after the first sync: `uv sync --extra lm-server`.
 
    If using `pip`, create a virtual environment, activate it, then run:
 

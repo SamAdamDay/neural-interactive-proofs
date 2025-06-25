@@ -58,6 +58,7 @@ Installation Steps
      
       .. code-tab:: bash Hosting the LM Server
 
+         uv sync
          uv sync --extra lm-server
      
       .. code-tab:: bash With ``pip``

@@ -973,6 +973,16 @@ wheels = [
 ]
 
 [[package]]
+name = "flash-attn"
+version = "2.8.0.post2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/5c/c7610beeb2fc0e70d0c09a93490bb2d07fb6c8fa1f80ef9617b0cd556d76/flash_attn-2.8.0.post2.tar.gz", hash = "sha256:b51d7015eb78f7ab2c332ec7c36681d7e97834f010b52eb4db1f118351982f58", size = 7857730, upload-time = "2025-06-15T01:39:32.219Z" }
+
+[[package]]
 name = "fonttools"
 version = "4.58.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2435,6 +2445,7 @@ lm-server = [
     { name = "bitsandbytes" },
     { name = "deepspeed" },
     { name = "fastapi" },
+    { name = "flash-attn" },
     { name = "liger-kernel" },
     { name = "loralib" },
     { name = "pydantic-settings" },
@@ -2476,6 +2487,7 @@ requires-dist = [
     { name = "deepspeed", marker = "extra == 'lm-server'", specifier = "==0.17.1" },
     { name = "einops", specifier = "==0.8.0" },
     { name = "fastapi", marker = "extra == 'lm-server'", specifier = "==0.115.6" },
+    { name = "flash-attn", marker = "extra == 'lm-server'", specifier = "==2.8.0.post2" },
     { name = "gitpython", specifier = "==3.1.44" },
     { name = "httpx", specifier = "==0.27.0" },
     { name = "huggingface-hub", specifier = "==0.32.4" },

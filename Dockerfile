@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.0.1-devel-ubuntu20.04 AS base
+FROM nvidia/cuda:12.0.1-devel-ubuntu22.04 AS base
 
 # Ports for the language model server and vLLM server
 ARG LM_SERVER_PORT=5000
@@ -66,6 +66,7 @@ RUN grep timm== pyproject.toml \
     | tar -xzC /root/neural-interactive-proofs/vendor
 
 # Install all the required packages
+RUN uv sync --locked
 RUN uv sync --locked --extra lm-server
 
 # The default target doesn't do much else

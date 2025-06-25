@@ -19,5 +19,6 @@ runs:
       shell: bash
     - name: Install dependencies with uv
       run: |
+        uv sync --locked
         uv sync --locked --all-extras --dev
       shell: bash
