@@ -39,6 +39,7 @@ to communicate reliably.
 - Agent-level hyper-parameter to enable quantisation for self-hosted models.
 - Using Liger kernel in DPO training for increased speed and lower memory usage.
 - Now logging prompt and completion token lengths for self-hosted models.
+- Now attempting several times to start the vLLM server. 
 
 
 ### Changed
