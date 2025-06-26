@@ -1253,7 +1253,8 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
                         f"vLLM server for model {self.model_name!r} did not start "
                         f"within {self.settings.vllm_server_start_timeout} seconds. "
                         f"Retrying "
-                        f"({num_attempts}/{self.settings.vllm_server_start_attempts})..."
+                        f"({num_attempts}/{self.settings.vllm_server_start_attempts})"
+                        f"..."
                     )
                     continue
 
