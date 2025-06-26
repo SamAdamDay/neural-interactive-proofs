@@ -136,6 +136,7 @@ class TrainingJob:
 
         time_now = datetime.now().replace(microsecond=0)
         sanitised_model_name = self.base_model_name.rpartition("/")[2]
+        sanitised_model_name = sanitised_model_name.lower().replace(".", "_")
         self.id = (
             f"{sanitised_model_name}"
             f"_{self.config.method}"

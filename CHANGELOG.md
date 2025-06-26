@@ -49,6 +49,8 @@ to communicate reliably.
   name itself.
 - Launching language model server with `uvicorn` directly (rather than using `fastapi
   run`), which has allowed displaying more log messages.
+- Sanitising model name a little more when creating training job name, which helps
+  Hugging Face identify the base model more easily.
 
 
 ### Fixed
