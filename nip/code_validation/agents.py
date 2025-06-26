@@ -1220,12 +1220,45 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             self.training_client_type == "lm_server"
             and not self.shared_agent_params.use_dummy_api
         ):
-            await self.language_model_client.start_vllm_server(
-                model_name=self.model_name,
-                quantization=self.shared_agent_params.quantization,
-            )
-            logger.info(f"Waiting for vLLM server for model {self.model_name!r}...")
-            await self.language_model_client.wait_for_vllm_server()
+            num_attempts = 0
+            while True:
+
+                await self.language_model_client.start_vllm_server(
+                    model_name=self.model_name,
+                    quantization=self.shared_agent_params.quantization,
+                )
+                logger.info(f"Waiting for vLLM server for model {self.model_name!r}...")
+
+                try:
+                    await self.language_model_client.wait_for_vllm_server(
+                        timeout=self.settings.vllm_server_start_timeout
+                    )
+
+                except ClientTimeoutError as e:
+
+                    await self.language_model_client.stop_vllm_server(
+                        ignore_not_running=True
+                    )
+
+                    num_attempts += 1
+
+                    if num_attempts >= self.settings.vllm_server_start_attempts:
+                        raise ClientTimeoutError(
+                            f"vLLM server for model {self.model_name!r} did not start "
+                            f"within {self.settings.vllm_server_start_timeout} "
+                            f"seconds. Give up after {num_attempts} attempts."
+                        ) from e
+
+                    logger.warning(
+                        f"vLLM server for model {self.model_name!r} did not start "
+                        f"within {self.settings.vllm_server_start_timeout} seconds. "
+                        f"Retrying "
+                        f"({num_attempts}/{self.settings.vllm_server_start_attempts})..."
+                    )
+                    continue
+
+                else:
+                    break
 
     async def train(self):
         """Set the agent group to training mode.

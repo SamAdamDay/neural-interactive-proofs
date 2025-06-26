@@ -52,10 +52,10 @@ class ExperimentSettings:
         API.
     force_more_iterations : bool, default=False
         If set to True and ``run_id`` already exists, the trainer will be forced to
-        perform as many iterations as specified in the hyper-parameters, even if the
-        run has already been completed. This is useful for continuing training
-        experiments that have been officially completed, but where you want to
-        continue training for more iterations.
+        perform as many iterations as specified in the hyper-parameters, even if the run
+        has already been completed. This is useful for continuing training experiments
+        that have been officially completed, but where you want to continue training for
+        more iterations.
     resume_if_safe : bool, default=False
         If True, If the run already exists and the major version in the run is the same
         as the package version, the run will be resumed. If False, the user will be
@@ -113,6 +113,11 @@ class ExperimentSettings:
         generation request is retried with exponential back-off with the formula ``2 **
         num_attempts``, so this value should not be too high. If True, the experiment
         will not load a checkpoint if one exists.
+    vllm_server_start_timeout : int, default=1200
+        The timeout in seconds for starting the vLLM server.
+    vllm_server_start_retries : int, default=3
+        The number of times to attempt starting the vLLM server. If the server fails to
+        start after this many retries, the experiment will be stopped.
     test_run : bool, default=False
         If True, the experiment is run in test mode. This means we do the smallest
         number of iterations possible and then exit. This is useful for testing that the
@@ -146,6 +151,8 @@ class ExperimentSettings:
     num_api_connection_errors: int = 10
     num_rate_limit_errors: int = 14
     do_not_load_checkpoint: bool = False
+    vllm_server_start_timeout: int = 1200
+    vllm_server_start_attempts: int = 3
     test_run: bool = False
 
     def __post_init__(self):
