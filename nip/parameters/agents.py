@@ -504,6 +504,9 @@ class PureTextAgentParameters(AgentParameters):
         The quantization method to use for model inference. This is only relevant when
         using a self-hosted model. It controls how the model weights are quantized to
         reduce memory usage, at the cost of some accuracy.
+    num_epochs : int | None
+        The number of epochs to train the model for. If ``None``, we use the global
+        ``rl.num_epochs`` parameter, which is set in the RL trainer parameters.
     dpo_beta : float | None
         The beta parameter for to use when training the model with DPO. This is a float
         between 0 and 2, which controls how strictly the new model will adhere to its
@@ -576,6 +579,8 @@ class PureTextAgentParameters(AgentParameters):
     freeze_agent: bool = False
 
     quantization: VllmQuantization = "none"
+
+    num_epochs: Optional[int] = None
 
     dpo_beta: Optional[float] = None
 

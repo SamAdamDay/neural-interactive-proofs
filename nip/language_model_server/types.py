@@ -135,6 +135,9 @@ class LmDpoTrainingConfig(BaseModel):
     learning_rate: float
     """The learning rate for the DPO training."""
 
+    num_training_epochs: int
+    """The number of epochs to train the model for."""
+
     max_prompt_length: int | None = None
     """The maximum length of the prompt sequence."""
 
@@ -218,6 +221,9 @@ class LmTrainingConfig(BaseModel):
 
     This can improve training speed and lower memory usage.
     """
+
+    logging_steps: int = 1
+    """The period (in steps) at which to log training metrics."""
 
 
 class CreateTrainingJobRequest(BaseModel):

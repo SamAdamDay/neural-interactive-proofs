@@ -505,6 +505,8 @@ class PureTextSharedModelGroup(ABC):
 
         fine_tune_from_scratch: bool
 
+        num_epochs: Optional[int]
+
         dpo_beta: Optional[float]
 
         use_lora: bool
@@ -543,6 +545,18 @@ class PureTextSharedModelGroup(ABC):
             learning_rate *= self.shared_agent_params.agent_lr_factor.actor
 
         return learning_rate
+
+    @property
+    def num_epochs(self) -> int:
+        """The number of epochs to train the model for.
+
+        We first look at the ``num_epochs`` shared agent parameter. If this is not set,
+        we use the global hyperparameter ``rl.num_epochs``.
+        """
+        if self.shared_agent_params.num_epochs is not None:
+            return self.shared_agent_params.num_epochs
+        else:
+            return self.hyper_params.rl.num_epochs
 
     @property
     def lora_alpha(self) -> float:
