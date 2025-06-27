@@ -219,3 +219,6 @@ all_but_first
     is somewhat superfluous for the first round, because the system message already
     contains all the instructions.
 """
+
+AppsDifficultyType: TypeAlias = Literal["introductory", "interview", "competition"]
+"""Type for the difficulty level of the APPS dataset."""

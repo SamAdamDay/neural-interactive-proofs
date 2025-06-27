@@ -15,12 +15,7 @@ Run the script with the ``--help`` flag to see all available arguments.
 
 from argparse import Namespace
 import os
-import json
-from pathlib import Path
-from typing import Callable
 import logging
-
-import numpy as np
 
 import torch
 
@@ -37,6 +32,7 @@ from nip.utils.experiments import (
     MultiprocessHyperparameterExperiment,
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
+    RunIDFunctionArguments,
 )
 
 script_name = os.path.basename(__file__)
@@ -132,25 +128,25 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
     )
 
 
-def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+def run_id_fn(arguments: RunIDFunctionArguments) -> str:
     """Generate the run ID for a given hyperparameter combination.
 
     Parameters
     ----------
-    combo_index : int | None
-        The index of the hyperparameter combination. If None, the run ID is for the
-        entire experiment.
-    cmd_args : Namespace
-        The command line arguments.
+    arguments : RunIDFunctionArguments
+        The arguments for generating the run ID, including:
+
+        - combo_index: The index of the hyperparameter combination.
+        - cmd_args: The command line arguments.
 
     Returns
     -------
     run_id : str
         The run ID.
     """
-    if combo_index is None:
-        return f"test_solo_gi_agents_{cmd_args.run_infix}"
-    return f"test_solo_gi_agents_{cmd_args.run_infix}_{combo_index}"
+    if arguments.combo_index is None:
+        return f"test_solo_gi_agents_{arguments.cmd_args.run_infix}"
+    return f"test_solo_gi_agents_{arguments.cmd_args.run_infix}_{arguments.combo_index}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:

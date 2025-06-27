@@ -82,6 +82,7 @@ from .types import (
     MessageRegressionMethodType,
     BaseRunType,
     UseSupervisorType,
+    AppsDifficultyType,
 )
 from .agents import (
     LrFactors,

@@ -54,6 +54,10 @@ to communicate reliably.
 - Sanitising model name a little more when creating training job name, which helps
   Hugging Face identify the base model more easily.
 - Allowed setting DPO training logging period, and set it to 1 by default.
+- The `cv_experiment.py` script now contains a Pydantic model of the default config
+  values. Config files now only need to specify values which differ from the default.
+- Runs of the `cv_experiment.py` experiment script now include the name of the config
+  file.
 
 
 ### Fixed

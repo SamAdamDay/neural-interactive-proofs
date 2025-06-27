@@ -9,11 +9,15 @@ and whether to use the dummy API, can be set via command line arguments. Run the
 with the ``--help`` flag to see all available arguments.
 """
 
+from abc import ABC
 from argparse import Namespace
 import os
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel
 
 from nip import (
     HyperParameters,
@@ -32,11 +36,18 @@ from nip import (
     prepare_experiment,
     PreparedExperimentInfo,
     DatasetParameters,
+    TrainerType,
+    InteractionProtocolType,
+    AppsDifficultyType,
+    TestSchemeType,
+    VerifierDecisionSpectrumType,
 )
 from nip.utils.experiments import (
     SequentialHyperparameterExperiment,
     ExperimentFunctionArguments,
+    RunIDFunctionArguments,
 )
+from nip.utils.data import unflatten_dict_keys
 from nip.utils.env import get_env_var
 
 script_name = os.path.basename(__file__)
@@ -46,7 +57,124 @@ scripts_dir = Path(__file__).parent
 config_dir = scripts_dir / "config" / "cv_experiment"
 
 
-def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
+class AgentConfig(BaseModel, ABC):
+    """Base class for agent configuration.
+
+    This class is used to define the common parameters for agents in the code validation
+    experiment. It is inherited by specific agent configurations.
+
+    These parameters map roughly onto the
+    :class:`nip.parameters.agents.CodeValidationAgentParameters
+    <CodeValidationAgentParameters>` class, with some differences for convenience.
+    """
+
+    model: str = "OpenAI/gpt-4o-mini-2024-07-18"
+    system_prompt_template: str | None = None
+    lm_server_scheme_host: str = "http://localhost"
+    lm_server_port: int = 5000
+    vllm_server_port: int = 8000
+    temperature: float | None = None
+    num_epochs: int = 3
+    dpo_beta: float = 0.1
+    lora_rank: int = 32
+    lora_alpha_scale: float = 1.0
+    lora_dropout: float = 0.05
+    top_p: float | None = None
+    repetition_penalty: float | None = None
+    supervisor_message: str = "all"
+    freeze: bool = False
+    quantization: str = "none"
+
+
+class VerifierConfig(AgentConfig):
+    """Configuration for the verifier agent in the code validation experiment.
+
+    This class inherits from :class:`AgentConfig` and adds specific parameters for the
+    verifier agent.
+
+    The extra config values map onto various hyper-parameters in the
+    :class:`nip.parameters.HyperParameters <HyperParameters>`
+    """
+
+    guess_replacement_proportion: float = 0.0
+    guess_replacement_annealing: str = "linear"
+    guess_replacement_annealing_rate: float = 0.1
+    decision_spectrum: VerifierDecisionSpectrumType = "accept_reject"
+
+
+class ProverConfig(AgentConfig):
+    """Configuration for the prover agent(s) in the code validation experiment.
+
+    This class inherits from :class:`AgentConfig` and adds specific parameters for the
+    prover agent(s).
+
+    The extra config values map onto various hyper-parameters in the
+    :class:`nip.parameters.HyperParameters <HyperParameters>`
+    """
+
+    max_words: int = 150
+    invalid_response_penalty: float | None = None
+
+
+class CodeValidationExperimentConfig(BaseModel):
+    """Configuration for the code validation experiment.
+
+    These parameters map roughly onto the :class:`nip.parameters.HyperParameters
+    <HyperParameters>` class, with some differences for convenience.
+    """
+
+    trainer: TrainerType = "pure_text_ei"
+    interaction_protocol: InteractionProtocolType = "nip"
+    dataset_name: str = "lrhammond/buggy-apps"
+    apps_difficulty: AppsDifficultyType = "interview"
+    num_iterations: int = 1
+    rollouts_per_iteration: int = 20
+    learning_rate: float = 1e-6
+    malt_num_initial_ei_iterations: int = 0
+    malt_pair_selection_method: Literal["positive_negative", "interval"] = "interval"
+    provers_share_model: bool = True
+    fine_tune_from_scratch: bool = False
+    fine_tune_on_all_previous_rollouts: bool = False
+    rollout_selection_method: Literal["threshold", "weighted_sampling"] = "threshold"
+    weighting_use_replacement: bool = True
+    shared_reward: bool = False
+    randomize_prover_stance: bool = False
+    min_message_rounds: int = 1
+    max_message_rounds: int = 9
+    verifier_first: bool = True
+    debate_sequential: bool = False
+    debate_prover0_first: bool = True
+    max_train_size: int | None = None
+    max_test_size: int | None = None
+    test_scheme: TestSchemeType = "none"
+    num_test_iterations: int = 1
+    test_dataset_split: str = "validation"
+    rerun_tests: str | None = None
+    """Which run ID to rerun tests from.
+
+    If set, this should be the ID of a previous experiment. This experiment will be
+    stepped through, running the tests as specified by "test_scheme" and other test
+    parameters.
+    """
+    force_more_iterations: bool = False
+    """Whether to force more iterations of an already finished run.
+
+    If set to true and the script is run with a run ID which already exists, the script
+    will continue running the experiment from the last completed iteration, even if the
+    previous had fewer iterations than specified in this configuration file. This is
+    useful for continuing promising experiments which have already completed.
+    """
+    seed: int = 6198
+
+    verifier: VerifierConfig = VerifierConfig()
+    """Configuration for the verifier agent."""
+    prover: ProverConfig = ProverConfig()
+    """Configuration for the prover agent(s)."""
+
+
+def _construct_params(
+    config: CodeValidationExperimentConfig, cmd_args: Namespace
+) -> HyperParameters:
     """Construct the hyperparameters object for the experiment.
 
     Parameters
@@ -62,68 +190,68 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         The hyperparameters object.
     """
 
-    verifier_model_provider, _, verifier_model_name = combo["verifier.model"].partition(
+    verifier_model_provider, _, verifier_model_name = config.verifier.model.partition(
         "/"
     )
-    prover_model_provider, _, prover_model_name = combo["prover.model"].partition("/")
+    prover_model_provider, _, prover_model_name = config.prover.model.partition("/")
 
     agents_params_dict = dict(
         verifier=CodeValidationAgentParameters(
             model_name=verifier_model_name,
             model_provider=verifier_model_provider,
-            system_prompt_template_path=combo["verifier.system_prompt_template"],
-            language_model_server_scheme_host=combo["verifier.lm_server_scheme_host"],
-            language_model_server_port=combo["verifier.lm_server_port"],
-            vllm_server_port=combo["verifier.vllm_server_port"],
-            temperature=combo["verifier.temperature"],
-            top_p=combo["verifier.top_p"],
-            repetition_penalty=combo["verifier.repetition_penalty"],
+            system_prompt_template_path=config.verifier.system_prompt_template,
+            language_model_server_scheme_host=config.verifier.lm_server_scheme_host,
+            language_model_server_port=config.verifier.lm_server_port,
+            vllm_server_port=config.verifier.vllm_server_port,
+            temperature=config.verifier.temperature,
+            top_p=config.verifier.top_p,
+            repetition_penalty=config.verifier.repetition_penalty,
             use_dummy_api=cmd_args.use_dummy_api,
-            freeze_agent=combo["verifier.freeze"],
-            fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-            use_supervisor_message=combo["verifier.supervisor_message"],
-            dpo_beta=combo["verifier.dpo_beta"],
-            lora_rank=combo["verifier.lora_rank"],
-            lora_alpha_scale=combo["verifier.lora_alpha_scale"],
-            lora_dropout=combo["verifier.lora_dropout"],
-            quantization=combo["verifier.quantization"],
-            num_epochs=combo["verifier.num_epochs"],
+            freeze_agent=config.verifier.freeze,
+            fine_tune_from_scratch=config.fine_tune_from_scratch,
+            use_supervisor_message=config.verifier.supervisor_message,
+            dpo_beta=config.verifier.dpo_beta,
+            lora_rank=config.verifier.lora_rank,
+            lora_alpha_scale=config.verifier.lora_alpha_scale,
+            lora_dropout=config.verifier.lora_dropout,
+            quantization=config.verifier.quantization,
+            num_epochs=config.verifier.num_epochs,
         ),
     )
 
     prover_params_dict = dict(
         model_name=prover_model_name,
         model_provider=prover_model_provider,
-        system_prompt_template_path=combo["prover.system_prompt_template"],
-        language_model_server_scheme_host=combo["prover.lm_server_scheme_host"],
-        language_model_server_port=combo["prover.lm_server_port"],
-        vllm_server_port=combo["prover.vllm_server_port"],
-        temperature=combo["prover.temperature"],
-        top_p=combo["prover.top_p"],
-        repetition_penalty=combo["prover.repetition_penalty"],
+        system_prompt_template_path=config.prover.system_prompt_template,
+        language_model_server_scheme_host=config.prover.lm_server_scheme_host,
+        language_model_server_port=config.prover.lm_server_port,
+        vllm_server_port=config.prover.vllm_server_port,
+        temperature=config.prover.temperature,
+        top_p=config.prover.top_p,
+        repetition_penalty=config.prover.repetition_penalty,
         use_dummy_api=cmd_args.use_dummy_api,
-        freeze_agent=combo["prover.freeze"],
-        fine_tune_from_scratch=combo["fine_tune_from_scratch"],
-        use_supervisor_message=combo["prover.supervisor_message"],
-        dpo_beta=combo["prover.dpo_beta"],
-        max_response_words=combo["prover.max_words"],
-        lora_rank=combo["prover.lora_rank"],
-        lora_alpha_scale=combo["prover.lora_alpha_scale"],
-        lora_dropout=combo["prover.lora_dropout"],
-        quantization=combo["prover.quantization"],
-        num_epochs=combo["prover.num_epochs"],
+        freeze_agent=config.prover.freeze,
+        fine_tune_from_scratch=config.fine_tune_from_scratch,
+        use_supervisor_message=config.prover.supervisor_message,
+        dpo_beta=config.prover.dpo_beta,
+        max_response_words=config.prover.max_words,
+        lora_rank=config.prover.lora_rank,
+        lora_alpha_scale=config.prover.lora_alpha_scale,
+        lora_dropout=config.prover.lora_dropout,
+        quantization=config.prover.quantization,
+        num_epochs=config.prover.num_epochs,
     )
 
-    if combo["provers_share_model"]:
+    if config.provers_share_model:
         prover_params_dict["shared_model_group"] = "provers_group"
     else:
         prover_params_dict["shared_model_group"] = None
 
-    if combo["interaction_protocol"] in ["nip", "adp"]:
+    if config.interaction_protocol in ["nip", "adp"]:
         agents_params_dict["prover"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
-    elif combo["interaction_protocol"] in [
+    elif config.interaction_protocol in [
         "debate",
         "mnip",
         "merlin_arthur",
@@ -134,18 +262,18 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         agents_params_dict["prover1"] = CodeValidationAgentParameters(
             **prover_params_dict
         )
-    elif combo["interaction_protocol"] == "solo_verifier":
+    elif config.interaction_protocol == "solo_verifier":
         pass
     else:
         raise NotImplementedError(
             f"This script does not currently support the "
-            f"{combo['interaction_protocol']} protocol."
+            f"{config.interaction_protocol} protocol."
         )
 
-    if combo["rerun_tests"] is not None:
+    if config.rerun_tests is not None:
         base_run_params = BaseRunParameters(
             base_run_type="rerun_tests",
-            run_id=combo["rerun_tests"],
+            run_id=config.rerun_tests,
             wandb_project=get_env_var("WANDB_CV_PROJECT"),
         )
     else:
@@ -153,66 +281,58 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
 
     return HyperParameters(
         scenario="code_validation",
-        trainer=combo["trainer"],
-        dataset=combo["dataset_name"],
-        test_dataset_split=combo["test_dataset_split"],
+        trainer=config.trainer,
+        dataset=config.dataset_name,
+        test_dataset_split=config.test_dataset_split,
         rl=RlTrainerParameters(
-            lr=combo["learning_rate"],
-            rollouts_per_iteration=combo["rollouts_per_iteration"],
+            lr=config.learning_rate,
+            rollouts_per_iteration=config.rollouts_per_iteration,
             frames_per_batch=None,
-            num_iterations=combo["num_iterations"],
-            num_test_iterations=combo["num_test_iterations"],
+            num_iterations=config.num_iterations,
+            num_test_iterations=config.num_test_iterations,
         ),
         text_rl=TextRlParameters(
-            test_scheme=combo["test_scheme"],
-            fine_tune_on_all_previous_rollouts=combo[
-                "fine_tune_on_all_previous_rollouts"
-            ],
-            verifier_guess_replacement_proportion=combo[
-                "verifier.guess_replacement_proportion"
-            ],
-            verifier_guess_replacement_annealing=combo[
-                "verifier.guess_replacement_annealing"
-            ],
-            verifier_guess_replacement_annealing_rate=combo[
-                "verifier.guess_replacement_annealing_rate"
-            ],
+            test_scheme=config.test_scheme,
+            fine_tune_on_all_previous_rollouts=config.fine_tune_on_all_previous_rollouts,
+            verifier_guess_replacement_proportion=config.verifier.guess_replacement_proportion,
+            verifier_guess_replacement_annealing=config.verifier.guess_replacement_annealing,
+            verifier_guess_replacement_annealing_rate=config.verifier.guess_replacement_annealing_rate,
         ),
         pure_text_ei=PureTextEiParameters(
-            rollout_selection_method=combo["rollout_selection_method"],
-            weighting_use_replacement=combo["weighting_use_replacement"],
+            rollout_selection_method=config.rollout_selection_method,
+            weighting_use_replacement=config.weighting_use_replacement,
         ),
         pure_text_malt=PureTextMaltParameters(
-            num_initial_ei_iterations=combo["malt_num_initial_ei_iterations"],
-            pair_selection_method=combo["malt_pair_selection_method"],
+            num_initial_ei_iterations=config.malt_num_initial_ei_iterations,
+            pair_selection_method=config.malt_pair_selection_method,
         ),
         agents=AgentsParameters(**agents_params_dict),
-        interaction_protocol=combo["interaction_protocol"],
+        interaction_protocol=config.interaction_protocol,
         protocol_common=CommonProtocolParameters(
-            shared_reward=combo["shared_reward"],
-            verifier_first=combo["verifier_first"],
-            randomize_prover_stance=combo["randomize_prover_stance"],
-            verifier_decision_spectrum=combo["verifier.decision_spectrum"],
-            prover_invalid_response_penalty=combo["prover.invalid_response_penalty"],
+            shared_reward=config.shared_reward,
+            verifier_first=config.verifier_first,
+            randomize_prover_stance=config.randomize_prover_stance,
+            verifier_decision_spectrum=config.verifier.decision_spectrum,
+            prover_invalid_response_penalty=config.prover.invalid_response_penalty,
         ),
         nip_protocol=NipProtocolParameters(
-            min_message_rounds=combo["min_message_rounds"],
-            max_message_rounds=combo["max_message_rounds"],
+            min_message_rounds=config.min_message_rounds,
+            max_message_rounds=config.max_message_rounds,
         ),
         debate_protocol=DebateProtocolParameters(
-            min_message_rounds=combo["min_message_rounds"],
-            max_message_rounds=combo["max_message_rounds"],
-            sequential=combo["debate_sequential"],
-            prover0_first=combo["debate_prover0_first"],
+            min_message_rounds=config.min_message_rounds,
+            max_message_rounds=config.max_message_rounds,
+            sequential=config.debate_sequential,
+            prover0_first=config.debate_prover0_first,
         ),
         code_validation=CodeValidationParameters(
-            apps_difficulty=combo["apps_difficulty"],
+            apps_difficulty=config.apps_difficulty,
         ),
         dataset_options=DatasetParameters(
-            max_test_size=combo["max_test_size"],
+            max_test_size=config.max_test_size,
         ),
         base_run=base_run_params,
-        seed=combo["seed"],
+        seed=config.seed,
     )
 
 
@@ -225,15 +345,16 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         The arguments for the experiment.
     """
 
-    combo = arguments.combo
+    combo = unflatten_dict_keys(arguments.combo, separator=".")
+    config = CodeValidationExperimentConfig(**combo)
     cmd_args = arguments.cmd_args
 
     logger.setLevel(arguments.log_level)
 
     logger.info(f"Starting run {arguments.run_id}")
-    logger.debug(f"Combo: {combo}")
+    logger.debug(f"Combo: {config}")
 
-    hyper_params = _construct_params(combo, cmd_args)
+    hyper_params = _construct_params(config, cmd_args)
 
     # Make sure W&B doesn't print anything when the logger level is higher than DEBUG
     if logger.level > logging.DEBUG:
@@ -257,27 +378,31 @@ def experiment_fn(arguments: ExperimentFunctionArguments):
         allow_overriding_wandb_config=True,
         wandb_tags=wandb_tags,
         wandb_group=arguments.common_run_name,
-        force_more_iterations=combo["force_more_iterations"],
+        force_more_iterations=config.force_more_iterations,
         resume_if_safe=cmd_args.resume_if_safe,
     )
 
 
-def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
+def run_id_fn(arguments: RunIDFunctionArguments) -> str:
     """Generate the run ID for a given hyperparameter combination.
 
     Parameters
     ----------
-    combo_index : int | None
-        The index of the hyperparameter combination. If None, the run ID is for the
-        entire experiment.
-    cmd_args : Namespace
-        The command line arguments.
+    arguments : RunIDFunctionArguments
+        The arguments for generating the run ID, including:
+
+        - combo_index: The index of the hyperparameter combination.
+        - cmd_args: The command line arguments.
+        - config_file_stem: The stem of the configuration file, if provided.
 
     Returns
     -------
     run_id : str
         The run ID.
     """
+
+    cmd_args = arguments.cmd_args
+
     if cmd_args.run_infix == "" and cmd_args.use_dummy_api:
         run_infix = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     elif cmd_args.run_infix == "":
@@ -286,9 +411,16 @@ def run_id_fn(combo_index: int | None, cmd_args: Namespace) -> str:
         )
     else:
         run_infix = cmd_args.run_infix
-    if combo_index is None:
-        return f"cv_{run_infix}"
-    return f"cv_{run_infix}_{combo_index}"
+
+    if arguments.combo_index is not None:
+        run_suffix = f"{run_infix}_{arguments.combo_index}"
+    else:
+        run_suffix = f"{run_infix}"
+
+    if arguments.config_file_stem is not None:
+        return f"cv_{arguments.config_file_stem}_{run_suffix}"
+    else:
+        return f"cv_{run_suffix}"
 
 
 def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
@@ -306,7 +438,9 @@ def run_preparer_fn(combo: dict, cmd_args: Namespace) -> PreparedExperimentInfo:
     prepared_experiment_info : PreparedExperimentInfo
         The prepared experiment data.
     """
-    hyper_params = _construct_params(combo, cmd_args)
+    combo = unflatten_dict_keys(combo, separator=".")
+    config = CodeValidationExperimentConfig(**combo)
+    hyper_params = _construct_params(config, cmd_args)
     return prepare_experiment(
         hyper_params=hyper_params, ignore_cache=cmd_args.ignore_cache
     )
@@ -319,7 +453,6 @@ experiment = SequentialHyperparameterExperiment(
     experiment_name="CV",
     arg_parser_description="Run Code Validation experiments, "
     "running from a hyperparameter grid in sequence.",
-    default_config_filename="single_experiment.json5",
     config_file_base_path=config_dir,
     default_wandb_project=get_env_var("WANDB_CV_PROJECT", ""),
     allow_resuming_wandb_run=True,
