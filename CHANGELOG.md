@@ -27,7 +27,7 @@ Similarly, it ensures that a client and server which agree on `MAJOR` version ar
 to communicate reliably.
 
 
-## Unreleased
+## [2.1.0] - 2025-06-27
 
 ### Added
 

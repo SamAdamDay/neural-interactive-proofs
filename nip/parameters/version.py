@@ -21,7 +21,7 @@ Example
 -------
 
 >>> @register_conversion_function("2.1.5", "2.2")
->>> def _from_2_1_5_to_2_2(hyper_param_dict: dict) -> dict:
+>>> def _(hyper_param_dict: dict) -> dict:
 >>>     ...
 """
 
@@ -189,7 +189,7 @@ def register_conversion_function(
 
 
 @register_conversion_function(None, "0.1")
-def _from_none_to_0_1(hyper_param_dict: dict) -> dict:
+def _(hyper_param_dict: dict) -> dict:
 
     warn(
         "Converting a hyper-parameter dict from before version numbers were tracked. "
@@ -201,7 +201,7 @@ def _from_none_to_0_1(hyper_param_dict: dict) -> dict:
 
 
 @register_conversion_function("0.1", "1.0")
-def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
+def _(hyper_param_dict: dict) -> dict:
 
     # "pvg" was renamed to "nip"
     if hyper_param_dict.get("interaction_protocol", None) == "pvg":
@@ -230,4 +230,11 @@ def _from_0_1_to_1_0(hyper_param_dict: dict) -> dict:
         if "sos_b_param" in spg:
             spg["sos_threshold_factor"] = spg.pop("sos_b_param")
 
+    return hyper_param_dict
+
+
+@register_conversion_function("2.0.0", "2.1.0")
+def _(hyper_param_dict: dict) -> dict:
+
+    # Nothing has changed
     return hyper_param_dict
