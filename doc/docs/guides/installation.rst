@@ -30,7 +30,7 @@ Installation Steps
      
       .. code-tab:: bash A specific release
 
-         git clone https://github.com/SamAdamDay/neural-interactive-proofs.git --branch v2.0.0 --depth 1
+         git clone https://github.com/SamAdamDay/neural-interactive-proofs.git --branch v2.1.0 --depth 1
 
       .. code-tab:: bash Latest version
 
