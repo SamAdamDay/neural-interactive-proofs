@@ -45,6 +45,8 @@ from .parameters import (
     ContiguousPeriodicUpdateSchedule,
     AlternatingPeriodicUpdateSchedule,
     TestSchemeType,
+    AppsDifficultyType,
+    VerifierDecisionSpectrumType,
 )
 from .experiment_settings import ExperimentSettings
 from .run import run_experiment, prepare_experiment, PreparedExperimentInfo

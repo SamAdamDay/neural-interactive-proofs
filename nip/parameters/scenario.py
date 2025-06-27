@@ -5,6 +5,7 @@ from typing import Literal
 from dataclasses import dataclass
 
 from nip.parameters.parameters_base import SubParameters, register_parameter_class
+from nip.parameters.types import AppsDifficultyType
 
 
 @register_parameter_class
@@ -32,7 +33,7 @@ class CodeValidationParameters(SubParameters):
 
     Parameters
     ----------
-    app_difficulty : Literal["introductory", "interview", "competition"]
+    app_difficulty : AppsDifficultyType
         The difficulty level of the APPS dataset, if using.
     app_solution_number : int
         Each question in the APPS dataset has multiple solutions. This parameter
@@ -46,7 +47,7 @@ class CodeValidationParameters(SubParameters):
         features available.
     """
 
-    apps_difficulty: Literal["introductory", "interview", "competition"] = "interview"
+    apps_difficulty: AppsDifficultyType = "interview"
     apps_solution_number: int = 0
     apps_exclude_flagged: bool = True
 

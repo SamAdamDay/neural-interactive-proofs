@@ -422,6 +422,37 @@ def flatten_dict_keys(data: dict, separator: str = ".", prefix: str = "") -> dic
     return flat_data
 
 
+def unflatten_dict_keys(flat_data: dict, separator: str = ".") -> dict:
+    """Unflatten a dictionary to a nested by splitting keys by a separator.
+
+    Creates a nested dictionary structure from a flat dictionary where keys are
+    joined by a separator. E.g. {"a.b.c": 1} becomes {"a": {"b": {"c": 1}}}.
+
+    Parameters
+    ----------
+    flat_data : dict
+        The flat dictionary to unflatten.
+    separator : str, default="."
+        The separator used to join keys in the flat dictionary.
+
+    Returns
+    -------
+    nested_data : dict
+        The nested dictionary with keys split by the separator.
+    """
+
+    nested_data = {}
+    for key, value in flat_data.items():
+        parts = key.split(separator)
+        current_level = nested_data
+        for part in parts[:-1]:
+            if part not in current_level:
+                current_level[part] = {}
+            current_level = current_level[part]
+        current_level[parts[-1]] = value
+    return nested_data
+
+
 def prompt_array_to_list(
     prompt_array: String[NDArray, "message field"],
 ) -> list[PromptMessage]:

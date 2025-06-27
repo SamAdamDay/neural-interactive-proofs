@@ -137,6 +137,26 @@ class TqdmMultiProcessPoolMaxTasks(TqdmMultiProcessPool):
 
 
 @dataclass
+class RunIDFunctionArguments:
+    """Arguments to the function which determines the run name.
+
+    Parameters
+    ----------
+    combo_index: int | None
+        The index of the hyperparameter combination. If None, the run name will be for
+        the whole experiment.
+    cmd_args : Namespace
+        The command line arguments.
+    config_file_stem : str | None
+        The stem of the config file, if given.
+    """
+
+    combo_index: int | None
+    cmd_args: Namespace
+    config_file_stem: str | None = None
+
+
+@dataclass
 class ExperimentFunctionArguments:
     """Arguments to the function which runs a single experiment.
 
@@ -177,7 +197,7 @@ class HyperparameterExperiment(ABC):
         self,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
         param_grid: Optional[dict] = None,
-        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[RunIDFunctionArguments], str]] = None,
         experiment_name: str = "EXPERIMENT",
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
@@ -191,10 +211,10 @@ class HyperparameterExperiment(ABC):
     ):
         if run_id_fn is None:
 
-            def run_id_fn(combo_index, cmd_args):
-                if combo_index is None:
+            def run_id_fn(arguments: RunIDFunctionArguments) -> str:
+                if arguments.combo_index is None:
                     return f"{experiment_name.lower()}"
-                return f"{experiment_name.lower()}_{combo_index}"
+                return f"{experiment_name.lower()}_{arguments.combo_index}"
 
         if param_grid is not None:
             self.param_grid = flatten_dict_keys(param_grid, separator=".")
@@ -212,6 +232,8 @@ class HyperparameterExperiment(ABC):
 
         if default_wandb_project is None:
             default_wandb_project = get_env_var("WANDB_PROJECT", "")
+
+        self.config_file_stem: Optional[str] = None
 
         # Set up the arg parser
         self.parser = ArgumentParser(
@@ -236,7 +258,7 @@ class HyperparameterExperiment(ABC):
                 "-c",
                 type=str,
                 help=f"The path to the file containing the hyperparameter grid"
-                f"{relative_text}",
+                f"{relative_text}. The file extension can be omitted.",
                 **default_kwarg,
             )
 
@@ -332,7 +354,13 @@ class HyperparameterExperiment(ABC):
         """A name for the experiment that is common to all runs."""
         if self.cmd_args is None:
             raise ValueError("The command line arguments have not been parsed yet.")
-        return self.run_id_fn(None, self.cmd_args)
+        return self.run_id_fn(
+            RunIDFunctionArguments(
+                combo_index=None,
+                cmd_args=self.cmd_args,
+                config_file_stem=self.config_file_stem,
+            )
+        )
 
     @property
     def combinations(self) -> ParameterGrid:
@@ -360,7 +388,14 @@ class HyperparameterExperiment(ABC):
             # Get the names of the runs we'll be running
             num_combinations = len(list(self.combinations))
             run_names = [
-                self.run_id_fn(i, self.cmd_args) for i in range(num_combinations)
+                self.run_id_fn(
+                    RunIDFunctionArguments(
+                        combo_index=i,
+                        cmd_args=self.cmd_args,
+                        config_file_stem=self.config_file_stem,
+                    )
+                )
+                for i in range(num_combinations)
             ]
 
             # Check if any already exist
@@ -383,7 +418,10 @@ class HyperparameterExperiment(ABC):
         self.cmd_args = self.parser.parse_args()
 
         if "config_file" in self.cmd_args:
-            self._load_param_grid(self.cmd_args.config_file)
+            if self.cmd_args.config_file is not None:
+                self._load_param_grid(self.cmd_args.config_file)
+            else:
+                self.param_grid = {}
 
         self.check_no_extant_runs()
 
@@ -434,22 +472,35 @@ class HyperparameterExperiment(ABC):
         """
 
         file_path = self.config_file_base_path / config_filename
-        extension = file_path.suffix.lower()
+        file_extension = file_path.suffix.lower()
 
-        if extension == ".json":
-            with open(file_path, "r") as f:
-                config: ExperimentConfig = json.load(f)
-        elif extension == ".json5":
-            with open(file_path, "r") as f:
-                config: ExperimentConfig = json5.load(f)
-        elif extension in (".yaml", ".yml"):
-            with open(file_path, "r") as f:
-                config: ExperimentConfig = yaml.safe_load(f)
+        extension_loaders = {
+            ".json": json.load,
+            ".json5": json5.load,
+            ".yaml": yaml.safe_load,
+            ".yml": yaml.safe_load,
+        }
+
+        for extension, loader in extension_loaders.items():
+            if file_extension == extension:
+                with open(file_path, "r") as f:
+                    config: ExperimentConfig = loader(f)
+                self.config_file_stem = file_path.stem
+                break
         else:
-            raise ValueError(
-                f"Unsupported config file format: {extension!r}. "
-                f"Supported formats are: .json, .json5, .yaml, .yml"
-            )
+            for extension, loader in extension_loaders.items():
+                test_file_path = file_path.with_name(f"{config_filename}{extension}")
+                if test_file_path.exists():
+                    with open(test_file_path, "r") as f:
+                        config: ExperimentConfig = loader(f)
+                    self.config_file_stem = config_filename
+                    break
+            else:
+                raise ValueError(
+                    f"Config file {config_filename!r} is not valid, nor could a valid "
+                    f"file be found after appending any of the supported extensions: "
+                    f"{', '.join(extension_loaders.keys())}."
+                )
 
         TypeAdapter(ExperimentConfig).validate_python(config)
 
@@ -527,23 +578,17 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
     ----------
     experiment_fn : Callable[[ExperimentFunctionArguments], None]
         A function that takes a single hyperparameter combination and runs the
-        experiment. The arguments are specified in the ``ExperimentFunctionArguments``
-        dataclass.
+        experiment. The arguments are specified in the
+        :class:`ExperimentFunctionArguments` dataclass.
     param_grid : dict, optional
         A dictionary mapping hyperparameter names to lists of values to try. If not
-        given, a positional argument "config_file" will be added to the parser,
-        and this will be used to load the hyperparameter grid from a config file.
-    run_id_fn : Callable[[int, Namespace], str], optional
+        given, a positional argument "config_file" will be added to the parser, and this
+        will be used to load the hyperparameter grid from a config file.
+    run_id_fn : Callable[[RunIDFunctionArguments], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
-        the combination index. It should take the form:
-
-        .. code-block:: python
-
-            run_id_fn(combo_index, cmd_args)
-
-        where ``combo_index`` is the index of the combination in the ParameterGrid and
-        ``cmd_args`` is the command line arguments.
+        the combination index. The arguments are specified in the
+        :class:`RunIDFunctionArguments` dataclass.
     run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
         for it. It should return a ``PreparedExperimentInfo`` instance. This is
@@ -561,13 +606,12 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         The description of the argument parser.
     default_config_filename : Optional[str], default=None
         The default config filename to use if the param_grid is not given. If None, no
-        default is set, and the user must provide a config file as a command line
-        argument.
+        default is set, and if the user does not provide a config file, an empty grid is
+        used.
     config_file_base_path : Optional[str | Path], default=None
-        The base path to use for the config file. If None, the current working
-        directory is used. If the config file is specified as a relative path, it
-        will be resolved relative to this base path. If this is an absolute path, it
-        will be used as is.
+        The base path to use for the config file. If None, the current working directory
+        is used. If the config file is specified as a relative path, it will be resolved
+        relative to this base path. If this is an absolute path, it will be used as is.
     default_wandb_project : Optional[str], default=None
         The default W&B project to use. If None, the default is to use the WANDB_PROJECT
         environment variable.
@@ -586,7 +630,7 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
             [dict, str, Namespace, Callable, logging.LoggerAdapter, str], None
         ],
         param_grid: Optional[dict] = None,
-        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[RunIDFunctionArguments], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
@@ -645,7 +689,13 @@ class SequentialHyperparameterExperiment(HyperparameterExperiment):
         """Run an experiment for a single combination of hyperparameters."""
 
         # Create a unique run_id for this run
-        run_id = self.run_id_fn(combo_index, cmd_args)
+        run_id = self.run_id_fn(
+            RunIDFunctionArguments(
+                combo_index=combo_index,
+                cmd_args=cmd_args,
+                config_file_stem=self.config_file_stem,
+            )
+        )
 
         self._setup_logger(combo_index, len(combinations))
 
@@ -742,17 +792,11 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         A dictionary mapping hyperparameter names to lists of values to try. If not
         given, a positional argument "config_file" will be added to the parser,
         and this will be used to load the hyperparameter grid from a config file.
-    run_id_fn : Callable[[int, Namespace], str], optional
+    run_id_fn : Callable[[RunIDFunctionArguments], str], optional
         A function that takes a single hyperparameter combination and returns a unique
         identifier for the run. If None, the default is to use the experiment name and
-        the combination index. It should take the form:
-
-        .. code-block:: python
-
-            run_id_fn(combo_index, cmd_args)
-
-        where ``combo_index`` is the index of the combination in the ParameterGrid and
-        ``cmd_args`` is the command line arguments.
+        the combination index. The arguments are specified in the
+        :class:`RunIDFunctionArguments` dataclass.
     run_preparer_fn : Callable[[dict, Namespace], PreparedExperimentInfo], optional
         A function that takes a single hyperparameter combination and prepares the run
         for it. It should return a ``PreparedExperimentInfo`` instance. This is
@@ -770,8 +814,8 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         The description of the argument parser.
     default_config_filename : Optional[str], default=None
         The default config filename to use if the param_grid is not given. If None, no
-        default is set, and the user must provide a config file as a command line
-        argument.
+        default is set, and if the user does not provide a config file, an empty grid
+        is used.
     config_file_base_path : Optional[str | Path], default=None
         The base path to use for the config file. If None, the current working
         directory is used. If the config file is specified as a relative path, it
@@ -793,7 +837,7 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         self,
         experiment_fn: Callable[[ExperimentFunctionArguments], None],
         param_grid: Optional[dict] = None,
-        run_id_fn: Optional[Callable[[int | None, Namespace], str]] = None,
+        run_id_fn: Optional[Callable[[RunIDFunctionArguments], str]] = None,
         run_preparer_fn: Optional[
             Callable[[dict, Namespace], PreparedExperimentInfo]
         ] = None,
@@ -876,7 +920,13 @@ class MultiprocessHyperparameterExperiment(HyperparameterExperiment):
         """
 
         # Create a unique run_id for this run
-        run_id = self.run_id_fn(combo_index, cmd_args)
+        run_id = self.run_id_fn(
+            RunIDFunctionArguments(
+                combo_index=combo_index,
+                cmd_args=cmd_args,
+                config_file_stem=self.config_file_stem,
+            )
+        )
 
         self._setup_logger(combo_index, len(combinations))
 

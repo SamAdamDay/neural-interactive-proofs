@@ -1,0 +1,28 @@
+// An example configuration file for a hyper-parameter grid experiment. 
+//
+// The experiment will perform six runs, varying th interaction protocol between two
+// possibilities and the verifier decision spectrum between three possibilities. 
+//
+// To see which config values can be changed, see the
+// ``CodeValidationExperimentConfig`` class in ``scripts/cv_experiment.py``
+
+{
+    "kind": "grid",
+    "parameters": {
+        "trainer": ["pure_text_malt"],
+        "interaction_protocol": ["adp", "merlin_arthur"],
+        "num_iterations": [5],
+        "rollouts_per_iteration": [100],
+        "verifier": {
+            "model": ["OpenAI/gpt-4o-mini-2024-07-18"],
+            "decision_spectrum": ["likert_scale_5", "likert_scale_6", "likert_scale_7"],
+            "freeze": [true],
+        },
+        "prover": {
+            "model": ["SelfHosted/Qwen/Qwen2.5-32B-Instruct"],
+            "temperature": [1.2],
+            "dpo_beta": [0.3],
+        },
+        "test_scheme": ["all"],
+    }
+}
