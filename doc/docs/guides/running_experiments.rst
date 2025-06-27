@@ -137,19 +137,24 @@ API reference :doc:`../reference/scripts` for a complete list of scripts.
 
 Let's consider the :doc:`cv_experiment.py
 <../reference/generated/scripts/cv_experiment>` script. This script takes the
-``-config-file`` argument, which is a path to a JSON, JSON5, or YAML file. This file
+``--config-file`` argument, which is a path to a JSON, JSON5, or YAML file. This file
 should contain a dictionary with keys "kind" and "parameters". If "kind" is
-"single_experiment", then "parameters" should be a dictionary with the hyperparameters
+"single_experiment", then "parameters" should be a dictionary with the config values
 to use. If "kind" is "grid", then "parameters" should be a dictionary with keys as
 hyperparameter names and values as lists of values to try. The script will run an
 experiment for each combination of hyper-parameters in the grid.
+
+The possible config values and their default options are listed in the
+``CodeValidationExperimentConfig`` class, in the :doc:`cv_experiment.py
+<../reference/generated/scripts/cv_experiment>` script. Any config value that is not
+specified in the config file will use the default value.
 
 For example, the following JSON file defines a grid will run 4 expert iteration (EI)
 experiments, running the NIP and Debate protocols with the "introductory" and
 "interview" level code validation datasets:
 
 .. code-block:: json
-    :caption: ``scripts/config/cv_experiment/config.json``
+    :caption: ``scripts/config/cv_experiment/test_difficulty_levels.json``
 
     {
       "kind": "grid",
@@ -163,15 +168,15 @@ experiments, running the NIP and Debate protocols with the "introductory" and
       }
     }
 
-The experiment (which we'll call ``test_difficulty_levels``) can now be run by calling
-the script with the following command:
+The experiment can now be run by calling the script with the following command:
 
 .. code-block:: bash
 
-    python scripts/cv_experiment.py --use-wandb --config-file config.json test_difficulty_levels
+    python scripts/cv_experiment.py --use-wandb --config-file test_difficulty_levels.json trial_1
 
-This will run the experiments sequentially, logging data to Weights & Biases
-with run IDs ``cv_test_difficulty_levels_0``, ``cv_test_difficulty_levels_1``, etc.
+This will run the experiments sequentially, logging data to Weights & Biases with run
+IDs ``cv_test_difficulty_levels_trial_1_0``, ``cv_test_difficulty_levels_trial_1_1``,
+etc.
 
 See the :doc:`documentation for the script
 <../reference/generated/scripts/cv_experiment>` for more information on how to run it,
