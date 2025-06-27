@@ -1830,7 +1830,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             dpo_config=LmDpoTrainingConfig(
                 beta=self.shared_agent_params.dpo_beta,
                 learning_rate=self.rl_learning_rate,
-                num_training_epochs=self.num_epochs,
+                num_train_epochs=self.num_epochs,
             ),
             training_lora_config=LmLoraAdapterConfig(
                 r=self.shared_agent_params.lora_rank,

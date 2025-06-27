@@ -135,7 +135,7 @@ class LmDpoTrainingConfig(BaseModel):
     learning_rate: float
     """The learning rate for the DPO training."""
 
-    num_training_epochs: int
+    num_train_epochs: int
     """The number of epochs to train the model for."""
 
     max_prompt_length: int | None = None
