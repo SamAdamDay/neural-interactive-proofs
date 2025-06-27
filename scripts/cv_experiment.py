@@ -87,6 +87,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
             lora_alpha_scale=combo["verifier.lora_alpha_scale"],
             lora_dropout=combo["verifier.lora_dropout"],
             quantization=combo["verifier.quantization"],
+            num_epochs=combo["verifier.num_epochs"],
         ),
     )
 
@@ -110,6 +111,7 @@ def _construct_params(combo: dict, cmd_args: Namespace) -> HyperParameters:
         lora_alpha_scale=combo["prover.lora_alpha_scale"],
         lora_dropout=combo["prover.lora_dropout"],
         quantization=combo["prover.quantization"],
+        num_epochs=combo["prover.num_epochs"],
     )
 
     if combo["provers_share_model"]:

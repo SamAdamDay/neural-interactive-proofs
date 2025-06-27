@@ -219,15 +219,19 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
         gradient_checkpointing=config.gradient_checkpointing,
         per_device_train_batch_size=config.per_device_train_batch_size,
         use_liger_kernel=config.use_liger_kernel,
+        logging_steps=config.logging_steps,
         seed=config.seed,
+        log_level="info",
     )
 
     ignore_training_lora_config = False
 
     if not is_model_peft(config.model_name):
+        logger.info(f"Loading model {config.model_name!r}...")
         model = AutoModelForCausalLM.from_pretrained(config.model_name)
 
     else:
+        logger.info(f"Model {config.model_name!r} is a LoRA model. Loading...")
         model_lora_config = LoraConfig.from_pretrained(config.model_name)
 
         # When reusing the LoRA adapter, make sure the model's LoRA configuration is
@@ -274,6 +278,8 @@ def train(config: LmTrainingConfig, dataset: Dataset, job_id: str, new_model_nam
             # Ignore the LoRA training adapter configuration, because the model is
             # already LoRA-adapted and the trainer will train the existing adapter.
             ignore_training_lora_config = True
+
+    logger.info(f"Model {config.model_name!r} loaded successfully.")
 
     if ignore_training_lora_config or config.training_lora_config is None:
         training_lora_config = None
@@ -337,9 +343,12 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s %(levelname)s] %(message)s",
-        datefmt="%x %X",
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "[%(asctime)s %(levelname)s] %(message)s", datefmt="%x %X"
     )
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
     main()

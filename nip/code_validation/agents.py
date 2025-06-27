@@ -1752,12 +1752,17 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
         file_id = uploaded_file.id
 
         method_key = {"type": method}
+        shared_hyperparameters = {"n_epochs": self.num_epochs}
         if method == "dpo":
             if self.shared_agent_params.dpo_beta is None:
                 beta = "auto"
             else:
                 beta = self.shared_agent_params.dpo_beta
-            method_key["dpo"] = {"hyperparameters": {"beta": beta}}
+            method_key["dpo"] = {
+                "hyperparameters": {"beta": beta, **shared_hyperparameters}
+            }
+        elif method == "supervised":
+            method_key["supervised"] = {"hyperparameters": shared_hyperparameters}
 
         # Create the fine-tune job
         while True:
@@ -1825,6 +1830,7 @@ class OpenAiSharedModelGroup(PureTextSharedModelGroup):
             dpo_config=LmDpoTrainingConfig(
                 beta=self.shared_agent_params.dpo_beta,
                 learning_rate=self.rl_learning_rate,
+                num_train_epochs=self.num_epochs,
             ),
             training_lora_config=LmLoraAdapterConfig(
                 r=self.shared_agent_params.lora_rank,
