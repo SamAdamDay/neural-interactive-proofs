@@ -132,8 +132,8 @@ VerifierDecisionSpectrumType: TypeAlias = Literal[
     "likert_scale_5",
     "likert_scale_6",
     "likert_scale_7",
+    "likert_int_scale_11",
     "likert_scale",
-    "likert_scale_no_undecided",
     "out_of_10",
     "out_of_100",
 ]
