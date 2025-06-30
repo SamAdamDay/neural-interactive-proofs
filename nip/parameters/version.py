@@ -52,7 +52,7 @@ class ConversionFunctionNotFoundError(Exception):
     """Exception raised when no conversion function matches a version number."""
 
     def __init__(self, dict_version: str):
-        super().__init(
+        super().__init__(
             f"When converting hyper-parameter dictionary, no conversion function "
             f"matched the version {dict_version}."
         )
