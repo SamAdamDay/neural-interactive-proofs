@@ -233,7 +233,7 @@ def _(hyper_param_dict: dict) -> dict:
     return hyper_param_dict
 
 
-@register_conversion_function("2.0.0", "2.1.0")
+@register_conversion_function("2.0.0", "2.1")
 def _(hyper_param_dict: dict) -> dict:
 
     # Nothing has changed
